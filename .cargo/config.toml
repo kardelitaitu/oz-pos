@@ -13,13 +13,16 @@
 #   bash scripts/setup-cache.sh                 # Linux / macOS
 
 [build]
+# Uncomment the line below AFTER running the one-time setup script:
+#   powershell -File scripts/setup-cache.ps1   # Windows
+#   bash scripts/setup-cache.sh                 # Linux / macOS
+#
 # sccache wraps rustc and caches compiled artifacts on disk.
 # A cold `cargo check --workspace` drops from ~22s to ~0.6s on the
 # second run (38× speedup on a 32-thread dev machine).
 #
-# If sccache is not installed, `rustc-wrapper` is silently ignored by
-# Cargo and builds proceed without caching — no config change needed.
-rustc-wrapper = "sccache"
+# CI uses Swatinem/rust-cache@v2 instead; sccache is local-dev only.
+#rustc-wrapper = "sccache"
 
 # ------------------------------------------------------------------
 # Fast linkers (optional — install the linker or remove the section)

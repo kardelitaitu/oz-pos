@@ -28,9 +28,12 @@ sccache --zero-stats
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)/.."
 
-echo "==> Verifying .cargo/config.toml …"
-if grep -q 'rustc-wrapper.*sccache' "$ROOT_DIR/.cargo/config.toml" 2>/dev/null; then
-    echo "    ✓ sccache wired as rustc-wrapper"
+echo "==> Enabling sccache in .cargo/config.toml …"
+CONFIG="$ROOT_DIR/.cargo/config.toml"
+if grep -qE '^#?rustc-wrapper.*sccache' "$CONFIG" 2>/dev/null; then
+    # Uncomment the line so Cargo picks it up.
+    sed -i 's/^#rustc-wrapper/rustc-wrapper/' "$CONFIG"
+    echo "    ✓ sccache enabled as rustc-wrapper"
 else
     echo "    ✗ .cargo/config.toml missing or not configured"
     echo "    The repo ships this file — make sure you're on main."

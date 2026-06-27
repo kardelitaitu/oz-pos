@@ -37,9 +37,8 @@ uuid = { workspace = true }
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
 
-[profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
-opt-level = "s"
-strip = true
+# Release profile is at the workspace root (Cargo.toml).
+# oz-pos-app-specific overrides live there under
+# [profile.release.package.oz-pos-app].
+# Per-package [profile.*] sections outside the workspace root
+# are ignored and produce warnings.

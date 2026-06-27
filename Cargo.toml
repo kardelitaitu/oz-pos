@@ -57,6 +57,16 @@ codegen-units = 8
 strip = "symbols"
 overflow-checks = true
 
+# oz-pos-app (Tauri shell) — optimized for the Tauri binary.
+# Cargo only allows opt-level, codegen-units, debug, strip,
+# debug-assertions, and overflow-checks in package profiles.
+# lto and panic must be set at the workspace level when we're
+# closer to release.
+[profile.release.package.oz-pos-app]
+codegen-units = 1
+opt-level = "s"
+strip = true
+
 [profile.dev]
 opt-level = 0
 incremental = true

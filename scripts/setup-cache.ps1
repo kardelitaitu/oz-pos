@@ -33,10 +33,12 @@ sccache --set-config cache.disk.size 20G
 Write-Host "==> Zeroing stats (fresh start)…" -ForegroundColor Cyan
 sccache --zero-stats
 
-Write-Host "==> Verifying .cargo/config.toml …" -ForegroundColor Cyan
+Write-Host "==> Enabling sccache in .cargo/config.toml …" -ForegroundColor Cyan
 $configPath = Join-Path $PSScriptRoot ".." ".cargo" "config.toml"
-if (Select-String -Path $configPath -Pattern 'rustc-wrapper.*sccache' -Quiet) {
-    Write-Host "    ✓ sccache wired as rustc-wrapper" -ForegroundColor Green
+if (Select-String -Path $configPath -Pattern '#?rustc-wrapper.*sccache' -Quiet) {
+    # Uncomment the line so Cargo picks it up.
+    (Get-Content $configPath) -replace '^#rustc-wrapper', 'rustc-wrapper' | Set-Content $configPath
+    Write-Host "    ✓ sccache enabled as rustc-wrapper" -ForegroundColor Green
 } else {
     Write-Host "    ✗ .cargo/config.toml missing or not configured" -ForegroundColor Red
     Write-Host "    The repo ships this file — make sure you're on main."
