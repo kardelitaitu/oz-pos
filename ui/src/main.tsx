@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
-import { FluentBundle, FluentResource } from '@fluent/react';
 import App from './App';
 import './styles/reset.css';
 import './styles/tokens.css';
