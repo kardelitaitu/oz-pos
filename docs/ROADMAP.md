@@ -60,7 +60,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] SQLite schema: `currency`, `exchange_rate`, `settings`
 - [ ] SQLite schema: `customers`, `users`, `roles`
 - [x] `Money` struct (integer minor units + `Currency` reference)
-- [x] `Currency` struct + ISO-4217 seed data
+- [x] `Currency` struct + ISO-4217 validation
+- [ ] ISO-4217 seed data (gated behind `oz-cli init-db`)
 - [ ] Transaction state machine: `Pending → Active → Completed | Voided`
 - [ ] ACID write wrapper: all writes inside explicit transactions
 - [ ] `updated_at` auto-update triggers on all mutable tables
@@ -77,7 +78,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Tauri v2 project scaffold (React + TypeScript + Vite)
 - [x] `ui/src/api/pos.ts` — Tauri command bridge (no `invoke` in components)
 - [ ] Product lookup screen (barcode scan → product card)
-- [x] Shopping cart (add/remove/quantity) — CartScreen scaffold
+- [x] Shopping cart (add/remove/quantity)
+  - CartScreen scaffold (display-only; interactions pending)
 - [ ] Checkout screen (payment method selection, total, tax)
 - [ ] Receipt view (on-screen, print trigger)
 - [ ] Global navigation (hides items for disabled features)
@@ -151,7 +153,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] Unit test `#[cfg(test)]` blocks in all `oz-*` crates
 - [ ] Integration tests with mock HAL drivers
 - [ ] Front-end: Jest + React Testing Library (`ui/src/__tests__/`)
-- [ ] `eslint-plugin-jsx-a11y` enabled in `ui/.eslintrc.cjs`
+- [x] `eslint-plugin-jsx-a11y` enabled in `ui/.eslintrc.cjs`
 - [ ] Test coverage target: ≥ 80% on `oz-core`, `oz-hal`, `oz-lua`
 
 ### CI/CD
