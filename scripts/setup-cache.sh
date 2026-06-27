@@ -26,8 +26,10 @@ sccache --set-config cache.disk.size 20G
 echo "==> Zeroing stats (fresh start)…"
 sccache --zero-stats
 
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)/.."
+
 echo "==> Verifying .cargo/config.toml …"
-if grep -q 'rustc-wrapper.*sccache' .cargo/config.toml 2>/dev/null; then
+if grep -q 'rustc-wrapper.*sccache' "$ROOT_DIR/.cargo/config.toml" 2>/dev/null; then
     echo "    ✓ sccache wired as rustc-wrapper"
 else
     echo "    ✗ .cargo/config.toml missing or not configured"

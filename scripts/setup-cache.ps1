@@ -1,5 +1,7 @@
 # One-time setup for Rust compilation caching with sccache (Windows).
 #
+# Prerequisites: Chocolatey (https://chocolatey.org/install)
+#
 # Run once per machine (PowerShell as Administrator not required):
 #   powershell -ExecutionPolicy Bypass -File scripts/setup-cache.ps1
 #
@@ -13,6 +15,11 @@ $ErrorActionPreference = "Stop"
 Write-Host "==> Checking sccache…" -ForegroundColor Cyan
 $sccache = Get-Command sccache -ErrorAction SilentlyContinue
 if (-not $sccache) {
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Host "    Chocolatey is not installed. Install it first:" -ForegroundColor Red
+        Write-Host "    https://chocolatey.org/install" -ForegroundColor Red
+        exit 1
+    }
     Write-Host "    sccache not found. Installing via Chocolatey…" -ForegroundColor Yellow
     choco install sccache -y
 }
