@@ -18,7 +18,7 @@ edition = "2024"
 rust-version = "1.85"   # edition 2024 requires Rust 1.85+
 license = "MIT"
 authors = ["OZ-POS contributors"]
-repository = "https://github.com/your-org/oz-pos"
+repository = "https://github.com/kardelitaitu/oz-pos"
 readme = "README.md"
 
 [workspace.dependencies]
