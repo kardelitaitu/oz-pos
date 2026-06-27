@@ -2216,7 +2216,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "oz-cli"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "oz-core"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "rusqlite",
  "serde",
@@ -2249,7 +2249,7 @@ dependencies = [
 
 [[package]]
 name = "oz-hal"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -2260,7 +2260,7 @@ dependencies = [
 
 [[package]]
 name = "oz-logging"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "thiserror 1.0.69",
  "tracing",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "oz-lua"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "oz-core",
  "serde",
@@ -2278,7 +2278,7 @@ dependencies = [
 
 [[package]]
 name = "oz-payment"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -2289,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-app"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2308,7 +2308,7 @@ dependencies = [
 
 [[package]]
 name = "oz-reporting"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "oz-core",
  "rusqlite",
@@ -2318,7 +2318,7 @@ dependencies = [
 
 [[package]]
 name = "oz-security"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "oz-core",
  "serde",

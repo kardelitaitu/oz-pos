@@ -9,7 +9,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - (nothing yet)
 
-## [0.1.0] — 2026-06-28
+## [0.0.1] — 2026-06-28
 
 ### Added
 - Cargo workspace with 8 `oz-*` crates (`oz-core`, `oz-hal`, `oz-lua`,
@@ -55,5 +55,5 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.1.0
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.1

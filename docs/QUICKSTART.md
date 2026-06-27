@@ -151,7 +151,7 @@ All green? Open the PR.
 
 ## Troubleshooting
 
-### "error: package `oz-core v0.1.0` cannot be built because it requires rustc 1.85 or newer"
+### "error: package `oz-core v0.0.1` cannot be built because it requires rustc 1.85 or newer"
 
 You're on an old Rust. Update:
 
