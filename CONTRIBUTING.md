@@ -11,9 +11,9 @@ This guide covers how to contribute effectively. The full project conventions li
 | Document | What it's for |
 |----------|---------------|
 | [`AGENTS.md`](./AGENTS.md) | Project-wide coding standards (Rust, Tauri, UI, testing, Git) |
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Directory layout and module responsibilities |
-| [`ROADMAP.md`](./ROADMAP.md) | Phased milestones and what we're building next |
-| [`WHITEPAPER.md`](./WHITEPAPER.md) | Design rationale, tech choices, database strategy |
+| [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Directory layout and module responsibilities |
+| [`ROADMAP.md`](./docs/ROADMAP.md) | Phased milestones and what we're building next |
+| [`WHITEPAPER.md`](./docs/WHITEPAPER.md) | Design rationale, tech choices, database strategy |
 | [`docs/QUICKSTART.md`](./docs/QUICKSTART.md) | First-time local setup and build |
 | [`.agents/skills/onboarding-guide`](./.agents/skills/onboarding-guide/SKILL.md) | Meta-skill that routes you to the right specialized skill |
 | [`.agents/skills/skill-drift-guard`](./.agents/skills/skill-drift-guard/SKILL.md) | Detects and patches skill drift — run before opening a PR |
@@ -31,7 +31,7 @@ Be respectful, assume good faith, and keep feedback focused on the work. We are 
 1. **Read [`AGENTS.md`](./AGENTS.md)** — it defines the non-negotiables (Money struct, rusqlite transactions, thiserror/anyhow, clippy `-D warnings`, Conventional Commits, etc.).
 2. **Read [`docs/QUICKSTART.md`](./docs/QUICKSTART.md)** — get the project building locally first.
 3. **Read the relevant skill** under `.agents/skills/` (the onboarding guide will route you).
-4. **Skim [`ROADMAP.md`](./ROADMAP.md)** so you know what's in scope and what's deferred.
+4. **Skim [`ROADMAP.md`](./docs/ROADMAP.md)** so you know what's in scope and what's deferred.
 
 If your change touches more than one layer (Rust core, Tauri IPC, UI, HAL, project structure), read each relevant skill in layer order: `rust-backend` → `tauri-ipc` → `ui-components` → `hal-drivers`.
 

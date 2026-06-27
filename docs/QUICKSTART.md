@@ -103,7 +103,7 @@ oz-pos/
 └── .github/workflows/          # CI pipelines
 ```
 
-For the full layout, see [`ARCHITECTURE.md`](../ARCHITECTURE.md).
+For the full layout, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ---
 
@@ -187,9 +187,9 @@ Expected. The drift guard no-ops the checks that need code (checks 2–4, 7) in 
 ## Where to go next
 
 - [`AGENTS.md`](../AGENTS.md) — the project's coding standards
-- [`ARCHITECTURE.md`](../ARCHITECTURE.md) — the deep layout
-- [`ROADMAP.md`](../ROADMAP.md) — what's being built and in what order
-- [`WHITEPAPER.md`](../WHITEPAPER.md) — the "why" behind the tech choices
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — the deep layout
+- [`ROADMAP.md`](./ROADMAP.md) — what's being built and in what order
+- [`WHITEPAPER.md`](./WHITEPAPER.md) — the "why" behind the tech choices
 - [`.agents/skills/onboarding-guide`](../.agents/skills/onboarding-guide/SKILL.md) — pick the right skill for the layer you're touching
 
 Welcome to OZ-POS. Keep the curtain closed, the merchant happy, and the money integer.

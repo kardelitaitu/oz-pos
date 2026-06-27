@@ -50,9 +50,9 @@ A high-performance POS framework for retail stores, restaurants, and any merchan
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Directory layout and module responsibilities |
-| [WHITEPAPER.md](./WHITEPAPER.md) | Design rationale, tech choices, database strategy |
-| [ROADMAP.md](./ROADMAP.md) | Phased milestones and planned features |
+| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Directory layout and module responsibilities |
+| [WHITEPAPER.md](./docs/WHITEPAPER.md) | Design rationale, tech choices, database strategy |
+| [ROADMAP.md](./docs/ROADMAP.md) | Phased milestones and planned features |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution workflow, branch policy, PR checklist |
 | [docs/QUICKSTART.md](./docs/QUICKSTART.md) | First-time local setup and build |
 
@@ -106,7 +106,7 @@ oz-pos/
 └─ .github/      # CI/CD workflows
 ```
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full directory tree.
+See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for the full directory tree.
 
 ---
 

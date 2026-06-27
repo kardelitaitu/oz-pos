@@ -74,15 +74,17 @@ oz-pos/
 ├─ assets/                   # UI mockups, icons, printer logos
 ├─ scripts/                  # Build helpers, schema generators
 ├─ migrations/               # SQL migration files (managed by refinery)
-├─ docs/                     # Supplementary docs (quickstart, a11y, security)
+├─ docs/                     # Project documentation
+│   ├─ ARCHITECTURE.md       # This document
+│   ├─ ROADMAP.md            # Planned milestones & feature priorities
+│   ├─ WHITEPAPER.md         # Design rationale, tech choices
+│   └─ QUICKSTART.md         # First-time local setup
 ├─ .github/
 │   └─ workflows/
 │       ├─ ci.yml            # Lint → test → build pipeline
 │       └─ release.yml       # Release automation & Tauri bundle upload
-├─ ROADMAP.md                # Planned milestones & feature priorities
 ├─ CONTRIBUTING.md           # Coding standards, branch policy, PR checklist
-├─ README.md                 # Project overview
-└─ ARCHITECTURE.md           # This document
+└─ README.md                 # Project overview
 ```
 
 ---
