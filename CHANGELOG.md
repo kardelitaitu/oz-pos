@@ -55,5 +55,5 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/your-org/oz-pos/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-org/oz-pos/releases/tag/v0.1.0
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.1.0

@@ -27,7 +27,7 @@ This guide gets OZ-POS building and running on your machine in under 15 minutes.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/oz-pos.git
+git clone https://github.com/kardelitaitu/oz-pos.git
 cd oz-pos
 
 # 2. Build the Rust workspace
