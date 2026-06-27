@@ -32,8 +32,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Cargo workspace with `oz-*` crate naming convention
 - [x] Architecture & whitepaper documentation
 - [x] `AGENTS.md` coding standards & rules
-- [ ] `Cargo.toml` workspace definition with all crate members
-- [ ] GitHub repository init, branch policy (`feat/`, `fix/`, `docs/`, `chore/`)
+- [x] `Cargo.toml` workspace definition with all crate members
+- [x] GitHub repository init, branch policy (`feat/`, `fix/`, `docs/`, `chore/`)
 
 ### Feature Flag System
 - [ ] `Feature` enum declared in `oz-core` (all 32 toggleable features)
@@ -59,8 +59,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] SQLite schema: `product`, `category`, `order`, `order_lines`
 - [ ] SQLite schema: `currency`, `exchange_rate`, `settings`
 - [ ] SQLite schema: `customers`, `users`, `roles`
-- [ ] `Money` struct (integer minor units + `Currency` reference)
-- [ ] `Currency` struct + ISO-4217 seed data
+- [x] `Money` struct (integer minor units + `Currency` reference)
+- [x] `Currency` struct + ISO-4217 seed data
 - [ ] Transaction state machine: `Pending → Active → Completed | Voided`
 - [ ] ACID write wrapper: all writes inside explicit transactions
 - [ ] `updated_at` auto-update triggers on all mutable tables
@@ -71,20 +71,20 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] USB barcode scanner driver (HID)
 - [ ] Serial barcode scanner driver (stub)
 - [ ] Receipt printer driver (USB, stub output)
-- [ ] Mock HAL driver for unit tests (`hal/src/drivers/mock.rs`)
+- [x] Mock HAL driver for unit tests (`hal/src/drivers/mock.rs`)
 
 ### UI — Core Checkout Flow
-- [ ] Tauri v2 project scaffold (React + TypeScript + Vite)
-- [ ] `ui/src/api/pos.ts` — Tauri command bridge (no `invoke` in components)
+- [x] Tauri v2 project scaffold (React + TypeScript + Vite)
+- [x] `ui/src/api/pos.ts` — Tauri command bridge (no `invoke` in components)
 - [ ] Product lookup screen (barcode scan → product card)
-- [ ] Shopping cart (add/remove/quantity)
+- [x] Shopping cart (add/remove/quantity) — CartScreen scaffold
 - [ ] Checkout screen (payment method selection, total, tax)
 - [ ] Receipt view (on-screen, print trigger)
 - [ ] Global navigation (hides items for disabled features)
 
 ### Database
-- [ ] `migrations/001_initial_schema.sql`
-- [ ] `oz-cli` migration runner (`oz-cli migrate`)
+- [x] `migrations/001_initial_schema.sql` (001_sales.sql)
+- [x] `oz-cli` migration runner (`oz-cli migrate`)
 - [ ] `oz-cli init-db` — seed currencies + default settings + preset flags
 
 ### UI / UX — Design System & Core Screens
@@ -155,7 +155,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] Test coverage target: ≥ 80% on `oz-core`, `oz-hal`, `oz-lua`
 
 ### CI/CD
-- [ ] `.github/workflows/ci.yml`: lint → test → Tauri bundle
+- [x] `.github/workflows/ci.yml`: lint → test → Tauri bundle
   - `cargo fmt --check`
   - `cargo clippy -- -D warnings`
   - `cargo test --workspace`
