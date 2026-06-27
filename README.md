@@ -70,7 +70,7 @@ A high-performance POS framework for retail stores, restaurants, and any merchan
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/oz-pos.git
+git clone https://github.com/kardelitaitu/oz-pos.git
 cd oz-pos
 
 # 2. Build Rust workspace

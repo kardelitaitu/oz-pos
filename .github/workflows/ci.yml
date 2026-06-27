@@ -47,9 +47,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'ui/package-lock.json'
+          node-version: '22'
       - run: cd ui && npm install --no-audit --no-fund
         # The scaffold doesn't ship a `package-lock.json`; a follow-up
         # commit will add one. `npm install` (not `npm ci`) until then.
