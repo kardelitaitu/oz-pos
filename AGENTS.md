@@ -31,6 +31,8 @@
 ### Git & Branch Policy
 - Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
 - All PRs must pass the CI pipeline (lint, test, build) before merging.
+- CI only triggers on the `main` branch (push + pull_request). Feature-branch
+  pushes do not run CI; open a PR targeting `main` to validate changes.
 - Never commit secrets, `.env` files, or SQLite database files.
 
 > [!NOTE]
