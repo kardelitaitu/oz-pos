@@ -99,6 +99,8 @@ oz-pos/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── ROADMAP.md
+│   ├── WHITEPAPER.md
+│   ├── QUICKSTART.md
 │   └── specs/
 │       ├── _template/
 │       ├── _active/
