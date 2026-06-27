@@ -1,0 +1,303 @@
+---
+name: tauri-ipc
+description: Tauri v2 command and front-end API conventions for OZ-POS — where Rust commands live, how they are registered, and how the React/TypeScript front-end calls them. Use when adding a new IPC surface or wiring a new feature end-to-end.
+---
+
+# Tauri IPC & Front-end API
+
+OZ-POS uses Tauri v2 to bridge Rust and a React/TypeScript front-end. The IPC boundary is the single most important architectural seam in the app: every command is a contract, and every contract must be in the right place.
+
+---
+
+## When to use
+
+- Adding a new feature that needs to cross the Rust ↔ React boundary.
+- Defining a new Tauri command on the backend.
+- Calling a backend command from a React component or hook.
+- Reviewing the IPC surface for errors or inconsistencies.
+- Adding a new event the front-end should listen for.
+
+---
+
+## Golden rules
+
+| # | Rule | Why |
+|---|------|-----|
+| 1 | **Rust commands live in `src-tauri/src/commands/<feature>.rs`.** | One folder, one feature, easy to find. |
+| 2 | **All commands are registered in `src-tauri/src/main.rs`.** | No hidden registration in sub-modules. |
+| 3 | **Front-end calls go through `ui/src/api/pos.ts`.** Components never call `invoke()` directly. |
+| 4 | **Every command is `async fn` and returns `Result<T, AppError>`.** | Errors are typed on both sides; no stringified blobs. |
+| 5 | **Every command takes its dependencies via `tauri::State<...>`.** | No globals, no thread-locals. |
+
+---
+
+## Layout
+
+```
+src-tauri/
+└── src/
+    ├── main.rs                      # registers commands, builds the runtime
+    ├── lib.rs                       # the run() function, app setup
+    └── commands/
+        ├── mod.rs                   # pub use for each command module
+        ├── sales.rs                 # start_sale, add_line, complete_sale
+        ├── inventory.rs             # lookup_sku, adjust_stock
+        ├── payments.rs              # authorize, capture, void
+        ├── hardware.rs              # open_cash_drawer, print_receipt
+        └── reports.rs               # daily_summary, export_csv
+```
+
+```
+ui/
+└── src/
+    ├── api/
+    │   └── pos.ts                   # the ONLY place that calls invoke()
+    ├── features/
+    │   ├── sales/
+    │   │   ├── CartScreen.tsx
+    │   │   └── useCart.ts           # uses pos.ts, not invoke()
+    │   └── inventory/
+    │       └── StockScreen.tsx
+    └── components/                  # presentational, no invoke()
+```
+
+---
+
+## Defining a Rust command
+
+```rust
+// src-tauri/src/commands/sales.rs
+
+use serde::{Deserialize, Serialize};
+use tauri::State;
+use oz_core::{Cart, Money, Sku};
+use crate::error::AppError;
+use crate::state::AppState;
+
+#[derive(Debug, Deserialize)]
+pub struct AddLineArgs {
+    pub cart_id: CartId,
+    pub sku: Sku,
+    pub qty: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AddLineResult {
+    pub line_id: LineId,
+    pub line_total: Money,
+}
+
+#[tauri::command]
+pub async fn add_line(
+    args: AddLineArgs,
+    state: State<'_, AppState>,
+) -> Result<AddLineResult, AppError> {
+    let cart = state.carts.get(&args.cart_id)?;
+    let line = cart.add_line(args.sku, args.qty)?;
+    Ok(AddLineResult { line_id: line.id, line_total: line.total() })
+}
+```
+
+**Rules:**
+- Argument struct is `*Args`, return type is `*Result`. Keeps the call site readable.
+- `State<'_, AppState>` is the only way to reach the database, services, or hardware. No module-level `static`s.
+- Errors are `AppError`, defined once in `src-tauri/src/error.rs` and re-exported. Don't return `String` errors.
+- Commands are pure: they take inputs, return outputs, and use `State` for the world. No hidden state.
+
+---
+
+## Registering in `main.rs`
+
+```rust
+// src-tauri/src/main.rs
+
+mod commands;
+mod error;
+mod state;
+
+use commands::{sales, inventory, payments, hardware, reports};
+
+fn main() {
+    oz_pos_lib::run();
+}
+```
+
+```rust
+// src-tauri/src/lib.rs
+
+use tauri::Builder;
+use crate::state::AppState;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    Builder::default()
+        .manage(AppState::new()?)
+        .invoke_handler(tauri::generate_handler![
+            sales::add_line,
+            sales::complete_sale,
+            inventory::lookup_sku,
+            inventory::adjust_stock,
+            payments::authorize,
+            payments::capture,
+            hardware::open_cash_drawer,
+            hardware::print_receipt,
+            reports::daily_summary,
+            reports::export_csv,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+```
+
+**Rules:**
+- Commands are grouped by feature module in the `invoke_handler!` list. Keep the order matching the module list.
+- Mobile entry point is gated with `#[cfg_attr(mobile, ...)]` so the same code runs on desktop and mobile.
+- `AppState::new()` must be fallible (DB open, migrations, etc.) — surface errors with `?` before `.manage(...)`.
+
+---
+
+## Calling from React — `pos.ts` is the only entry point
+
+```ts
+// ui/src/api/pos.ts
+
+import { invoke } from '@tauri-apps/api/core';
+import type { CartId, LineId, Money, Sku } from '@/types/domain';
+
+export interface AddLineArgs {
+  cartId: CartId;
+  sku: Sku;
+  qty: number;
+}
+
+export interface AddLineResult {
+  lineId: LineId;
+  lineTotal: Money;
+}
+
+export async function addLine(args: AddLineArgs): Promise<AddLineResult> {
+  return invoke<AddLineResult>('add_line', { args });
+}
+```
+
+**Rules:**
+- One TypeScript function per Rust command. Names are camelCase; Rust is snake_case — `invoke()` does the conversion automatically.
+- Every TypeScript wrapper has explicit `*Args` and `*Result` interfaces. Don't use `any` or `unknown` to skip the type.
+- All errors are `Result<T, AppError>`; on the TS side, wrap with `try { ... } catch (e) { ... }` and check `e instanceof AppError`.
+- Domain types (`CartId`, `Sku`, `Money`, …) live in `ui/src/types/domain.ts` and are imported everywhere.
+
+---
+
+## React hooks consume `pos.ts`, not `invoke()`
+
+```tsx
+// ui/src/features/sales/useCart.ts
+
+import { useState, useCallback } from 'react';
+import { addLine, completeSale } from '@/api/pos';
+import type { Cart, CartId, Sku } from '@/types/domain';
+
+export function useCart(cartId: CartId) {
+  const [cart, setCart] = useState<Cart | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const addLine = useCallback(async (sku: Sku, qty: number) => {
+    try {
+      const result = await posAddLine({ cartId, sku, qty });
+      // refetch cart, or trust the lineTotal and optimistically update
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'unknown');
+    }
+  }, [cartId]);
+
+  return { cart, error, addLine };
+}
+```
+
+**Rules:**
+- Hooks are the only place that knows how to talk to `pos.ts`. Components consume hooks.
+- Components never import from `@tauri-apps/api/core` — that's the line we don't cross.
+- Async errors are surfaced via local state, not thrown. Throw only in test code or top-level error boundaries.
+
+---
+
+## Events from backend to front-end
+
+Use Tauri events for streaming or push-style updates (e.g., barcode scan, printer status, sync progress).
+
+```rust
+// src-tauri/src/commands/hardware.rs
+
+use tauri::{AppHandle, Emitter};  // <-- Emitter trait is required for .emit()
+
+#[tauri::command]
+pub async fn subscribe_barcode_scans(app: AppHandle) -> Result<(), AppError> {
+    let app = app.clone();
+    tokio::spawn(async move {
+        let mut rx = /* open barcode channel */;
+        while let Some(scan) = rx.recv().await {
+            let _ = app.emit("barcode:scan", &scan);
+        }
+        Ok::<_, AppError>(())
+    });
+    Ok(())
+}
+```
+
+```ts
+// ui/src/api/pos.ts
+
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { BarcodeScan } from '@/types/domain';
+
+export async function onBarcodeScan(
+  handler: (scan: BarcodeScan) => void,
+): Promise<UnlistenFn> {
+  return listen<BarcodeScan>('barcode:scan', (e) => handler(e.payload));
+}
+```
+
+**Rules:**
+- Event names are `domain:verb` (kebab/snake allowed; be consistent). Example: `barcode:scan`, `sale:completed`, `sync:progress`.
+- Always return the `UnlistenFn` from `listen()`. Components must call it in cleanup to avoid leaks.
+- Payload types are defined in `ui/src/types/domain.ts` and shared with the backend via JSON.
+
+---
+
+## Adding a new command — checklist
+
+- [ ] Rust: define `*Args` and `*Result` types in `commands/<feature>.rs`.
+- [ ] Rust: write the `#[tauri::command] async fn` taking `State<'_, AppState>`.
+- [ ] Rust: register the command in `lib.rs`'s `invoke_handler!` list.
+- [ ] TS: define `*Args` and `*Result` interfaces in `ui/src/api/pos.ts`.
+- [ ] TS: write the `invoke<>('cmd_name', { args })` wrapper.
+- [ ] TS: create a hook in `ui/src/features/<feature>/` that calls the wrapper.
+- [ ] Tests: add a `#[cfg(test)]` block in the Rust command (using a mock `AppState`).
+- [ ] Tests: add a component test in `ui/src/__tests__/` for the hook.
+- [ ] A11y: any UI changes pass `eslint-plugin-jsx-a11y`.
+- [ ] I18n: any user-visible strings go through `@fluent/react`.
+
+---
+
+## Common pitfalls
+
+1. **Calling `invoke()` from a component** to "save time." It works, but it makes the API surface un-mockable for tests and hides the call from code search.
+2. **Returning `String` errors** from a command. Front-end has to string-match. Use `AppError` with variants.
+3. **Putting a command in `mod.rs` of `commands/`** instead of a sub-module. Bloats `mod.rs` and breaks the feature-folder convention.
+4. **Forgetting `tauri::generate_handler!`** — the command compiles but is not callable at runtime. Easy to miss; lint with a startup smoke test.
+5. **Reusing a domain type from `oz-core` directly in a command's `*Result`** without wrapping. Tauri serializes via JSON, and internal fields may include `i64` IDs that the JS side can't represent. Wrap with a serializable `Id(String)` or similar.
+6. **`State<'_, T>` borrowing across an `await`** — fine on the outer `async fn`, but if you call helper functions, pass `&T` from the state, not the `State` guard.
+7. **Returning `Money` with `i64` directly** in the front-end API without a renderer. The number is correct but `123456` cents looks like "123,456" in the UI. Provide a `formatMoney(money, locale)` helper.
+
+---
+
+## See also
+
+- **[`rust-backend`](../rust-backend/SKILL.md)** — defines the `oz-core` types (`Money`, `CartId`, `Sku`, …) that cross this IPC boundary. Read it before adding a new command so you know how the types are meant to be constructed and serialized.
+- **[`hal-drivers`](../hal-drivers/SKILL.md)** — the hardware drivers and `DriverRegistry` that hardware-touching commands (barcode scan, cash drawer, receipt print) reach into. The wiring pattern `State<'_, AppState>` -> `DriverRegistry::scanner(id)` lives in both skills; keep them in sync.
+- **[`ui-components`](../ui-components/SKILL.md)** — the React/TypeScript side of this contract. Every command you add here needs a `pos.ts` wrapper and a hook in `ui/src/features/<feature>/`.
+- **[`project-scaffold`](../project-scaffold/SKILL.md)** — the CI matrix and branch policy that gate this code into release.
+
+---
+
+> last audited 28-06-26 by docs-auditor

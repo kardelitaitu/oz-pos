@@ -1,0 +1,28 @@
+[package]
+name = "oz-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Command-line tools for OZ-POS — migrations, backup, export, smoke tests."
+
+[[bin]]
+name = "oz"
+path = "src/main.rs"
+
+[dependencies]
+oz-core = { workspace = true }
+oz-hal = { workspace = true }
+oz-lua = { workspace = true }
+oz-security = { workspace = true }
+oz-payment = { workspace = true }
+oz-reporting = { workspace = true }
+oz-logging = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+clap = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

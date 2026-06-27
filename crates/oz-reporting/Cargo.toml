@@ -1,0 +1,13 @@
+[package]
+name = "oz-reporting"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Analytics and CSV export engine for OZ-POS — daily summaries, sales reports, inventory movement."
+
+[dependencies]
+oz-core = { workspace = true }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }

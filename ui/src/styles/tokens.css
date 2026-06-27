@@ -1,0 +1,29 @@
+/* Design tokens. Components reference these variables; never hardcode
+ * colors or sizes inline. */
+
+:root {
+  /* Color */
+  --color-bg: #ffffff;
+  --color-fg: #1a1a1a;
+  --color-muted: #6b6b6b;
+  --color-accent: #1f6feb;
+  --color-accent-fg: #ffffff;
+  --color-danger: #b00020;
+
+  /* Spacing (rem; scales with the user's font-size preference) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+
+  /* Type */
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+}

@@ -1,0 +1,12 @@
+[package]
+name = "oz-logging"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Structured logging facade for OZ-POS — context-tagged log records, file + stdout output, log levels."
+
+[dependencies]
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }

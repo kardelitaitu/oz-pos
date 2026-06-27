@@ -1,0 +1,12 @@
+[package]
+name = "oz-lua"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Embedded Lua scripting runtime for OZ-POS — lets merchants customize business rules and promotions without recompiling the core."
+
+[dependencies]
+oz-core = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }

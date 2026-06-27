@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/oz-core",
+    "crates/oz-hal",
+    "crates/oz-lua",
+    "crates/oz-security",
+    "crates/oz-payment",
+    "crates/oz-reporting",
+    "crates/oz-logging",
+    "crates/oz-cli",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"   # edition 2024 requires Rust 1.85+
+license = "MIT"
+authors = ["OZ-POS contributors"]
+repository = "https://github.com/your-org/oz-pos"
+readme = "README.md"
+
+[workspace.dependencies]
+# all crates import from here: oz-core = { workspace = true }
+oz-core = { path = "crates/oz-core" }
+oz-hal = { path = "crates/oz-hal" }
+oz-lua = { path = "crates/oz-lua" }
+oz-security = { path = "crates/oz-security" }
+oz-payment = { path = "crates/oz-payment" }
+oz-reporting = { path = "crates/oz-reporting" }
+oz-logging = { path = "crates/oz-logging" }
+oz-cli = { path = "crates/oz-cli" }
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+
+# Ecosystem deps
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
+async-trait = "0.1"
+async-channel = "2"
+clap = { version = "4", features = ["derive"] }
+embedded-hal = "0.2"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 8
+strip = "symbols"
+overflow-checks = true
+
+[profile.dev]
+opt-level = 0
+incremental = true
+codegen-units = 256
+debug = true
+overflow-checks = false
+
+# TDD profile: fastest possible compile for tight test loops
+[profile.tdd]
+inherits = "dev"
+debug = false
+incremental = true

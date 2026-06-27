@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            src-tauri -> target
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features --exclude oz-pos-app -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --all-features --exclude oz-pos-app
+
+  ui:
+    name: UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - run: cd ui && npm install --no-audit --no-fund
+        # The scaffold doesn't ship a `package-lock.json`; a follow-up
+        # commit will add one. `npm install` (not `npm ci`) until then.
+      - run: cd ui && npm run lint
+      - run: cd ui && npm run typecheck
+      - run: cd ui && npm run test
+      - run: cd ui && npm run build
+
+  migration:
+    name: Migration smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # The `migrate` subcommand takes no flags. The second run
+      # exercises the idempotency branch.
+      - run: cargo run -p oz-cli -- migrate
+      - run: cargo run -p oz-cli -- migrate
+      - name: Clean up the local DB the smoke test created
+        # WAL mode creates sidecar files; remove them all.
+        run: rm -f oz-pos.db oz-pos.db-wal oz-pos.db-shm

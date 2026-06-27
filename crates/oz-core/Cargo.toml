@@ -1,0 +1,20 @@
+[package]
+name = "oz-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Domain types for OZ-POS: money, currency, cart, sale, inventory."
+
+[dependencies]
+serde = { workspace = true }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# Used by SerDe round-trip tests in money.rs and sku.rs to verify
+# the wire format produces bare strings ("USD", "COFFEE") rather
+# than arrays or objects. Not a runtime dep.
+serde_json = { workspace = true }

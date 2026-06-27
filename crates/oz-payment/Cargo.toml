@@ -1,0 +1,14 @@
+[package]
+name = "oz-payment"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Payment processor abstraction for OZ-POS — Stripe, Square, EMV terminals behind a single trait."
+
+[dependencies]
+oz-core = { workspace = true }
+oz-hal = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
