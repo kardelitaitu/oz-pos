@@ -33,7 +33,8 @@ rustc-wrapper = "sccache"
 # One-time install:
 #   sudo apt install mold        # Debian / Ubuntu
 #   sudo dnf install mold        # Fedora
-#   brew install llvm            # macOS (provides ld64.lld)
+#   brew install llvm            # macOS — then add to PATH:
+#     echo 'export PATH="$(brew --prefix llvm)/bin:$PATH"' >> ~/.zshrc
 #
 # If mold / ld64.lld are not installed, comment out or remove the
 # relevant [target] section.  A missing linker produces the error
