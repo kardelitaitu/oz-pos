@@ -30,7 +30,7 @@ describe('CartScreen', () => {
     };
     render(wrap(<CartScreen lines={[line]} total={usd} />));
     expect(screen.getByText(/COFFEE/)).toBeInTheDocument();
-    expect(screen.getByText(/\$3\.50/)).toBeInTheDocument();
+    expect(screen.getAllByText(/\$3\.50/)).toHaveLength(2);
   });
 
   it('invokes the onAddSample callback', async () => {
