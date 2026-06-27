@@ -25,12 +25,11 @@
 #rustc-wrapper = "sccache"
 
 # ------------------------------------------------------------------
-# Fast linkers (optional — install the linker or remove the section)
+# Fast linkers (local dev only — CI doesn't have mold / ld64.lld)
 # ------------------------------------------------------------------
-# On Linux the default GNU ld is slow; mold is ~3-5× faster and can
-# be used as a direct drop-in linker.  Set `linker = "mold"`.
-# On macOS the default ld64 is fine; lld shaves ~20% off link time.
-# Set `linker = "ld64.lld"`.
+# Uncomment the [target] sections below after installing the linker.
+# On Linux, mold is ~3-5× faster than GNU ld.
+# On macOS, ld64.lld shaves ~20% off link time.
 # Windows MSVC link.exe is already fast — no config needed.
 #
 # One-time install:
@@ -38,19 +37,15 @@
 #   sudo dnf install mold        # Fedora
 #   brew install llvm            # macOS — then add to PATH:
 #     echo 'export PATH="$(brew --prefix llvm)/bin:$PATH"' >> ~/.zshrc
+
+# [target.x86_64-unknown-linux-gnu]
+# linker = "mold"
 #
-# If mold / ld64.lld are not installed, comment out or remove the
-# relevant [target] section.  A missing linker produces the error
-# "could not find linker mold" at build time.
-
-[target.x86_64-unknown-linux-gnu]
-linker = "mold"
-
-[target.aarch64-unknown-linux-gnu]
-linker = "mold"
-
-[target.x86_64-apple-darwin]
-linker = "ld64.lld"
-
-[target.aarch64-apple-darwin]
-linker = "ld64.lld"
+# [target.aarch64-unknown-linux-gnu]
+# linker = "mold"
+#
+# [target.x86_64-apple-darwin]
+# linker = "ld64.lld"
+#
+# [target.aarch64-apple-darwin]
+# linker = "ld64.lld"
