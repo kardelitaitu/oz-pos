@@ -3,6 +3,7 @@
 // directly from a component.
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { CartId, LineId, Money, Sku } from '@/types/domain';
 
 export interface StartSaleArgs {
@@ -57,3 +58,39 @@ export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
 
 export const completeSale = (cartId: CartId): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale', { args: { cartId } });
+
+// ── Hardware ──────────────────────────────────────────────────────
+
+export interface OpenCashDrawerArgs {
+  deviceId?: string;
+}
+
+export interface OpenCashDrawerResult {
+  opened: boolean;
+}
+
+export const openCashDrawer = (
+  args: OpenCashDrawerArgs = {},
+): Promise<OpenCashDrawerResult> =>
+  invoke<OpenCashDrawerResult>('open_cash_drawer', { args });
+
+export interface PrintReceiptArgs {
+  body: string;
+}
+
+export interface PrintReceiptResult {
+  printedLines: number;
+}
+
+export const printReceipt = (
+  args: PrintReceiptArgs,
+): Promise<PrintReceiptResult> =>
+  invoke<PrintReceiptResult>('print_receipt', { args });
+
+/// Listen for `receipt:printed` events emitted by the backend.
+export const onReceiptPrinted = (
+  handler: (lines: number) => void,
+): Promise<UnlistenFn> =>
+  listen<{ lines: number }>('receipt:printed', (e) =>
+    handler(e.payload.lines),
+  );

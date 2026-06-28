@@ -672,6 +672,94 @@ impl Store<'_> {
     }
 }
 
+// ── Backup / Export ────────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// Create a snapshot of the database to a file at `output_path`.
+    ///
+    /// Uses SQLite's online backup API so the source connection can
+    /// remain in use during the copy.
+    pub fn backup(&self, output_path: &str) -> Result<(), CoreError> {
+        // VACUUM INTO creates a clean, optimized database snapshot.
+        let escaped = output_path.replace('\'', "''");
+        let sql = format!("VACUUM INTO '{escaped}'");
+        self.conn.execute_batch(&sql)?;
+        Ok(())
+    }
+}
+
+/// Row returned by [`Store::export_daily_summary`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DailySummaryRow {
+    /// The sale id.
+    pub sale_id: String,
+    /// Total minor units.
+    pub total_minor: i64,
+    /// ISO-4217 currency code.
+    pub currency: String,
+    /// Number of line items.
+    pub line_count: i64,
+    /// Current sale status.
+    pub status: String,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+}
+
+/// Row returned by [`Store::export_sales_by_hour`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SalesByHourRow {
+    /// Hour of day (0-23).
+    pub hour: i64,
+    /// Total minor units sold in that hour.
+    pub total_minor: i64,
+    /// Number of sales in that hour.
+    pub sale_count: i64,
+}
+
+impl Store<'_> {
+    /// Query all sales for today, ordered chronologically.
+    pub fn export_daily_summary(&self) -> Result<Vec<DailySummaryRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, total_minor, currency, line_count, status, created_at
+             FROM sales
+             WHERE date(created_at) = date('now')
+             ORDER BY created_at",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(DailySummaryRow {
+                sale_id: row.get("id")?,
+                total_minor: row.get("total_minor")?,
+                currency: row.get("currency")?,
+                line_count: row.get("line_count")?,
+                status: row.get("status")?,
+                created_at: row.get("created_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Query sales volume grouped by hour of day (for today).
+    pub fn export_sales_by_hour(&self) -> Result<Vec<SalesByHourRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+                    SUM(total_minor) AS total_minor,
+                    COUNT(*) AS sale_count
+             FROM sales
+             WHERE date(created_at) = date('now')
+             GROUP BY hour
+             ORDER BY hour",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(SalesByHourRow {
+                hour: row.get("hour")?,
+                total_minor: row.get("total_minor")?,
+                sale_count: row.get("sale_count")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+}
+
 // ── Settings delegation ───────────────────────────────────────────────
 
 impl Store<'_> {
@@ -1287,6 +1375,47 @@ mod tests {
             .unwrap();
         assert_eq!(count, 1);
         drop(p); // silence unused warning
+    }
+
+    // ── Backup / Export ───────────────────────────────────────────
+
+    #[test]
+    fn backup_creates_snapshot_file() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+
+        let tmp = std::env::temp_dir().join("oz-test-backup.db");
+        let _ = std::fs::remove_file(&tmp); // clean slate
+
+        s.backup(tmp.to_str().unwrap()).unwrap();
+
+        // Open the backup and verify data exists.
+        let backup_conn = Connection::open(&tmp).unwrap();
+        let count: i64 = backup_conn
+            .query_row("SELECT COUNT(*) FROM products", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 3);
+        let cat_count: i64 = backup_conn
+            .query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cat_count, 2);
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn export_daily_summary_empty() {
+        let conn = fresh();
+        let rows = store(&conn).export_daily_summary().unwrap();
+        assert!(rows.is_empty(), "no sales today → empty");
+    }
+
+    #[test]
+    fn export_sales_by_hour_empty() {
+        let conn = fresh();
+        let rows = store(&conn).export_sales_by_hour().unwrap();
+        assert!(rows.is_empty());
     }
 
     // ── ProductWithDetails equality ──────────────────────────────

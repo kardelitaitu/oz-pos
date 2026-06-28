@@ -39,6 +39,32 @@
     ],
     "category": "Business",
     "shortDescription": "OZ-POS point-of-sale framework",
-    "longDescription": "OZ-POS is a modular, extensible point-of-sale framework built on Rust and Tauri v2."
+    "longDescription": "OZ-POS is a modular, extensible point-of-sale framework built on Rust and Tauri v2.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "createDesktopShortcut": true,
+        "startMenuFolder": "OZ-POS"
+      },
+      "wix": {
+        "language": "en-US",
+        "template": "main.wxs"
+      },
+      "signCommand": "signtool.exe sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 %1"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/kardelitaitu/oz-pos/releases/latest/download/latest.json"
+      ],
+      "pubkey": "PLACEHOLDER_EDIT_AFTER_KEY_GENERATION",
+      "windows": {
+        "installMode": "basicUi"
+      }
+    }
   }
 }

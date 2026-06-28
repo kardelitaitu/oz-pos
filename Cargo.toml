@@ -54,6 +54,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 axum = { version = "0.8", features = ["macros"] }
 jsonwebtoken = "9"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
+tauri-plugin-updater = "2"
 
 [profile.release]
 opt-level = 3

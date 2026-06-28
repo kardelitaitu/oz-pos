@@ -126,14 +126,8 @@ fn main() -> Result<()> {
         Some(Command::Migrate) => run_migrate(conn),
         Some(Command::InitDb(args)) => run_init_db(&conn, &args),
         Some(Command::Product(args)) => run_product(&conn, args),
-        Some(Command::Backup { output }) => {
-            println!("backup -> {output}: not yet implemented (scaffold)");
-            Ok(())
-        }
-        Some(Command::Export { kind }) => {
-            println!("export {kind}: not yet implemented (scaffold)");
-            Ok(())
-        }
+        Some(Command::Backup { output }) => run_backup(&conn, &output),
+        Some(Command::Export { kind }) => run_export(&conn, &kind),
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;
@@ -198,6 +192,50 @@ fn run_init_db(conn: &Connection, args: &InitDbArgs) -> Result<()> {
     eprintln!("  enabled {feature_count} feature(s)");
 
     eprintln!("database initialised successfully");
+    Ok(())
+}
+
+// ── Backup / Export ────────────────────────────────────────────────────
+
+/// Create an online SQLite snapshot of the database.
+fn run_backup(conn: &Connection, output: &str) -> Result<()> {
+    let store = Store::new(conn);
+    eprintln!("creating backup -> {output}...");
+    store
+        .backup(output)
+        .with_context(|| format!("backup to {output}"))?;
+    eprintln!("backup complete");
+    Ok(())
+}
+
+/// Write a CSV report to stdout for the given kind.
+fn run_export(conn: &Connection, kind: &str) -> Result<()> {
+    let store = Store::new(conn);
+
+    match kind {
+        "daily-summary" => {
+            let rows = store.export_daily_summary()?;
+            let mut wtr = csv::Writer::from_writer(std::io::stdout());
+            for r in &rows {
+                wtr.serialize(r)?;
+            }
+            wtr.flush()?;
+        }
+        "sales-by-hour" => {
+            let rows = store.export_sales_by_hour()?;
+            let mut wtr = csv::Writer::from_writer(std::io::stdout());
+            for r in &rows {
+                wtr.serialize(r)?;
+            }
+            wtr.flush()?;
+        }
+        other => {
+            eprintln!("unknown export kind '{other}'");
+            eprintln!("available kinds: daily-summary, sales-by-hour");
+            std::process::exit(1);
+        }
+    }
+
     Ok(())
 }
 

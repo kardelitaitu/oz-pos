@@ -25,6 +25,7 @@ pub fn run() {
     oz_logging::init();
 
     let result: Result<(), AppError> = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let state = AppState::new(&app.handle())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
