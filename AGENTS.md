@@ -8,6 +8,9 @@
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
+- **Version is locked at `0.0.1`.** Never change the version number
+  (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
+  or anywhere else) unless the user explicitly asks you to bump it.
 
 ### Rust Standards
 - Format all Rust code with `rustfmt` before committing.
