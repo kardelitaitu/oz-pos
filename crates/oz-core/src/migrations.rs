@@ -37,6 +37,10 @@ pub const ALL: &[Migration] = &[
         id: "002_products.sql",
         sql: include_str!("../migrations/002_products.sql"),
     },
+    Migration {
+        id: "003_barcode.sql",
+        sql: include_str!("../migrations/003_barcode.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Idempotent: running twice is a no-op

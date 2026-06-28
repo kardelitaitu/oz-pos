@@ -1,0 +1,223 @@
+//! Product domain type — the core inventory item.
+//!
+//! A [`Product`] wraps the fields stored in the `products` table:
+//! SKU (unique identifier), display name, price with currency,
+//! optional category and barcode, and timestamps. The struct lives
+//! in `oz-core` so every downstream crate (`oz-api`, `oz-cli`,
+//! `src-tauri`) uses the same definition.
+
+use serde::{Deserialize, Serialize};
+
+use crate::{Money, Sku};
+
+/// A product in the store's inventory.
+///
+/// # Schema mapping
+///
+/// Maps 1:1 to the `products` table (migrations `001_sales.sql`,
+/// `002_products.sql`, `003_barcode.sql`). Fields use domain types
+/// ([`Sku`], [`Money`]) rather than raw strings/integers so code
+/// downstream benefits from validation and checked arithmetic.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Product {
+    /// Internal row id (UUID v4).
+    pub id: String,
+
+    /// Stock-keeping unit — the human-readable product code.
+    #[serde(with = "sku_serde")]
+    pub sku: Sku,
+
+    /// Display name shown on receipts and the POS UI.
+    pub name: String,
+
+    /// Sale price with currency.
+    pub price: Money,
+
+    /// Optional reference to a [`crate::Category`] row.
+    pub category_id: Option<String>,
+
+    /// Optional machine-readable barcode (EAN-13, UPC-A, etc.).
+    /// Unique when present; two products can share a `None` barcode.
+    pub barcode: Option<String>,
+
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+
+    /// ISO-8601 last-update timestamp.
+    pub updated_at: String,
+}
+
+impl Product {
+    /// Create a new product with the given SKU, name, and price.
+    ///
+    /// Generates a fresh UUID for `id` and sets both timestamps to
+    /// empty strings (the database layer fills them in on insert).
+    /// Optional fields (`category_id`, `barcode`) default to `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `name` is empty after trimming.
+    pub fn new(sku: impl Into<Sku>, name: impl Into<String>, price: Money) -> Self {
+        let name = name.into().trim().to_owned();
+        assert!(!name.is_empty(), "product name must not be empty");
+
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            sku: sku.into(),
+            name,
+            price,
+            category_id: None,
+            barcode: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    /// Set the category reference (builder-style).
+    #[must_use]
+    pub fn with_category(mut self, category_id: impl Into<String>) -> Self {
+        self.category_id = Some(category_id.into());
+        self
+    }
+
+    /// Set the barcode (builder-style).
+    #[must_use]
+    pub fn with_barcode(mut self, barcode: impl Into<String>) -> Self {
+        self.barcode = Some(barcode.into());
+        self
+    }
+}
+
+// ── Serde helpers ────────────────────────────────────────────────
+
+/// Custom serde module so `Sku` serializes as a bare string within the
+/// containing struct. Without this, `#[serde(transparent)]` on `Sku`
+/// would work on its own, but nesting inside `Product` requires the
+/// `#[serde(with = "...")]` indirection.
+mod sku_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(sku: &super::Sku, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(sku.as_str())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(de: D) -> Result<super::Sku, D::Error> {
+        let s = String::deserialize(de)?;
+        super::Sku::try_new(s).ok_or_else(|| serde::de::Error::custom("SKU must not be empty"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn usd() -> crate::Currency {
+        "USD".parse().unwrap()
+    }
+
+    fn test_price() -> Money {
+        Money::from_major(12, usd()).unwrap()
+    }
+
+    #[test]
+    fn new_product_has_generated_id() {
+        let p = Product::new("COFFEE", "Espresso", test_price());
+        assert!(!p.id.is_empty(), "id should be generated");
+        assert_eq!(p.sku.as_str(), "COFFEE");
+        assert_eq!(p.name, "Espresso");
+        assert_eq!(p.price, test_price());
+        assert!(p.category_id.is_none());
+        assert!(p.barcode.is_none());
+        assert!(p.created_at.is_empty());
+        assert!(p.updated_at.is_empty());
+    }
+
+    #[test]
+    fn product_ids_are_unique() {
+        let a = Product::new("A", "Alpha", test_price());
+        let b = Product::new("B", "Beta", test_price());
+        assert_ne!(a.id, b.id);
+    }
+
+    #[test]
+    #[should_panic(expected = "product name must not be empty")]
+    fn new_product_panics_on_empty_name() {
+        Product::new("SKU", "   ", test_price());
+    }
+
+    #[test]
+    fn builder_sets_category() {
+        let p = Product::new("SKU", "Widget", test_price())
+            .with_category("cat-tools");
+        assert_eq!(p.category_id, Some("cat-tools".into()));
+    }
+
+    #[test]
+    fn builder_sets_barcode() {
+        let p = Product::new("SKU", "Widget", test_price())
+            .with_barcode("5901234123457");
+        assert_eq!(p.barcode, Some("5901234123457".into()));
+    }
+
+    #[test]
+    fn builder_chains() {
+        let p = Product::new("SKU", "Widget", test_price())
+            .with_category("cat-tools")
+            .with_barcode("5901234123457");
+        assert_eq!(p.category_id, Some("cat-tools".into()));
+        assert_eq!(p.barcode, Some("5901234123457".into()));
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let p = Product::new("COFFEE", "Espresso", test_price())
+            .with_category("cat-drinks")
+            .with_barcode("5901234123457");
+        let json = serde_json::to_string(&p).unwrap();
+        let back: Product = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, p);
+    }
+
+    #[test]
+    fn serde_deserialize_minimal() {
+        let json = r#"{
+            "id": "abc",
+            "sku": "COFFEE",
+            "name": "Espresso",
+            "price": { "minor_units": 350, "currency": "USD" },
+            "category_id": null,
+            "barcode": null,
+            "created_at": "",
+            "updated_at": ""
+        }"#;
+        let p: Product = serde_json::from_str(json).unwrap();
+        assert_eq!(p.sku.as_str(), "COFFEE");
+        assert_eq!(p.name, "Espresso");
+        assert_eq!(p.price.minor_units, 350);
+        assert_eq!(p.price.currency, usd());
+    }
+
+    #[test]
+    fn serde_deserialize_rejects_empty_sku() {
+        let json = r#"{
+            "id": "abc",
+            "sku": "",
+            "name": "Espresso",
+            "price": { "minor_units": 350, "currency": "USD" },
+            "category_id": null,
+            "barcode": null,
+            "created_at": "",
+            "updated_at": ""
+        }"#;
+        let result: Result<Product, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "empty SKU should fail deserialization");
+    }
+
+    #[test]
+    fn sku_serializes_as_bare_string() {
+        let p = Product::new("COFFEE", "Espresso", test_price());
+        let json = serde_json::to_string(&p).unwrap();
+        // Sku field should be "COFFEE", not {"0": "COFFEE"} or similar.
+        assert!(json.contains(r#""sku":"COFFEE""#), "unexpected JSON: {json}");
+    }
+}
