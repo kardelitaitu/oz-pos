@@ -95,6 +95,37 @@ export const onReceiptPrinted = (
     handler(e.payload.lines),
   );
 
+// ── Setup Wizard ────────────────────────────────────────────────────
+
+export interface CompleteSetupArgs {
+  /** Store preset name (e.g. "simple-retail", "restaurant"). */
+  preset: string;
+  /** Enabled feature keys (kebab-case, e.g. "cash-payment"). */
+  features: string[];
+}
+
+export interface SetupStatus {
+  /** Whether the setup wizard has been completed. */
+  completed: boolean;
+  /** The store preset name, if set. */
+  preset: string | null;
+}
+
+/**
+ * Persist the chosen preset and enabled features, then mark setup
+ * as complete.
+ */
+export const completeSetup = (
+  args: CompleteSetupArgs,
+): Promise<void> => invoke<void>('complete_setup', { args });
+
+/**
+ * Check whether the setup wizard has already been completed.
+ * The app calls this on mount to decide which screen to show.
+ */
+export const getSetupStatus = (): Promise<SetupStatus> =>
+  invoke<SetupStatus>('get_setup_status');
+
 // ── Currencies ─────────────────────────────────────────────────────
 
 export interface CurrencyInfo {

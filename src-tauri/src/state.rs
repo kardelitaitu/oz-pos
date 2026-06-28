@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use rusqlite::Connection;
 use tauri::AppHandle;
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 use oz_core::{migrations, Cart, CartId};
@@ -62,7 +63,7 @@ impl AppState {
                 .map_err(|e| AppError::Internal(format!("creating db dir {parent:?}: {e}")))?;
         }
 
-        let conn = Connection::open(&db_path)
+        let mut conn = Connection::open(&db_path)
             .map_err(|e| AppError::Internal(format!("opening {db_path:?}: {e}")))?;
         conn.pragma_update(None, "foreign_keys", "ON")
             .map_err(|e| AppError::Internal(format!("enabling foreign_keys: {e}")))?;
@@ -100,6 +101,18 @@ impl AppState {
     pub fn for_test() -> Self {
         Self {
             db: Mutex::new(Connection::open_in_memory().unwrap()),
+            registry: Arc::new(DriverRegistry::default()),
+            app: AppHandle::default(),
+            db_path: ":memory:".into(),
+            carts: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Construct an `AppState` with a pre-configured connection (migrations
+    /// already run). Used by integration tests that need a seeded database.
+    pub fn for_test_with_conn(conn: Connection) -> Self {
+        Self {
+            db: Mutex::new(conn),
             registry: Arc::new(DriverRegistry::default()),
             app: AppHandle::default(),
             db_path: ":memory:".into(),

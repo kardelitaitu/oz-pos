@@ -15,6 +15,7 @@ pub mod commands;
 pub mod error;
 pub mod state;
 
+use tauri::Manager;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -41,6 +42,8 @@ pub fn run() {
             commands::sales::complete_sale,
             commands::hardware::open_cash_drawer,
             commands::hardware::print_receipt,
+            commands::setup::complete_setup,
+            commands::setup::get_setup_status,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);

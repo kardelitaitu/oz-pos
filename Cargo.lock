@@ -2646,6 +2646,7 @@ dependencies = [
  "oz-core",
  "oz-hal",
  "oz-logging",
+ "rusqlite",
  "serde",
  "serde_json",
  "tauri",

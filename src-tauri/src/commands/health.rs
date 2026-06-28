@@ -27,7 +27,7 @@ pub async fn version() -> Result<VersionInfo, AppError> {
         name: env!("CARGO_PKG_NAME"),
         version: env!("CARGO_PKG_VERSION"),
         rust_version: env!("CARGO_PKG_RUST_VERSION"),
-        target: env!("TARGET"),
+        target: option_env!("TARGET").unwrap_or("unknown"),
     })
 }
 

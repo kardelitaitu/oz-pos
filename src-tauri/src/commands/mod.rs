@@ -9,3 +9,4 @@ pub mod currencies;
 pub mod hardware;
 pub mod health;
 pub mod sales;
+pub mod setup;

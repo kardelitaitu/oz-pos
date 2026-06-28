@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import SetupWizard from '@/features/setup/SetupWizard';
 import DesignSystem from '@/features/design/DesignSystem';
+import { completeSetup, getSetupStatus } from '@/api/pos';
+import type { WizardState } from '@/features/setup/SetupWizard';
 import '@/features/design/DesignSystem.css';
 
 /**
  * Root app component.
  *
- * On first launch (no stored preset), the Setup Wizard is shown.
- * Once completed, the main Design System showcase is displayed.
- * This logic will be replaced with proper routing in Phase 2.
+ * On mount, checks if the Setup Wizard has already been completed
+ * (via the IPC bridge). If not, shows the wizard. When the wizard
+ * completes, the chosen preset + features are persisted to SQLite.
  */
 export default function App() {
   return (
@@ -20,20 +22,70 @@ export default function App() {
 }
 
 function AppShell() {
-  // Tracks whether the Setup Wizard has been completed or skipped.
-  // In production this would read `store.setup_complete` from the
-  // Tauri settings table via the IPC bridge.
+  const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
 
-  const handleComplete = () => {
+  // On mount, check if setup was already completed.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await getSetupStatus();
+        if (!cancelled) {
+          setHasCompletedSetup(status.completed);
+        }
+      } catch {
+        // IPC unavailable (e.g. running outside Tauri in dev).
+        // Default to showing wizard.
+        if (!cancelled) {
+          setHasCompletedSetup(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleComplete = async (state: WizardState) => {
+    // Persist to SQLite via Tauri IPC bridge.
+    try {
+      await completeSetup({
+        preset: state.preset ?? 'custom',
+        features: Object.keys(state.features).filter(
+          (k) => state.features[k],
+        ),
+      });
+    } catch (err) {
+      console.error('Failed to persist setup:', err);
+    }
     setHasCompletedSetup(true);
-    // Future: persist the WizardState via the Tauri IPC bridge
-    // and set `store.setup_complete = "1"` in the settings table.
   };
 
   const handleSkip = () => {
     setHasCompletedSetup(true);
   };
+
+  // Show a minimal loading state while checking setup status.
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100dvh',
+          color: 'var(--color-fg-secondary)',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 'var(--text-base)',
+        }}
+      >
+        Loading…
+      </div>
+    );
+  }
 
   if (!hasCompletedSetup) {
     return (
