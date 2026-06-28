@@ -30,14 +30,28 @@
 pub mod auth;
 pub mod routes;
 
+use std::sync::Arc;
+
 use axum::{
     Router,
     middleware,
     routing::{get, post},
 };
+use rusqlite::Connection;
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
+
+/// Shared application state passed to all axum handlers.
+///
+/// Wraps the SQLite connection in `Arc<Mutex<>>` so axum can cheaply
+/// clone it for the [`State`](axum::extract::State) extractor while
+/// ensuring only one handler writes to the database at a time.
+#[derive(Clone)]
+pub struct AppState {
+    pub db: Arc<Mutex<Connection>>,
+}
 
 /// Build the API router with all routes and middleware.
 ///
@@ -51,7 +65,7 @@ use tracing::info;
 /// - `GET /api/v1/products`
 /// - `GET /api/v1/products/:sku`
 /// - `GET /api/v1/categories`
-pub fn router() -> Router {
+pub fn router(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_methods(Any)
         .allow_headers(Any)
@@ -70,15 +84,31 @@ pub fn router() -> Router {
     Router::new()
         .merge(public)
         .merge(protected)
+        .with_state(state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
 }
 
 /// Start the server, binding to the port from `OZ_API_PORT` (default 3099).
 ///
-/// This function blocks on the server loop. Spawn it in a background
-/// `tokio::task` if you need the caller to continue.
+/// Opens the SQLite database at `OZ_DB_PATH` (default `oz-pos.db`), runs
+/// migrations, and blocks on the server loop. Spawn in a background
+/// `tokio::task` if the caller needs to continue.
 pub async fn serve() {
+    let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
+    let mut conn = Connection::open(&db_path)
+        .expect("failed to open API database");
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .expect("enabling foreign_keys");
+    conn.pragma_update(None, "journal_mode", "WAL")
+        .expect("enabling WAL");
+    oz_core::migrations::run(&mut conn)
+        .expect("running migrations");
+
+    let state = AppState {
+        db: Arc::new(Mutex::new(conn)),
+    };
+
     let port: u16 = std::env::var("OZ_API_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
@@ -88,7 +118,7 @@ pub async fn serve() {
         .await
         .expect("failed to bind API port");
     info!(port, "OZ-POS API server listening");
-    axum::serve(listener, router())
+    axum::serve(listener, router(state))
         .await
         .expect("API server exited with error");
 }
@@ -104,7 +134,46 @@ mod tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
-    /// Helper: deserialize a response body as JSON.
+    /// Helper: open an in-memory connection, turn on FKs, run migrations.
+    fn fresh_conn() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        oz_core::migrations::run(&mut conn).unwrap();
+        conn
+    }
+
+    /// Helper: build a router backed by an empty in-memory database.
+    fn test_app() -> Router {
+        let state = AppState {
+            db: Arc::new(Mutex::new(fresh_conn())),
+        };
+        router(state)
+    }
+
+    /// Helper: build a router with seeded products, categories, and inventory.
+    fn test_app_seeded() -> Router {
+        let conn = fresh_conn();
+        conn.execute_batch(
+            "INSERT INTO categories (id, name, colour) VALUES
+                ('cat-drinks', 'Drinks',  '#06b6d4'),
+                ('cat-food',   'Food',    '#f97316');
+             INSERT INTO products (id, sku, name, price_minor, currency, category_id) VALUES
+                ('prod-1', 'DRINK-001', 'Espresso',        350, 'USD', 'cat-drinks'),
+                ('prod-2', 'FOOD-001',  'Bagel',           450, 'USD', 'cat-food'),
+                ('prod-3', 'DRINK-002', 'Green Tea',       275, 'USD', 'cat-drinks');
+             INSERT INTO inventory (product_id, qty) VALUES
+                ('prod-1', 50),
+                ('prod-2', 12);",
+        )
+        .unwrap();
+        let state = AppState {
+            db: Arc::new(Mutex::new(conn)),
+        };
+        router(state)
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────
+
     async fn body_json(resp: axum::response::Response) -> Value {
         let bytes = resp
             .into_body()
@@ -115,16 +184,14 @@ mod tests {
         serde_json::from_slice(&bytes).expect("parse JSON body")
     }
 
-    /// Helper: create an authenticated GET request.
     fn auth_get(uri: &str, token: &str) -> Request<Body> {
         Request::builder()
             .uri(uri)
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap()
     }
 
-    /// Helper: create a POST request with a JSON body.
     fn post_json(uri: &str, body: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
@@ -138,23 +205,21 @@ mod tests {
 
     #[tokio::test]
     async fn health_returns_ok() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/health")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn health_returns_json_with_status_and_version() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/health")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         let json = body_json(resp).await;
         assert_eq!(json["status"], "ok");
         assert!(json["version"].is_string(), "version should be a string");
@@ -164,17 +229,15 @@ mod tests {
 
     #[tokio::test]
     async fn token_creation_returns_200() {
-        let app = router();
         let req = post_json("/api/v1/tokens", r#"{"label":"test","expiry_hours":1}"#);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn token_creation_returns_token_fields() {
-        let app = router();
         let req = post_json("/api/v1/tokens", r#"{"label":"my-script","expiry_hours":8}"#);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         let json = body_json(resp).await;
         let token = &json["token"];
         assert!(token["token"].is_string(), "token field should be a string");
@@ -184,10 +247,8 @@ mod tests {
 
     #[tokio::test]
     async fn token_creation_with_default_expiry() {
-        let app = router();
-        // Omit expiry_hours — should default to 24.
         let req = post_json("/api/v1/tokens", r#"{"label":"no-expiry"}"#);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
         assert!(json["token"]["token"].is_string());
@@ -195,68 +256,61 @@ mod tests {
 
     #[tokio::test]
     async fn token_creation_missing_label_returns_error() {
-        let app = router();
         let req = post_json("/api/v1/tokens", r#"{}"#);
-        let resp = app.oneshot(req).await.unwrap();
-        // axum 0.8: valid JSON but missing required field → 422 Unprocessable Entity.
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
     async fn token_creation_invalid_json() {
-        let app = router();
         let req = Request::builder()
             .method("POST")
             .uri("/api/v1/tokens")
             .header("Content-Type", "application/json")
             .body(Body::from("not json"))
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
     async fn token_creation_wrong_method_get() {
-        let app = router();
         let req = Request::builder()
             .method("GET")
             .uri("/api/v1/tokens")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
 
     #[tokio::test]
     async fn token_creation_empty_body() {
-        let app = router();
         let req = Request::builder()
             .method("POST")
             .uri("/api/v1/tokens")
             .header("Content-Type", "application/json")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
     async fn token_creation_wrong_content_type() {
-        let app = router();
         let req = Request::builder()
             .method("POST")
             .uri("/api/v1/tokens")
             .header("Content-Type", "text/plain")
             .body(Body::from(r#"{"label":"test"}"#))
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
-        // axum's Json extractor requires Content-Type: application/json.
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
     }
 
     #[tokio::test]
     async fn two_tokens_have_different_values() {
-        let app = router();
+        let app = test_app();
         let req1 = post_json("/api/v1/tokens", r#"{"label":"a"}"#);
         let req2 = post_json("/api/v1/tokens", r#"{"label":"b"}"#);
         let json1 = body_json(app.clone().oneshot(req1).await.unwrap()).await;
@@ -277,82 +331,74 @@ mod tests {
 
     #[tokio::test]
     async fn protected_route_rejects_without_token() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/products")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn protected_route_accepts_valid_token() {
         let token = auth::create_token("test", Some(1));
-        let app = router();
         let req = auth_get("/api/v1/products", &token.token);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn protected_route_rejects_expired_token() {
         let token = auth::create_token("expired", Some(-1));
-        let app = router();
         let req = auth_get("/api/v1/products", &token.token);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn protected_route_rejects_malformed_header() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/products")
             .header("Authorization", "NotBearer xyz")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn protected_route_rejects_empty_auth_header() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/products")
             .header("Authorization", "")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn protected_route_rejects_garbage_token() {
-        let app = router();
         let req = auth_get("/api/v1/products", "not.a.real.jwt");
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn protected_route_rejects_tampered_token() {
         let token = auth::create_token("tamper", Some(24));
-        let app = router();
         let req = auth_get("/api/v1/products", &format!("{}x", token.token));
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
-    // ── Product endpoints ────────────────────────────────────────
+    // ── Product endpoints (empty DB) ─────────────────────────────
 
     #[tokio::test]
     async fn products_list_returns_empty_array() {
         let token = auth::create_token("test", Some(1));
-        let app = router();
         let req = auth_get("/api/v1/products", &token.token);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
         assert!(json.is_array(), "should return a JSON array");
@@ -361,88 +407,135 @@ mod tests {
 
     #[tokio::test]
     async fn product_get_by_sku_requires_auth() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/products/ABC123")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
-    async fn product_get_by_sku_returns_null() {
+    async fn product_get_by_sku_returns_null_for_unknown() {
         let token = auth::create_token("test", Some(1));
-        let app = router();
         let req = auth_get("/api/v1/products/ABC123", &token.token);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
         assert!(json.is_null(), "should return null for unknown SKU");
+    }
+
+    // ── Product endpoints (seeded DB) ────────────────────────────
+
+    #[tokio::test]
+    async fn products_list_returns_seeded_products() {
+        let token = auth::create_token("test", Some(1));
+        let req = auth_get("/api/v1/products", &token.token);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr.len(), 3, "should return 3 seeded products");
+    }
+
+    #[tokio::test]
+    async fn product_get_by_sku_returns_detail_with_stock() {
+        let token = auth::create_token("test", Some(1));
+        let req = auth_get("/api/v1/products/DRINK-001", &token.token);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["sku"], "DRINK-001");
+        assert_eq!(json["name"], "Espresso");
+        assert_eq!(json["price_minor"], 350);
+        assert_eq!(json["currency"], "USD");
+        assert_eq!(json["category_id"], "cat-drinks");
+        assert_eq!(json["category_name"], "Drinks");
+        assert_eq!(json["stock_qty"], 50);
+    }
+
+    #[tokio::test]
+    async fn product_get_by_sku_returns_null_for_existing_but_unstocked() {
+        let token = auth::create_token("test", Some(1));
+        // DRINK-002 exists but has no inventory row.
+        let req = auth_get("/api/v1/products/DRINK-002", &token.token);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["sku"], "DRINK-002");
+        assert_eq!(json["name"], "Green Tea");
+        assert!(json["stock_qty"].is_null(), "no inventory row → null stock");
     }
 
     // ── Category endpoints ───────────────────────────────────────
 
     #[tokio::test]
     async fn categories_list_requires_auth() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/categories")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn categories_list_returns_empty_array() {
         let token = auth::create_token("test", Some(1));
-        let app = router();
         let req = auth_get("/api/v1/categories", &token.token);
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
         assert!(json.is_array(), "should return a JSON array");
         assert_eq!(json.as_array().unwrap().len(), 0, "should be empty");
     }
 
+    #[tokio::test]
+    async fn categories_list_returns_seeded_categories() {
+        let token = auth::create_token("test", Some(1));
+        let req = auth_get("/api/v1/categories", &token.token);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr.len(), 2, "should return 2 seeded categories");
+        assert_eq!(arr[0]["name"], "Drinks");
+        assert_eq!(arr[0]["colour"], "#06b6d4");
+        assert_eq!(arr[1]["name"], "Food");
+        assert_eq!(arr[1]["colour"], "#f97316");
+    }
+
     // ── Edge cases ───────────────────────────────────────────────
 
     #[tokio::test]
     async fn unknown_route_returns_401() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/nonexistent")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
-        // The auth middleware on the protected router fires before axum
-        // can determine no route matches, so unauthorised is returned.
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn root_returns_401() {
-        let app = router();
         let req = Request::builder()
             .uri("/")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn cors_headers_present_on_health() {
-        let app = router();
         let req = Request::builder()
             .uri("/api/v1/health")
             .header("Origin", "http://example.com")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        // CORS should allow all origins.
         let allow_origin = resp
             .headers()
             .get("access-control-allow-origin")
@@ -452,7 +545,6 @@ mod tests {
 
     #[tokio::test]
     async fn cors_preflight_returns_ok() {
-        let app = router();
         let req = Request::builder()
             .method("OPTIONS")
             .uri("/api/v1/products")
@@ -460,7 +552,7 @@ mod tests {
             .header("Access-Control-Request-Method", "GET")
             .body(Body::empty())
             .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 }

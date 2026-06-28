@@ -5,10 +5,12 @@
 
 use axum::{
     Json,
-    extract::Path,
+    extract::{Path, State},
     response::IntoResponse,
 };
 use serde::Serialize;
+
+use crate::AppState;
 
 #[derive(Serialize)]
 pub struct ProductResponse {
@@ -21,16 +23,77 @@ pub struct ProductResponse {
     pub stock_qty: Option<i64>,
 }
 
-/// List products. In this scaffold pass, returns an empty list — the
-/// SQL layer will be wired up when `db.rs` lands.
-pub async fn list_products() -> impl IntoResponse {
-    // Placeholder: query from SQLite when the DB layer is ready.
-    Json(Vec::<ProductResponse>::new())
+/// List all products, ordered by name, with category name and current
+/// stock from the `inventory` table.
+pub async fn list_products(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let db = state.db.lock().await;
+    let mut stmt = db
+        .prepare(
+            "SELECT p.sku, p.name, p.price_minor, p.currency,
+                    p.category_id, c.name AS category_name,
+                    i.qty AS stock_qty
+             FROM products p
+             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN inventory i ON p.id = i.product_id
+             ORDER BY p.name",
+        )
+        .expect("prepare list_products query");
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ProductResponse {
+                sku: row.get("sku")?,
+                name: row.get("name")?,
+                price_minor: row.get("price_minor")?,
+                currency: row.get("currency")?,
+                category_id: row.get("category_id")?,
+                category_name: row.get("category_name")?,
+                stock_qty: row.get("stock_qty")?,
+            })
+        })
+        .expect("execute list_products query");
+
+    let products: Vec<ProductResponse> =
+        rows.map(|r| r.expect("deserialize product row")).collect();
+    Json(products)
 }
 
-/// Get a single product by SKU, including current stock.
-pub async fn get_product(Path(sku): Path<String>) -> impl IntoResponse {
-    // Placeholder: query from SQLite when the DB layer is ready.
-    let _ = sku;
-    Json(None::<ProductResponse>)
+/// Get a single product by SKU, including current stock quantity.
+/// Returns `null` (JSON `None`) if no product matches the SKU.
+pub async fn get_product(
+    State(state): State<AppState>,
+    Path(sku): Path<String>,
+) -> impl IntoResponse {
+    let db = state.db.lock().await;
+    let mut stmt = db
+        .prepare(
+            "SELECT p.sku, p.name, p.price_minor, p.currency,
+                    p.category_id, c.name AS category_name,
+                    i.qty AS stock_qty
+             FROM products p
+             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN inventory i ON p.id = i.product_id
+             WHERE p.sku = ?1",
+        )
+        .expect("prepare get_product query");
+
+    let result = stmt.query_row([&sku], |row| {
+        Ok(ProductResponse {
+            sku: row.get("sku")?,
+            name: row.get("name")?,
+            price_minor: row.get("price_minor")?,
+            currency: row.get("currency")?,
+            category_id: row.get("category_id")?,
+            category_name: row.get("category_name")?,
+            stock_qty: row.get("stock_qty")?,
+        })
+    });
+
+    match result {
+        Ok(product) => Json(Some(product)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Json(None),
+        Err(e) => panic!("get_product query failed: {e}"),
+    }
 }
