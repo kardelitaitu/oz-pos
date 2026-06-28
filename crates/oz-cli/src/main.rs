@@ -345,6 +345,73 @@ fn run_init_db(conn: &Connection, args: &InitDbArgs) -> Result<()> {
         .context("saving feature flags")?;
     eprintln!("  enabled {feature_count} feature(s)");
 
+    // --- ISO-4217 Currencies ---
+    eprintln!("  seeding currencies...");
+    conn.execute_batch(
+        "INSERT OR IGNORE INTO currencies (code, numeric_code, name, minor_exponent, symbol) VALUES
+            ('USD', '840', 'US Dollar',               2, '$'),
+            ('EUR', '978', 'Euro',                    2, '\u{20ac}'),
+            ('GBP', '826', 'British Pound',           2, '\u{a3}'),
+            ('JPY', '392', 'Japanese Yen',            0, '\u{a5}'),
+            ('CAD', '124', 'Canadian Dollar',         2, 'CA$'),
+            ('AUD', '036', 'Australian Dollar',       2, 'A$'),
+            ('CHF', '756', 'Swiss Franc',             2, 'Fr'),
+            ('CNY', '156', 'Chinese Yuan',            2, '\u{5143}'),
+            ('INR', '356', 'Indian Rupee',            2, '\u{20b9}'),
+            ('BRL', '986', 'Brazilian Real',          2, 'R$'),
+            ('MXN', '484', 'Mexican Peso',            2, 'Mex$'),
+            ('KRW', '410', 'South Korean Won',        0, '\u{20a9}'),
+            ('SEK', '752', 'Swedish Krona',           2, 'kr'),
+            ('NOK', '578', 'Norwegian Krone',         2, 'kr'),
+            ('DKK', '208', 'Danish Krone',            2, 'kr'),
+            ('NZD', '554', 'New Zealand Dollar',      2, 'NZ$'),
+            ('SGD', '702', 'Singapore Dollar',        2, 'S$'),
+            ('HKD', '344', 'Hong Kong Dollar',        2, 'HK$'),
+            ('MYR', '458', 'Malaysian Ringgit',       2, 'RM'),
+            ('THB', '764', 'Thai Baht',               2, '\u{e3f}'),
+            ('PHP', '608', 'Philippine Peso',         2, '\u{20b1}'),
+            ('IDR', '360', 'Indonesian Rupiah',       0, 'Rp'),
+            ('VND', '704', 'Vietnamese Dong',         0, '\u{20ab}'),
+            ('ZAR', '710', 'South African Rand',      2, 'R'),
+            ('RUB', '643', 'Russian Ruble',           2, '\u{20bd}'),
+            ('TRY', '949', 'Turkish Lira',            2, '\u{20ba}'),
+            ('SAR', '682', 'Saudi Riyal',             2, '\u{fdfc}'),
+            ('AED', '784', 'UAE Dirham',              2, '\u{62f}.\u{625}'),
+            ('ILS', '376', 'Israeli Shekel',          2, '\u{20aa}'),
+            ('PLN', '985', 'Polish Zloty',            2, 'z\u{142}'),
+            ('CZK', '203', 'Czech Koruna',            2, 'K\u{10d}'),
+            ('HUF', '348', 'Hungarian Forint',        0, 'Ft'),
+            ('CLP', '152', 'Chilean Peso',            0, 'CLP$'),
+            ('COP', '170', 'Colombian Peso',          2, 'COL$'),
+            ('PEN', '604', 'Peruvian Sol',            2, 'S/'),
+            ('ARS', '032', 'Argentine Peso',          2, 'AR$'),
+            ('NGN', '566', 'Nigerian Naira',          2, '\u{20a6}'),
+            ('KES', '404', 'Kenyan Shilling',         2, 'KSh'),
+            ('EGP', '818', 'Egyptian Pound',          2, '\u{a3}');",
+    )
+    .context("seeding currencies")?;
+
+    // --- Default Roles ---
+    eprintln!("  seeding roles...");
+    conn.execute_batch(
+        "INSERT OR IGNORE INTO roles (id, name, description, permissions) VALUES
+            ('role-owner',   'owner',   'Full access to all features and settings',
+             '[\"*\"]'),
+            ('role-manager', 'manager', 'Can manage products, categories, and view reports',
+             '[\"products:crud\",\"categories:manage\",\"sales:void\",\"reports:view\"]'),
+            ('role-cashier', 'cashier', 'Can process sales and manage the daily register',
+             '[\"sales:process\",\"sales:view\",\"customers:view\"]');",
+    )
+    .context("seeding roles")?;
+
+    // --- Admin User ---
+    eprintln!("  seeding admin user...");
+    conn.execute(
+        "INSERT OR IGNORE INTO users (id, username, pin_hash, display_name, role_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params!["user-admin", "admin", "hashed_pin_placeholder", "Admin", "role-owner"],
+    )
+    .context("seeding admin user")?;
+
     eprintln!("database initialised successfully");
     Ok(())
 }
