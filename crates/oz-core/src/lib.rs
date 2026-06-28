@@ -18,6 +18,7 @@
 
 pub mod cart;
 pub mod category;
+pub mod db;
 pub mod error;
 pub mod features;
 pub mod inventory;
@@ -30,6 +31,7 @@ pub mod sku;
 
 pub use cart::{Cart, CartError, CartId, CartLine};
 pub use category::Category;
+pub use db::{ProductWithDetails, Store};
 pub use error::CoreError;
 pub use features::{Feature, FeatureRegistry};
 pub use inventory::Inventory;
