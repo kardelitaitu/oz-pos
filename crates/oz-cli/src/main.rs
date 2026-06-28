@@ -59,6 +59,69 @@ enum Command {
     Inventory(InventoryArgs),
     /// Manage sales (list, get, update-status).
     Sale(SaleArgs),
+    /// Manage customers (list, get, create).
+    Customer(CustomerArgs),
+    /// Manage users (list, get, create).
+    User(UserArgs),
+}
+
+#[derive(Debug, Args)]
+struct CustomerArgs {
+    #[command(subcommand)]
+    action: CustomerAction,
+}
+
+#[derive(Debug, Subcommand)]
+enum CustomerAction {
+    /// List all customers.
+    List,
+    /// Show a customer by id.
+    Get {
+        /// Customer id.
+        id: String,
+    },
+    /// Create a new customer.
+    Create {
+        /// Display name.
+        name: String,
+        /// Email address.
+        #[arg(long)]
+        email: Option<String>,
+        /// Phone number.
+        #[arg(long)]
+        phone: Option<String>,
+        /// Free-form notes.
+        #[arg(long)]
+        notes: Option<String>,
+    },
+}
+
+#[derive(Debug, Args)]
+struct UserArgs {
+    #[command(subcommand)]
+    action: UserAction,
+}
+
+#[derive(Debug, Subcommand)]
+enum UserAction {
+    /// List all users.
+    List,
+    /// Show a user by id.
+    Get {
+        /// User id.
+        id: String,
+    },
+    /// Create a new user.
+    Create {
+        /// Login username.
+        username: String,
+        /// Hashed PIN/password.
+        pin_hash: String,
+        /// Display name shown on the POS UI.
+        display_name: String,
+        /// Role id (e.g. "role-owner", "role-cashier").
+        role_id: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -217,6 +280,8 @@ fn main() -> Result<()> {
         Some(Command::Category(args)) => run_category(&conn, args),
         Some(Command::Inventory(args)) => run_inventory(&conn, args),
         Some(Command::Sale(args)) => run_sale(&conn, args),
+        Some(Command::Customer(args)) => run_customer(&conn, args),
+        Some(Command::User(args)) => run_user(&conn, args),
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;
@@ -585,6 +650,164 @@ fn run_sale_update_status(store: &Store<'_>, id: &str, status_str: &str) -> Resu
         }
     }
 
+    Ok(())
+}
+
+// ── Customer commands ──────────────────────────────────────────────────
+
+fn run_customer(conn: &Connection, args: CustomerArgs) -> Result<()> {
+    let store = Store::new(conn);
+
+    match args.action {
+        CustomerAction::List => run_customer_list(&store),
+        CustomerAction::Get { id } => run_customer_get(&store, &id),
+        CustomerAction::Create { name, email, phone, notes } => {
+            run_customer_create(&store, &name, email.as_deref(), phone.as_deref(), notes.as_deref())
+        }
+    }
+}
+
+fn run_customer_list(store: &Store<'_>) -> Result<()> {
+    let customers = store.list_customers().context("listing customers")?;
+
+    if customers.is_empty() {
+        println!("No customers found.");
+        return Ok(());
+    }
+
+    println!("{:<40} {:<24} {:<30} {:<16}", "ID", "Name", "Email", "Phone");
+    println!("{:-<40} {:-<24} {:-<30} {:-<16}", "", "", "", "");
+
+    for c in &customers {
+        let email = c.email.as_deref().unwrap_or("-");
+        let phone = c.phone.as_deref().unwrap_or("-");
+        println!("{:<40} {:<24} {:<30} {:<16}", c.id, c.name, email, phone);
+    }
+
+    Ok(())
+}
+
+fn run_customer_get(store: &Store<'_>, id: &str) -> Result<()> {
+    match store.get_customer(id).context("looking up customer")? {
+        Some(c) => {
+            println!("ID:      {}", c.id);
+            println!("Name:    {}", c.name);
+            println!("Email:   {}", c.email.as_deref().unwrap_or("(none)"));
+            println!("Phone:   {}", c.phone.as_deref().unwrap_or("(none)"));
+            println!("Points:  {}", c.loyalty_points);
+            println!("Spent:   {} {}", c.total_spent_minor, c.currency);
+            println!("Notes:   {}", c.notes);
+            println!("Created: {}", c.created_at);
+            println!("Updated: {}", c.updated_at);
+        }
+        None => {
+            println!("Customer not found: {id}");
+        }
+    }
+    Ok(())
+}
+
+fn run_customer_create(
+    store: &Store<'_>,
+    name: &str,
+    email: Option<&str>,
+    phone: Option<&str>,
+    notes: Option<&str>,
+) -> Result<()> {
+    match store.create_customer(name, email, phone, notes) {
+        Ok(c) => {
+            println!("Created customer: {} ({})", c.name, c.id);
+        }
+        Err(CoreError::Validation { message, .. }) => {
+            eprintln!("Validation error: {message}");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    }
+    Ok(())
+}
+
+// ── User commands ──────────────────────────────────────────────────────
+
+fn run_user(conn: &Connection, args: UserArgs) -> Result<()> {
+    let store = Store::new(conn);
+
+    match args.action {
+        UserAction::List => run_user_list(&store),
+        UserAction::Get { id } => run_user_get(&store, &id),
+        UserAction::Create {
+            username,
+            pin_hash,
+            display_name,
+            role_id,
+        } => run_user_create(&store, &username, &pin_hash, &display_name, &role_id),
+    }
+}
+
+fn run_user_list(store: &Store<'_>) -> Result<()> {
+    let users = store.list_users().context("listing users")?;
+
+    if users.is_empty() {
+        println!("No users found.");
+        return Ok(());
+    }
+
+    println!("{:<40} {:<16} {:<24} {:<12} Active", "ID", "Username", "Display Name", "Role");
+    println!("{:-<40} {:-<16} {:-<24} {:-<12} {:-}", "", "", "", "", "");
+
+    for u in &users {
+        let active = if u.is_active { "yes" } else { "no" };
+        println!("{:<40} {:<16} {:<24} {:<12} {}", u.id, u.username, u.display_name, u.role_id, active);
+    }
+
+    Ok(())
+}
+
+fn run_user_get(store: &Store<'_>, id: &str) -> Result<()> {
+    match store.get_user(id).context("looking up user")? {
+        Some(u) => {
+            println!("ID:       {}", u.id);
+            println!("Username: {}", u.username);
+            println!("Name:     {}", u.display_name);
+            println!("Role:     {}", u.role_id);
+            println!("Active:   {}", if u.is_active { "yes" } else { "no" });
+            println!("Created:  {}", u.created_at);
+            println!("Updated:  {}", u.updated_at);
+        }
+        None => {
+            println!("User not found: {id}");
+        }
+    }
+    Ok(())
+}
+
+fn run_user_create(
+    store: &Store<'_>,
+    username: &str,
+    pin_hash: &str,
+    display_name: &str,
+    role_id: &str,
+) -> Result<()> {
+    match store.create_user(username, pin_hash, display_name, role_id) {
+        Ok(u) => {
+            println!("Created user: {} ({})", u.display_name, u.username);
+        }
+        Err(CoreError::Validation { message, .. }) => {
+            eprintln!("Validation error: {message}");
+            std::process::exit(1);
+        }
+        Err(CoreError::Conflict { entity, field }) => {
+            eprintln!("Conflict: {entity} already exists ({field})");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    }
     Ok(())
 }
 
