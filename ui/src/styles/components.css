@@ -299,6 +299,24 @@
   to   { opacity: 1; }
 }
 
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--color-fg-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+.theme-toggle:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
 @keyframes modal-slide-up {
   from {
     opacity: 0;

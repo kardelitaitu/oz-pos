@@ -13,7 +13,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::io::AsyncBufReadExt;
 use tokio::sync::Mutex;
 use tokio::task::spawn_blocking;
 
@@ -80,11 +79,11 @@ impl BarcodeScanner for SerialBarcodeScanner {
             }));
         }
 
-        let port = open_port(&self.port_name, self.baud_rate)?;
+        let mut port = open_port(&self.port_name, self.baud_rate)?;
 
         // Enable read timeout so poll() doesn't block forever.
         port.set_timeout(std::time::Duration::from_millis(500))
-            .map_err(|e| HalError::Io(e))?;
+            .map_err(|e| HalError::Protocol(format!("serial set_timeout: {e}")))?;
 
         *guard = Some(port);
 
@@ -99,8 +98,8 @@ impl BarcodeScanner for SerialBarcodeScanner {
     async fn poll(&mut self, timeout_ms: u32) -> Result<Option<Barcode>, HalError> {
         let port_arc = self.port.clone();
 
-        let result = spawn_blocking(move || {
-            let mut guard = port_arc.blocking_lock().ok().ok_or(HalError::Busy)?;
+        spawn_blocking(move || {
+            let mut guard = port_arc.blocking_lock();
             let port = guard
                 .as_mut()
                 .ok_or(HalError::NotFound("not connected".into()))?;
@@ -115,7 +114,6 @@ impl BarcodeScanner for SerialBarcodeScanner {
                     return if buf.is_empty() {
                         Ok(None)
                     } else {
-                        // Return what we have so far (no terminator received)
                         let code = String::from_utf8_lossy(&buf).trim().to_owned();
                         Ok(Some(Barcode::new(code)))
                     };
@@ -124,7 +122,6 @@ impl BarcodeScanner for SerialBarcodeScanner {
                 let mut byte = [0u8; 1];
                 match port.read(&mut byte) {
                     Ok(0) | Err(_) => {
-                        // Timeout or error — return what we have (if any)
                         if buf.is_empty() {
                             return Ok(None);
                         }
@@ -157,9 +154,7 @@ impl BarcodeScanner for SerialBarcodeScanner {
             }
         })
         .await
-        .map_err(|e| HalError::Usb(format!("serial poll join error: {e}")))?;
-
-        result
+        .map_err(|e| HalError::Usb(format!("serial poll join error: {e}")))?
     }
 
     async fn cancel(&self) -> Result<(), HalError> {

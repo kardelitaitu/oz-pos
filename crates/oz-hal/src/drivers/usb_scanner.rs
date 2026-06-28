@@ -180,61 +180,64 @@ impl BarcodeScanner for UsbHidBarcodeScanner {
     async fn poll(&mut self, timeout_ms: u32) -> Result<Option<Barcode>, HalError> {
         let handle_arc = self.handle.clone();
         let ep_in = self.usb_info.endpoint_in;
+        let total_timeout = Duration::from_millis(timeout_ms as u64);
 
-        let timeout = Duration::from_millis(timeout_ms as u64);
+        spawn_blocking(move || {
+            let mut guard = handle_arc.blocking_lock();
+            let handle = guard
+                .as_mut()
+                .ok_or(HalError::NotFound("not connected".into()))?;
 
-        // Accumulate a barcode string from sequential HID reports.
-        let mut code = String::with_capacity(32);
+            let deadline = std::time::Instant::now() + total_timeout;
+            let mut code = String::with_capacity(32);
+            let read_timeout = Duration::from_millis(50);
 
-        // Read HID reports until we see Enter (newline) or timeout.
-        loop {
-            let result: Result<Option<char>, HalError> = spawn_blocking(move || {
-                let mut guard = handle_arc
-                    .blocking_lock()
-                    .ok()
-                    .ok_or(HalError::Busy)?;
-
-                let handle = guard
-                    .as_mut()
-                    .ok_or(HalError::NotFound("not connected".into()))?;
+            loop {
+                if std::time::Instant::now() >= deadline {
+                    return if code.is_empty() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(Barcode::new(&code)))
+                    };
+                }
 
                 let mut buf = [0u8; 8];
+                let timeout = std::cmp::min(
+                    read_timeout,
+                    deadline.saturating_duration_since(std::time::Instant::now()),
+                );
+
                 match handle.read_interrupt(ep_in, &mut buf, timeout) {
-                    Ok(_) => Ok(hid_report_to_char(&buf)),
-                    Err(rusb::Error::Timeout) => Ok(None),
+                    Ok(_) => {
+                        match hid_report_to_char(&buf) {
+                            Some('\n') => {
+                                // Enter terminator — barcode complete.
+                                // If code is empty (spurious enter), keep reading.
+                                if !code.is_empty() {
+                                    return Ok(Some(Barcode::new(&code)));
+                                }
+                            }
+                            Some(ch) => code.push(ch),
+                            None => { /* key-up report or modifier — ignore */ }
+                        }
+                    }
+                    Err(rusb::Error::Timeout) => {
+                        // Timeout between keys — if we have data, the barcode
+                        // might be complete (scanner without terminator).
+                        if !code.is_empty() {
+                            return Ok(Some(Barcode::new(&code)));
+                        }
+                    }
                     Err(rusb::Error::NoDevice) => {
                         *guard = None;
-                        Err(HalError::Disconnected)
+                        return Err(HalError::Disconnected);
                     }
-                    Err(e) => Err(HalError::Usb(e.to_string())),
+                    Err(e) => return Err(HalError::Usb(e.to_string())),
                 }
-            })
-            .await
-            .map_err(|e| HalError::Usb(format!("spawn_blocking join error: {e}")))?;
-
-            match result {
-                Ok(Some('\n')) => {
-                    // Enter terminator — barcode complete
-                    if code.is_empty() {
-                        // Spurious enter; keep reading
-                        continue;
-                    }
-                    return Ok(Some(Barcode::new(&code)));
-                }
-                Ok(Some(ch)) => {
-                    code.push(ch);
-                }
-                Ok(None) => {
-                    // Timeout — if we have accumulated characters, return them.
-                    // This handles scanners that don't send a terminator.
-                    if !code.is_empty() {
-                        return Ok(Some(Barcode::new(&code)));
-                    }
-                    return Ok(None);
-                }
-                Err(e) => return Err(e),
             }
-        }
+        })
+        .await
+        .map_err(|e| HalError::Usb(format!("spawn_blocking join error: {e}")))?
     }
 
     async fn cancel(&self) -> Result<(), HalError> {

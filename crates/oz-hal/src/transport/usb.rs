@@ -4,7 +4,7 @@
 //! devices by known VID/PID pairs. The discovery functions in this module
 //! are called by [`DriverRegistry::discover()`] at startup.
 
-use rusb::{Context, DeviceDescriptor};
+use rusb::{Context, UsbContext};
 
 use crate::error::HalError;
 
@@ -91,7 +91,7 @@ pub fn probe_by_class(class: u8) -> Result<Vec<UsbDeviceInfo>, HalError> {
 
         for interface in config.interfaces() {
             for setting in interface.descriptors() {
-                if setting.interface_class() != class {
+                if setting.class_code() != class {
                     continue;
                 }
 
@@ -151,10 +151,10 @@ pub fn probe_scanners() -> Result<Vec<UsbDeviceInfo>, HalError> {
     // Also check vendor-specific class for devices not exposing HID class
     if let Ok(vendor_devices) = probe_by_class(CLASS_VENDOR_SPECIFIC) {
         for dev in vendor_devices {
-            if KNOWN_SCANNERS.contains(&(dev.vid, dev.pid)) {
-                if !results.iter().any(|r| r.vid == dev.vid && r.pid == dev.pid) {
-                    results.push(dev);
-                }
+            if KNOWN_SCANNERS.contains(&(dev.vid, dev.pid))
+                && !results.iter().any(|r| r.vid == dev.vid && r.pid == dev.pid)
+            {
+                results.push(dev);
             }
         }
     }
@@ -193,7 +193,7 @@ pub fn open_device(
         })
         .ok_or_else(|| HalError::NotFound(format!("USB device {vid:#06x}:{pid:#06x}")))?;
 
-    let mut handle = device
+    let handle = device
         .open()
         .map_err(|e| HalError::Usb(format!("failed to open USB device: {e}")))?;
 

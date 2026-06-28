@@ -16,7 +16,7 @@ use tokio::task::spawn_blocking;
 
 use crate::error::HalError;
 use crate::traits::printer::ReceiptPrinter;
-use crate::transport::usb::{open_device, UsbDeviceInfo};
+use crate::transport::usb::UsbDeviceInfo;
 use crate::types::DeviceInfo;
 
 // ---------------------------------------------------------------------------
@@ -34,6 +34,7 @@ const CUT_PARTIAL: &[u8] = &[0x1D, 0x56, 0x01];
 /// Select character font A (12×24).
 const FONT_A: &[u8] = &[0x1B, 0x4D, 0x00];
 /// Select character font B (9×17).
+#[allow(dead_code)]
 const FONT_B: &[u8] = &[0x1B, 0x4D, 0x01];
 /// Set line spacing to default (30 dots).
 const LINE_SPACING_DEFAULT: &[u8] = &[0x1B, 0x32];
@@ -99,7 +100,23 @@ impl UsbReceiptPrinter {
         buf
     }
 
+    async fn ensure_connected(&self) -> Result<(), HalError> {
+        let mut guard = self.handle.lock().await;
+        if guard.is_some() {
+            return Ok(());
+        }
+        let handle = crate::transport::usb::open_device(
+            self.usb_info.vid,
+            self.usb_info.pid,
+            self.usb_info.interface_number,
+        )?;
+        *guard = Some(handle);
+        Ok(())
+    }
+
     async fn write_to_endpoint(&self, data: &[u8]) -> Result<(), HalError> {
+        self.ensure_connected().await?;
+
         let handle_arc = self.handle.clone();
         let ep_out = self
             .usb_info
@@ -110,7 +127,7 @@ impl UsbReceiptPrinter {
         let timeout = Duration::from_secs(5);
 
         spawn_blocking(move || {
-            let mut guard = handle_arc.blocking_lock().ok().ok_or(HalError::Busy)?;
+            let mut guard = handle_arc.blocking_lock();
             let handle = guard
                 .as_mut()
                 .ok_or(HalError::NotFound("not connected".into()))?;

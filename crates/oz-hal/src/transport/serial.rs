@@ -46,7 +46,7 @@ pub struct SerialPortInfo {
 /// hardware adapters, or all ports when `only_known` is false.
 pub fn probe_ports(only_known: bool) -> Result<Vec<SerialPortInfo>, HalError> {
     let ports = available_ports()
-        .map_err(|e| HalError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        .map_err(|e| HalError::Io(std::io::Error::other(e.to_string())))?;
 
     let mut results = Vec::new();
 
