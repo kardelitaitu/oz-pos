@@ -22,7 +22,7 @@ use rusqlite::{Connection, params};
 use uuid::Uuid;
 
 use crate::error::CoreError;
-use crate::{Category, Money, Product, Settings, Sku};
+use crate::{Category, Money, Product, Sale, SaleLine, SaleStatus, Settings, Sku};
 
 // ── Store ────────────────────────────────────────────────────────────
 
@@ -399,6 +399,189 @@ impl Store<'_> {
     }
 }
 
+// ── Sale CRUD ────────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// Persist a [`Sale`] (header + all line items) inside a single
+    /// transaction. The sale should have been created by
+    /// [`Sale::from_cart`] so that ids, timestamps, and totals are
+    /// already computed.
+    pub fn create_sale(&self, sale: &Sale) -> Result<(), CoreError> {
+        let cur_str = std::str::from_utf8(&sale.currency.0)
+            .expect("currency bytes are valid UTF-8");
+        let status_str = sale.status.as_stored_str();
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        tx.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                sale.id,
+                sale.total.minor_units,
+                cur_str,
+                sale.line_count,
+                status_str,
+                sale.created_at,
+                sale.updated_at,
+            ],
+        )?;
+
+        for line in &sale.lines {
+            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0)
+                .expect("currency bytes are valid UTF-8");
+            tx.execute(
+                "INSERT INTO sale_lines
+                    (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    line.id,
+                    line.sale_id,
+                    line.sku,
+                    line.qty,
+                    line.unit_price.minor_units,
+                    line.line_total.minor_units,
+                    unit_cur,
+                    line.line_position,
+                ],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Build a [`SaleLine`] from a rusqlite row that has all
+    /// `sale_lines` columns.
+    fn row_to_sale_line(row: &rusqlite::Row) -> rusqlite::Result<SaleLine> {
+        let unit_cur_str: String = row.get("currency")?;
+        Ok(SaleLine {
+            id: row.get("id")?,
+            sale_id: row.get("sale_id")?,
+            sku: row.get("sku")?,
+            qty: row.get("qty")?,
+            unit_price: Money {
+                minor_units: row.get("unit_minor")?,
+                currency: unit_cur_str.parse().expect("valid currency in DB"),
+            },
+            line_total: Money {
+                minor_units: row.get("line_minor")?,
+                currency: unit_cur_str.parse().expect("valid currency in DB"),
+            },
+            line_position: row.get("line_position")?,
+        })
+    }
+
+    /// Look up a single sale by id, including all line items.
+    ///
+    /// Returns `None` when no sale matches the id.
+    pub fn get_sale(&self, id: &str) -> Result<Option<Sale>, CoreError> {
+        let mut sale_stmt = self.conn.prepare(
+            "SELECT id, total_minor, currency, line_count, status, created_at, updated_at
+             FROM sales WHERE id = ?1",
+        )?;
+
+        let sale_result = sale_stmt.query_row(params![id], |row| {
+            let cur_str: String = row.get("currency")?;
+            let status_str: String = row.get("status")?;
+            let status = SaleStatus::from_stored_str(&status_str)
+                .unwrap_or(SaleStatus::Pending);
+            Ok(Sale {
+                id: row.get("id")?,
+                status,
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency: cur_str.parse().expect("valid currency in DB"),
+                },
+                line_count: row.get("line_count")?,
+                currency: cur_str.parse().expect("valid currency in DB"),
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+                lines: Vec::new(), // filled below
+            })
+        });
+
+        let mut sale = match sale_result {
+            Ok(s) => s,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+
+        // Load lines.
+        let mut line_stmt = self.conn.prepare(
+            "SELECT id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position
+             FROM sale_lines WHERE sale_id = ?1 ORDER BY line_position",
+        )?;
+        let line_rows = line_stmt.query_map(params![id], Self::row_to_sale_line)?;
+        for line in line_rows {
+            sale.lines.push(line?);
+        }
+
+        Ok(Some(sale))
+    }
+
+    /// Update the status of a sale, validating the state machine
+    /// transition. Returns the updated [`Sale`] with all line items.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NotFound`] when the sale id doesn't exist.
+    /// Returns [`CoreError::Validation`] when the transition is
+    /// invalid per the state machine.
+    pub fn update_sale_status(
+        &self,
+        id: &str,
+        to: SaleStatus,
+    ) -> Result<Sale, CoreError> {
+        // Read current status.
+        let result = self.conn.query_row(
+            "SELECT status FROM sales WHERE id = ?1",
+            params![id],
+            |row| row.get::<_, String>(0),
+        );
+
+        let current_str = match result {
+            Ok(s) => s,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return Err(CoreError::NotFound {
+                    entity: "sale",
+                    id: id.to_owned(),
+                });
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        let current = SaleStatus::from_stored_str(&current_str).ok_or_else(|| {
+            CoreError::Validation {
+                field: "status",
+                message: format!("invalid stored status: {current_str}"),
+            }
+        })?;
+
+        if !SaleStatus::can_transition_to(current, to) {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: format!(
+                    "cannot transition from {:?} to {:?}",
+                    current, to,
+                ),
+            });
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let status_str = to.as_stored_str();
+        self.conn.execute(
+            "UPDATE sales SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            params![status_str, now, id],
+        )?;
+
+        self.get_sale(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "sale",
+            id: id.to_owned(),
+        })
+    }
+}
+
 // ── Settings delegation ───────────────────────────────────────────────
 
 impl Store<'_> {
@@ -450,6 +633,7 @@ mod tests {
     use super::*;
     use crate::migrations;
     use crate::Currency;
+    use crate::Cart;
 
     fn fresh() -> Connection {
         let mut conn = Connection::open_in_memory().unwrap();
@@ -767,6 +951,129 @@ mod tests {
         // DRINK-002 has no inventory row → baseline 0.
         let new_qty = store(&conn).adjust_stock("DRINK-002", 30).unwrap();
         assert_eq!(new_qty, 30);
+    }
+
+    // ── Sale CRUD ───────────────────────────────────────────────
+
+    fn make_cart() -> crate::Cart {
+        use crate::CartLine;
+        let mut cart = crate::Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("COFFEE"), 2, price(350)))
+            .unwrap();
+        cart.add_line(CartLine::new(Sku::new("BAGEL"), 1, price(450)))
+            .unwrap();
+        cart
+    }
+
+    #[test]
+    fn create_sale_persists_header() {
+        let conn = fresh();
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
+        store(&conn).create_sale(&sale).unwrap();
+
+        let loaded = store(&conn).get_sale(&sale.id).unwrap().unwrap();
+        assert_eq!(loaded.id, sale.id);
+        assert_eq!(loaded.status, SaleStatus::Pending);
+        assert_eq!(loaded.total.minor_units, 1150);
+        assert_eq!(loaded.line_count, 2);
+    }
+
+    #[test]
+    fn create_sale_persists_lines() {
+        let conn = fresh();
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
+        store(&conn).create_sale(&sale).unwrap();
+
+        let loaded = store(&conn).get_sale(&sale.id).unwrap().unwrap();
+        assert_eq!(loaded.lines.len(), 2);
+        assert_eq!(loaded.lines[0].sku, "COFFEE");
+        assert_eq!(loaded.lines[0].qty, 2);
+        assert_eq!(loaded.lines[0].unit_price.minor_units, 350);
+        assert_eq!(loaded.lines[0].line_total.minor_units, 700);
+        assert_eq!(loaded.lines[0].line_position, 1);
+        assert_eq!(loaded.lines[1].sku, "BAGEL");
+        assert_eq!(loaded.lines[1].line_position, 2);
+    }
+
+    #[test]
+    fn create_sale_empty_cart() {
+        let conn = fresh();
+        let cart = Cart::new(usd());
+        let sale = Sale::from_cart(&cart).unwrap();
+        // Sale with 0 lines should persist (total = 0, line_count = 0).
+        store(&conn).create_sale(&sale).unwrap();
+        let loaded = store(&conn).get_sale(&sale.id).unwrap().unwrap();
+        assert_eq!(loaded.line_count, 0);
+        assert_eq!(loaded.lines.len(), 0);
+        assert_eq!(loaded.total.minor_units, 0);
+    }
+
+    #[test]
+    fn get_sale_not_found() {
+        let conn = fresh();
+        let result = store(&conn).get_sale("nope").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn update_sale_status_active() {
+        let conn = fresh();
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
+        store(&conn).create_sale(&sale).unwrap();
+
+        let updated = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Active)
+            .unwrap();
+        assert_eq!(updated.status, SaleStatus::Active);
+        assert!(!updated.updated_at.is_empty());
+    }
+
+    #[test]
+    fn update_sale_status_full_flow() {
+        let conn = fresh();
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
+        store(&conn).create_sale(&sale).unwrap();
+
+        // Pending -> Active.
+        let s = store(&conn).update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        assert_eq!(s.status, SaleStatus::Active);
+
+        // Active -> Completed.
+        let s = store(&conn).update_sale_status(&sale.id, SaleStatus::Completed).unwrap();
+        assert_eq!(s.status, SaleStatus::Completed);
+
+        // Terminal -> rejected.
+        let err = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Voided)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { .. }));
+    }
+
+    #[test]
+    fn update_sale_status_not_found() {
+        let conn = fresh();
+        let err = store(&conn)
+            .update_sale_status("nope", SaleStatus::Active)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    #[test]
+    fn update_sale_status_invalid_transition() {
+        let conn = fresh();
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
+        store(&conn).create_sale(&sale).unwrap();
+
+        // Pending -> Completed is invalid.
+        let err = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { .. }));
     }
 
     // ── Settings delegation ──────────────────────────────────────

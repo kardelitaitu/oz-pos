@@ -80,6 +80,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/products/{sku}", get(routes::products::get_product))
         .route("/api/v1/products/{sku}/stock", patch(routes::products::patch_stock))
         .route("/api/v1/categories", get(routes::categories::list_categories))
+        .route("/api/v1/sales", post(routes::sales::create_sale))
+        .route("/api/v1/sales/{id}", get(routes::sales::get_sale))
+        .route("/api/v1/sales/{id}/status", patch(routes::sales::update_sale_status))
         .layer(middleware::from_fn(auth::auth_middleware));
 
     Router::new()
@@ -706,6 +709,200 @@ mod tests {
         assert_eq!(arr[0]["colour"], "#06b6d4");
         assert_eq!(arr[1]["name"], "Food");
         assert_eq!(arr[1]["colour"], "#f97316");
+    }
+
+    // ── Sale endpoints ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn create_sale_returns_201() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{
+            "lines": [
+                {"sku": "COFFEE", "qty": 2, "unit_price": {"minor_units": 350, "currency": "USD"}}
+            ]
+        }"#;
+        let req = auth_post_json("/api/v1/sales", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["status"], "pending");
+        assert_eq!(json["line_count"], 1);
+        assert_eq!(json["total"]["minor_units"], 700);
+        assert!(json["id"].is_string());
+        assert!(json["lines"].is_array());
+        assert_eq!(json["lines"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn create_sale_multi_line() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{
+            "lines": [
+                {"sku": "COFFEE", "qty": 2, "unit_price": {"minor_units": 350, "currency": "USD"}},
+                {"sku": "BAGEL",  "qty": 1, "unit_price": {"minor_units": 450, "currency": "USD"}}
+            ]
+        }"#;
+        let req = auth_post_json("/api/v1/sales", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["line_count"], 2);
+        assert_eq!(json["total"]["minor_units"], 1150);
+        let lines = json["lines"].as_array().unwrap();
+        assert_eq!(lines[0]["line_position"], 1);
+        assert_eq!(lines[1]["line_position"], 2);
+        assert_eq!(lines[0]["sku"], "COFFEE");
+        assert_eq!(lines[1]["sku"], "BAGEL");
+    }
+
+    #[tokio::test]
+    async fn create_sale_empty_lines_rejected() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"lines": []}"#;
+        let req = auth_post_json("/api/v1/sales", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn create_sale_requires_auth() {
+        let body = r#"{"lines": [{"sku":"X","qty":1,"unit_price":{"minor_units":100,"currency":"USD"}}]}"#;
+        let req = post_json("/api/v1/sales", body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn get_sale_returns_detail() {
+        let token = auth::create_token("test", Some(1));
+        // Create a sale first.
+        let create_body = r#"{
+            "lines": [
+                {"sku": "COFFEE", "qty": 2, "unit_price": {"minor_units": 350, "currency": "USD"}}
+            ]
+        }"#;
+        let app = test_app();
+        let create_req = auth_post_json("/api/v1/sales", &token.token, create_body);
+        let create_resp = app.clone().oneshot(create_req).await.unwrap();
+        let create_json = body_json(create_resp).await;
+        let sale_id = create_json["id"].as_str().unwrap().to_string();
+
+        // Fetch the sale.
+        let get_req = auth_get(&format!("/api/v1/sales/{sale_id}"), &token.token);
+        let get_resp = app.oneshot(get_req).await.unwrap();
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let json = body_json(get_resp).await;
+        assert_eq!(json["id"], sale_id);
+        assert_eq!(json["status"], "pending");
+        assert_eq!(json["line_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn get_sale_not_found_returns_null() {
+        let token = auth::create_token("test", Some(1));
+        let req = auth_get("/api/v1/sales/nonexistent-id", &token.token);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert!(json.is_null());
+    }
+
+    #[tokio::test]
+    async fn get_sale_requires_auth() {
+        let req = Request::builder()
+            .uri("/api/v1/sales/some-id")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn update_sale_status_pending_to_active() {
+        let token = auth::create_token("test", Some(1));
+        let app = test_app();
+
+        // Create a sale.
+        let create_body = r#"{
+            "lines": [{"sku": "TEA", "qty": 1, "unit_price": {"minor_units": 200, "currency": "USD"}}]
+        }"#;
+        let create_req = auth_post_json("/api/v1/sales", &token.token, create_body);
+        let create_resp = app.clone().oneshot(create_req).await.unwrap();
+        let sale_id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+
+        // Transition to active.
+        let patch_body = r#"{"status": "active"}"#;
+        let patch_req = auth_patch_json(
+            &format!("/api/v1/sales/{sale_id}/status"),
+            &token.token,
+            patch_body,
+        );
+        let patch_resp = app.clone().oneshot(patch_req).await.unwrap();
+        assert_eq!(patch_resp.status(), StatusCode::OK);
+        let json = body_json(patch_resp).await;
+        assert_eq!(json["status"], "active");
+        assert!(json["updated_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn update_sale_status_full_flow() {
+        let token = auth::create_token("test", Some(1));
+        let app = test_app();
+
+        let create_body = r#"{
+            "lines": [{"sku": "A", "qty": 1, "unit_price": {"minor_units": 100, "currency": "USD"}}]
+        }"#;
+        let create_req = auth_post_json("/api/v1/sales", &token.token, create_body);
+        let create_resp = app.clone().oneshot(create_req).await.unwrap();
+        let sale_id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+
+        // Active -> Completed.
+        let r1 = auth_patch_json(&format!("/api/v1/sales/{sale_id}/status"), &token.token, r#"{"status": "active"}"#);
+        let resp1 = app.clone().oneshot(r1).await.unwrap();
+        assert_eq!(resp1.status(), StatusCode::OK);
+
+        let r2 = auth_patch_json(&format!("/api/v1/sales/{sale_id}/status"), &token.token, r#"{"status": "completed"}"#);
+        let resp2 = app.clone().oneshot(r2).await.unwrap();
+        assert_eq!(resp2.status(), StatusCode::OK);
+        assert_eq!(body_json(resp2).await["status"], "completed");
+    }
+
+    #[tokio::test]
+    async fn update_sale_status_invalid_transition_returns_422() {
+        let token = auth::create_token("test", Some(1));
+        let app = test_app();
+
+        let create_body = r#"{
+            "lines": [{"sku": "B", "qty": 1, "unit_price": {"minor_units": 100, "currency": "USD"}}]
+        }"#;
+        let create_req = auth_post_json("/api/v1/sales", &token.token, create_body);
+        let create_resp = app.clone().oneshot(create_req).await.unwrap();
+        let sale_id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+
+        // Pending -> Completed is invalid.
+        let req = auth_patch_json(&format!("/api/v1/sales/{sale_id}/status"), &token.token, r#"{"status": "completed"}"#);
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn update_sale_status_not_found_returns_404() {
+        let token = auth::create_token("test", Some(1));
+        let req = auth_patch_json("/api/v1/sales/nope-999/status", &token.token, r#"{"status": "active"}"#);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn update_sale_status_requires_auth() {
+        let req = Request::builder()
+            .method("PATCH")
+            .uri("/api/v1/sales/some-id/status")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"status": "active"}"#))
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     // ── Edge cases ───────────────────────────────────────────────

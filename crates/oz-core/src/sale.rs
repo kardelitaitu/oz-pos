@@ -37,6 +37,38 @@ impl SaleStatus {
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Completed | Self::Voided)
     }
+
+    /// Canonical string representation for database storage (kebab-case).
+    pub fn as_stored_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Active => "active",
+            Self::Completed => "completed",
+            Self::Voided => "voided",
+        }
+    }
+
+    /// Parse a status from its stored string representation.
+    pub fn from_stored_str(s: &str) -> Option<Self> {
+        match s {
+            "pending" => Some(Self::Pending),
+            "active" => Some(Self::Active),
+            "completed" => Some(Self::Completed),
+            "voided" => Some(Self::Voided),
+            _ => None,
+        }
+    }
+
+    /// Check whether a transition from `from` to `to` is valid by the
+    /// state machine rules (without needing a full `Sale` instance).
+    pub fn can_transition_to(from: Self, to: Self) -> bool {
+        matches!(
+            (from, to),
+            (Self::Pending, Self::Active)
+                | (Self::Active, Self::Completed)
+                | (Self::Active, Self::Voided)
+        )
+    }
 }
 
 /// Error returned when an invalid state transition is attempted.
