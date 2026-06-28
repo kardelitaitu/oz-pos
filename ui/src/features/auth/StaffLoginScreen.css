@@ -1,0 +1,339 @@
+/* ── Full-screen auth overlay ───────────────────────────────────── */
+
+.staff-login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  animation: staff-login-fade-in 0.3s ease-out;
+}
+
+@keyframes staff-login-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Login card ──────────────────────────────────────────────────── */
+
+.staff-login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
+  max-width: 360px;
+  width: 100%;
+  animation: staff-login-slide-up 0.35s ease-out;
+}
+
+@keyframes staff-login-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.staff-login-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  margin-bottom: var(--space-1);
+}
+
+.staff-login-logo svg {
+  width: 28px;
+  height: 28px;
+}
+
+.staff-login-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-accent);
+  letter-spacing: var(--tracking-tight);
+}
+
+.staff-login-subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Step indicator ──────────────────────────────────────────────── */
+
+.staff-login-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0;
+}
+
+.staff-login-step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+  transition: all 0.2s ease;
+}
+
+.staff-login-step-dot--active {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
+.staff-login-step-dot--done {
+  background: var(--color-accent);
+  opacity: 0.5;
+}
+
+.staff-login-step-line {
+  width: 24px;
+  height: 2px;
+  background: var(--color-border);
+  border-radius: 1px;
+}
+
+.staff-login-step-label {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-fg);
+  text-align: center;
+}
+
+/* ── Username form ───────────────────────────────────────────────── */
+
+.staff-login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.staff-login-input-wrap {
+  width: 100%;
+}
+
+.staff-login-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-lg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  color: var(--color-fg);
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.staff-login-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
+.staff-login-input::placeholder {
+  color: var(--color-fg-tertiary);
+}
+
+.staff-login-submit-btn {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-accent);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.staff-login-submit-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.staff-login-submit-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.staff-login-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── PIN section ─────────────────────────────────────────────────── */
+
+.staff-login-pin-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.staff-login-pin-dots {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.staff-login-pin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-border);
+  background: transparent;
+  transition: all 0.15s ease;
+}
+
+.staff-login-pin-dot--filled {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  transform: scale(1.1);
+}
+
+/* ── PIN pad ─────────────────────────────────────────────────────── */
+
+.staff-login-pad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 280px;
+}
+
+.staff-login-pad-row {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.staff-login-pad-key {
+  width: 72px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  color: var(--color-fg);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.staff-login-pad-key:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  border-color: var(--color-accent);
+}
+
+.staff-login-pad-key:active:not(:disabled) {
+  transform: scale(0.95);
+  background: var(--color-accent-subtle);
+}
+
+.staff-login-pad-key:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.staff-login-pad-key--clear,
+.staff-login-pad-key--backspace {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-fg-secondary);
+}
+
+.staff-login-pad-key--backspace svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ── Verify hint ─────────────────────────────────────────────────── */
+
+.staff-login-verify-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  text-align: center;
+}
+
+/* ── Error ────────────────────────────────────────────────────────── */
+
+.staff-login-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+.staff-login-error svg {
+  flex-shrink: 0;
+}
+
+/* ── Loading ──────────────────────────────────────────────────────── */
+
+.staff-login-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-fg-secondary);
+  font-size: var(--text-sm);
+  margin-top: var(--space-2);
+}
+
+.staff-login-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  animation: staff-login-spin 0.6s linear infinite;
+}
+
+@keyframes staff-login-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── PIN submit button ──────────────────────────────────────────── */
+
+.staff-login-pin-submit {
+  margin-top: var(--space-1);
+}
+
+/* ── Back link ───────────────────────────────────────────────────── */
+
+.staff-login-back-link {
+  background: none;
+  border: none;
+  color: var(--color-fg-link);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.staff-login-back-link:hover {
+  text-decoration: underline;
+}

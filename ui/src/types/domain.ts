@@ -37,6 +37,8 @@ export interface Product {
   readonly barcode: string | null;
   /** Whether the product is currently in stock. */
   readonly inStock: boolean;
+  /** Current stock quantity, or null if tracking is disabled. */
+  readonly stockQty: number | null;
 }
 
 /** Mirrors `AppError` in `src-tauri/src/error.rs`. */

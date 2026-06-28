@@ -1,9 +1,11 @@
 //! Currency-lookup command for the front-end.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use tauri::State;
 use tauri::command;
 
 use crate::error::AppError;
+use crate::state::AppState;
 
 /// Currency info returned to the front-end for formatting.
 #[derive(Debug, Serialize)]
@@ -25,6 +27,58 @@ pub async fn currency_info(
         code: String::from_utf8_lossy(&currency.0).into_owned(),
         exponent: currency.minor_unit_exponent(),
     })
+}
+
+/// A currency DTO for the front-end.
+#[derive(Debug, Serialize)]
+pub struct CurrencyDto {
+    pub code: String,
+    pub name: String,
+    pub minor_exponent: u32,
+    pub symbol: String,
+}
+
+#[command]
+pub async fn list_currencies(
+    state: State<'_, AppState>,
+) -> Result<Vec<CurrencyDto>, AppError> {
+    let db = state.db.lock().await;
+    let store = oz_core::db::Store::new(&db);
+    let rows = store.list_currencies()?;
+    Ok(rows
+        .into_iter()
+        .map(|(code, name, minor_exponent, symbol)| CurrencyDto {
+            code,
+            name,
+            minor_exponent,
+            symbol,
+        })
+        .collect())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetDefaultCurrencyArgs {
+    pub code: String,
+}
+
+#[command]
+pub async fn get_default_currency(
+    state: State<'_, AppState>,
+) -> Result<Option<String>, AppError> {
+    let db = state.db.lock().await;
+    let store = oz_core::db::Store::new(&db);
+    Ok(store.get_default_currency()?)
+}
+
+#[command]
+pub async fn set_default_currency(
+    args: SetDefaultCurrencyArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = oz_core::db::Store::new(&db);
+    store.set_default_currency(&args.code)?;
+    Ok(())
 }
 
 #[cfg(test)]

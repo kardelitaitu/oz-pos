@@ -95,6 +95,9 @@ pub enum CartError {
     /// Tried to remove a SKU that isn't in the cart.
     #[error("sku not in cart: {0}")]
     SkuNotInCart(String),
+    /// Invalid discount percentage (must be 0-100).
+    #[error("invalid discount percentage: {0} (must be 0-100)")]
+    InvalidDiscount(i64),
 }
 
 /// An open cart scoped to a single currency.
@@ -103,6 +106,12 @@ pub struct Cart {
     id: CartId,
     currency: crate::money::Currency,
     lines: Vec<CartLine>,
+    /// Discount percentage (0-100). 0 means no discount.
+    #[serde(default)]
+    discount_percent: i64,
+    /// Optional human-readable label for the discount (e.g. "Senior 10%").
+    #[serde(default)]
+    discount_label: Option<String>,
 }
 
 impl Cart {
@@ -113,6 +122,8 @@ impl Cart {
             id: CartId::new(),
             currency,
             lines: Vec::new(),
+            discount_percent: 0,
+            discount_label: None,
         }
     }
 
@@ -131,6 +142,33 @@ impl Cart {
     #[must_use]
     pub fn line_count(&self) -> usize {
         self.lines.len()
+    }
+
+    /// Get the current discount percentage.
+    #[must_use]
+    pub fn discount_percent(&self) -> i64 {
+        self.discount_percent
+    }
+
+    /// Get the discount label.
+    #[must_use]
+    pub fn discount_label(&self) -> Option<&str> {
+        self.discount_label.as_deref()
+    }
+
+    /// Set a cart-level discount.
+    ///
+    /// `percent` must be between 0 and 100 inclusive.
+    /// `label` is an optional human-readable description.
+    /// Pass `percent = 0` to clear the discount.
+    #[must_use]
+    pub fn set_discount(&mut self, percent: i64, label: Option<String>) -> Result<(), CartError> {
+        if !(0..=100).contains(&percent) {
+            return Err(CartError::InvalidDiscount(percent));
+        }
+        self.discount_percent = percent;
+        self.discount_label = if percent == 0 { None } else { label };
+        Ok(())
     }
 
     /// Append a line. Returns `Err(CartError::CurrencyMismatch)` if the
@@ -159,7 +197,10 @@ impl Cart {
         }
     }
 
-    /// Sum of all line totals. Returns `None` on `i64` overflow.
+    /// Sum of all line totals, minus any discount. Returns `None` on `i64` overflow.
+    ///
+    /// Applies the discount percentage to the subtotal. For example, a 10%
+    /// discount on a $10.00 subtotal gives a $9.00 total.
     #[must_use]
     pub fn total(&self) -> Option<Money> {
         let mut acc = Money::zero(self.currency);
@@ -167,7 +208,34 @@ impl Cart {
             let t = line.total()?;
             acc = acc.checked_add(t)?;
         }
+        if self.discount_percent > 0 {
+            // Apply percentage: total * (100 - discount_percent) / 100
+            let discount_multiplier = 100 - self.discount_percent;
+            let discounted = acc.minor_units.checked_mul(discount_multiplier)? / 100;
+            acc = Money {
+                minor_units: discounted,
+                currency: self.currency,
+            };
+        }
         Some(acc)
+    }
+
+    /// The discount amount in minor units, or 0 if no discount is applied.
+    #[must_use]
+    pub fn discount_amount(&self) -> Option<Money> {
+        if self.discount_percent == 0 {
+            return Some(Money::zero(self.currency));
+        }
+        let mut subtotal = Money::zero(self.currency);
+        for line in &self.lines {
+            let t = line.total()?;
+            subtotal = subtotal.checked_add(t)?;
+        }
+        let discounted = subtotal.minor_units.checked_mul(self.discount_percent)? / 100;
+        Some(Money {
+            minor_units: discounted,
+            currency: self.currency,
+        })
     }
 }
 

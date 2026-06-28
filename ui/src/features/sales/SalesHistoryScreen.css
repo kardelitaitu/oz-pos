@@ -1,0 +1,178 @@
+.sales-history {
+  padding: var(--space-4);
+}
+
+.sales-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.sales-history-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.sales-history-export-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-fg-link);
+}
+
+.sales-history-export-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.sales-history-loading {
+  color: var(--color-fg-secondary);
+}
+
+.sales-history-empty {
+  text-align: center;
+  padding: var(--space-12) var(--space-4);
+  color: var(--color-fg-secondary);
+}
+
+.sales-history-table-wrap {
+  overflow-x: auto;
+}
+
+.sales-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.sales-history-table th,
+.sales-history-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-history-table th {
+  font-weight: 600;
+  color: var(--color-fg-secondary);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sales-history-cell-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.sales-history-cell-total {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: right;
+}
+
+.sales-history-cell-actions {
+  text-align: right;
+}
+
+.sales-history-action-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-fg-link);
+}
+
+.sales-history-action-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.sales-history-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.sales-history-modal {
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 640px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.sales-history-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-history-modal-header h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.sales-history-modal-close {
+  background: none;
+  border: none;
+  font-size: var(--text-xl);
+  cursor: pointer;
+  color: var(--color-fg-secondary);
+  padding: var(--space-1);
+  line-height: 1;
+}
+
+.sales-history-modal-body {
+  padding: var(--space-4);
+}
+
+.sales-history-detail-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.sales-history-lines-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+
+.sales-history-lines-table th,
+.sales-history-lines-table td {
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-history-lines-table th {
+  font-weight: 600;
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+}
+
+.sales-history-modal-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}

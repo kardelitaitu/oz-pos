@@ -13,9 +13,13 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
-
-[dev-dependencies]
-# Used by SerDe round-trip tests in money.rs and sku.rs to verify
-# the wire format produces bare strings ("USD", "COFFEE") rather
-# than arrays or objects. Not a runtime dep.
+argon2 = { workspace = true }
+aes-gcm = { workspace = true }
+zstd = { workspace = true }
+aead = { workspace = true }
+rand = { workspace = true }
+hex = "0.4"
 serde_json = { workspace = true }
+
+# Property-based testing for feature flag invariants.
+proptest = "1"

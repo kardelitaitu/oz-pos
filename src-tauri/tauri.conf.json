@@ -59,7 +59,7 @@
       "endpoints": [
         "https://github.com/kardelitaitu/oz-pos/releases/latest/download/latest.json"
       ],
-      "pubkey": "PLACEHOLDER_EDIT_AFTER_KEY_GENERATION",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5QzJBNzRGMEJBOUQ2QUUKUldTdTFxa0xUNmZDZVkwUGRaRllSbDlJNjZ1VzhJc0ptdExKc29mdVdXNzhGM0RqVElObTFBZFcK",
       "windows": {
         "installMode": "basicUi"
       }

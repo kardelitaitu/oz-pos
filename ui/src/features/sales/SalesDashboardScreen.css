@@ -1,0 +1,106 @@
+.sales-dashboard {
+  padding: var(--space-4);
+}
+
+.sales-dashboard-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.sales-dashboard-loading {
+  color: var(--color-fg-secondary);
+}
+
+.sales-dashboard-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.sales-dashboard-kpi {
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.sales-dashboard-kpi-label {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.sales-dashboard-kpi-value {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.sales-dashboard-section {
+  margin-top: var(--space-4);
+}
+
+.sales-dashboard-section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.sales-dashboard-hourly-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.sales-dashboard-hour-bar-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 80px;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.sales-dashboard-hour-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.sales-dashboard-hour-bar-track {
+  height: 14px;
+  background: var(--color-bg-hover, var(--color-border));
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.sales-dashboard-hour-bar {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--color-border);
+  transition: width 0.3s ease;
+}
+
+.sales-dashboard-hour-bar--active {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary, var(--color-accent)));
+}
+
+.sales-dashboard-hour-value {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-fg-secondary);
+  text-align: right;
+}
+
+.sales-dashboard-no-data {
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-6) 0;
+  font-size: var(--text-sm);
+}

@@ -25,7 +25,7 @@ use std::sync::Arc;
 use rusqlite::Connection;
 use tauri::AppHandle;
 use tauri::Manager;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
 
 use oz_core::{migrations, Cart, CartId};
 use oz_hal::DriverRegistry;
@@ -42,7 +42,8 @@ pub struct AppState {
     pub registry: Arc<DriverRegistry>,
 
     /// Tauri app handle, used for emitting events to the front-end.
-    pub app: AppHandle,
+    /// `None` in test or headless contexts where no UI is attached.
+    pub app: Option<AppHandle>,
 
     /// Path to the SQLite database file (for diagnostics + `oz-cli` reuse).
     pub db_path: PathBuf,
@@ -51,6 +52,11 @@ pub struct AppState {
     /// TODO(oz-core): replace with a SQLite-backed `CartStore` so
     /// carts survive a restart.
     pub carts: Mutex<HashMap<CartId, Cart>>,
+
+    /// Cancel-sender for the active barcode scanner background task.
+    /// When `Some`, the scanner polling loop is running; dropping
+    /// or signalling it stops the loop gracefully.
+    pub scanner_cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl AppState {
@@ -80,9 +86,10 @@ impl AppState {
         Ok(Self {
             db: Mutex::new(conn),
             registry,
-            app: app.clone(),
+            app: Some(app.clone()),
             db_path,
             carts: Mutex::new(HashMap::new()),
+            scanner_cancel: Mutex::new(None),
         })
     }
 }
@@ -97,14 +104,16 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 
 #[cfg(test)]
 impl AppState {
-    /// Construct an `AppState` suitable for unit tests without a Tauri runtime.
+    /// Construct an `AppState` suitable for unit tests.
+    /// Creates a lightweight Tauri app handle via `tauri::test::mock_builder`.
     pub fn for_test() -> Self {
         Self {
             db: Mutex::new(Connection::open_in_memory().unwrap()),
             registry: Arc::new(DriverRegistry::default()),
-            app: AppHandle::default(),
+            app: None,
             db_path: ":memory:".into(),
             carts: Mutex::new(HashMap::new()),
+            scanner_cancel: Mutex::new(None),
         }
     }
 
@@ -114,9 +123,10 @@ impl AppState {
         Self {
             db: Mutex::new(conn),
             registry: Arc::new(DriverRegistry::default()),
-            app: AppHandle::default(),
+            app: None,
             db_path: ":memory:".into(),
             carts: Mutex::new(HashMap::new()),
+            scanner_cancel: Mutex::new(None),
         }
     }
 }

@@ -57,6 +57,12 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 tauri-plugin-updater = "2"
 rusb = "0.9"
 serialport = "4"
+argon2 = "0.5"
+aes-gcm = "0.10"
+zstd = { version = "0.13", features = ["zstdmt"] }
+aead = "0.5"
+rand = "0.8"
+tracing-appender = "0.2"
 
 [profile.release]
 opt-level = 3

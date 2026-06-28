@@ -128,8 +128,9 @@ pub struct SaleLine {
 /// # Schema mapping
 ///
 /// Maps to the `sales` table (migrations `001_sales.sql` +
-/// `004_sale_status.sql`). The `total` field consolidates `total_minor`
-/// + `currency` into a [`Money`]. Lines are stored in `sale_lines`.
+/// `004_sale_status.sql` + `008_payments.sql`). The `total` field
+/// consolidates `total_minor` + `currency` into a [`Money`]. Lines
+/// are stored in `sale_lines`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sale {
     /// Internal row id (UUID v4).
@@ -147,6 +148,12 @@ pub struct Sale {
     /// Currency for all monetary values in this sale.
     pub currency: Currency,
 
+    /// Payment method used ("cash", "card", "other", or `None`).
+    pub payment_method: Option<String>,
+
+    /// Amount tendered by the customer in minor units (for cash).
+    pub tendered_minor: Option<i64>,
+
     /// ISO-8601 creation timestamp.
     pub created_at: String,
 
@@ -155,14 +162,22 @@ pub struct Sale {
 
     /// Line items in positional order.
     pub lines: Vec<SaleLine>,
+
+    /// Discount percentage applied (0-100). 0 means no discount.
+    #[serde(default)]
+    pub discount_percent: i64,
+
+    /// Human-readable discount label (e.g. "Senior 10%").
+    #[serde(default)]
+    pub discount_label: Option<String>,
 }
 
 impl Sale {
     /// Create a new sale from a [`Cart`].
     ///
     /// Converts every [`CartLine`] into a [`SaleLine`], computes the
-    /// grand total, and sets `status = Pending`. Timestamps are left
-    /// empty for the database layer to fill in.
+    /// grand total, and sets `status = Pending`. Timestamps are set to
+    /// the current UTC time.
     ///
     /// # Returns
     ///
@@ -172,6 +187,7 @@ impl Sale {
         let total = cart.total()?;
         let currency = cart.currency();
         let line_count = cart.line_count() as i64;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let lines: Vec<SaleLine> = cart
             .lines()
@@ -197,9 +213,13 @@ impl Sale {
             total,
             line_count,
             currency,
-            created_at: String::new(),
-            updated_at: String::new(),
+            payment_method: None,
+            tendered_minor: None,
+            created_at: now.clone(),
+            updated_at: now,
             lines,
+            discount_percent: cart.discount_percent(),
+            discount_label: cart.discount_label().map(String::from),
         })
     }
 
@@ -305,11 +325,12 @@ mod tests {
     }
 
     #[test]
-    fn from_cart_preserves_timestamps_empty() {
+    fn from_cart_sets_timestamps() {
         let cart = make_cart();
         let sale = Sale::from_cart(&cart).unwrap();
-        assert!(sale.created_at.is_empty());
-        assert!(sale.updated_at.is_empty());
+        assert!(!sale.created_at.is_empty(), "timestamps should be set");
+        assert!(!sale.updated_at.is_empty(), "timestamps should be set");
+        assert_eq!(sale.created_at, sale.updated_at);
     }
 
     // ── State machine ────────────────────────────────────────────

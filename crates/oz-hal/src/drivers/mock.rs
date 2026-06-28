@@ -270,4 +270,68 @@ mod tests {
         // After the error is consumed, subsequent calls succeed.
         p.print_receipt("y").await.unwrap();
     }
+
+    #[tokio::test]
+    async fn barcode_mock_queue_len() {
+        let m = MockBarcodeScanner::new();
+        assert_eq!(m.queue_len(), 0);
+        m.push(Barcode::new("A"));
+        m.push(Barcode::new("B"));
+        assert_eq!(m.queue_len(), 2);
+        // Poll consumes one.
+        let mut dyn_scanner: Box<dyn BarcodeScanner> = m.connect().await.unwrap();
+        dyn_scanner.poll(0).await.unwrap();
+        assert_eq!(m.queue_len(), 1);
+    }
+
+    #[tokio::test]
+    async fn barcode_mock_cancel() {
+        let m = MockBarcodeScanner::new();
+        let dyn_scanner = m.connect().await.unwrap();
+        dyn_scanner.cancel().await.unwrap();
+        assert_eq!(m.cancel_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn printer_mock_captures_raw_bytes() {
+        let p = MockReceiptPrinter::new();
+        p.print_raw(b"\x1b@\x0a").await.unwrap();
+        p.print_raw(b"hello").await.unwrap();
+        assert_eq!(p.printed_raw.lock().unwrap().len(), 2);
+        assert_eq!(p.printed_raw.lock().unwrap()[0], b"\x1b@\x0a");
+    }
+
+    #[tokio::test]
+    async fn printer_mock_error_affects_raw_too() {
+        let p = MockReceiptPrinter::new();
+        p.set_next_error(HalError::Busy);
+        assert!(matches!(p.print_raw(b"x").await, Err(HalError::Busy)));
+        // Error consumed, next call succeeds.
+        p.print_raw(b"y").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn drawer_error_is_returned() {
+        let d = MockCashDrawer::new();
+        d.set_next_error(HalError::Timeout(100));
+        assert!(matches!(d.open().await, Err(HalError::Timeout(100))));
+        // After error is consumed, subsequent open succeeds.
+        d.open().await.unwrap();
+        assert_eq!(d.open_calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn drawer_is_open_uses_default() {
+        // MockCashDrawer doesn't override is_open, so it returns default.
+        let d = MockCashDrawer::new();
+        let result = d.is_open().await;
+        assert!(matches!(result, Err(HalError::Disconnected)));
+    }
+
+    #[tokio::test]
+    async fn printer_mock_cut_counts_calls() {
+        let p = MockReceiptPrinter::new();
+        p.cut().await.unwrap();
+        assert_eq!(p.cut_calls.load(Ordering::SeqCst), 1);
+    }
 }

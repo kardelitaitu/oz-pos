@@ -2,7 +2,7 @@
 //!
 //! Defines structured receipt models ([`SalesReceipt`]) and the
 //! [`format_sales_receipt`] function that produces a ready-to-print
-//! byte buffer.
+//! byte buffer. Display options are controlled through [`ReceiptConfig`].
 //!
 //! # Layout (80 mm / 48 characters)
 //!
@@ -14,16 +14,16 @@
 //! │ 01 Jan 2026           #REC-001         │
 //! ├───────────────────────────────────────────────┤
 //! │ Item                   Qty  Price  Total│
-//! │ Milk 2%                  1   3.50    3.50│
-//! │ Bread White              2   2.00    4.00│
+//! │ Milk 2%                  1  $3.50   $3.50│
+//! │ Bread White              2  $2.00   $4.00│
 //! ├───────────────────────────────────────────────┤
-//! │ SUBTOTAL:                        15.00│
-//! │ TAX (10%):                       1.50│
+//! │ SUBTOTAL:                      $12.00│
+//! │ TAX:                            $1.20│
 //! ├───────────────────────────────────────────────┤
-//! │ TOTAL:                          16.50│
+//! │ TOTAL:                        $13.20│
 //! │                                       │
-//! │ CASH:                            20.00│
-//! │ CHANGE:                           3.50│
+//! │ CASH:                          $20.00│
+//! │ CHANGE:                         $6.80│
 //! ├───────────────────────────────────────────────┤
 //! │        Thanks for shopping!             │
 //! └───────────────────────────────────────────────┘
@@ -51,6 +51,61 @@ impl PaperWidth {
         match self {
             Self::Narrow => 32,
             Self::Standard => 48,
+        }
+    }
+}
+
+// ── Decimal separator ────────────────────────────────────
+
+/// How fractional amounts are displayed on receipts.
+#[derive(Debug, Clone, Copy)]
+pub enum DecimalSeparator {
+    /// Period separator: `12.50`
+    Dot,
+    /// Comma separator: `12,50`
+    Comma,
+    /// No fractional digits: `12`
+    None,
+}
+
+impl DecimalSeparator {
+    /// Which exponent to use when formatting. `None` means truncate
+    /// fractional digits entirely.
+    #[must_use]
+    pub fn effective_exponent(self, raw: u32) -> Option<usize> {
+        match self {
+            Self::Dot | Self::Comma => Some(raw as usize),
+            Self::None => None,
+        }
+    }
+}
+
+// ── Receipt display configuration ───────────────────────
+
+/// Per-store display options for receipts. Stored in the
+/// `settings` table and loaded before each print.
+#[derive(Debug, Clone)]
+pub struct ReceiptConfig {
+    /// Paper width — controls line length.
+    pub paper_width: PaperWidth,
+    /// Whether to prefix amounts with the currency symbol (e.g. `"$"`).
+    pub show_currency: bool,
+    /// Decimal separator style.
+    pub decimal_separator: DecimalSeparator,
+    /// Whether to print a tax line.
+    pub show_tax: bool,
+    /// Optional footer text (centered at the bottom).
+    pub footer: Option<String>,
+}
+
+impl Default for ReceiptConfig {
+    fn default() -> Self {
+        Self {
+            paper_width: PaperWidth::Standard,
+            show_currency: false,
+            decimal_separator: DecimalSeparator::Dot,
+            show_tax: true,
+            footer: None,
         }
     }
 }
@@ -99,6 +154,9 @@ pub struct PaymentInfo {
 // ── Sales receipt ────────────────────────────────────────
 
 /// A complete sales receipt ready to format and print.
+///
+/// Display formatting (currency prefix, decimal separator, etc.)
+/// is handled by [`ReceiptConfig`] passed to [`format_sales_receipt`].
 #[derive(Debug, Clone)]
 pub struct SalesReceipt {
     /// Store identity printed at the top.
@@ -117,25 +175,54 @@ pub struct SalesReceipt {
     pub total: Money,
     /// Payments tendered.
     pub payments: Vec<PaymentInfo>,
-    /// Optional footer message (e.g. "Thank you, please come again").
-    pub footer: Option<String>,
-    /// Paper width preset.
-    pub paper_width: PaperWidth,
 }
 
 // ── Helpers ──────────────────────────────────────────────
 
-/// Format a `Money` value as a string with the correct number of
-/// decimal places for its currency (e.g. `"15.50"` for USD).
-fn format_money(m: &Money) -> String {
-    let exp = m.currency.minor_unit_exponent() as usize;
-    let divisor = 10_i64.pow(exp as u32);
-    let major = m.minor_units / divisor;
-    let minor = (m.minor_units % divisor).unsigned_abs();
-    if m.minor_units < 0 {
-        format!("-{}.{minor:0width$}", major.unsigned_abs(), width = exp)
+/// Format a `Money` value according to display config.
+fn format_money(m: &Money, config: &ReceiptConfig) -> String {
+    let raw_exp = m.currency.minor_unit_exponent() as usize;
+    let divisor = 10_i64.pow(raw_exp as u32);
+    let sign = if m.minor_units < 0 { "-" } else { "" };
+    let abs_val = m.minor_units.unsigned_abs();
+    let major = abs_val / divisor as u64;
+    let minor = abs_val % divisor as u64;
+
+    let prefix = if config.show_currency {
+        currency_symbol(&m.currency)
     } else {
-        format!("{major}.{minor:0width$}", width = exp)
+        ""
+    };
+
+    match config.decimal_separator {
+        DecimalSeparator::None => {
+            format!("{sign}{prefix}{major}")
+        }
+        DecimalSeparator::Comma => {
+            format!("{sign}{prefix}{major},{minor:0width$}", width = raw_exp)
+        }
+        DecimalSeparator::Dot => {
+            format!("{sign}{prefix}{major}.{minor:0width$}", width = raw_exp)
+        }
+    }
+}
+
+/// Best-effort currency symbol for the given ISO-4217 code.
+/// Falls back to the code itself if no common symbol is known.
+fn currency_symbol(currency: &oz_core::Currency) -> &'static str {
+    let code = std::str::from_utf8(&currency.0).unwrap_or("  ");
+    match code {
+        "USD" | "SGD" | "HKD" => "$",
+        "EUR" => "€",
+        "GBP" => "£",
+        "JPY" => "¥",
+        "IDR" => "Rp",
+        "MYR" => "RM",
+        "PHP" => "₱",
+        "THB" => "฿",
+        "KRW" => "₩",
+        "BRL" => "R$",
+        _ => "$",
     }
 }
 
@@ -240,19 +327,21 @@ impl TableCols {
             _ => Self { name: 26, qty: 4, price: 6, total: 6, sep: "  " },
         }
     }
-
 }
 
 // ── Public formatter ─────────────────────────────────────
 
 /// Build an ESC/POS byte buffer for a sales receipt.
 ///
+/// `config` controls display options (currency prefix, decimal
+/// separator, paper width, tax visibility, footer text).
+///
 /// The returned buffer can be sent directly to any printer via
 /// [`ReceiptPrinter::print_raw`] — it includes the initialisation
 /// sequence, all text and formatting commands, a 3-line paper feed,
 /// and a full paper cut.
-pub fn format_sales_receipt(r: &SalesReceipt) -> Vec<u8> {
-    let w = r.paper_width.chars();
+pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8> {
+    let w = config.paper_width.chars();
     let mut b = ReceiptBuilder::new(w);
 
     b.init();
@@ -273,7 +362,6 @@ pub fn format_sales_receipt(r: &SalesReceipt) -> Vec<u8> {
     b.separator();
 
     // ── Date / receipt number ─────────────────────────
-    // Left-aligned date, right-aligned receipt number.
     let right_text = format!("#{}", r.receipt_number);
     let left_text = &r.date;
     let gap = " ".repeat(w.saturating_sub(left_text.len() + right_text.len() + 1));
@@ -298,10 +386,9 @@ pub fn format_sales_receipt(r: &SalesReceipt) -> Vec<u8> {
     for item in &r.items {
         let name = truncate(&item.name, cols.name);
         let qty_s = format!("{}", item.quantity);
-        let price_s = format_money(&item.unit_price);
-        let total_s = format_money(&item.total_price);
+        let price_s = format_money(&item.unit_price, config);
+        let total_s = format_money(&item.total_price, config);
 
-        // Manual column alignment with right-aligned numerics
         let qty_pad = cols.qty.saturating_sub(qty_s.len());
         let price_pad = cols.price.saturating_sub(price_s.len());
         let total_pad = cols.total.saturating_sub(total_s.len());
@@ -320,24 +407,24 @@ pub fn format_sales_receipt(r: &SalesReceipt) -> Vec<u8> {
     b.separator();
 
     // ── Totals (right-aligned) ────────────────────────
-    b.text(&right_line("SUBTOTAL:", &format_money(&r.subtotal), w));
-    if let Some(ref tax) = r.tax {
-        b.text(&right_line("TAX:", &format_money(tax), w));
+    b.text(&right_line("SUBTOTAL:", &format_money(&r.subtotal, config), w));
+    if config.show_tax && let Some(ref tax) = r.tax {
+        b.text(&right_line("TAX:", &format_money(tax, config), w));
     }
     b.separator();
-    b.bold(&right_line("TOTAL:", &format_money(&r.total), w));
+    b.bold(&right_line("TOTAL:", &format_money(&r.total, config), w));
     b.blank();
 
     // ── Payments ──────────────────────────────────────
     for pmt in &r.payments {
-        b.text(&right_line(&pmt.method.to_uppercase(), &format_money(&pmt.amount), w));
+        b.text(&right_line(&pmt.method.to_uppercase(), &format_money(&pmt.amount, config), w));
         if let Some(ref chg) = pmt.change {
-            b.text(&right_line("CHANGE:", &format_money(chg), w));
+            b.text(&right_line("CHANGE:", &format_money(chg, config), w));
         }
     }
 
     // ── Footer ────────────────────────────────────────
-    if let Some(ref footer) = r.footer {
+    if let Some(ref footer) = config.footer {
         b.separator();
         b.center(footer);
     }
@@ -383,6 +470,10 @@ mod tests {
         }
     }
 
+    fn default_config() -> ReceiptConfig {
+        ReceiptConfig::default()
+    }
+
     fn sample_receipt() -> SalesReceipt {
         SalesReceipt {
             store: StoreInfo {
@@ -420,25 +511,63 @@ mod tests {
                 amount: usd_money(2000),
                 change: Some(usd_money(680)),
             }],
-            footer: Some("Thank you for shopping!".into()),
-            paper_width: PaperWidth::Standard,
         }
     }
 
     #[test]
-    fn format_money_usd() {
-        assert_eq!(format_money(&usd_money(1550)), "15.50");
-        assert_eq!(format_money(&usd_money(0)), "0.00");
-        assert_eq!(format_money(&usd_money(100)), "1.00");
+    fn format_money_dot_default() {
+        let cfg = default_config();
+        assert_eq!(format_money(&usd_money(1550), &cfg), "15.50");
+        assert_eq!(format_money(&usd_money(0), &cfg), "0.00");
+        assert_eq!(format_money(&usd_money(100), &cfg), "1.00");
+    }
+
+    #[test]
+    fn format_money_comma() {
+        let cfg = ReceiptConfig {
+            decimal_separator: DecimalSeparator::Comma,
+            ..default_config()
+        };
+        assert_eq!(format_money(&usd_money(1550), &cfg), "15,50");
+    }
+
+    #[test]
+    fn format_money_no_decimals() {
+        let cfg = ReceiptConfig {
+            decimal_separator: DecimalSeparator::None,
+            ..default_config()
+        };
+        assert_eq!(format_money(&usd_money(1550), &cfg), "15");
+        assert_eq!(format_money(&usd_money(100), &cfg), "1");
+    }
+
+    #[test]
+    fn format_money_with_currency() {
+        let cfg = ReceiptConfig {
+            show_currency: true,
+            ..default_config()
+        };
+        assert_eq!(format_money(&usd_money(1550), &cfg), "$15.50");
+    }
+
+    #[test]
+    fn format_money_with_currency_no_decimals() {
+        let cfg = ReceiptConfig {
+            show_currency: true,
+            decimal_separator: DecimalSeparator::None,
+            ..default_config()
+        };
+        assert_eq!(format_money(&usd_money(2000), &cfg), "$20");
     }
 
     #[test]
     fn format_money_negative() {
+        let cfg = default_config();
         let m = Money {
             minor_units: -1550,
             currency: "USD".parse::<Currency>().unwrap(),
         };
-        assert_eq!(format_money(&m), "-15.50");
+        assert_eq!(format_money(&m, &cfg), "-15.50");
     }
 
     #[test]
@@ -453,21 +582,21 @@ mod tests {
 
     #[test]
     fn sales_receipt_contains_store_name() {
-        let data = format_sales_receipt(&sample_receipt());
+        let data = format_sales_receipt(&sample_receipt(), &default_config());
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("OZ MART"));
     }
 
     #[test]
     fn sales_receipt_contains_receipt_number() {
-        let data = format_sales_receipt(&sample_receipt());
+        let data = format_sales_receipt(&sample_receipt(), &default_config());
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("#REC-001"));
     }
 
     #[test]
     fn sales_receipt_contains_item_names() {
-        let data = format_sales_receipt(&sample_receipt());
+        let data = format_sales_receipt(&sample_receipt(), &default_config());
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("Milk 2%"));
         assert!(text.contains("Bread White"));
@@ -476,22 +605,39 @@ mod tests {
 
     #[test]
     fn sales_receipt_contains_total() {
-        let data = format_sales_receipt(&sample_receipt());
+        let data = format_sales_receipt(&sample_receipt(), &default_config());
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("13.20"));
     }
 
     #[test]
-    fn sales_receipt_contains_tax() {
-        let data = format_sales_receipt(&sample_receipt());
+    fn sales_receipt_contains_tax_when_show_tax() {
+        let cfg = ReceiptConfig { show_tax: true, ..default_config() };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("TAX:"));
         assert!(text.contains("1.20"));
     }
 
     #[test]
+    fn sales_receipt_hides_tax_when_show_tax_false() {
+        let cfg = ReceiptConfig { show_tax: false, ..default_config() };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(!text.contains("TAX:"), "tax should not appear when show_tax=false");
+    }
+
+    #[test]
+    fn sales_receipt_contains_currency_when_enabled() {
+        let cfg = ReceiptConfig { show_currency: true, ..default_config() };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(text.contains("$13.20"), "receipt should show $ prefix: {:?}", text);
+    }
+
+    #[test]
     fn sales_receipt_contains_payment_and_change() {
-        let data = format_sales_receipt(&sample_receipt());
+        let data = format_sales_receipt(&sample_receipt(), &default_config());
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("CASH"));
         assert!(text.contains("20.00"));
@@ -501,29 +647,34 @@ mod tests {
 
     #[test]
     fn sales_receipt_contains_footer() {
-        let data = format_sales_receipt(&sample_receipt());
+        let cfg = ReceiptConfig {
+            footer: Some("Thank you for shopping!".into()),
+            ..default_config()
+        };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("Thank you for shopping!"));
     }
 
     #[test]
     fn sales_receipt_starts_with_esc_init() {
-        let data = format_sales_receipt(&sample_receipt());
+        let data = format_sales_receipt(&sample_receipt(), &default_config());
         assert!(data.starts_with(escpos::ESC_INIT));
     }
 
     #[test]
     fn sales_receipt_ends_with_cut() {
-        let data = format_sales_receipt(&sample_receipt());
+        let data = format_sales_receipt(&sample_receipt(), &default_config());
         assert!(data.ends_with(escpos::CUT_FULL));
     }
 
     #[test]
     fn narrow_width_uses_32_chars() {
-        let mut r = sample_receipt();
-        r.paper_width = PaperWidth::Narrow;
-        let data = format_sales_receipt(&r);
-        // Separator should be 32 dashes
+        let cfg = ReceiptConfig {
+            paper_width: PaperWidth::Narrow,
+            ..default_config()
+        };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
         for line in text.lines() {
             let dash_count = line.chars().filter(|&c| c == '─').count();
@@ -538,5 +689,22 @@ mod tests {
         let result = right_line("TOTAL:", "13.20", 48);
         assert!(result.starts_with("TOTAL:"));
         assert!(result.ends_with("13.20"));
+    }
+
+    #[test]
+    fn decimal_separator_effective_exponent() {
+        assert_eq!(DecimalSeparator::Dot.effective_exponent(2), Some(2));
+        assert_eq!(DecimalSeparator::Comma.effective_exponent(3), Some(3));
+        assert_eq!(DecimalSeparator::None.effective_exponent(2), None);
+    }
+
+    #[test]
+    fn currency_symbol_known_codes() {
+        let usd: oz_core::Currency = "USD".parse().unwrap();
+        let eur: oz_core::Currency = "EUR".parse().unwrap();
+        let idr: oz_core::Currency = "IDR".parse().unwrap();
+        assert_eq!(currency_symbol(&usd), "$");
+        assert_eq!(currency_symbol(&eur), "€");
+        assert_eq!(currency_symbol(&idr), "Rp");
     }
 }

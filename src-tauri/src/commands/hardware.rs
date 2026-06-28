@@ -1,12 +1,16 @@
-//! Hardware-facing Tauri commands: cash drawer, receipt printer, and the
-//! barcode subscription event. All commands reach into the HAL via
-//! `state.registry` — they never construct a concrete driver.
+//! Hardware-facing Tauri commands: cash drawer, receipt printer, and
+//! barcode scanner lifecycle (start/stop/list). All commands reach into
+//! the HAL via `state.registry` — they never construct a concrete driver.
+
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State, command};
+use tokio::sync::oneshot;
 
-use oz_core::{Currency, Money};
+use oz_core::{Currency, Money, Settings};
 use oz_hal::drivers::receipt;
+use oz_hal::BarcodeScanner;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -76,9 +80,9 @@ pub async fn print_receipt(
         .await
         .map_err(|e| AppError::Hardware(e.to_string()))?;
     // Emit a completion event so the front-end can show a toast.
-    let _ = state
-        .app
-        .emit("receipt:printed", serde_json::json!({ "lines": n }));
+    if let Some(ref app) = state.app {
+        let _ = app.emit("receipt:printed", serde_json::json!({ "lines": n }));
+    }
     Ok(PrintReceiptResult { printed_lines: n })
 }
 
@@ -86,9 +90,6 @@ pub async fn print_receipt(
 
 #[derive(Debug, Deserialize)]
 pub struct PrintSalesReceiptArgs {
-    pub store_name: String,
-    pub store_address: String,
-    pub store_tax_id: Option<String>,
     pub date: String,
     pub receipt_number: String,
     pub items: Vec<LineItemDto>,
@@ -96,9 +97,6 @@ pub struct PrintSalesReceiptArgs {
     pub tax: Option<MoneyDto>,
     pub total: MoneyDto,
     pub payments: Vec<PaymentDto>,
-    pub footer: Option<String>,
-    #[serde(default)]
-    pub paper_width: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,11 +151,38 @@ pub async fn print_sales_receipt(
         .await
         .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
 
+    // Load store info + display settings from the DB.
+    let conn = state.db.lock().await;
+    let store_name = Settings::get_store_name(&conn)?.unwrap_or_else(|| "OZ-POS Store".into());
+    let store_address = Settings::get_store_address(&conn)?.unwrap_or_default();
+    let store_tax_id = Settings::get_store_tax_id(&conn)?;
+    let decimals = Settings::get_receipt_decimal_separator(&conn)?;
+    let decimal_separator = match decimals.as_str() {
+        "comma" => receipt::DecimalSeparator::Comma,
+        "none" => receipt::DecimalSeparator::None,
+        _ => receipt::DecimalSeparator::Dot,
+    };
+    let paper_width = match Settings::get_receipt_paper_width(&conn)?.as_str() {
+        "narrow" => receipt::PaperWidth::Narrow,
+        _ => receipt::PaperWidth::Standard,
+    };
+    let config = receipt::ReceiptConfig {
+        paper_width,
+        show_currency: Settings::get_receipt_show_currency(&conn)?,
+        decimal_separator,
+        show_tax: Settings::get_receipt_show_tax(&conn)?,
+        footer: {
+            let f = Settings::get_receipt_footer(&conn)?;
+            if f.is_empty() { None } else { Some(f) }
+        },
+    };
+    drop(conn); // release lock before printing
+
     let receipt = receipt::SalesReceipt {
         store: receipt::StoreInfo {
-            name: args.store_name,
-            address: args.store_address,
-            tax_id: args.store_tax_id,
+            name: store_name,
+            address: store_address,
+            tax_id: store_tax_id,
         },
         date: args.date,
         receipt_number: args.receipt_number,
@@ -187,26 +212,128 @@ pub async fn print_sales_receipt(
                 })
             })
             .collect::<Result<Vec<_>, _>>()?,
-        footer: args.footer,
-        paper_width: match args.paper_width.as_deref() {
-            Some("narrow") => receipt::PaperWidth::Narrow,
-            _ => receipt::PaperWidth::Standard,
-        },
     };
 
-    let data = receipt::format_sales_receipt(&receipt);
-    let line_count = receipt.items.len() + 6; // rough line count for the event
+    let data = receipt::format_sales_receipt(&receipt, &config);
+    let line_count = receipt.items.len() + 6;
 
     printer
         .print_raw(&data)
         .await
         .map_err(|e| AppError::Hardware(e.to_string()))?;
 
-    let _ = state
-        .app
-        .emit("receipt:printed", serde_json::json!({ "lines": line_count }));
+    if let Some(ref app) = state.app {
+        let _ = app.emit("receipt:printed", serde_json::json!({ "lines": line_count }));
+    }
 
     Ok(PrintSalesReceiptResult { printed: true })
+}
+
+// ── Barcode scanner ──────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct ScannerInfo {
+    pub id: String,
+}
+
+/// List all registered barcode scanners.
+#[command]
+pub async fn list_scanners(
+    state: State<'_, AppState>,
+) -> Result<Vec<ScannerInfo>, AppError> {
+    let ids = state.registry.scanner_ids().await;
+    Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
+}
+
+/// Start a background polling task for the named scanner.
+///
+/// Every decoded barcode is emitted as a `barcode:scanned` event
+/// with shape `{ code: String, symbology: String }`. Calling
+/// `start_scanner` while a scanner is already running stops the
+/// previous one first.
+#[command]
+pub async fn start_scanner(
+    scanner_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    // Stop any existing scanner first.
+    {
+        let mut cancel = state.scanner_cancel.lock().await;
+        if let Some(sender) = cancel.take() {
+            let _ = sender.send(());
+        }
+    }
+
+    let driver: Arc<dyn BarcodeScanner> = state
+        .registry
+        .scanner(&scanner_id)
+        .await
+        .ok_or_else(|| AppError::Invalid(format!("no scanner registered as '{scanner_id}'")))?;
+
+    let app = state
+        .app
+        .clone()
+        .ok_or_else(|| AppError::Internal("AppHandle unavailable".into()))?;
+
+    let (tx, mut rx) = oneshot::channel::<()>();
+
+    tokio::spawn(async move {
+        // Attempt to connect (idempotent – a second connect is a no-op).
+        let mut scanner = match driver.connect().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(scanner = %scanner_id, error = %e, "scanner connect failed");
+                let _ = app.emit("barcode:error", serde_json::json!({ "error": e.to_string() }));
+                return;
+            }
+        };
+
+        tracing::info!(scanner = %scanner_id, "barcode scanner started");
+
+        loop {
+            tokio::select! {
+                _ = &mut rx => {
+                    tracing::info!(scanner = %scanner_id, "barcode scanner stopped");
+                    break;
+                }
+                result = scanner.poll(300) => {
+                    match result {
+                        Ok(Some(barcode)) => {
+                            let payload = serde_json::json!({
+                                "code": barcode.code,
+                                "symbology": format!("{:?}", barcode.symbology),
+                            });
+                            let _ = app.emit("barcode:scanned", payload);
+                        }
+                        Ok(None) => {
+                            // Timeout — loop again.
+                        }
+                        Err(e) => {
+                            tracing::warn!(scanner = %scanner_id, error = %e, "scanner poll error");
+                            let _ = app.emit("barcode:error", serde_json::json!({ "error": e.to_string() }));
+                            // Keep trying after a brief backoff.
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Store the cancel-sender so a subsequent start_scanner or stop_scanner can shut it down.
+    state.scanner_cancel.lock().await.replace(tx);
+
+    Ok(())
+}
+
+/// Stop the active barcode scanner background task (if any).
+#[command]
+pub async fn stop_scanner(state: State<'_, AppState>) -> Result<(), AppError> {
+    let mut cancel = state.scanner_cancel.lock().await;
+    if let Some(sender) = cancel.take() {
+        let _ = sender.send(());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -217,7 +344,7 @@ mod tests {
     fn print_receipt_args_deserialise() {
         let json = r#"{"body":"COFFEE\n3.50\n"}"#;
         let args: PrintReceiptArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.body.lines().count(), 3);
+        assert_eq!(args.body.lines().count(), 2);
     }
 
     #[test]
@@ -242,8 +369,6 @@ mod tests {
     #[test]
     fn print_sales_receipt_args_deserialise() {
         let json = r#"{
-            "store_name": "OZ Mart",
-            "store_address": "123 Main St",
             "date": "01 Jan 2026",
             "receipt_number": "REC-001",
             "items": [
@@ -265,9 +390,8 @@ mod tests {
             ]
         }"#;
         let args: PrintSalesReceiptArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.store_name, "OZ Mart");
+        assert_eq!(args.date, "01 Jan 2026");
         assert_eq!(args.items.len(), 1);
         assert_eq!(args.payments.len(), 1);
-        assert!(args.footer.is_none());
     }
 }

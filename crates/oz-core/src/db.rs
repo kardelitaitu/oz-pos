@@ -23,6 +23,7 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 use crate::{Category, Customer, Money, Product, Role, Sale, SaleLine, SaleStatus, Settings, Sku, User};
+use crate::tax_rate::TaxRate;
 
 // ── Store ────────────────────────────────────────────────────────────
 
@@ -128,6 +129,35 @@ impl Store<'_> {
              WHERE p.sku = ?1",
         )?;
         let result = stmt.query_row(params![sku], row_to_product_with_details);
+        match result {
+            Ok(p) => Ok(Some(p)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Look up a single product by barcode, including category and stock.
+    ///
+    /// Returns `None` when no product matches the barcode, or when
+    /// the barcode is empty.
+    pub fn lookup_product_with_details_by_barcode(
+        &self,
+        barcode: &str,
+    ) -> Result<Option<ProductWithDetails>, CoreError> {
+        if barcode.trim().is_empty() {
+            return Ok(None);
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
+                    p.category_id, p.barcode, p.created_at, p.updated_at,
+                    c.name AS category_name,
+                    i.qty AS stock_qty
+             FROM products p
+             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN inventory i ON p.id = i.product_id
+             WHERE p.barcode = ?1",
+        )?;
+        let result = stmt.query_row(params![barcode.trim()], row_to_product_with_details);
         match result {
             Ok(p) => Ok(Some(p)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -309,6 +339,26 @@ impl Store<'_> {
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
         Ok(product)
+    }
+
+    /// Look up a product by barcode.
+    ///
+    /// Returns `None` when no product has the given barcode, or if
+    /// the barcode is empty.
+    pub fn get_product_by_barcode(&self, barcode: &str) -> Result<Option<Product>, CoreError> {
+        if barcode.trim().is_empty() {
+            return Ok(None);
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at
+             FROM products WHERE barcode = ?1",
+        )?;
+        let result = stmt.query_row(params![barcode.trim()], row_to_product);
+        match result {
+            Ok(p) => Ok(Some(p)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     /// Delete a product by SKU, including its inventory row (CASCADE
@@ -520,14 +570,19 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         tx.execute(
-            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
+                                discount_percent, discount_label, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 sale.id,
                 sale.total.minor_units,
                 cur_str,
                 sale.line_count,
                 status_str,
+                sale.payment_method,
+                sale.tendered_minor,
+                sale.discount_percent,
+                sale.discount_label,
                 sale.created_at,
                 sale.updated_at,
             ],
@@ -582,7 +637,9 @@ impl Store<'_> {
     /// without line items (each sale has an empty `lines` vec).
     pub fn list_sales(&self) -> Result<Vec<Sale>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, total_minor, currency, line_count, status, created_at, updated_at
+            "SELECT id, total_minor, currency, line_count, status,
+                    payment_method, tendered_minor, discount_percent, discount_label,
+                    created_at, updated_at
              FROM sales
              ORDER BY created_at DESC",
         )?;
@@ -600,6 +657,10 @@ impl Store<'_> {
                 },
                 line_count: row.get("line_count")?,
                 currency: cur_str.parse().expect("valid currency in DB"),
+                payment_method: row.get("payment_method")?,
+                tendered_minor: row.get("tendered_minor")?,
+                discount_percent: row.get::<_, Option<i64>>("discount_percent").unwrap_or(Some(0)).unwrap_or(0),
+                discount_label: row.get("discount_label")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
                 lines: Vec::new(),
@@ -613,7 +674,9 @@ impl Store<'_> {
     /// Returns `None` when no sale matches the id.
     pub fn get_sale(&self, id: &str) -> Result<Option<Sale>, CoreError> {
         let mut sale_stmt = self.conn.prepare(
-            "SELECT id, total_minor, currency, line_count, status, created_at, updated_at
+            "SELECT id, total_minor, currency, line_count, status,
+                    payment_method, tendered_minor, discount_percent, discount_label,
+                    created_at, updated_at
              FROM sales WHERE id = ?1",
         )?;
 
@@ -631,6 +694,10 @@ impl Store<'_> {
                 },
                 line_count: row.get("line_count")?,
                 currency: cur_str.parse().expect("valid currency in DB"),
+                payment_method: row.get("payment_method")?,
+                tendered_minor: row.get("tendered_minor")?,
+                discount_percent: row.get::<_, Option<i64>>("discount_percent").unwrap_or(Some(0)).unwrap_or(0),
+                discount_label: row.get("discount_label")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
                 lines: Vec::new(), // filled below
@@ -760,6 +827,29 @@ pub struct SalesByHourRow {
     pub total_minor: i64,
     /// Number of sales in that hour.
     pub sale_count: i64,
+}
+
+/// Summary row for a held (parked) cart.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HeldCartRow {
+    pub id: String,
+    pub label: String,
+    pub item_count: i64,
+    pub total_minor: i64,
+    pub currency: String,
+    pub created_at: String,
+}
+
+/// Full held cart data including the JSON cart_data blob.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HeldCartFull {
+    pub id: String,
+    pub label: String,
+    pub cart_data: String,
+    pub item_count: i64,
+    pub total_minor: i64,
+    pub currency: String,
+    pub created_at: String,
 }
 
 impl Store<'_> {
@@ -1264,6 +1354,435 @@ impl Store<'_> {
     }
 }
 
+// ── Tax Rate CRUD ───────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// List all tax rates, ordered by name.
+    pub fn list_tax_rates(&self) -> Result<Vec<TaxRate>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, rate_bps, is_default, created_at, updated_at
+             FROM tax_rates ORDER BY name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(TaxRate {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                rate_bps: row.get("rate_bps")?,
+                is_default: row.get("is_default")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Look up a single tax rate by id.
+    ///
+    /// Returns `None` when no rate matches.
+    pub fn get_tax_rate(&self, id: &str) -> Result<Option<TaxRate>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, rate_bps, is_default, created_at, updated_at
+             FROM tax_rates WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![id], |row| {
+            Ok(TaxRate {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                rate_bps: row.get("rate_bps")?,
+                is_default: row.get("is_default")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        });
+        match result {
+            Ok(r) => Ok(Some(r)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Insert a new tax rate.
+    ///
+    /// Generates a UUID for the rate id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::Validation`] when the name is empty.
+    pub fn create_tax_rate(
+        &self,
+        name: &str,
+        rate_bps: i64,
+        is_default: bool,
+    ) -> Result<TaxRate, CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "tax rate name must not be empty".into(),
+            });
+        }
+        if rate_bps < 0 {
+            return Err(CoreError::Validation {
+                field: "rate_bps",
+                message: "rate must be non-negative".into(),
+            });
+        }
+
+        // If this is the default, clear any existing default first.
+        if is_default {
+            self.conn.execute("UPDATE tax_rates SET is_default = 0 WHERE is_default = 1", [])?;
+        }
+
+        let id = Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        self.conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, name.trim(), rate_bps, is_default, now, now],
+        )?;
+
+        Ok(TaxRate {
+            id,
+            name: name.trim().to_owned(),
+            rate_bps,
+            is_default,
+            created_at: now.clone(),
+            updated_at: now,
+        })
+    }
+
+    /// Update an existing tax rate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NotFound`] when the id doesn't match.
+    /// Returns [`CoreError::Validation`] when the name is empty or rate is negative.
+    pub fn update_tax_rate(
+        &self,
+        id: &str,
+        name: &str,
+        rate_bps: i64,
+        is_default: bool,
+    ) -> Result<TaxRate, CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "tax rate name must not be empty".into(),
+            });
+        }
+        if rate_bps < 0 {
+            return Err(CoreError::Validation {
+                field: "rate_bps",
+                message: "rate must be non-negative".into(),
+            });
+        }
+
+        // If this is the new default, clear any existing default first.
+        if is_default {
+            self.conn.execute("UPDATE tax_rates SET is_default = 0 WHERE is_default = 1", [])?;
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let affected = self.conn.execute(
+            "UPDATE tax_rates
+             SET name = ?1, rate_bps = ?2, is_default = ?3, updated_at = ?4
+             WHERE id = ?5",
+            params![name.trim(), rate_bps, is_default, now, id],
+        )?;
+
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "tax_rate",
+                id: id.to_owned(),
+            });
+        }
+
+        Ok(TaxRate {
+            id: id.to_owned(),
+            name: name.trim().to_owned(),
+            rate_bps,
+            is_default,
+            created_at: String::new(),
+            updated_at: now,
+        })
+    }
+
+    /// Delete a tax rate by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NotFound`] when the id doesn't match.
+    pub fn delete_tax_rate(&self, id: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "DELETE FROM tax_rates WHERE id = ?1",
+            params![id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "tax_rate",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Assign tax rates to a product (replaces any existing assignments).
+    ///
+    /// Uses a transaction to atomically delete old rows and insert new ones.
+    /// Unknown `tax_rate_id`s are silently ignored (`INSERT OR IGNORE`).
+    pub fn set_product_tax_rates(&self, sku: &str, tax_rate_ids: &[String]) -> Result<(), CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM product_taxes WHERE product_sku = ?1", params![sku])?;
+        for id in tax_rate_ids {
+            tx.execute(
+                "INSERT OR IGNORE INTO product_taxes (product_sku, tax_rate_id) VALUES (?1, ?2)",
+                params![sku, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Get all tax rate IDs assigned to a product, ordered by creation time.
+    pub fn get_product_tax_rates(&self, sku: &str) -> Result<Vec<String>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tax_rate_id FROM product_taxes WHERE product_sku = ?1 ORDER BY created_at",
+        )?;
+        let ids = stmt
+            .query_map(params![sku], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// Insert a new audit log entry (append-only).
+    ///
+    /// The audit_log table has no UPDATE/DELETE methods — once written,
+    /// entries are immutable. This satisfies PCI-DSS 10.3.1.
+    pub fn log_audit(&self, entry: &crate::AuditEntry) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, outcome, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                entry.id,
+                entry.user_id,
+                entry.action,
+                entry.target_type,
+                entry.target_id,
+                entry.details,
+                entry.outcome,
+                entry.created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// List audit log entries in reverse chronological order.
+    pub fn list_audit_entries(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::AuditEntry>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
+             FROM audit_log
+             ORDER BY created_at DESC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![limit, offset], |row| {
+            Ok(crate::AuditEntry {
+                id: row.get("id")?,
+                user_id: row.get("user_id")?,
+                action: row.get("action")?,
+                target_type: row.get("target_type")?,
+                target_id: row.get("target_id")?,
+                details: row.get("details")?,
+                outcome: row.get("outcome")?,
+                created_at: row.get("created_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Void a sale and restore stock for all line items.
+    ///
+    /// This is an atomic operation inside a single transaction:
+    /// 1. Transitions sale status to Voided
+    /// 2. Restores stock for each line item
+    /// 3. Writes an audit log entry
+    ///
+    /// Returns the updated sale with line items.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NotFound`] if the sale doesn't exist.
+    /// Returns [`CoreError::Validation`] if the sale can't be voided
+    /// (e.g. already voided or completed).
+    pub fn void_sale(&self, sale_id: &str, user_id: &str, reason: &str) -> Result<Sale, CoreError> {
+        use crate::AuditEntry;
+
+        // Load the sale with lines.
+        let sale = self.get_sale(sale_id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "sale",
+                id: sale_id.to_owned(),
+            })?;
+
+        // Validate the transition.
+        if sale.status != SaleStatus::Active {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: format!(
+                    "only active sales can be voided (current: {:?})",
+                    sale.status
+                ),
+            });
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Atomic transaction: status update + stock restore + audit.
+        let tx = self.conn.unchecked_transaction()?;
+
+        // 1. Update status to Voided.
+        tx.execute(
+            "UPDATE sales SET status = 'voided', updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, sale_id],
+        )?;
+
+        // 2. Restore stock for each line item.
+        for line in &sale.lines {
+            // Get product id by SKU.
+            if let Some(product_id) = self.product_id_by_sku(&line.sku)? {
+                let current_qty = self.get_stock(&product_id)?;
+                let new_qty = current_qty.checked_add(line.qty).ok_or_else(|| {
+                    CoreError::Validation {
+                        field: "qty",
+                        message: "stock overflow during void".into(),
+                    }
+                })?;
+                tx.execute(
+                    "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
+                     ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
+                                                            updated_at = excluded.updated_at",
+                    rusqlite::params![product_id, new_qty, now],
+                )?;
+            }
+        }
+
+        // 3. Audit log entry (uses serde_json for safe JSON escaping).
+        let details = serde_json::json!({
+            "reason": reason,
+            "total_minor": sale.total.minor_units,
+        }).to_string();
+        let audit = AuditEntry::new(
+            user_id,
+            "sale.void",
+            Some("sale"),
+            Some(sale_id),
+            Some(details),
+            "success",
+        );
+        self.log_audit(&audit)?;
+
+        tx.commit()?;
+
+        // Reload and return the updated sale.
+        self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "sale",
+            id: sale_id.to_owned(),
+        })
+    }
+
+    /// Persist a cart as a held (parked) order.
+    ///
+    /// Serializes the cart's lines and metadata to JSON and stores it
+    /// in the `held_carts` table. The cart can be resumed later via
+    /// [`Store::get_held_cart`].
+    pub fn hold_cart(
+        &self,
+        label: &str,
+        cart_data: &str,
+        item_count: i64,
+        total_minor: i64,
+        currency: &str,
+    ) -> Result<String, CoreError> {
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, label.trim(), cart_data, item_count, total_minor, currency],
+        )?;
+        Ok(id)
+    }
+
+    /// List all held (parked) orders, most recent first.
+    pub fn list_held_carts(&self) -> Result<Vec<HeldCartRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, item_count, total_minor, currency, created_at
+             FROM held_carts
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(HeldCartRow {
+                id: row.get("id")?,
+                label: row.get("label")?,
+                item_count: row.get("item_count")?,
+                total_minor: row.get("total_minor")?,
+                currency: row.get("currency")?,
+                created_at: row.get("created_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Look up a held cart by id, including its JSON cart_data.
+    ///
+    /// Returns `None` when the id doesn't match.
+    pub fn get_held_cart(&self, id: &str) -> Result<Option<HeldCartFull>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, cart_data, item_count, total_minor, currency, created_at
+             FROM held_carts WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![id], |row| {
+            Ok(HeldCartFull {
+                id: row.get("id")?,
+                label: row.get("label")?,
+                cart_data: row.get("cart_data")?,
+                item_count: row.get("item_count")?,
+                total_minor: row.get("total_minor")?,
+                currency: row.get("currency")?,
+                created_at: row.get("created_at")?,
+            })
+        });
+        match result {
+            Ok(c) => Ok(Some(c)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Delete a held cart by id.
+    ///
+    /// Returns [`CoreError::NotFound`] when the id doesn't match any held cart.
+    pub fn delete_held_cart(&self, id: &str) -> Result<(), CoreError> {
+        let rows = self.conn.execute(
+            "DELETE FROM held_carts WHERE id = ?1",
+            params![id],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "held_cart",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+}
+
 // ── Settings delegation ───────────────────────────────────────────────
 
 impl Store<'_> {
@@ -1287,6 +1806,11 @@ impl Store<'_> {
         Settings::save_features(self.conn, reg)
     }
 
+    /// Prune stale feature rows. Delegates to [`Settings::prune_stale_features`].
+    pub fn prune_stale_features(&self, reg: &crate::FeatureRegistry) -> Result<usize, CoreError> {
+        Settings::prune_stale_features(self.conn, reg)
+    }
+
     /// Get the store display name. Delegates to [`Settings::get_store_name`].
     pub fn get_store_name(&self) -> Result<Option<String>, CoreError> {
         Settings::get_store_name(self.conn)
@@ -1297,6 +1821,26 @@ impl Store<'_> {
         Settings::set_store_name(self.conn, name)
     }
 
+    /// Get the store address. Delegates to [`Settings::get_store_address`].
+    pub fn get_store_address(&self) -> Result<Option<String>, CoreError> {
+        Settings::get_store_address(self.conn)
+    }
+
+    /// Set the store address. Delegates to [`Settings::set_store_address`].
+    pub fn set_store_address(&self, addr: &str) -> Result<(), CoreError> {
+        Settings::set_store_address(self.conn, addr)
+    }
+
+    /// Get the store tax / VAT number. Delegates to [`Settings::get_store_tax_id`].
+    pub fn get_store_tax_id(&self) -> Result<Option<String>, CoreError> {
+        Settings::get_store_tax_id(self.conn)
+    }
+
+    /// Set the store tax / VAT number. Delegates to [`Settings::set_store_tax_id`].
+    pub fn set_store_tax_id(&self, id: &str) -> Result<(), CoreError> {
+        Settings::set_store_tax_id(self.conn, id)
+    }
+
     /// Get the default currency. Delegates to [`Settings::get_default_currency`].
     pub fn get_default_currency(&self) -> Result<Option<String>, CoreError> {
         Settings::get_default_currency(self.conn)
@@ -1305,6 +1849,98 @@ impl Store<'_> {
     /// Set the default currency. Delegates to [`Settings::set_default_currency`].
     pub fn set_default_currency(&self, code: &str) -> Result<(), CoreError> {
         Settings::set_default_currency(self.conn, code)
+    }
+
+    /// List all currencies from the ISO-4217 table.
+    pub fn list_currencies(&self) -> Result<Vec<(String, String, u32, String)>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,  // code
+                row.get::<_, String>(1)?,  // name
+                row.get::<_, u32>(2)?,     // minor_exponent
+                row.get::<_, String>(3)?,  // symbol
+            ))
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// List all exchange rates, ordered by from_currency, to_currency.
+    pub fn list_exchange_rates(&self) -> Result<Vec<crate::exchange_rate::ExchangeRateRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, from_currency, to_currency, rate, source, effective_date, created_at
+             FROM exchange_rates ORDER BY from_currency, to_currency"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(crate::exchange_rate::ExchangeRateRow {
+                id: row.get(0)?,
+                from_currency: row.get(1)?,
+                to_currency: row.get(2)?,
+                rate: row.get(3)?,
+                source: row.get(4)?,
+                effective_date: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// Create a new exchange rate entry.
+    pub fn create_exchange_rate(
+        &self,
+        from_currency: &str,
+        to_currency: &str,
+        rate: f64,
+        source: &str,
+        effective_date: &str,
+    ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO exchange_rates (id, from_currency, to_currency, rate, source, effective_date)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![id, from_currency, to_currency, rate, source, effective_date],
+        )?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, from_currency, to_currency, rate, source, effective_date, created_at
+             FROM exchange_rates WHERE id = ?1"
+        )?;
+        let row = stmt.query_row(rusqlite::params![id], |row| {
+            Ok(crate::exchange_rate::ExchangeRateRow {
+                id: row.get(0)?,
+                from_currency: row.get(1)?,
+                to_currency: row.get(2)?,
+                rate: row.get(3)?,
+                source: row.get(4)?,
+                effective_date: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        Ok(row)
+    }
+
+    /// Delete an exchange rate by ID.
+    pub fn delete_exchange_rate(&self, id: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "DELETE FROM exchange_rates WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "exchange_rate",
+                id: id.to_string(),
+            });
+        }
+        Ok(())
     }
 }
 

@@ -14,3 +14,6 @@ serde = { workspace = true }
 tokio = { workspace = true }
 rusb = { workspace = true }
 serialport = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

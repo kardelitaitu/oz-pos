@@ -11,6 +11,7 @@
 //! - `oz backup` — snapshot the local SQLite store (scaffold)
 //! - `oz export` — write a CSV report (scaffold)
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -63,6 +64,36 @@ enum Command {
     Customer(CustomerArgs),
     /// Manage users (list, get, create).
     User(UserArgs),
+    /// Restore the database from a backup file.
+    Restore {
+        /// Path to the backup file.
+        #[arg(short, long)]
+        input: String,
+    },
+    /// Export data to an encrypted .ozpkg file.
+    ExportOzpkg {
+        /// Output file path.
+        #[arg(short, long)]
+        output: String,
+        /// Data types to include (comma-separated: products,categories,sales,customers,users,settings).
+        #[arg(short, long, default_value = "all")]
+        types: String,
+        /// Encryption password.
+        #[arg(short, long)]
+        password: String,
+    },
+    /// Import data from an encrypted .ozpkg file.
+    ImportOzpkg {
+        /// Input .ozpkg file path.
+        #[arg(short, long)]
+        input: String,
+        /// Decryption password.
+        #[arg(short, long)]
+        password: String,
+        /// Dry-run mode: show what would be imported without writing.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -282,6 +313,13 @@ fn main() -> Result<()> {
         Some(Command::Sale(args)) => run_sale(&conn, args),
         Some(Command::Customer(args)) => run_customer(&conn, args),
         Some(Command::User(args)) => run_user(&conn, args),
+        Some(Command::Restore { input }) => run_restore(conn, &input),
+        Some(Command::ExportOzpkg { output, types, password }) => {
+            run_export_ozpkg(&conn, &output, &types, &password)
+        }
+        Some(Command::ImportOzpkg { input, password, dry_run }) => {
+            run_import_ozpkg(&conn, &input, &password, dry_run)
+        }
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;
@@ -1071,6 +1109,195 @@ fn run_product_delete(store: &Store<'_>, sku: &str) -> Result<()> {
             std::process::exit(1);
         }
     }
+
+    Ok(())
+}
+
+// ── Restore ────────────────────────────────────────────────────────────
+
+/// Restore the database from a backup file.
+fn run_restore(conn: Connection, input: &str) -> Result<()> {
+    eprintln!("restoring from {input}...");
+
+    // Close the existing connection, then copy the backup over.
+    let db_path = conn.path().map(|p| p.to_owned()).unwrap_or_else(|| "oz-pos.db".into());
+    drop(conn);
+
+    std::fs::copy(input, &db_path)
+        .with_context(|| format!("copying backup {input} to {db_path}"))?;
+
+    eprintln!("restore complete — database replaced with backup");
+    Ok(())
+}
+
+// ── Export .ozpkg ─────────────────────────────────────────────────────
+
+/// Export store data to an encrypted .ozpkg file.
+fn run_export_ozpkg(conn: &Connection, output: &str, types_str: &str, password: &str) -> Result<()> {
+    use oz_core::ozpkg::{export_ozpkg, OzpkgPayload};
+
+    let store = Store::new(conn);
+
+    // Parse which data types to include.
+    let all_types = types_str == "all";
+    let requested: Vec<String> = if all_types {
+        vec![]
+    } else {
+        types_str.split(',').map(|s| s.trim().to_lowercase()).collect()
+    };
+
+    let wants = |name: &str| all_types || requested.iter().any(|r| r == name);
+
+    eprintln!("exporting data...");
+
+    // Collect data from the database.
+    let products = if wants("products") {
+        let prods = store.list_products()?;
+        serde_json::to_value(&prods)
+            .ok()
+            .and_then(|v| v.as_array().cloned())
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let categories = if wants("categories") {
+        let cats = store.list_categories()?;
+        serde_json::to_value(&cats)
+            .ok()
+            .and_then(|v| v.as_array().cloned())
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let sales = if wants("sales") {
+        let sales_list = store.list_sales()?;
+        Some(
+            serde_json::to_value(&sales_list)
+                .ok()
+                .and_then(|v| v.as_array().cloned())
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+
+    let customers = if wants("customers") {
+        let custs = store.list_customers()?;
+        Some(
+            serde_json::to_value(&custs)
+                .ok()
+                .and_then(|v| v.as_array().cloned())
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+
+    let users = if wants("users") {
+        let usrs = store.list_users()?;
+        Some(
+            serde_json::to_value(&usrs)
+                .ok()
+                .and_then(|v| v.as_array().cloned())
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+
+    let settings = if wants("settings") {
+        let rows = oz_core::Settings::load_all(conn)?;
+        Some(
+            rows.into_iter()
+                .map(|(key, value)| serde_json::json!({ "key": key, "value": value }))
+                .collect(),
+        )
+    } else {
+        None
+    };
+
+    // Collect feature flags for header metadata.
+    let reg = store.load_features()?;
+    let features: HashMap<String, String> = reg.to_settings_rows().into_iter().collect();
+
+    // Build data_types list.
+    let mut data_types: Vec<String> = Vec::new();
+    if wants("products") { data_types.push("products".into()); }
+    if wants("categories") { data_types.push("categories".into()); }
+    if wants("sales") { data_types.push("sales".into()); }
+    if wants("customers") { data_types.push("customers".into()); }
+    if wants("users") { data_types.push("users".into()); }
+    if wants("settings") { data_types.push("settings".into()); }
+
+    let payload = OzpkgPayload {
+        products,
+        categories,
+        sales,
+        customers,
+        users,
+        settings,
+    };
+
+    let store_name = store.get_store_name()?.unwrap_or_else(|| "OZ-POS Store".into());
+
+    eprintln!("  encrypting with Argon2id + AES-256-GCM...");
+    let ozpkg_bytes = export_ozpkg(password, &store_name, "0.0.1", data_types, features, &payload)
+        .context("encrypting export")?;
+
+    std::fs::write(output, &ozpkg_bytes)
+        .with_context(|| format!("writing {output}"))?;
+
+    eprintln!("exported to {output} ({} bytes)", ozpkg_bytes.len());
+    Ok(())
+}
+
+// ── Import .ozpkg ─────────────────────────────────────────────────────
+
+/// Import data from an encrypted .ozpkg file.
+fn run_import_ozpkg(_conn: &Connection, input: &str, password: &str, dry_run: bool) -> Result<()> {
+    use oz_core::ozpkg::import_ozpkg;
+
+    eprintln!("reading {input}...");
+    let data = std::fs::read(input)
+        .with_context(|| format!("reading {input}"))?;
+
+    eprintln!("  decrypting...");
+    let (header, payload) = import_ozpkg(&data, password)
+        .context("decrypting import file")?;
+
+    // Show metadata.
+    println!();
+    println!("Store:      {}", header.store_name);
+    println!("Version:    {}", header.app_version);
+    println!("Created:    {}", header.created_at);
+    println!("Types:      {}", header.data_types.join(", "));
+    println!("Products:   {}", payload.products.len());
+    println!("Categories: {}", payload.categories.len());
+    if let Some(sales) = &payload.sales {
+        println!("Sales:      {}", sales.len());
+    }
+    if let Some(customers) = &payload.customers {
+        println!("Customers:  {}", customers.len());
+    }
+    if let Some(users) = &payload.users {
+        println!("Users:      {}", users.len());
+    }
+    if let Some(settings) = &payload.settings {
+        println!("Settings:   {}", settings.len());
+    }
+    println!();
+
+    if dry_run {
+        println!("Dry-run mode — no data written.");
+        return Ok(());
+    }
+
+    // TODO: Write data to the database.
+    // Actual import logic (upserting into tables) will be added in a
+    // follow-up once the exact conflict-resolution strategy is defined.
+    eprintln!("import will be applied in a future update — placeholder only.");
 
     Ok(())
 }

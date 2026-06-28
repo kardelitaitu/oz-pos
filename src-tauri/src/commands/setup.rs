@@ -32,7 +32,35 @@ pub struct SetupStatus {
     pub preset: Option<String>,
 }
 
+// ── Response types ───────────────────────────────────────────────────
+
+/// The enabled feature keys returned by `get_enabled_features`.
+#[derive(Debug, Serialize)]
+pub struct EnabledFeaturesResult {
+    /// Kebab-case feature keys (e.g. `"cash-payment"`, `"barcode-scanning"`).
+    pub features: Vec<String>,
+}
+
 // ── Commands ─────────────────────────────────────────────────────────
+
+/// Return the list of currently-enabled feature keys.
+///
+/// The front-end calls this once on mount to decide which nav items
+/// and UI elements to show/hide.
+#[command]
+pub async fn get_enabled_features(
+    state: State<'_, AppState>,
+) -> Result<EnabledFeaturesResult, AppError> {
+    let conn = state.db.lock().await;
+    let registry = Settings::load_features(&conn)?;
+
+    let features: Vec<String> = registry
+        .enabled_features()
+        .map(|f| oz_core::features::feature_key(f).to_string())
+        .collect();
+
+    Ok(EnabledFeaturesResult { features })
+}
 
 /// Persist the chosen preset and features, then mark setup as complete.
 ///
@@ -106,68 +134,357 @@ mod tests {
     use oz_core::migrations;
     use rusqlite::Connection;
 
-    fn fresh_state() -> AppState {
+    /// Create a fresh in-memory connection with migrations applied.
+    fn fresh_conn() -> Connection {
         let mut conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
         migrations::run(&mut conn).unwrap();
-        AppState::for_test_with_conn(conn)
+        conn
     }
 
-    #[tokio::test]
-    async fn complete_setup_persists_features() {
-        let state = fresh_state();
+    /// Run the same logic as `complete_setup` but with a plain
+    /// `&Connection` so tests don't need a Tauri runtime.
+    ///
+    /// Each individual operation (`save_features`, `prune_stale_features`,
+    /// `set`) handles its own transaction internally. The production
+    /// `complete_setup` command wraps them in a single outer transaction
+    /// for atomicity; tests verify the operations individually.
+    fn run_complete_setup(
+        conn: &Connection,
+        preset: &str,
+        features: &[&str],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut registry = FeatureRegistry::new();
+        for &key in features {
+            if let Some(feat) = features::feature_from_key(key) {
+                registry.enable(feat);
+            }
+        }
 
-        complete_setup(
-            tauri::State::new(&state),
-            CompleteSetupArgs {
-                preset: "simple-retail".into(),
-                features: vec![
-                    "cash-payment".into(),
-                    "barcode-scanning".into(),
-                    "receipt-printing".into(),
-                    "inventory-tracking".into(),
-                    "categories-enabled".into(),
-                    "tax-engine".into(),
-                ],
-            },
+        let store = Store::new(conn);
+        store.save_features(&registry)?;
+        Settings::prune_stale_features(conn, &registry)?;
+        Settings::set(conn, oz_core::settings::keys::STORE_PRESET, preset)?;
+        Settings::set(conn, oz_core::settings::keys::SETUP_COMPLETE, "1")?;
+        Ok(())
+    }
+
+    #[test]
+    fn complete_setup_persists_features() {
+        let conn = fresh_conn();
+
+        run_complete_setup(
+            &conn,
+            "simple-retail",
+            &[
+                "cash-payment",
+                "barcode-scanning",
+                "receipt-printing",
+                "inventory-tracking",
+                "categories-enabled",
+                "tax-engine",
+            ],
         )
-        .await
         .unwrap();
 
         // Verify setup is marked complete.
-        let status = get_setup_status(tauri::State::new(&state)).await.unwrap();
-        assert!(status.completed);
-        assert_eq!(status.preset, Some("simple-retail".into()));
+        let completed = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(completed, "1");
+
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset, "simple-retail");
     }
 
-    #[tokio::test]
-    async fn get_setup_status_defaults_to_not_completed() {
-        let state = fresh_state();
+    #[test]
+    fn get_setup_status_defaults_to_not_completed() {
+        let conn = fresh_conn();
 
-        let status = get_setup_status(tauri::State::new(&state)).await.unwrap();
-        assert!(!status.completed);
-        assert_eq!(status.preset, None);
+        let completed = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
+            .unwrap();
+        assert_eq!(completed, None);
+
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap();
+        assert_eq!(preset, None);
     }
 
-    #[tokio::test]
-    async fn complete_setup_skips_unknown_features() {
-        let state = fresh_state();
+    #[test]
+    fn complete_setup_skips_unknown_features() {
+        let conn = fresh_conn();
 
-        complete_setup(
-            tauri::State::new(&state),
-            CompleteSetupArgs {
-                preset: "custom".into(),
-                features: vec![
-                    "cash-payment".into(),
-                    "made-up-feature".into(), // unknown, should be skipped
-                ],
-            },
+        run_complete_setup(
+            &conn,
+            "custom",
+            &["cash-payment", "made-up-feature"], // unknown, should be skipped
         )
-        .await
         .unwrap();
 
         // Should still succeed.
-        let status = get_setup_status(tauri::State::new(&state)).await.unwrap();
-        assert!(status.completed);
+        let completed = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(completed, "1");
+
+        // Only cash-payment should be enabled.
+        let store = Store::new(&conn);
+        let loaded = store.load_features().unwrap();
+        assert!(loaded.is_enabled(oz_core::Feature::CashPayment));
+        assert!(!loaded.is_enabled(oz_core::Feature::BarcodeScanning));
+    }
+
+    #[test]
+    fn complete_setup_empty_features() {
+        let conn = fresh_conn();
+
+        run_complete_setup(&conn, "empty-store", &[]).unwrap();
+
+        let completed = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(completed, "1");
+
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset, "empty-store");
+
+        // No features should be enabled.
+        let store = Store::new(&conn);
+        let loaded = store.load_features().unwrap();
+        assert_eq!(loaded.count(), 0);
+    }
+
+    #[test]
+    fn complete_setup_with_different_presets() {
+        let conn = fresh_conn();
+
+        // Test restaurant preset.
+        run_complete_setup(
+            &conn,
+            "restaurant",
+            &[
+                "restaurant",
+                "cash-payment",
+                "receipt-printing",
+                "inventory-tracking",
+                "categories-enabled",
+                "discount-engine",
+                "tax-engine",
+                "kitchen-display",
+                "table-management",
+                "staff-login",
+            ],
+        )
+        .unwrap();
+
+        let completed = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(completed, "1");
+
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset, "restaurant");
+
+        // Verify restaurant-specific features.
+        let store = Store::new(&conn);
+        let loaded = store.load_features().unwrap();
+        assert!(loaded.is_enabled(oz_core::Feature::Restaurant));
+        assert!(loaded.is_enabled(oz_core::Feature::KitchenDisplay));
+        assert!(loaded.is_enabled(oz_core::Feature::TableManagement));
+        assert!(loaded.is_enabled(oz_core::Feature::StaffLogin));
+        assert!(!loaded.is_enabled(oz_core::Feature::SimpleRetail));
+        assert!(!loaded.is_enabled(oz_core::Feature::CardPayment));
+    }
+
+    #[test]
+    fn complete_setup_all_features_single_preset() {
+        let conn = fresh_conn();
+
+        // Full-store preset: 24 feature keys.
+        run_complete_setup(
+            &conn,
+            "full-store",
+            &[
+                "simple-retail",
+                "cash-payment",
+                "card-payment",
+                "multi-currency",
+                "inventory-tracking",
+                "product-variants",
+                "categories-enabled",
+                "staff-login",
+                "staff-roles",
+                "shift-management",
+                "audit-log",
+                "barcode-scanning",
+                "receipt-printing",
+                "cash-drawer",
+                "customer-display",
+                "nfc-reader",
+                "discount-engine",
+                "tax-engine",
+                "loyalty-program",
+                "promotions-engine",
+                "product-bundles",
+                "reporting",
+                "analytics",
+                "export-import",
+            ],
+        )
+        .unwrap();
+
+        let store = Store::new(&conn);
+        let loaded = store.load_features().unwrap();
+        assert!(loaded.count() >= 20);
+        assert!(loaded.is_enabled(oz_core::Feature::SimpleRetail));
+        assert!(loaded.is_enabled(oz_core::Feature::Analytics));
+
+        // Prune should be a no-op since all features match.
+        let removed = Settings::prune_stale_features(&conn, &loaded).unwrap();
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn complete_setup_allows_multiple_calls() {
+        let conn = fresh_conn();
+
+        // First call with simple-retail.
+        run_complete_setup(
+            &conn,
+            "simple-retail",
+            &["cash-payment", "barcode-scanning", "receipt-printing"],
+        )
+        .unwrap();
+
+        // Second call overwrites with restaurant (pruning handles cleanup).
+        run_complete_setup(
+            &conn,
+            "restaurant",
+            &[
+                "restaurant",
+                "cash-payment",
+                "kitchen-display",
+                "table-management",
+                "staff-login",
+            ],
+        )
+        .unwrap();
+
+        // Preset was overwritten.
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset, "restaurant");
+
+        // Features should be from restaurant, not simple-retail.
+        let store = Store::new(&conn);
+        let loaded = store.load_features().unwrap();
+        assert!(loaded.is_enabled(oz_core::Feature::Restaurant));
+        assert!(!loaded.is_enabled(oz_core::Feature::SimpleRetail));
+    }
+
+    #[test]
+    fn complete_setup_persists_all_settings() {
+        let conn = fresh_conn();
+
+        run_complete_setup(
+            &conn,
+            "simple-retail",
+            &["cash-payment", "receipt-printing"],
+        )
+        .unwrap();
+
+        // Verify DB state directly.
+        let complete = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(complete, "1");
+
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset, "simple-retail");
+
+        // Feature flags.
+        let cash = Settings::get(&conn, "feature.cash-payment").unwrap().unwrap();
+        assert_eq!(cash, "1");
+        let receipt = Settings::get(&conn, "feature.receipt-printing").unwrap().unwrap();
+        assert_eq!(receipt, "1");
+
+        // Unknown feature should NOT be present.
+        assert_eq!(Settings::get(&conn, "feature.card-payment").unwrap(), None);
+    }
+
+    #[test]
+    fn complete_setup_without_transaction_leaves_partial_state() {
+        let conn = fresh_conn();
+
+        // Run a successful setup first.
+        run_complete_setup(&conn, "simple-retail", &["cash-payment"]).unwrap();
+
+        // Write feature rows, preset (but NOT setup_complete) outside a
+        // transaction, simulating a crash halfway through.
+        {
+            let mut registry = FeatureRegistry::new();
+            registry.enable(oz_core::Feature::CardPayment);
+
+            let store = Store::new(&conn);
+            store.save_features(&registry).unwrap();
+            Settings::prune_stale_features(&conn, &registry).unwrap();
+            Settings::set(&conn, oz_core::settings::keys::STORE_PRESET, "broken").unwrap();
+            // Crashing here — setup_complete is NOT written.
+        }
+
+        // setup_complete is still "1" from the first call because the
+        // second attempt crashed before writing it.
+        let complete = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(complete, "1");
+
+        // preset was written (outside a transaction, so visible despite crash).
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset, "broken");
+    }
+
+    #[test]
+    fn complete_setup_twice_preserves_latest() {
+        let conn = fresh_conn();
+
+        // Run setup twice with different presets.
+        run_complete_setup(
+            &conn,
+            "first",
+            &["cash-payment", "barcode-scanning"],
+        )
+        .unwrap();
+
+        run_complete_setup(
+            &conn,
+            "second",
+            &["restaurant", "cash-payment", "kitchen-display"],
+        )
+        .unwrap();
+
+        // Second setup's results are in effect.
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset, "second");
+
+        let store = Store::new(&conn);
+        let loaded = store.load_features().unwrap();
+        assert!(loaded.is_enabled(oz_core::Feature::Restaurant));
+        assert!(loaded.is_enabled(oz_core::Feature::KitchenDisplay));
+        assert!(!loaded.is_enabled(oz_core::Feature::BarcodeScanning));
+        assert!(!loaded.is_enabled(oz_core::Feature::SimpleRetail));
     }
 }

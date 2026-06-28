@@ -1,14 +1,41 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
+import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
+import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
+import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
 import AppLayout from '@/components/AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import DesignSystem from '@/features/design/DesignSystem';
 import PosScreen from '@/features/sales/PosScreen';
+import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
+import SalesDashboardScreen from '@/features/sales/SalesDashboardScreen';
+import VoidOrdersScreen from '@/features/sales/VoidOrdersScreen';
+import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
+import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
+import ProductManagementScreen from '@/features/products/ProductManagementScreen';
+import CategoryManagementScreen from '@/features/categories/CategoryManagementScreen';
+import SettingsPage from '@/features/settings/SettingsPage';
+import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
+import DataManagementScreen from '@/features/settings/DataManagementScreen';
+import InventoryAdjustmentScreen from '@/features/inventory/InventoryAdjustmentScreen';
+import EodReportScreen from '@/features/sales/EodReportScreen';
+import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import { completeSetup, getSetupStatus } from '@/api/pos';
+import { useFeatures } from '@/hooks/useFeatures';
 import type { WizardState } from '@/features/setup/SetupWizard';
 import type { AppRoute } from '@/components/AppLayout';
 import '@/features/design/DesignSystem.css';
+import '@/features/staff/StaffManagementScreen.css';
+import '@/features/customers/CustomerManagementScreen.css';
+import '@/features/sales/VoidOrdersScreen.css';
+import '@/features/auth/StaffLoginScreen.css';
+import '@/features/inventory/InventoryAdjustmentScreen.css';
+import '@/features/audit/AuditLogScreen.css';
+import '@/features/currency/ExchangeRateScreen.css';
+import '@/features/sales/EodReportScreen.css';
 
 /**
  * Root app component.
@@ -23,7 +50,9 @@ import '@/features/design/DesignSystem.css';
 export default function App() {
   return (
     <ThemeProvider>
-      <AppShell />
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
     </ThemeProvider>
   );
 }
@@ -32,6 +61,8 @@ function AppShell() {
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
+  const { enabled, loaded: featuresLoaded } = useFeatures();
+  const { session } = useAuth();
 
   // On mount, check if setup was already completed.
   useEffect(() => {
@@ -106,12 +137,39 @@ function AppShell() {
     );
   }
 
+  // Require staff login before showing the main app.
+  if (!session) {
+    return (
+      <StaffLoginScreen />
+    );
+  }
+
   // Main app with sidebar navigation.
+  // Pass enabled features so the sidebar can hide feature-gated nav items.
   return (
-    <AppLayout route={currentRoute} onNavigate={handleNavigate}>
+    <AppLayout
+      route={currentRoute}
+      onNavigate={handleNavigate}
+      {...(featuresLoaded ? { enabledFeatures: enabled } : {})}
+    >
       {currentRoute === 'sales' && <PosScreen />}
+      {currentRoute === 'sales-history' && <SalesHistoryScreen />}
+      {currentRoute === 'sales-dashboard' && <SalesDashboardScreen />}
+      {currentRoute === 'tax-config' && <TaxConfigurationScreen />}
       {currentRoute === 'products' && <ProductLookupScreen />}
+      {currentRoute === 'categories' && <CategoryManagementScreen />}
+      {currentRoute === 'data-management' && <DataManagementScreen />}
+      {currentRoute === 'features' && <FeatureToggleScreen />}
+      {currentRoute === 'inventory' && <ProductManagementScreen />}
+      {currentRoute === 'inventory-adjustment' && <InventoryAdjustmentScreen />}
       {currentRoute === 'design' && <DesignSystem />}
+      {currentRoute === 'orders' && <VoidOrdersScreen />}
+      {currentRoute === 'customers' && <CustomerManagementScreen />}
+      {currentRoute === 'staff' && <StaffManagementScreen />}
+      {currentRoute === 'eod-report' && <EodReportScreen />}
+      {currentRoute === 'audit-log' && <AuditLogScreen />}
+      {currentRoute === 'exchange-rates' && <ExchangeRateScreen />}
+      {currentRoute === 'settings' && <SettingsPage />}
     </AppLayout>
   );
 }

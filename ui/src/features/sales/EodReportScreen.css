@@ -1,0 +1,353 @@
+.eod-report {
+  padding: var(--space-4);
+  max-width: 1200px;
+}
+
+.eod-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.eod-report-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.eod-report-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.eod-report-date {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+}
+
+.eod-report-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-fg-link);
+  transition: background 0.15s;
+}
+
+.eod-report-refresh-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.eod-report-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Loading ──────────────────────────────── */
+
+.eod-report-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-12) 0;
+  color: var(--color-fg-secondary);
+}
+
+.eod-report-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: eod-spin 0.8s linear infinite;
+}
+
+@keyframes eod-spin {
+  to { transform: rotate(360deg); }
+}
+
+.eod-report-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-danger);
+}
+
+.eod-report-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+  color: var(--color-fg-secondary);
+}
+
+.eod-report-empty svg {
+  color: var(--color-fg-tertiary);
+}
+
+.eod-report-empty-sub {
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+}
+
+.eod-report-retry-btn {
+  margin-top: var(--space-1);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-fg-link);
+}
+
+.eod-report-retry-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+/* ── KPI Cards ────────────────────────────── */
+
+.eod-report-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.eod-report-kpi-card {
+  overflow: hidden;
+}
+
+.eod-report-kpi {
+  padding: var(--space-3);
+}
+
+.eod-report-kpi-label {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.eod-report-kpi-value {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.eod-report-kpi-value--primary {
+  color: var(--color-accent);
+}
+
+.eod-report-kpi-value--danger {
+  color: var(--color-danger);
+}
+
+.eod-report-kpi-value--warning {
+  color: var(--color-warning, #f59e0b);
+}
+
+.eod-report-kpi-sub {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* ── Two-column layout ────────────────────── */
+
+.eod-report-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 800px) {
+  .eod-report-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.eod-report-section-card {
+  padding: var(--space-4);
+}
+
+.eod-report-section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.eod-report-no-data {
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-6) 0;
+  font-size: var(--text-sm);
+}
+
+/* ── Payment Breakdown ────────────────────── */
+
+.eod-report-payment-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.eod-report-payment-row {
+  display: grid;
+  grid-template-columns: 1fr 80px auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.eod-report-payment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eod-report-payment-method {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.eod-report-payment-count {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+.eod-report-payment-bar-wrap {
+  height: 8px;
+  background: var(--color-bg-hover, var(--color-border));
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.eod-report-payment-bar {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.eod-report-payment-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.eod-report-payment-total {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.eod-report-payment-pct {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Hourly Sales Chart ───────────────────── */
+
+.eod-report-hourly-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.eod-report-hour-bar-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 80px;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.eod-report-hour-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.eod-report-hour-bar-track {
+  height: 14px;
+  background: var(--color-bg-hover, var(--color-border));
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.eod-report-hour-bar {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--color-border);
+  transition: width 0.3s ease;
+}
+
+.eod-report-hour-bar--active {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary, var(--color-accent)));
+}
+
+.eod-report-hour-value {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-fg-secondary);
+  text-align: right;
+}
+
+/* ── Summary Grid ─────────────────────────── */
+
+.eod-report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.eod-report-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-hover, transparent);
+}
+
+.eod-report-summary-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.eod-report-summary-value {
+  font-size: var(--text-base);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.eod-report-summary-value--danger {
+  color: var(--color-danger);
+}

@@ -1,0 +1,289 @@
+.staff-mgmt {
+  padding: var(--space-6) var(--space-8);
+}
+
+.staff-mgmt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.staff-mgmt-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+  color: var(--color-fg);
+}
+
+.staff-mgmt-loading {
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-base);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────── */
+
+.staff-mgmt-empty {
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-fg-secondary);
+}
+
+.staff-mgmt-empty-icon {
+  color: var(--color-fg-tertiary);
+  opacity: 0.5;
+}
+
+/* ── Table ────────────────────────────────────────────────────────── */
+
+.staff-mgmt-table-wrap {
+  overflow-x: auto;
+}
+
+.staff-mgmt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.staff-mgmt-table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  border-bottom: 2px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.staff-mgmt-table td {
+  padding: var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.staff-mgmt-row--inactive {
+  opacity: 0.5;
+}
+
+/* ── Cell styles ──────────────────────────────────────────────────── */
+
+.staff-mgmt-cell-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.staff-mgmt-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.staff-mgmt-cell-username {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+}
+
+.staff-mgmt-status-active {
+  color: var(--color-success);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-xs);
+}
+
+.staff-mgmt-status-inactive {
+  color: var(--color-fg-tertiary);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-xs);
+}
+
+/* ── Actions ──────────────────────────────────────────────────────── */
+
+.staff-mgmt-cell-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.staff-mgmt-action-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  color: var(--color-fg-secondary);
+  transition: all var(--duration-150) var(--ease-out);
+}
+
+.staff-mgmt-action-btn:hover {
+  background: var(--color-bg-surface);
+}
+
+.staff-mgmt-action-btn--warn {
+  color: var(--color-danger);
+  border-color: var(--color-danger-dim);
+}
+
+.staff-mgmt-action-btn--warn:hover {
+  background: var(--color-danger-bg);
+}
+
+.staff-mgmt-action-btn--restore {
+  color: var(--color-success);
+  border-color: var(--color-success-dim, #86efac);
+}
+
+.staff-mgmt-action-btn--restore:hover {
+  background: var(--color-success-bg, #f0fdf4);
+}
+
+/* ── Modal ────────────────────────────────────────────────────────── */
+
+.staff-mgmt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.staff-mgmt-modal {
+  width: 440px;
+  max-width: 92vw;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.staff-mgmt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.staff-mgmt-modal-header h2 {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  margin: 0;
+  color: var(--color-fg);
+}
+
+.staff-mgmt-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-fg-tertiary);
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+}
+
+.staff-mgmt-modal-close:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
+.staff-mgmt-modal-body {
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.staff-mgmt-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.staff-mgmt-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+}
+
+.staff-mgmt-input {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.staff-mgmt-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
+.staff-mgmt-input:disabled {
+  opacity: 0.5;
+}
+
+.staff-mgmt-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+/* ── Error ────────────────────────────────────────────────────────── */
+
+.staff-mgmt-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.staff-mgmt-error svg {
+  flex-shrink: 0;
+}
+
+/* ── Modal actions ────────────────────────────────────────────────── */
+
+.staff-mgmt-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+}

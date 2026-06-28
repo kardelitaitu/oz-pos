@@ -1,0 +1,367 @@
+.inv-adjust {
+  padding: var(--space-6) var(--space-8);
+  max-width: 640px;
+}
+
+.inv-adjust-header {
+  margin-bottom: var(--space-4);
+}
+
+.inv-adjust-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+  color: var(--color-fg);
+}
+
+/* ── Sections ─────────────────────────────────────────────────────── */
+
+.inv-adjust-section {
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.inv-adjust-section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+/* ── Product search ───────────────────────────────────────────────── */
+
+.inv-adjust-search-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.inv-adjust-search-wrap {
+  position: relative;
+}
+
+.inv-adjust-search-icon {
+  position: absolute;
+  left: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--color-fg-tertiary);
+  pointer-events: none;
+}
+
+.inv-adjust-search {
+  width: 100%;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-9);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.inv-adjust-search:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
+.inv-adjust-loading,
+.inv-adjust-no-results,
+.inv-adjust-hint {
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--space-4);
+  margin: 0;
+}
+
+/* ── Product list ─────────────────────────────────────────────────── */
+
+.inv-adjust-product-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.inv-adjust-product-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: all var(--duration-150) var(--ease-out);
+}
+
+.inv-adjust-product-item:hover {
+  border-color: var(--color-accent);
+  background: var(--color-bg-hover);
+}
+
+.inv-adjust-product-item:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.inv-adjust-product-item[aria-selected="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+
+.inv-adjust-product-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inv-adjust-product-item-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+}
+
+.inv-adjust-product-item-sku {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-fg-tertiary);
+}
+
+.inv-adjust-product-item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.inv-adjust-product-item-stock {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+}
+
+.inv-adjust-product-item-barcode {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Selected product ─────────────────────────────────────────────── */
+
+.inv-adjust-selected-product {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+
+.inv-adjust-selected-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inv-adjust-selected-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.inv-adjust-selected-sku {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-fg-tertiary);
+}
+
+.inv-adjust-selected-stock {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.inv-adjust-selected-price {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-mono);
+  color: var(--color-accent);
+}
+
+.inv-adjust-stock--ok {
+  color: var(--color-success);
+}
+
+.inv-adjust-stock--low {
+  color: var(--color-warning);
+}
+
+.inv-adjust-stock--out {
+  color: var(--color-danger);
+}
+
+.inv-adjust-clear-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  color: var(--color-fg-link);
+  transition: all var(--duration-150) var(--ease-out);
+}
+
+.inv-adjust-clear-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+/* ── Type toggle ──────────────────────────────────────────────────── */
+
+.inv-adjust-type-toggle {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.inv-adjust-type-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  color: var(--color-fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--duration-150) var(--ease-out);
+}
+
+.inv-adjust-type-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.inv-adjust-type-btn--active {
+  border-width: 2px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.inv-adjust-type-btn--add.inv-adjust-type-btn--active {
+  border-color: var(--color-success);
+  background: var(--color-success-bg, #f0fdf4);
+  color: var(--color-success);
+}
+
+.inv-adjust-type-btn--remove.inv-adjust-type-btn--active {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+/* ── Form fields ──────────────────────────────────────────────────── */
+
+.inv-adjust-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.inv-adjust-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+}
+
+.inv-adjust-input {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.inv-adjust-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
+.inv-adjust-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+.inv-adjust-hint-text {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Error / Success ──────────────────────────────────────────────── */
+
+.inv-adjust-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--space-3);
+}
+
+.inv-adjust-error svg {
+  flex-shrink: 0;
+}
+
+.inv-adjust-success {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-success-bg, #f0fdf4);
+  border: 1px solid var(--color-success-dim, #86efac);
+  border-radius: var(--radius-md);
+  color: var(--color-success);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--space-3);
+}
+
+.inv-adjust-success svg {
+  flex-shrink: 0;
+}
+
+/* ── Actions ──────────────────────────────────────────────────────── */
+
+.inv-adjust-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
+}

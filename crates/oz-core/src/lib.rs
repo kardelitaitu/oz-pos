@@ -16,21 +16,27 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod audit;
+pub mod auth;
 pub mod cart;
 pub mod category;
 pub mod customer;
 pub mod db;
 pub mod error;
+pub mod exchange_rate;
 pub mod features;
 pub mod inventory;
 pub mod migrations;
 pub mod money;
+pub mod ozpkg;
 pub mod product;
 pub mod sale;
 pub mod settings;
 pub mod sku;
+pub mod tax_rate;
 pub mod user;
 
+pub use audit::AuditEntry;
 pub use cart::{Cart, CartError, CartId, CartLine};
 pub use category::Category;
 pub use customer::Customer;

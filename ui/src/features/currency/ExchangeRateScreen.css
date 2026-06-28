@@ -1,0 +1,179 @@
+.exchange-rate-config {
+  padding: var(--space-4);
+}
+
+.exchange-rate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.exchange-rate-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.exchange-rate-loading {
+  color: var(--color-fg-secondary);
+}
+
+.exchange-rate-error {
+  text-align: center;
+  padding: var(--space-12) var(--space-4);
+  color: var(--color-danger);
+}
+
+.exchange-rate-error p {
+  margin-bottom: var(--space-3);
+}
+
+.exchange-rate-empty {
+  text-align: center;
+  padding: var(--space-12) var(--space-4);
+  color: var(--color-fg-secondary);
+}
+
+.exchange-rate-empty p {
+  margin-bottom: var(--space-3);
+}
+
+.exchange-rate-table-wrap {
+  overflow-x: auto;
+}
+
+.exchange-rate-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.exchange-rate-table th,
+.exchange-rate-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.exchange-rate-table th {
+  font-weight: 600;
+  color: var(--color-fg-secondary);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.exchange-rate-cell-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.exchange-rate-action-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-fg-link);
+  margin-left: var(--space-1);
+}
+
+.exchange-rate-action-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.exchange-rate-action-btn--danger {
+  color: var(--color-danger);
+}
+
+.exchange-rate-action-btn--danger:hover {
+  background: var(--color-danger-bg, rgba(220, 38, 38, 0.08));
+}
+
+.exchange-rate-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.exchange-rate-modal {
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 480px;
+  box-shadow: var(--shadow-lg);
+}
+
+.exchange-rate-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.exchange-rate-modal-header h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.exchange-rate-modal-close {
+  background: none;
+  border: none;
+  font-size: var(--text-xl);
+  cursor: pointer;
+  color: var(--color-fg-secondary);
+  padding: var(--space-1);
+  line-height: 1;
+}
+
+.exchange-rate-modal-body {
+  padding: var(--space-4);
+}
+
+.exchange-rate-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.exchange-rate-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-fg-secondary);
+}
+
+.exchange-rate-input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.exchange-rate-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-alpha, rgba(99, 102, 241, 0.2));
+}
+
+.exchange-rate-select {
+  appearance: auto;
+}
+
+.exchange-rate-modal-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  padding: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}

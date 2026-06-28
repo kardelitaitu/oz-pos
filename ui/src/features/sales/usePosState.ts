@@ -1,20 +1,26 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { CartLine, LineId, Money, Product } from '@/types/domain';
-
 let nextLineId = 0;
 const genLineId = (): LineId =>
   `line-${Date.now()}-${nextLineId++}` as LineId;
 
 /**
- * POS state hook — manages cart lines, add/remove/qty, and total.
+ * POS state hook — manages cart lines, add/remove/qty, discount, and total.
+ *
+ * Discount is applied locally (preview) and synced to the backend cart
+ * via IPC so it's included in the completed sale.
  *
  * @example
  * ```tsx
- * const { lines, total, addProduct, removeLine, updateQty } = usePosState();
+ * const { lines, total, subtotal, discountPercent, discountLabel,
+ *         addProduct, removeLine, updateQty, setDiscount, resetCart }
+ *   = usePosState();
  * ```
  */
 export function usePosState() {
   const [lines, setLines] = useState<CartLine[]>([]);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [discountLabel, setDiscountLabel] = useState('');
 
   /** Add a product to the cart, or increment qty if already present. */
   const addProduct = useCallback((product: Product) => {
@@ -24,7 +30,8 @@ export function usePosState() {
         return prev.map((l) =>
           l.id === existing.id ? { ...l, qty: l.qty + 1 } : l,
         );
-      }        return [
+      }
+      return [
         ...prev,
         {
           id: genLineId(),
@@ -50,8 +57,8 @@ export function usePosState() {
     );
   }, []);
 
-  /** Computed total across all lines. */
-  const total: Money | null = useMemo(() => {
+  /** Computed subtotal (sum of all line totals, before discount). */
+  const subtotal: Money | null = useMemo(() => {
     if (lines.length === 0) return null;
     const currency = lines[0]!.unit_price.currency;
     const sum = lines.reduce((acc, l) => {
@@ -60,5 +67,53 @@ export function usePosState() {
     return { minor_units: sum, currency };
   }, [lines]);
 
-  return { lines, total, addProduct, removeLine, updateQty };
+  /** Computed total after applying any discount. */
+  const total: Money | null = useMemo(() => {
+    if (!subtotal) return null;
+    if (discountPercent <= 0) return subtotal;
+    const multiplier = 100 - discountPercent;
+    const discounted = Math.floor(subtotal.minor_units * multiplier / 100);
+    return { minor_units: discounted, currency: subtotal.currency };
+  }, [subtotal, discountPercent]);
+
+  /** Discount amount in minor units. */
+  const discountAmount: Money | null = useMemo(() => {
+    if (!subtotal || discountPercent <= 0) return null;
+    const amount = Math.floor(subtotal.minor_units * discountPercent / 100);
+    return { minor_units: amount, currency: subtotal.currency };
+  }, [subtotal, discountPercent]);
+
+  /**
+   * Set a cart-level percentage discount.
+   * Pass `percent = 0` to clear. `label` is optional.
+   * This is a local preview; the backend applies it on complete.
+   */
+  const setDiscount = useCallback(async (percent: number, label: string) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+    setDiscountPercent(clamped);
+    setDiscountLabel(clamped > 0 ? label : '');
+  }, []);
+
+  /** Clear all lines and reset discount. */
+  const resetCart = useCallback(() => {
+    setLines([]);
+    setDiscountPercent(0);
+    setDiscountLabel('');
+  }, []);
+
+  return {
+    lines,
+    subtotal,
+    total,
+    discountPercent,
+    discountLabel,
+    discountAmount,
+    addProduct,
+    removeLine,
+    updateQty,
+    setDiscount,
+    resetCart,
+    /** Exposed for restoring held carts. Prefer addProduct/removeLine for normal use. */
+    setLines,
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
@@ -37,26 +37,39 @@ describe('ProductLookupScreen', () => {
     expect(screen.getByLabelText(/barcode input/i)).toBeInTheDocument();
   });
 
-  it('renders category filter chips', () => {
+  it('renders category filter chips after loading', async () => {
     render(wrap(<ProductLookupScreen />));
-    const radiogroup = screen.getByRole('radiogroup', { name: /filter by category/i });
-    expect(radiogroup).toBeInTheDocument();
-    // "All Categories", "Beverages", "Food"
-    expect(screen.getByRole('radio', { name: /all categories/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /^Beverages$/ })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /^Food$/ })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('radiogroup', { name: /filter by category/i })).toBeInTheDocument();
+    });
+    // "All Categories", "Beverages", "Food" (after async fallback loads)
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /all categories/i })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /^Beverages$/ })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /^Food$/ })).toBeInTheDocument();
+    });
   });
 
-  it('renders all products in the grid by default', () => {
+  it('renders all products in the grid by default', async () => {
     render(wrap(<ProductLookupScreen />));
-    const list = screen.getByRole('list', { name: /products/i });
+    const list = await screen.findByRole('list', { name: /products/i });
     // 18 sample products
     const items = within(list).getAllByRole('listitem');
     expect(items.length).toBe(18);
   });
 
+  async function waitForProducts() {
+    // Wait for the async IPC fallback to load sample products.
+    await screen.findByRole('list', { name: /products/i });
+  }
+
   it('filters products by search query (name)', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search products/i });
     await userEvent.type(search, 'Latte');
     const list = screen.getByRole('list', { name: /products/i });
@@ -69,6 +82,7 @@ describe('ProductLookupScreen', () => {
 
   it('filters products by search query (SKU)', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search products/i });
     await userEvent.type(search, 'ESPR');
     const list = screen.getByRole('list', { name: /products/i });
@@ -79,6 +93,7 @@ describe('ProductLookupScreen', () => {
 
   it('filters products by search query (barcode)', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search products/i });
     // Search for barcode "4901234567904" (Orange Juice)
     await userEvent.type(search, '7904');
@@ -90,6 +105,7 @@ describe('ProductLookupScreen', () => {
 
   it('shows empty state when no products match', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search products/i });
     await userEvent.type(search, 'zzzznotfound');
     expect(screen.getByText(/no products found/i)).toBeInTheDocument();
@@ -97,6 +113,7 @@ describe('ProductLookupScreen', () => {
 
   it('filters by category using chip button', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     const foodChip = screen.getByRole('radio', { name: /^Food$/ });
     await userEvent.click(foodChip);
 
@@ -111,6 +128,7 @@ describe('ProductLookupScreen', () => {
 
   it('switching to "All Categories" shows all products', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     // First filter to Food
     await userEvent.click(screen.getByRole('radio', { name: /^Food$/ }));
     // Then back to All
@@ -121,8 +139,9 @@ describe('ProductLookupScreen', () => {
     expect(items.length).toBe(18);
   });
 
-  it('renders product card with name, price, SKU, and stock indicator', () => {
+  it('renders product card with name, price, SKU, and stock indicator', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     // Check a specific product is rendered
     expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
     expect(screen.getByText('$4.50')).toBeInTheDocument();
@@ -130,8 +149,9 @@ describe('ProductLookupScreen', () => {
     expect(screen.getAllByText(/in stock/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('marks out-of-stock products with disabled style and disabled button', () => {
+  it('marks out-of-stock products with disabled style and disabled button', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     // Brownie is out of stock
     const brownie = screen.getByText('Fudge Brownie');
     expect(brownie).toBeInTheDocument();
@@ -152,6 +172,7 @@ describe('ProductLookupScreen', () => {
   it('calls onAddProduct when clicking the add button', async () => {
     const handler = vi.fn();
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await waitForProducts();
 
     const addBtn = screen.getByRole('button', { name: /caffè latte —/i });
     await userEvent.click(addBtn);
@@ -165,6 +186,7 @@ describe('ProductLookupScreen', () => {
   it('calls onAddProduct on Enter key for in-stock product card', async () => {
     const handler = vi.fn();
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await waitForProducts();
 
     const cardBtn = screen.getByRole('button', { name: /caffè latte —/i });
     cardBtn.focus();
@@ -176,6 +198,7 @@ describe('ProductLookupScreen', () => {
   it('handles barcode scan via Enter key in barcode input', async () => {
     const handler = vi.fn();
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/barcode input/i);
     await userEvent.type(barcodeInput, '4901234567890{Enter}');
@@ -188,6 +211,7 @@ describe('ProductLookupScreen', () => {
   it('handles barcode scan via Scan button', async () => {
     const handler = vi.fn();
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/barcode input/i);
     await userEvent.type(barcodeInput, '4901234567904');
@@ -203,6 +227,7 @@ describe('ProductLookupScreen', () => {
   it('does not call onAddProduct for unknown barcode', async () => {
     const handler = vi.fn();
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/barcode input/i);
     await userEvent.type(barcodeInput, '0000000000000');
@@ -214,6 +239,7 @@ describe('ProductLookupScreen', () => {
   it('clears barcode input after scan', async () => {
     const handler = vi.fn();
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/barcode input/i);
     await userEvent.type(barcodeInput, '4901234567890{Enter}');
@@ -221,8 +247,9 @@ describe('ProductLookupScreen', () => {
     expect(barcodeInput).toHaveValue('');
   });
 
-  it('renders product category badges', () => {
+  it('renders product category badges', async () => {
     render(wrap(<ProductLookupScreen />));
+    await waitForProducts();
     const badges = screen.getAllByText(/^Beverages$|^Food$/);
     expect(badges.length).toBeGreaterThanOrEqual(17);
   });

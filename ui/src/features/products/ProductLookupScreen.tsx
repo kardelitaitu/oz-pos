@@ -1,30 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Localized } from '@/components/Localized';
-import { formatMoney, type Product, type Sku } from '@/types/domain';
+import { formatMoney, type Product } from '@/types/domain';
+import { useProducts } from './useProducts';
 import './ProductLookupScreen.css';
-
-// ── Sample product data (backed by IPC in a follow-up) ───────────
-
-const SAMPLE_PRODUCTS: Product[] = [
-  { sku: 'LATTE' as Sku, name: 'Caffè Latte', category: 'Beverages', price: { minor_units: 450, currency: 'USD' }, barcode: '4901234567890', inStock: true },
-  { sku: 'CAPPU' as Sku, name: 'Cappuccino', category: 'Beverages', price: { minor_units: 420, currency: 'USD' }, barcode: '4901234567891', inStock: true },
-  { sku: 'ESPR' as Sku, name: 'Espresso Shot', category: 'Beverages', price: { minor_units: 280, currency: 'USD' }, barcode: '4901234567892', inStock: true },
-  { sku: 'MATCHA' as Sku, name: 'Matcha Latte', category: 'Beverages', price: { minor_units: 520, currency: 'USD' }, barcode: null, inStock: true },
-  { sku: 'BAGEL' as Sku, name: 'Plain Bagel', category: 'Food', price: { minor_units: 250, currency: 'USD' }, barcode: '4901234567894', inStock: true },
-  { sku: 'BAGEL-S' as Sku, name: 'Sesame Bagel', category: 'Food', price: { minor_units: 275, currency: 'USD' }, barcode: '4901234567895', inStock: true },
-  { sku: 'CROISS' as Sku, name: 'Butter Croissant', category: 'Food', price: { minor_units: 350, currency: 'USD' }, barcode: '4901234567896', inStock: true },
-  { sku: 'MUFFIN-B' as Sku, name: 'Blueberry Muffin', category: 'Food', price: { minor_units: 320, currency: 'USD' }, barcode: '4901234567897', inStock: true },
-  { sku: 'MUFFIN-C' as Sku, name: 'Chocolate Muffin', category: 'Food', price: { minor_units: 340, currency: 'USD' }, barcode: null, inStock: false },
-  { sku: 'SANDW-C' as Sku, name: 'Chicken Sandwich', category: 'Food', price: { minor_units: 750, currency: 'USD' }, barcode: '4901234567899', inStock: true },
-  { sku: 'SANDW-V' as Sku, name: 'Veggie Sandwich', category: 'Food', price: { minor_units: 680, currency: 'USD' }, barcode: '4901234567900', inStock: true },
-  { sku: 'COOKIE' as Sku, name: 'Chocolate Chip Cookie', category: 'Food', price: { minor_units: 195, currency: 'USD' }, barcode: '4901234567901', inStock: true },
-  { sku: 'TEA-G' as Sku, name: 'Green Tea', category: 'Beverages', price: { minor_units: 250, currency: 'USD' }, barcode: '4901234567902', inStock: true },
-  { sku: 'TEA-C' as Sku, name: 'Chai Tea', category: 'Beverages', price: { minor_units: 320, currency: 'USD' }, barcode: null, inStock: true },
-  { sku: 'JUICE-O' as Sku, name: 'Orange Juice', category: 'Beverages', price: { minor_units: 380, currency: 'USD' }, barcode: '4901234567904', inStock: true },
-  { sku: 'WATER-S' as Sku, name: 'Sparkling Water', category: 'Beverages', price: { minor_units: 180, currency: 'USD' }, barcode: '4901234567905', inStock: true },
-  { sku: 'BROWNIE' as Sku, name: 'Fudge Brownie', category: 'Food', price: { minor_units: 295, currency: 'USD' }, barcode: '4901234567906', inStock: false },
-  { sku: 'MUFFIN-BA' as Sku, name: 'Banana Muffin', category: 'Food', price: { minor_units: 310, currency: 'USD' }, barcode: null, inStock: true },
-];
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -35,9 +13,7 @@ export interface ProductLookupScreenProps {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-const CATEGORIES = ['All', ...Array.from(new Set(SAMPLE_PRODUCTS.map((p) => p.category)))] as const;
-
-type Category = (typeof CATEGORIES)[number];
+type Category = string;
 
 /** Search icon SVG */
 function SearchIcon() {
@@ -100,13 +76,20 @@ function PackageIcon() {
  * ```
  */
 export default function ProductLookupScreen({ onAddProduct }: ProductLookupScreenProps) {
+  const { products, categories, loading, usingFallback } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('All');
 
+  // All category options: "All" + each unique category
+  const categoryOptions = useMemo<Category[]>(
+    () => ['All', ...categories],
+    [categories],
+  );
+
   // Filter products based on search, barcode, and category
   const filtered = useMemo(() => {
-    let results = SAMPLE_PRODUCTS;
+    let results = products;
 
     // Filter by search query
     if (searchQuery.trim()) {
@@ -125,18 +108,18 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
     }
 
     return results;
-  }, [searchQuery, activeCategory]);
+  }, [searchQuery, activeCategory, products]);
 
   // Handle barcode scan submission
   const handleBarcodeScan = useCallback(() => {
     if (!barcodeInput.trim()) return;
     const barcode = barcodeInput.trim();
-    const found = SAMPLE_PRODUCTS.find((p) => p.barcode === barcode);
+    const found = products.find((p) => p.barcode === barcode);
     if (found && found.inStock) {
       onAddProduct?.(found);
     }
     setBarcodeInput('');
-  }, [barcodeInput, onAddProduct]);
+  }, [barcodeInput, onAddProduct, products]);
 
   // Handle Enter key in barcode input
   const handleBarcodeKeyDown = useCallback(
@@ -210,7 +193,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
 
       {/* ── Category filters ───────────────────────── */}
       <div className="product-categories" role="radiogroup" aria-label="Filter by category">
-        {CATEGORIES.map((cat) => (
+        {categoryOptions.map((cat) => (
           <button
             key={cat}
             type="button"
@@ -234,8 +217,16 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
         ))}
       </div>
 
-      {/* ── Product grid ───────────────────────────── */}
-      {filtered.length === 0 ? (
+      {/* ── Loading state ────────────────────────────── */}
+      {loading ? (
+        <div className="product-empty">
+          <span className="product-empty-text">
+            <Localized id="product-lookup-loading">
+              <span>Loading products…</span>
+            </Localized>
+          </span>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="product-empty">
           <PackageIcon />
           <span className="product-empty-text">
@@ -253,6 +244,21 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
               {...(onAddProduct ? { onAdd: onAddProduct } : {})}
             />
           ))}
+        </div>
+      )
+      }
+
+      {/* Dev notice when using fallback data */}
+      {usingFallback && (
+        <div
+          style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-fg-tertiary)',
+            textAlign: 'center',
+            padding: 'var(--space-2)',
+          }}
+        >
+          Using sample data (IPC unavailable)
         </div>
       )}
     </div>

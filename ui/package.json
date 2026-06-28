@@ -18,14 +18,15 @@
     "@fluent/bundle": "^0.18.0",
     "@fluent/react": "^0.15.0",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
     "@testing-library/jest-dom": "^6.4.6",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^7.16.0",

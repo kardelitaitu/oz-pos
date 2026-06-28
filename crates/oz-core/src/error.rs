@@ -55,4 +55,8 @@ pub enum CoreError {
         /// Human-readable description of the failure.
         message: String,
     },
+
+    /// An unexpected internal error (serialization, crypto, I/O, etc.).
+    #[error("internal error: {0}")]
+    Internal(String),
 }
