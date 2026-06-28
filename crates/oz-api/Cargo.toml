@@ -1,0 +1,24 @@
+[package]
+name = "oz-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS OpenAPI REST server — axum-based HTTP API with JWT auth."
+
+[dependencies]
+oz-core = { workspace = true }
+axum = { workspace = true }
+jsonwebtoken = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tower = "0.5"
