@@ -74,9 +74,10 @@ fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<Product> {
 
 /// A [`Product`] enriched with category name and stock quantity from
 /// LEFT JOINs on `categories` and `inventory`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ProductWithDetails {
-    /// The core product fields.
+    /// The core product fields (flattened into the parent JSON).
+    #[serde(flatten)]
     pub product: Product,
     /// Display name from `categories.name`, if linked.
     pub category_name: Option<String>,

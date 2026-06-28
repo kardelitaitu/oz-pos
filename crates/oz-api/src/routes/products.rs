@@ -1,39 +1,47 @@
 //! Product endpoints.
 //!
-//! `GET /api/v1/products` — list all products (with optional category filter).
+//! `GET /api/v1/products` — list all products.
 //! `GET /api/v1/products/:sku` — product detail including stock quantity.
+//! `POST /api/v1/products` — create a new product.
+//! `PATCH /api/v1/products/:sku/stock` — adjust stock quantity.
 
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 
-use oz_core::Product;
+use oz_core::{CoreError, ProductWithDetails};
+use oz_core::db::Store;
 
 use crate::AppState;
 
-/// API response for a product with category name and stock from JOINs.
-///
-/// Flattens the [`Product`] domain struct and adds the extra fields
-/// that come from LEFT JOINs on `categories` and `inventory`.
-#[derive(Serialize)]
-pub struct ProductDetail {
-    #[serde(flatten)]
-    pub product: Product,
-    /// Category display name, from `categories.name`.
-    pub category_name: Option<String>,
-    /// Current stock quantity, from `inventory.qty`.
-    pub stock_qty: Option<i64>,
+// ── Error mapping ─────────────────────────────────────────────────────
+
+/// Convert a [`CoreError`] from the Store into an HTTP response.
+fn store_error_response(e: CoreError) -> Response {
+    match e {
+        CoreError::Validation { message, .. } => {
+            (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": message}))).into_response()
+        }
+        CoreError::Conflict { .. } => {
+            (StatusCode::CONFLICT, Json(serde_json::json!({"error": "resource already exists"}))).into_response()
+        }
+        CoreError::NotFound { .. } => {
+            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "not found"}))).into_response()
+        }
+        e => {
+            tracing::error!("unexpected store error: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"}))).into_response()
+        }
+    }
 }
 
+// ── Request / Response types ──────────────────────────────────────────
+
 /// Request body for creating a new product.
-///
-/// The caller supplies `sku`, `name`, and `price` (all required).
-/// `category_id`, `barcode`, and `initial_stock` are optional.
-/// The server generates `id` and timestamps.
 #[derive(Deserialize)]
 pub struct CreateProductRequest {
     pub sku: String,
@@ -41,196 +49,8 @@ pub struct CreateProductRequest {
     pub price: oz_core::Money,
     pub category_id: Option<String>,
     pub barcode: Option<String>,
-    /// Initial stock quantity (≥ 0). If omitted or zero, no inventory row is inserted.
+    /// Initial stock quantity (>= 0). If omitted or zero, no inventory row is inserted.
     pub initial_stock: Option<i64>,
-}
-
-/// Create a new product.
-///
-/// Validates the SKU and name, generates an id, and inserts into
-/// `products`. If `initial_stock` > 0, a matching `inventory` row is
-/// inserted as well. Returns 201 with the created `ProductDetail`.
-pub async fn create_product(
-    State(state): State<AppState>,
-    Json(body): Json<CreateProductRequest>,
-) -> impl IntoResponse {
-    // Validate.
-    if body.sku.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "SKU must not be empty"}))).into_response();
-    }
-    if body.name.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "name must not be empty"}))).into_response();
-    }
-    if body.price.minor_units < 0 {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "price must be ≥ 0"}))).into_response();
-    }
-    let initial_stock = body.initial_stock.unwrap_or(0);
-    if initial_stock < 0 {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "initial_stock must be ≥ 0"}))).into_response();
-    }
-
-    let id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let sku_trimmed = body.sku.trim().to_owned();
-    let cur_str = std::str::from_utf8(&body.price.currency.0)
-        .expect("currency bytes are valid UTF-8")
-        .to_owned();
-
-    let db = state.db.lock().await;
-
-    // Insert product.
-    let result = db.execute(
-        "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        rusqlite::params![
-            id,
-            sku_trimmed,
-            body.name.trim(),
-            body.price.minor_units,
-            cur_str,
-            body.category_id,
-            body.barcode,
-            now,
-            now,
-        ],
-    );
-
-    match result {
-        Err(rusqlite::Error::SqliteFailure(e, _))
-            if e.code == rusqlite::ErrorCode::ConstraintViolation =>
-        {
-            return (StatusCode::CONFLICT, Json(serde_json::json!({"error": "SKU or barcode already exists"}))).into_response();
-        }
-        Err(e) => panic!("insert product failed: {e}"),
-        Ok(_) => {}
-    }
-
-    // Insert inventory row if initial stock > 0.
-    if initial_stock > 0 {
-        db.execute(
-            "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)",
-            rusqlite::params![id, initial_stock, now],
-        )
-        .expect("insert inventory row");
-    }
-
-    let product = Product {
-        id,
-        sku: oz_core::Sku::new(sku_trimmed),
-        name: body.name.trim().to_owned(),
-        price: body.price,
-        category_id: body.category_id,
-        barcode: body.barcode,
-        created_at: now.clone(),
-        updated_at: now,
-    };
-
-    let detail = ProductDetail {
-        product,
-        category_name: None,
-        stock_qty: if initial_stock > 0 { Some(initial_stock) } else { None },
-    };
-
-    (StatusCode::CREATED, Json(detail)).into_response()
-}
-
-/// List all products, ordered by name, with category name and current
-/// stock from the `inventory` table.
-pub async fn list_products(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    let db = state.db.lock().await;
-    let mut stmt = db
-        .prepare(
-            "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
-             FROM products p
-             LEFT JOIN categories c ON p.category_id = c.id
-             LEFT JOIN inventory i ON p.id = i.product_id
-             ORDER BY p.name",
-        )
-        .expect("prepare list_products query");
-
-    let rows = stmt
-        .query_map([], |row| {
-            let sku_str: String = row.get("sku")?;
-            let cur_str: String = row.get("currency")?;
-            let product = Product {
-                id: row.get("id")?,
-                sku: oz_core::Sku::new(sku_str),
-                name: row.get("name")?,
-                price: oz_core::Money {
-                    minor_units: row.get("price_minor")?,
-                    currency: cur_str.parse().expect("valid currency in database"),
-                },
-                category_id: row.get("category_id")?,
-                barcode: row.get("barcode")?,
-                created_at: row.get("created_at")?,
-                updated_at: row.get("updated_at")?,
-            };
-            Ok(ProductDetail {
-                product,
-                category_name: row.get("category_name")?,
-                stock_qty: row.get("stock_qty")?,
-            })
-        })
-        .expect("execute list_products query");
-
-    let products: Vec<ProductDetail> =
-        rows.map(|r| r.expect("deserialize product row")).collect();
-    Json(products)
-}
-
-/// Get a single product by SKU, including current stock quantity.
-/// Returns `null` (JSON `None`) if no product matches the SKU.
-pub async fn get_product(
-    State(state): State<AppState>,
-    Path(sku): Path<String>,
-) -> impl IntoResponse {
-    let db = state.db.lock().await;
-    let mut stmt = db
-        .prepare(
-            "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
-             FROM products p
-             LEFT JOIN categories c ON p.category_id = c.id
-             LEFT JOIN inventory i ON p.id = i.product_id
-             WHERE p.sku = ?1",
-        )
-        .expect("prepare get_product query");
-
-    let result = stmt.query_row([&sku], |row| {
-        let sku_str: String = row.get("sku")?;
-        let cur_str: String = row.get("currency")?;
-        let product = Product {
-            id: row.get("id")?,
-            sku: oz_core::Sku::new(sku_str),
-            name: row.get("name")?,
-            price: oz_core::Money {
-                minor_units: row.get("price_minor")?,
-                currency: cur_str.parse().expect("valid currency in database"),
-            },
-            category_id: row.get("category_id")?,
-            barcode: row.get("barcode")?,
-            created_at: row.get("created_at")?,
-            updated_at: row.get("updated_at")?,
-        };
-        Ok(ProductDetail {
-            product,
-            category_name: row.get("category_name")?,
-            stock_qty: row.get("stock_qty")?,
-        })
-    });
-
-    match result {
-        Ok(detail) => Json(Some(detail)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Json(None),
-        Err(e) => panic!("get_product query failed: {e}"),
-    }
 }
 
 /// Request body for adjusting stock.
@@ -248,12 +68,77 @@ pub struct PatchStockResponse {
     pub new_qty: i64,
 }
 
+// ── Handlers ──────────────────────────────────────────────────────────
+
+/// List all products, ordered by name, with category name and stock.
+pub async fn list_products(
+    State(state): State<AppState>,
+) -> Response {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+
+    match store.list_products() {
+        Ok(products) => Json(products).into_response(),
+        Err(e) => store_error_response(e),
+    }
+}
+
+/// Get a single product by SKU, including category name and stock.
+///
+/// Returns JSON `null` when the product is not found.
+pub async fn get_product(
+    State(state): State<AppState>,
+    Path(sku): Path<String>,
+) -> Response {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+
+    match store.get_product(&sku) {
+        Ok(Some(p)) => Json(Some(p)).into_response(),
+        Ok(None) => Json(None as Option<ProductWithDetails>).into_response(),
+        Err(e) => store_error_response(e),
+    }
+}
+
+/// Create a new product.
+///
+/// Accepts a `CreateProductRequest` JSON body. Validation (empty SKU,
+/// empty name, negative price, negative stock) is handled by the Store,
+/// returning 400 on failure. Returns 201 with the created product.
+pub async fn create_product(
+    State(state): State<AppState>,
+    Json(body): Json<CreateProductRequest>,
+) -> Response {
+    let initial_stock = body.initial_stock.unwrap_or(0);
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+
+    match store.create_product(
+        &body.sku,
+        &body.name,
+        body.price,
+        body.category_id.as_deref(),
+        body.barcode.as_deref(),
+        initial_stock,
+    ) {
+        Ok(product) => {
+            let detail = ProductWithDetails {
+                product,
+                category_name: None,
+                stock_qty: if initial_stock > 0 { Some(initial_stock) } else { None },
+            };
+            (StatusCode::CREATED, Json(detail)).into_response()
+        }
+        Err(e) => store_error_response(e),
+    }
+}
+
 /// Adjust stock for a product by SKU.
 ///
-/// Accepts `{ "delta": +/-N }`. Reads the current inventory row (or
-/// treats missing rows as qty 0), checks the new qty would be ≥ 0,
-/// and updates inside a single transaction. Returns 200 with previous
-/// and new quantities.
+/// Accepts `{ "delta": +/-N }`. The Store handles validation, the
+/// `checked_add` / `>=0` guard, and the atomic upsert. Returns 200
+/// with previous and new quantities.
 ///
 /// Status codes:
 /// - 200 — stock adjusted successfully
@@ -263,38 +148,32 @@ pub async fn patch_stock(
     State(state): State<AppState>,
     Path(sku): Path<String>,
     Json(body): Json<PatchStockRequest>,
-) -> impl IntoResponse {
+) -> Response {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
 
-    // Look up the product id.
-    let product_id: String = match db.query_row(
-        "SELECT id FROM products WHERE sku = ?1",
-        rusqlite::params![sku],
-        |row| row.get(0),
-    ) {
-        Ok(id) => id,
-        Err(rusqlite::Error::QueryReturnedNoRows) => {
+    // Read previous stock while we still have it.
+    let product = match store.get_product(&sku) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
             return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "product not found"}))).into_response();
         }
-        Err(e) => panic!("product lookup failed: {e}"),
+        Err(e) => return store_error_response(e),
     };
+    let previous_qty = product.stock_qty.unwrap_or(0);
 
-    // Read current stock (default 0 if no inventory row).
-    let previous_qty: i64 = match db.query_row(
-        "SELECT qty FROM inventory WHERE product_id = ?1",
-        rusqlite::params![product_id],
-        |row| row.get(0),
-    ) {
-        Ok(q) => q,
-        Err(rusqlite::Error::QueryReturnedNoRows) => 0,
-        Err(e) => panic!("inventory read failed: {e}"),
-    };
-
-    // Check the adjustment is valid.
-    let new_qty = match previous_qty.checked_add(body.delta) {
-        Some(q) if q >= 0 => q,
-        _ => {
-            return (
+    match store.adjust_stock(&sku, body.delta) {
+        Ok(new_qty) => {
+            let response = PatchStockResponse {
+                sku,
+                previous_qty,
+                new_qty,
+            };
+            Json(response).into_response()
+        }
+        Err(CoreError::Validation { .. }) => {
+            // Oversell or overflow -> 422 with details.
+            (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(serde_json::json!({
                     "error": "adjustment would cause negative stock",
@@ -302,27 +181,8 @@ pub async fn patch_stock(
                     "delta": body.delta,
                 })),
             )
-                .into_response();
+                .into_response()
         }
-    };
-
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
-    // Update inside a transaction.
-    let tx = db.unchecked_transaction().expect("begin transaction");
-    tx.execute(
-        "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
-         ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
-                                                updated_at = excluded.updated_at",
-        rusqlite::params![product_id, new_qty, now],
-    )
-    .expect("update inventory");
-    tx.commit().expect("commit stock adjustment");
-
-    let response = PatchStockResponse {
-        sku,
-        previous_qty,
-        new_qty,
-    };
-    Json(response).into_response()
+        Err(e) => store_error_response(e),
+    }
 }

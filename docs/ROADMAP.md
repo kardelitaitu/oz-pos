@@ -56,7 +56,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] Wizard skipped on subsequent launches (flags already set)
 
 ### oz-core — Data Models & Engine
-- [x] SQLite schema: `product`, `category`, `order`, `order_lines`
+- [x] SQLite schema: `products`, `categories`, `sales`, `sale_lines`
 - [x] SQLite schema: `settings`
 - [ ] SQLite schema: `currency`, `exchange_rate`
 - [ ] SQLite schema: `customers`, `users`, `roles`
@@ -73,7 +73,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] `updated_at` auto-update via SQLite `DEFAULT (strftime(...))` on mutable tables
 
 ### oz-hal — Hardware
-- [ ] `Device`, `BarcodeScanner`, `Printer`, `NfcReader` trait definitions
+- [x] `BarcodeScanner`, `ReceiptPrinter`, `CashDrawer` async trait definitions
+- [x] `DriverRegistry` for lookup/injection per device category
 - [ ] USB barcode scanner driver (HID)
 - [ ] Serial barcode scanner driver (stub)
 - [ ] Receipt printer driver (USB, stub output)
@@ -163,7 +164,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] `.env.example` template for development secrets
 
 ### oz-logging
-- [ ] `tracing` + `tracing-subscriber` initialiser (`oz_logging::init()`)
+- [x] `tracing` + `tracing-subscriber` initialiser (`oz_logging::init()`)
 - [ ] JSON log formatter (ELK/Loki compatible)
 - [ ] Syslog output (Linux)
 - [ ] Windows Event Log output
@@ -381,7 +382,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] `@fluent/react` integration — no hardcoded strings in JSX
 - [ ] `docs/a11y.md` — accessibility compliance checklist
 
-### oz-perf
+### oz-reporting — Performance & Profiling
 - [ ] `tokio-console` integration macros
 - [ ] `cargo flamegraph` helpers
 - [ ] Benchmark suite: barcode lookup < 1 ms, transaction commit < 5 ms
