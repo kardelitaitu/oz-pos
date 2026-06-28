@@ -76,7 +76,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/tokens", post(routes::tokens::create_token_handler));
 
     let protected = Router::new()
-        .route("/api/v1/products", get(routes::products::list_products))
+        .route("/api/v1/products", get(routes::products::list_products).post(routes::products::create_product))
         .route("/api/v1/products/{sku}", get(routes::products::get_product))
         .route("/api/v1/categories", get(routes::categories::list_categories))
         .layer(middleware::from_fn(auth::auth_middleware));
@@ -471,6 +471,121 @@ mod tests {
         assert_eq!(json["name"], "Green Tea");
         assert_eq!(json["price"]["minor_units"], 275);
         assert!(json["stock_qty"].is_null(), "no inventory row → null stock");
+    }
+
+    // ── Product creation endpoint ───────────────────────────────
+
+    fn auth_post_json(uri: &str, token: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn create_product_returns_201() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"NEW-001","name":"New Item","price":{"minor_units":199,"currency":"USD"}}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn create_product_returns_fields() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"NEW-002","name":"Widget","price":{"minor_units":499,"currency":"USD"},"category_id":"cat-drinks","barcode":"5901234123457"}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["sku"], "NEW-002");
+        assert_eq!(json["name"], "Widget");
+        assert_eq!(json["price"]["minor_units"], 499);
+        assert_eq!(json["price"]["currency"], "USD");
+        assert_eq!(json["category_id"], "cat-drinks");
+        assert_eq!(json["barcode"], "5901234123457");
+        assert!(json["id"].is_string());
+        assert!(json["created_at"].is_string());
+        assert!(json["updated_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn create_product_with_initial_stock() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"STOCKED-1","name":"Stocked","price":{"minor_units":100,"currency":"USD"},"initial_stock":25}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["stock_qty"], 25);
+    }
+
+    #[tokio::test]
+    async fn create_product_with_zero_stock_no_inventory_row() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"NOSTOCK-1","name":"NoStock","price":{"minor_units":100,"currency":"USD"},"initial_stock":0}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert!(json["stock_qty"].is_null(), "zero stock → no inventory row");
+    }
+
+    #[tokio::test]
+    async fn create_product_duplicate_sku_returns_409() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"DRINK-001","name":"Duplicate","price":{"minor_units":100,"currency":"USD"}}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn create_product_requires_auth() {
+        let body = r#"{"sku":"NEW-001","name":"New","price":{"minor_units":100,"currency":"USD"}}"#;
+        let req = post_json("/api/v1/products", body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn create_product_empty_sku_returns_400() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"   ","name":"Bad","price":{"minor_units":100,"currency":"USD"}}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn create_product_empty_name_returns_400() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"SKU-OK","name":"","price":{"minor_units":100,"currency":"USD"}}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn create_product_negative_price_returns_400() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"SKU-OK","name":"Bad Price","price":{"minor_units":-1,"currency":"USD"}}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn create_product_negative_initial_stock_returns_400() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"sku":"SKU-OK","name":"Bad Stock","price":{"minor_units":100,"currency":"USD"},"initial_stock":-5}"#;
+        let req = auth_post_json("/api/v1/products", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     // ── Category endpoints ───────────────────────────────────────
