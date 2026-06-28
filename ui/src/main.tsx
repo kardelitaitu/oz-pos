@@ -5,6 +5,7 @@ import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import App from './App';
 import './styles/reset.css';
 import './styles/tokens.css';
+import './styles/components.css';
 
 // Bootstrap the only locale we ship at scaffold time. Adding a new
 // locale is a copy of en-US.ftl + a translation; the registration

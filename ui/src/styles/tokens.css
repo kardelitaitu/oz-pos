@@ -116,6 +116,7 @@
   --color-warning-bg:      #fffbeb;
   --color-danger:          var(--danger-500);
   --color-danger-hover:    var(--danger-600);
+  --color-danger-700:      var(--danger-700);
   --color-danger-bg:       var(--danger-50);
   --color-danger-fg:       #ffffff;
   --color-info:            var(--info-500);
