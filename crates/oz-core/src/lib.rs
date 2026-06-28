@@ -19,6 +19,7 @@
 pub mod cart;
 pub mod category;
 pub mod error;
+pub mod inventory;
 pub mod migrations;
 pub mod money;
 pub mod product;
@@ -27,6 +28,7 @@ pub mod sku;
 pub use cart::{Cart, CartError, CartId, CartLine};
 pub use category::Category;
 pub use error::CoreError;
+pub use inventory::Inventory;
 pub use money::{Currency, Money};
 pub use product::Product;
 pub use sku::{LineId, Sku};
