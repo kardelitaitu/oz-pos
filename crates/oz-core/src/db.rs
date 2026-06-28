@@ -239,6 +239,96 @@ impl Store<'_> {
             updated_at: now,
         })
     }
+
+    /// Update an existing product identified by SKU.
+    ///
+    /// All fields are required (read the current values first with
+    /// [`get_product`], then submit the updated version). Returns the
+    /// updated [`Product`] without category/stock enrichment.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NotFound`] when the SKU doesn't match.
+    /// Returns [`CoreError::Conflict`] when the new SKU or barcode
+    /// clashes with another product.
+    /// Returns [`CoreError::Validation`] when name or price is invalid.
+    pub fn update_product(
+        &self,
+        sku: &str,
+        name: &str,
+        price: Money,
+        category_id: Option<&str>,
+        barcode: Option<&str>,
+    ) -> Result<Product, CoreError> {
+        // Validation.
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "name must not be empty".into(),
+            });
+        }
+        if price.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "price",
+                message: "price must be ≥ 0".into(),
+            });
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let cur_str = std::str::from_utf8(&price.currency.0)
+            .expect("currency bytes are valid UTF-8")
+            .to_owned();
+
+        let rows = self.conn.execute(
+            "UPDATE products
+             SET name = ?1, price_minor = ?2, currency = ?3,
+                 category_id = ?4, barcode = ?5, updated_at = ?6
+             WHERE sku = ?7",
+            params![
+                name.trim(),
+                price.minor_units,
+                cur_str,
+                category_id,
+                barcode,
+                now,
+                sku,
+            ],
+        )?;
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "product",
+                id: sku.to_owned(),
+            });
+        }
+
+        // Re-read to get the persisted product.
+        let mut stmt = self.conn.prepare(
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at
+             FROM products WHERE sku = ?1",
+        )?;
+        let product = stmt.query_row(params![sku], row_to_product)?;
+        Ok(product)
+    }
+
+    /// Delete a product by SKU, including its inventory row (CASCADE
+    /// in the schema). Returns [`CoreError::NotFound`] when the SKU
+    /// doesn't match any product.
+    pub fn delete_product(&self, sku: &str) -> Result<(), CoreError> {
+        let rows = self.conn.execute(
+            "DELETE FROM products WHERE sku = ?1",
+            params![sku],
+        )?;
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "product",
+                id: sku.to_owned(),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 // ── Category CRUD ─────────────────────────────────────────────────────
@@ -807,6 +897,76 @@ mod tests {
         // Negative stock
         let err = s.create_product("SKU", "X", price(1), None, None, -5).unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "initial_stock"));
+    }
+
+    // ── Product update / delete ─────────────────────────────────
+
+    #[test]
+    fn update_product_basic() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let updated = store(&conn)
+            .update_product("DRINK-001", "Latte", price(400), None, None)
+            .unwrap();
+        assert_eq!(updated.name, "Latte");
+        assert_eq!(updated.price.minor_units, 400);
+        assert_eq!(updated.sku.as_str(), "DRINK-001");
+        assert!(updated.updated_at.as_str() > "2025-01-01");
+    }
+
+    #[test]
+    fn update_product_not_found() {
+        let conn = fresh();
+        let err = store(&conn)
+            .update_product("NOPE", "X", price(1), None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    #[test]
+    fn update_product_empty_name() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let err = store(&conn)
+            .update_product("DRINK-001", "", price(1), None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn update_product_negative_price() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let err = store(&conn)
+            .update_product("DRINK-001", "X", price(-1), None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
+    }
+
+    #[test]
+    fn update_product_with_category() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let updated = store(&conn)
+            .update_product("DRINK-001", "Latte", price(400), Some("cat-food"), None)
+            .unwrap();
+        assert_eq!(updated.category_id.as_deref(), Some("cat-food"));
+    }
+
+    #[test]
+    fn delete_product_removes_row() {
+        let conn = fresh();
+        seed_everything(&conn);
+        store(&conn).delete_product("DRINK-001").unwrap();
+        let p = store(&conn).get_product("DRINK-001").unwrap();
+        assert!(p.is_none());
+    }
+
+    #[test]
+    fn delete_product_not_found() {
+        let conn = fresh();
+        let err = store(&conn).delete_product("NOPE").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
     // ── Categories ───────────────────────────────────────────────

@@ -18,6 +18,7 @@
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -25,7 +26,7 @@ use rusqlite::Connection;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
-use oz_core::migrations;
+use oz_core::{migrations, Cart, CartId};
 use oz_hal::DriverRegistry;
 
 use crate::error::AppError;
@@ -44,6 +45,11 @@ pub struct AppState {
 
     /// Path to the SQLite database file (for diagnostics + `oz-cli` reuse).
     pub db_path: PathBuf,
+
+    /// In-memory cart store shared across sales commands.
+    /// TODO(oz-core): replace with a SQLite-backed `CartStore` so
+    /// carts survive a restart.
+    pub carts: Mutex<HashMap<CartId, Cart>>,
 }
 
 impl AppState {
@@ -75,6 +81,7 @@ impl AppState {
             registry,
             app: app.clone(),
             db_path,
+            carts: Mutex::new(HashMap::new()),
         })
     }
 }
@@ -85,4 +92,18 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
         .app_data_dir()
         .map_err(|e| AppError::Internal(format!("resolving app data dir: {e}")))?;
     Ok(dir.join("oz-pos.db"))
+}
+
+#[cfg(test)]
+impl AppState {
+    /// Construct an `AppState` suitable for unit tests without a Tauri runtime.
+    pub fn for_test() -> Self {
+        Self {
+            db: Mutex::new(Connection::open_in_memory().unwrap()),
+            registry: Arc::new(DriverRegistry::default()),
+            app: AppHandle::default(),
+            db_path: ":memory:".into(),
+            carts: Mutex::new(HashMap::new()),
+        }
+    }
 }

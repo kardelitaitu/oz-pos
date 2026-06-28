@@ -4,43 +4,18 @@
 //! actual cart/sale state machine lives in `oz_core`; this file translates
 //! between the Tauri argument structs and the domain types.
 //!
-//! The cart is currently held in-memory (see TODO below). Once the
-//! persistence layer is in place, carts will be saved to SQLite and
-//! recovered on restart. The persistence path will re-introduce
-//! `State<'_, AppState>` in every command — until then we keep the
-//! signatures free of unused state parameters.
-
-use std::collections::HashMap;
-use std::sync::Arc;
+//! Carts are held in-memory inside [`AppState::carts`] — they do not
+//! survive a restart. Once the persistence layer is in place, carts
+//! will be saved to SQLite and recovered on restart.
 
 use serde::{Deserialize, Serialize};
-use tauri::command;
-use tokio::sync::Mutex;
+use tauri::{State, command};
 
 use oz_core::{Cart, CartId, LineId, Money, Sku};
 use uuid::Uuid;
 
 use crate::error::AppError;
-
-// TODO(oz-core): replace the in-memory cart map with a SQLite-backed
-// `CartStore` so carts survive a restart. The `Mutex<HashMap<CartId, Cart>>`
-// here is intentionally a placeholder.
-
-type CartMap = Arc<Mutex<HashMap<CartId, Cart>>>;
-
-/// In-memory cart store. Constructed lazily inside the first command that
-/// needs it; a future refactor will move this into `AppState` proper.
-///
-/// Note: this global is shared across all `#[tokio::test]`s in the
-/// module. Tests in this file assume serial execution; once a second
-/// test is added, mark both with `#[serial_test::serial]` or refactor
-/// to pass a `CartMap` via `State`.
-fn cart_store() -> CartMap {
-    static CARTS: std::sync::OnceLock<CartMap> = std::sync::OnceLock::new();
-    CARTS
-        .get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
-        .clone()
-}
+use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct StartSaleArgs {
@@ -56,7 +31,10 @@ pub struct StartSaleResult {
 }
 
 #[command]
-pub async fn start_sale(args: StartSaleArgs) -> Result<StartSaleResult, AppError> {
+pub async fn start_sale(
+    args: StartSaleArgs,
+    state: State<'_, AppState>,
+) -> Result<StartSaleResult, AppError> {
     let currency_str = if args.currency.is_empty() {
         "USD"
     } else {
@@ -67,7 +45,7 @@ pub async fn start_sale(args: StartSaleArgs) -> Result<StartSaleResult, AppError
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency_str}")))?;
     let cart = Cart::new(currency);
     let id = cart.id();
-    cart_store().lock().await.insert(id, cart);
+    state.carts.lock().await.insert(id, cart);
     Ok(StartSaleResult { cart_id: id })
 }
 
@@ -87,10 +65,13 @@ pub struct AddLineResult {
 }
 
 #[command]
-pub async fn add_line(args: AddLineArgs) -> Result<AddLineResult, AppError> {
+pub async fn add_line(
+    args: AddLineArgs,
+    state: State<'_, AppState>,
+) -> Result<AddLineResult, AppError> {
     let currency = {
-        let store = cart_store().lock().await;
-        let cart = store
+        let carts = state.carts.lock().await;
+        let cart = carts
             .get(&args.cart_id)
             .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
         cart.currency()
@@ -104,8 +85,8 @@ pub async fn add_line(args: AddLineArgs) -> Result<AddLineResult, AppError> {
     let line_id = line.id;
     let line_total = line.total();
 
-    let mut store = cart_store().lock().await;
-    let cart = store
+    let mut carts = state.carts.lock().await;
+    let cart = carts
         .get_mut(&args.cart_id)
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
     cart.add_line(line)
@@ -131,9 +112,12 @@ pub struct CompleteSaleResult {
 }
 
 #[command]
-pub async fn complete_sale(args: CompleteSaleArgs) -> Result<CompleteSaleResult, AppError> {
-    let mut store = cart_store().lock().await;
-    let cart = store
+pub async fn complete_sale(
+    args: CompleteSaleArgs,
+    state: State<'_, AppState>,
+) -> Result<CompleteSaleResult, AppError> {
+    let mut carts = state.carts.lock().await;
+    let cart = carts
         .remove(&args.cart_id)
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
     let total = cart.total();
@@ -151,6 +135,7 @@ pub async fn complete_sale(args: CompleteSaleArgs) -> Result<CompleteSaleResult,
 mod tests {
     use super::*;
     use oz_core::Currency;
+    use tauri::State;
 
     fn usd() -> Currency {
         "USD".parse().unwrap()
@@ -158,17 +143,24 @@ mod tests {
 
     #[tokio::test]
     async fn start_then_complete_sale() {
-        let start = start_sale(StartSaleArgs {
-            currency: "USD".into(),
-        })
+        let state = AppState::for_test();
+        let start = start_sale(
+            StartSaleArgs {
+                currency: "USD".into(),
+            },
+            State::new(&state),
+        )
         .await
         .unwrap();
-        let add = add_line(AddLineArgs {
-            cart_id: start.cart_id,
-            sku: Sku::new("COFFEE"),
-            qty: 2,
-            unit_price_minor: 350,
-        })
+        let add = add_line(
+            AddLineArgs {
+                cart_id: start.cart_id,
+                sku: Sku::new("COFFEE"),
+                qty: 2,
+                unit_price_minor: 350,
+            },
+            State::new(&state),
+        )
         .await
         .unwrap();
         let total = add.line_total.expect("line fits in i64");

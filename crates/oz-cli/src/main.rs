@@ -6,6 +6,8 @@
 //! - `oz product list` — list all products
 //! - `oz product get <sku>` — show a product by SKU
 //! - `oz product create <sku> <name> <price>` — create a new product
+//! - `oz product update <sku> <name> <price>` — update an existing product
+//! - `oz product delete <sku>` — delete a product
 //! - `oz backup` — snapshot the local SQLite store (scaffold)
 //! - `oz export` — write a CSV report (scaffold)
 
@@ -38,7 +40,7 @@ enum Command {
     Migrate,
     /// Seed the database with default settings and feature flags.
     InitDb(InitDbArgs),
-    /// Manage products (list, get, create).
+    /// Manage products (list, get, create, update, delete).
     Product(ProductArgs),
     /// Snapshot the local SQLite store to a backup file.
     Backup {
@@ -86,6 +88,29 @@ enum ProductAction {
         /// ISO-4217 currency code (default: USD).
         #[arg(long, default_value = "USD")]
         currency: String,
+    },
+    /// Update an existing product by SKU.
+    Update {
+        /// Product SKU to update.
+        sku: String,
+        /// New display name.
+        name: String,
+        /// New price in minor units.
+        price: i64,
+        /// ISO-4217 currency code (default: USD).
+        #[arg(long, default_value = "USD")]
+        currency: String,
+        /// New category id (or empty to clear).
+        #[arg(long)]
+        category_id: Option<String>,
+        /// New barcode (or empty to clear).
+        #[arg(long)]
+        barcode: Option<String>,
+    },
+    /// Delete a product by SKU.
+    Delete {
+        /// Product SKU to delete.
+        sku: String,
     },
 }
 
@@ -144,7 +169,6 @@ fn run_migrate(conn: Connection) -> Result<()> {
 
 /// Seed the database with default settings and a feature preset.
 fn run_init_db(conn: &Connection, args: &InitDbArgs) -> Result<()> {
-    // Ensure migrations have been run first.
     eprintln!("seeding database with preset: {}", args.preset);
 
     let store = Store::new(conn);
@@ -191,6 +215,23 @@ fn run_product(conn: &Connection, args: ProductArgs) -> Result<()> {
             price,
             currency,
         } => run_product_create(&store, &sku, &name, price, &currency),
+        ProductAction::Update {
+            sku,
+            name,
+            price,
+            currency,
+            category_id,
+            barcode,
+        } => run_product_update(
+            &store,
+            &sku,
+            &name,
+            price,
+            &currency,
+            category_id.as_deref(),
+            barcode.as_deref(),
+        ),
+        ProductAction::Delete { sku } => run_product_delete(&store, &sku),
     }
 }
 
@@ -286,6 +327,66 @@ fn run_product_create(
         }
         Err(CoreError::Conflict { entity, field }) => {
             eprintln!("Conflict: {entity} already exists ({field})");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+fn run_product_update(
+    store: &Store<'_>,
+    sku: &str,
+    name: &str,
+    price_minor: i64,
+    currency_code: &str,
+    category_id: Option<&str>,
+    barcode: Option<&str>,
+) -> Result<()> {
+    let currency = Currency::from_str(currency_code)
+        .with_context(|| format!("invalid currency code: {currency_code}"))?;
+    let money = Money {
+        minor_units: price_minor,
+        currency,
+    };
+
+    // Treat empty strings passed via --category-id or --barcode as None
+    // so the caller can clear a previously-set value.
+    let cat = category_id.and_then(|s| if s.is_empty() { None } else { Some(s) });
+    let bar = barcode.and_then(|s| if s.is_empty() { None } else { Some(s) });
+
+    match store.update_product(sku, name, money, cat, bar) {
+        Ok(product) => {
+            println!("Updated product: {} ({})", product.name, product.sku.as_str());
+        }
+        Err(CoreError::NotFound { .. }) => {
+            eprintln!("Product not found: {sku}");
+            std::process::exit(1);
+        }
+        Err(CoreError::Validation { message, .. }) => {
+            eprintln!("Validation error: {message}");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+fn run_product_delete(store: &Store<'_>, sku: &str) -> Result<()> {
+    match store.delete_product(sku) {
+        Ok(()) => {
+            println!("Deleted product: {sku}");
+        }
+        Err(CoreError::NotFound { .. }) => {
+            eprintln!("Product not found: {sku}");
             std::process::exit(1);
         }
         Err(e) => {
