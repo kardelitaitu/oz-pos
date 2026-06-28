@@ -128,6 +128,9 @@ enum SaleAction {
     Get {
         /// Sale UUID.
         id: String,
+        /// Output format (default: text, or "json").
+        #[arg(long, default_value = "text")]
+        format: String,
     },
     /// Transition a sale to a new status.
     UpdateStatus {
@@ -471,7 +474,7 @@ fn run_sale(conn: &Connection, args: SaleArgs) -> Result<()> {
 
     match args.action {
         SaleAction::List => run_sale_list(&store),
-        SaleAction::Get { id } => run_sale_get(&store, &id),
+        SaleAction::Get { id, format } => run_sale_get(&store, &id, &format),
         SaleAction::UpdateStatus { id, status } => run_sale_update_status(&store, &id, &status),
     }
 }
@@ -508,39 +511,49 @@ fn run_sale_list(store: &Store<'_>) -> Result<()> {
     Ok(())
 }
 
-fn run_sale_get(store: &Store<'_>, id: &str) -> Result<()> {
+fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<()> {
     match store.get_sale(id).context("looking up sale")? {
         Some(sale) => {
-            let total_str = format!(
-                "{}.{:02} {}",
-                sale.total.minor_units / 100,
-                sale.total.minor_units.abs() % 100,
-                std::str::from_utf8(&sale.currency.0).unwrap_or("???"),
-            );
-            println!("ID:           {}", sale.id);
-            println!("Status:       {:?}", sale.status);
-            println!("Total:        {}", total_str);
-            println!("Line count:   {}", sale.line_count);
-            println!("Currency:     {}", std::str::from_utf8(&sale.currency.0).unwrap_or("???"));
-            println!("Created:      {}", sale.created_at);
-            println!("Updated:      {}", sale.updated_at);
+            if format == "json" {
+                let json = serde_json::to_string_pretty(&sale)
+                    .context("serializing sale to JSON")?;
+                println!("{json}");
+            } else {
+                let total_str = format!(
+                    "{}.{:02} {}",
+                    sale.total.minor_units / 100,
+                    sale.total.minor_units.abs() % 100,
+                    std::str::from_utf8(&sale.currency.0).unwrap_or("???"),
+                );
+                println!("ID:           {}", sale.id);
+                println!("Status:       {:?}", sale.status);
+                println!("Total:        {}", total_str);
+                println!("Line count:   {}", sale.line_count);
+                println!("Currency:     {}", std::str::from_utf8(&sale.currency.0).unwrap_or("???"));
+                println!("Created:      {}", sale.created_at);
+                println!("Updated:      {}", sale.updated_at);
 
-            if !sale.lines.is_empty() {
-                println!();
-                println!("{:<4} {:<24} {:>6} {:>10}", "#", "SKU", "Qty", "Unit");
-                println!("{:-<4} {:-<24} {:->6} {:->10}", "", "", "", "");
-                for line in &sale.lines {
-                    let unit_str = format!(
-                        "{}.{:02}",
-                        line.unit_price.minor_units / 100,
-                        line.unit_price.minor_units.abs() % 100,
-                    );
-                    println!("{:<4} {:<24} {:>6} {:>10}", line.line_position, line.sku, line.qty, unit_str);
+                if !sale.lines.is_empty() {
+                    println!();
+                    println!("{:<4} {:<24} {:>6} {:>10}", "#", "SKU", "Qty", "Unit");
+                    println!("{:-<4} {:-<24} {:->6} {:->10}", "", "", "", "");
+                    for line in &sale.lines {
+                        let unit_str = format!(
+                            "{}.{:02}",
+                            line.unit_price.minor_units / 100,
+                            line.unit_price.minor_units.abs() % 100,
+                        );
+                        println!("{:<4} {:<24} {:>6} {:>10}", line.line_position, line.sku, line.qty, unit_str);
+                    }
                 }
             }
         }
         None => {
-            println!("Sale not found: {id}");
+            if format == "json" {
+                println!("null");
+            } else {
+                println!("Sale not found: {id}");
+            }
         }
     }
 
