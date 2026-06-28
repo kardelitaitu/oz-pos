@@ -447,11 +447,16 @@ mod tests {
         let json = body_json(resp).await;
         assert_eq!(json["sku"], "DRINK-001");
         assert_eq!(json["name"], "Espresso");
-        assert_eq!(json["price_minor"], 350);
-        assert_eq!(json["currency"], "USD");
+        assert_eq!(json["price"]["minor_units"], 350);
+        assert_eq!(json["price"]["currency"], "USD");
         assert_eq!(json["category_id"], "cat-drinks");
         assert_eq!(json["category_name"], "Drinks");
         assert_eq!(json["stock_qty"], 50);
+        // New fields from the Product domain type.
+        assert_eq!(json["id"], "prod-1");
+        assert!(json["barcode"].is_null());
+        assert!(json["created_at"].is_string());
+        assert!(json["updated_at"].is_string());
     }
 
     #[tokio::test]
@@ -464,6 +469,7 @@ mod tests {
         let json = body_json(resp).await;
         assert_eq!(json["sku"], "DRINK-002");
         assert_eq!(json["name"], "Green Tea");
+        assert_eq!(json["price"]["minor_units"], 275);
         assert!(json["stock_qty"].is_null(), "no inventory row → null stock");
     }
 

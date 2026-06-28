@@ -3,16 +3,10 @@
 //! `GET /api/v1/categories` — list all product categories.
 
 use axum::{Json, extract::State, response::IntoResponse};
-use serde::Serialize;
+
+use oz_core::Category;
 
 use crate::AppState;
-
-#[derive(Serialize)]
-pub struct CategoryResponse {
-    pub id: String,
-    pub name: String,
-    pub colour: String,
-}
 
 /// List all categories, ordered by name.
 pub async fn list_categories(
@@ -25,7 +19,7 @@ pub async fn list_categories(
 
     let rows = stmt
         .query_map([], |row| {
-            Ok(CategoryResponse {
+            Ok(Category {
                 id: row.get("id")?,
                 name: row.get("name")?,
                 colour: row.get("colour")?,
@@ -33,7 +27,7 @@ pub async fn list_categories(
         })
         .expect("execute list_categories query");
 
-    let categories: Vec<CategoryResponse> =
+    let categories: Vec<Category> =
         rows.map(|r| r.expect("deserialize category row")).collect();
     Json(categories)
 }
