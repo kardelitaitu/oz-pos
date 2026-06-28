@@ -95,6 +95,11 @@ impl ReceiptPrinter for BtReceiptPrinter {
         self.write_to_port(&data).await
     }
 
+    async fn print_raw(&self, data: &[u8]) -> Result<(), HalError> {
+        self.ensure_connected().await?;
+        self.write_to_port(data).await
+    }
+
     async fn cut(&self) -> Result<(), HalError> {
         self.ensure_connected().await?;
         let data = if self.partial_cut {

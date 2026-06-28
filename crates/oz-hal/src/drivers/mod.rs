@@ -7,6 +7,7 @@
 pub mod bt_printer;
 pub mod escpos;
 pub mod mock;
+pub mod receipt;
 pub mod serial_scanner;
 pub mod tcp_printer;
 pub mod usb_printer;

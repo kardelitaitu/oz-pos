@@ -18,6 +18,8 @@ export interface Money {
 export interface CartLine {
   readonly id: LineId;
   readonly sku: Sku;
+  /** Display name of the product (set at add time, may be absent from IPC). */
+  readonly name?: string;
   readonly qty: number;
   readonly unit_price: Money;
 }

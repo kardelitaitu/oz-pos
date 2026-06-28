@@ -25,6 +25,7 @@ describe('CartScreen', () => {
     const line: CartLine = {
       id: 'line-1' as LineId,
       sku: 'COFFEE' as Sku,
+      name: 'Coffee',
       qty: 2,
       unit_price: usd,
     };

@@ -110,6 +110,8 @@ impl BarcodeScanner for MockBarcodeScanner {
 #[derive(Clone)]
 pub struct MockReceiptPrinter {
     pub printed: Arc<Mutex<Vec<String>>>,
+    /// Captured raw bytes from `print_raw` calls.
+    pub printed_raw: Arc<Mutex<Vec<Vec<u8>>>>,
     pub cut_calls: Arc<AtomicUsize>,
     pub info: DeviceInfo,
     /// If set, every `print_receipt` returns this error instead of Ok.
@@ -126,6 +128,7 @@ impl MockReceiptPrinter {
     pub fn with_info(info: DeviceInfo) -> Self {
         Self {
             printed: Arc::new(Mutex::new(Vec::new())),
+            printed_raw: Arc::new(Mutex::new(Vec::new())),
             cut_calls: Arc::new(AtomicUsize::new(0)),
             info,
             fail_with: Arc::new(Mutex::new(None)),
@@ -152,6 +155,14 @@ impl ReceiptPrinter for MockReceiptPrinter {
             return Err(err);
         }
         self.printed.lock().expect("poisoned").push(body.to_owned());
+        Ok(())
+    }
+
+    async fn print_raw(&self, data: &[u8]) -> Result<(), HalError> {
+        if let Some(err) = self.fail_with.lock().expect("poisoned").take() {
+            return Err(err);
+        }
+        self.printed_raw.lock().expect("poisoned").push(data.to_vec());
         Ok(())
     }
 

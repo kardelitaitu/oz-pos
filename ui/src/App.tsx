@@ -3,7 +3,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import AppLayout from '@/components/AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import DesignSystem from '@/features/design/DesignSystem';
-import CartScreen from '@/features/sales/CartScreen';
+import PosScreen from '@/features/sales/PosScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import { completeSetup, getSetupStatus } from '@/api/pos';
 import type { WizardState } from '@/features/setup/SetupWizard';
@@ -109,7 +109,7 @@ function AppShell() {
   // Main app with sidebar navigation.
   return (
     <AppLayout route={currentRoute} onNavigate={handleNavigate}>
-      {currentRoute === 'sales' && <CartScreen />}
+      {currentRoute === 'sales' && <PosScreen />}
       {currentRoute === 'products' && <ProductLookupScreen />}
       {currentRoute === 'design' && <DesignSystem />}
     </AppLayout>

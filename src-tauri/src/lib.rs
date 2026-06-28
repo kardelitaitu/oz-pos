@@ -28,7 +28,7 @@ pub fn run() {
     let result: Result<(), AppError> = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let state = AppState::new(&app.handle())
+            let state = AppState::new(app.handle())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             app.manage(state);
             Ok(())
@@ -42,6 +42,7 @@ pub fn run() {
             commands::sales::complete_sale,
             commands::hardware::open_cash_drawer,
             commands::hardware::print_receipt,
+            commands::hardware::print_sales_receipt,
             commands::setup::complete_setup,
             commands::setup::get_setup_status,
         ])

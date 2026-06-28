@@ -256,6 +256,19 @@
   color: var(--color-fg-secondary);
 }
 
+/* ── Section subtitle ──────────────────────────── */
+.ds-section-subtitle {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-tertiary);
+  margin-bottom: var(--space-3);
+}
+
+/* ── Toast demo ────────────────────────────────── */
+.ds-toast-demo .ds-button-row {
+  margin-bottom: 0;
+}
+
 /* ── Screen reader only ────────────────────────── */
 .sr-only {
   position: absolute;

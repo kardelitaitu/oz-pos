@@ -87,6 +87,51 @@ export const printReceipt = (
 ): Promise<PrintReceiptResult> =>
   invoke<PrintReceiptResult>('print_receipt', { args });
 
+// ── Structured sales receipt ─────────────────────────────────────────
+
+export interface LineItemDto {
+  name: string;
+  quantity: number;
+  unitPrice: MoneyDto;
+  totalPrice: MoneyDto;
+}
+
+export interface PaymentDto {
+  method: string;
+  amount: MoneyDto;
+  change: MoneyDto | null;
+}
+
+export interface MoneyDto {
+  minorUnits: number;
+  currency: string;
+}
+
+export interface PrintSalesReceiptArgs {
+  storeName: string;
+  storeAddress: string;
+  storeTaxId?: string;
+  date: string;
+  receiptNumber: string;
+  items: LineItemDto[];
+  subtotal: MoneyDto;
+  tax?: MoneyDto;
+  total: MoneyDto;
+  payments: PaymentDto[];
+  footer?: string;
+  /** "narrow" (58mm) or "standard" (80mm). Defaults to standard. */
+  paperWidth?: string;
+}
+
+export interface PrintSalesReceiptResult {
+  printed: boolean;
+}
+
+export const printSalesReceipt = (
+  args: PrintSalesReceiptArgs,
+): Promise<PrintSalesReceiptResult> =>
+  invoke<PrintSalesReceiptResult>('print_sales_receipt', { args });
+
 /// Listen for `receipt:printed` events emitted by the backend.
 export const onReceiptPrinted = (
   handler: (lines: number) => void,

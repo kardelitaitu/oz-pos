@@ -115,6 +115,10 @@ impl ReceiptPrinter for UsbReceiptPrinter {
         self.write_to_endpoint(&data).await
     }
 
+    async fn print_raw(&self, data: &[u8]) -> Result<(), HalError> {
+        self.write_to_endpoint(data).await
+    }
+
     async fn cut(&self) -> Result<(), HalError> {
         self.ensure_connected().await?;
         let cut_cmd = if self.partial_cut {

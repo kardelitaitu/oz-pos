@@ -74,3 +74,38 @@ setup-review-more = +{ $count } more
 setup-complete-title = All Set!
 setup-complete-desc = Your { $preset } POS is configured with { $count } features enabled. You can change any setting later in Preferences.
 setup-complete-launch = Launch OZ-POS
+
+# POS Screen
+pos-title = POS Terminal
+pos-cart-panel-title = Current Sale
+pos-cart-empty = Cart is empty
+pos-cart-total = Total
+pos-cart-qty-label = Qty
+pos-cart-remove = Remove
+pos-cart-pay = Charge { $amount }
+
+# Badge
+badge-default = Badge
+badge-success = Success
+badge-warning = Warning
+badge-danger = Danger
+badge-info = Info
+
+# Spinner
+spinner-label = Loading…
+
+# Toast
+toast-success = Operation completed successfully
+toast-error = Something went wrong
+toast-warning = Please check your input
+toast-info = This is an informational message
+
+# Empty state
+empty-state-title = Nothing here yet
+empty-state-desc = Get started by adding your first item
+empty-state-cta = Add Product
+
+# Error state
+error-state-title = Something went wrong
+error-state-desc = An unexpected error occurred. Please try again.
+error-state-retry = Retry

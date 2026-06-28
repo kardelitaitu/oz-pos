@@ -1,0 +1,276 @@
+/* ============================================================
+ * OZ-POS Screen — side-by-side product lookup + cart panel
+ *
+ * Layout:
+ *   .pos-screen           → flex row, full height
+ *   .pos-products         → left panel (flex 1, scrollable)
+ *   .pos-cart-panel       → right panel (380px fixed, scrollable)
+ * ============================================================ */
+
+.pos-screen {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Left: Product lookup area ─────────────────────── */
+.pos-products {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+/* ── Right: Cart panel ──────────────────────────────── */
+.pos-cart-panel {
+  width: 380px;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elevated);
+  border-left: 1px solid var(--color-border);
+}
+
+.pos-cart-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pos-cart-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-primary);
+  margin: 0;
+}
+
+/* ── Line items list ────────────────────────────────── */
+.pos-cart-lines {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+}
+
+.pos-cart-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+
+.pos-cart-line:hover {
+  background: var(--color-bg-surface);
+}
+
+.pos-cart-line-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pos-cart-line-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pos-cart-line-sku {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono);
+  margin-top: var(--space-0_5);
+}
+
+.pos-cart-line-price {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+}
+
+.pos-cart-line-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1_5);
+}
+
+.pos-cart-qty-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-fg-secondary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  line-height: 1;
+  transition:
+    background-color var(--duration-100) var(--ease-out),
+    border-color var(--duration-100) var(--ease-out);
+}
+
+.pos-cart-qty-btn:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-hover);
+}
+
+.pos-cart-qty-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pos-cart-qty-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.pos-cart-qty-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cart-line-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-fg-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition:
+    color var(--duration-100) var(--ease-out),
+    background-color var(--duration-100) var(--ease-out);
+  flex-shrink: 0;
+  margin-top: var(--space-0_5);
+}
+
+.pos-cart-line-remove:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.pos-cart-line-remove:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.pos-cart-line-remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Line total ──────────────────────────────────────── */
+.pos-cart-line-total {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  white-space: nowrap;
+  min-width: 64px;
+  text-align: right;
+  margin-top: var(--space-1_5);
+}
+
+/* ── Footer: subtotal + pay button ──────────────────── */
+.pos-cart-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pos-cart-subtotal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pos-cart-subtotal-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+}
+
+.pos-cart-subtotal-amount {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cart-empty-msg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-4);
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+/* ── Pay button ──────────────────────────────────────── */
+.pos-cart-pay-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    opacity var(--duration-150) var(--ease-out);
+}
+
+.pos-cart-pay-btn:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.pos-cart-pay-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pos-cart-pay-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Cart line count badge ──────────────────────────── */
+.pos-cart-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+  margin-left: var(--space-2);
+}

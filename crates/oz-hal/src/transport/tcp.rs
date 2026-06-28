@@ -74,6 +74,6 @@ mod tests {
 
     #[test]
     fn connect_timeout_is_reasonable() {
-        assert!(CONNECT_TIMEOUT_SECS > 0 && CONNECT_TIMEOUT_SECS <= 30);
+        const { assert!(CONNECT_TIMEOUT_SECS > 0 && CONNECT_TIMEOUT_SECS <= 30); }
     }
 }

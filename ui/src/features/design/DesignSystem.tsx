@@ -1,5 +1,12 @@
 import { Localized } from '@/components/Localized';
 import ThemeToggle from '@/components/ThemeToggle';
+import { Badge } from '@/components/Badge';
+import { Spinner } from '@/components/Spinner';
+import { Skeleton } from '@/components/Skeleton';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
+import { ToastProvider, useToast } from '@/components/Toast';
+import { Button } from '@/components/Button';
 
 /**
  * Design System showcase — visual reference of every token category.
@@ -187,6 +194,126 @@ export default function DesignSystem() {
             </label>
           </div>
         </Section>
+
+        {/* ── Badges ───────────────────────────── */}
+        <Section title="Badges">
+          <div className="ds-section-subtitle">Variants (md)</div>
+          <div className="ds-button-row" style={{ marginBottom: 'var(--space-4)' }}>
+            <Badge variant="default">Default</Badge>
+            <Badge variant="success">Success</Badge>
+            <Badge variant="warning">Warning</Badge>
+            <Badge variant="danger">Danger</Badge>
+            <Badge variant="info">Info</Badge>
+          </div>
+          <div className="ds-section-subtitle">Sizes (sm)</div>
+          <div className="ds-button-row">
+            <Badge variant="default" size="sm">Default</Badge>
+            <Badge variant="success" size="sm">Success</Badge>
+            <Badge variant="warning" size="sm">Warning</Badge>
+            <Badge variant="danger" size="sm">Danger</Badge>
+            <Badge variant="info" size="sm">Info</Badge>
+          </div>
+        </Section>
+
+        {/* ── Spinners ─────────────────────────── */}
+        <Section title="Spinners">
+          <div className="ds-section-subtitle">Sizes</div>
+          <div className="ds-button-row" style={{ marginBottom: 'var(--space-4)' }}>
+            <Spinner size="sm" />
+            <Spinner size="md" />
+            <Spinner size="lg" />
+          </div>
+          <div className="ds-section-subtitle">With label</div>
+          <div className="ds-button-row">
+            <Spinner size="sm" label="Loading…" />
+            <Spinner size="md" label="Saving…" />
+          </div>
+        </Section>
+
+        {/* ── Skeleton ─────────────────────────── */}
+        <Section title="Skeleton Loading">
+          <div className="ds-section-subtitle">Variants</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+              <Skeleton variant="circle" width="40px" height="40px" />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <Skeleton variant="text" width="60%" />
+                <Skeleton variant="text" width="40%" />
+              </div>
+            </div>
+            <Skeleton variant="block" width="100%" height="80px" />
+          </div>
+        </Section>
+
+        {/* ── Toast ────────────────────────────── */}
+        <Section title="Toast Notifications">
+          <ToastProvider>
+            <ToastSection />
+          </ToastProvider>
+        </Section>
+
+        {/* ── Empty State ──────────────────────── */}
+        <Section title="Empty State">
+          <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+            <EmptyState
+              icon={
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+              }
+              title="Nothing here yet"
+              description="Get started by adding your first item"
+              action={{ label: 'Add Product', onClick: () => {} }}
+            />
+          </div>
+        </Section>
+
+        {/* ── Error State ──────────────────────── */}
+        <Section title="Error State">
+          <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+            <ErrorState
+              icon={
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              }
+              title="Something went wrong"
+              message="An unexpected error occurred. Please try again."
+              onRetry={() => {}}
+              retryLabel="Retry"
+            />
+          </div>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+// ── Toast demo sub-component (needs provider context) ──────────────
+
+function ToastSection() {
+  const { addToast } = useToast();
+
+  return (
+    <div className="ds-toast-demo">
+      <div className="ds-section-subtitle">Trigger toasts</div>
+      <div className="ds-button-row">
+        <Button variant="primary" onClick={() => addToast({ type: 'success', message: 'Operation completed successfully' })}>
+          Show Success
+        </Button>
+        <Button variant="danger" onClick={() => addToast({ type: 'error', message: 'Something went wrong' })}>
+          Show Error
+        </Button>
+        <Button variant="secondary" onClick={() => addToast({ type: 'warning', message: 'Please check your input' })}>
+          Show Warning
+        </Button>
+        <Button variant="ghost" onClick={() => addToast({ type: 'info', message: 'This is an informational message' })}>
+          Show Info
+        </Button>
       </div>
     </div>
   );
