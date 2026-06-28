@@ -13,3 +13,7 @@ sale-pay-button-aria = Charge the customer for the current cart
 
 cart-line-add-sample = Add sample line
 cart-line-add-sample-aria = Add a sample product to the cart for testing
+
+# Design system showcase
+ds-title = Design System
+theme-toggle-label = Toggle theme
