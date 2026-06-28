@@ -58,10 +58,12 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 ### oz-core — Data Models & Engine
 - [x] SQLite schema: `products`, `categories`, `sales`, `sale_lines`
 - [x] SQLite schema: `settings`
-- [ ] SQLite schema: `currency`, `exchange_rate`
-- [ ] SQLite schema: `customers`, `users`, `roles`
+- [x] SQLite schema: `currency`, `exchange_rate`
+- [x] SQLite schema: `customers`, `users`, `roles`
 - [x] `Money` struct (integer minor units + `Currency` reference)
 - [x] `Currency` struct + ISO-4217 validation
+- [x] `Customer` domain type with builder pattern (new, with_email, with_phone)
+- [x] `User`/`Role` domain types with builtin role constants (owner, manager, cashier)
 - [ ] ISO-4217 seed data (gated behind `oz-cli init-db`)
 - [x] `Product` domain type with builder pattern (new, with_category, with_barcode)
 - [x] `Category` domain type (id, name, colour)
@@ -95,7 +97,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] `oz-core` migration runner (embedded via `include_str!`, run on startup)
 - [x] Domain-to-schema mapping: `Product`, `Category`, `Inventory`, `Sale`, `SaleLine`, `Settings`
 - [x] `Cart` (in-memory) → `Sale` (persisted) pipeline with `Sale::from_cart()`
-- [ ] `oz-cli init-db` — seed currencies + default settings + preset flags
+- [x] `oz-cli init-db` — seeds default settings + preset flags + feature flags
+- [ ] `oz-cli init-db` — seed ISO-4217 currencies + built-in roles + admin user
 
 ### API — REST Endpoints (Phase 1 MVP)
 - [x] `GET /api/v1/health` — server health + version
@@ -148,8 +151,9 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] UI hides all inactive features (e.g., no loyalty tab in Simple Retail)
 - [ ] Dark mode and light mode both render without visual glitches
 - [ ] Design tokens applied consistently — no hardcoded hex colours in components
-- [x] `cargo test` passes across all crates (203 tests, 0 failed)
+- [x] `cargo test` passes across all crates (250 tests, 0 failed)
 - [x] `cargo clippy -- -D warnings` passes with zero warnings
+- [x] 250 unit tests across `oz-core` (172) + `oz-api` (65) + `oz-hal` (13)
 - [ ] App launches on Windows and Linux
 
 ---

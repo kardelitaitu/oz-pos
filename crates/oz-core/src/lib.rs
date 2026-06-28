@@ -18,6 +18,7 @@
 
 pub mod cart;
 pub mod category;
+pub mod customer;
 pub mod db;
 pub mod error;
 pub mod features;
@@ -28,9 +29,11 @@ pub mod product;
 pub mod sale;
 pub mod settings;
 pub mod sku;
+pub mod user;
 
 pub use cart::{Cart, CartError, CartId, CartLine};
 pub use category::Category;
+pub use customer::Customer;
 pub use db::{ProductWithDetails, Store};
 pub use error::CoreError;
 pub use features::{Feature, FeatureRegistry};
@@ -40,3 +43,4 @@ pub use product::Product;
 pub use sale::{InvalidTransition, Sale, SaleLine, SaleStatus};
 pub use settings::Settings;
 pub use sku::{LineId, Sku};
+pub use user::{Role, User, builtin_roles, seed_users};
