@@ -22,7 +22,7 @@ use rusqlite::{Connection, params};
 use uuid::Uuid;
 
 use crate::error::CoreError;
-use crate::{Category, Money, Product, Sale, SaleLine, SaleStatus, Settings, Sku};
+use crate::{Category, Customer, Money, Product, Role, Sale, SaleLine, SaleStatus, Settings, Sku, User};
 
 // ── Store ────────────────────────────────────────────────────────────
 
@@ -806,6 +806,464 @@ impl Store<'_> {
     }
 }
 
+// ── Customer CRUD ─────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// List all customers, ordered by name.
+    pub fn list_customers(&self) -> Result<Vec<Customer>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, email, phone, loyalty_points, total_spent_minor, currency,
+                    notes, created_at, updated_at
+             FROM customers ORDER BY name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Customer {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                email: row.get("email")?,
+                phone: row.get("phone")?,
+                loyalty_points: row.get("loyalty_points")?,
+                total_spent_minor: row.get("total_spent_minor")?,
+                currency: row.get("currency")?,
+                notes: row.get("notes")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Look up a single customer by id.
+    ///
+    /// Returns `None` when no customer matches.
+    pub fn get_customer(&self, id: &str) -> Result<Option<Customer>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, email, phone, loyalty_points, total_spent_minor, currency,
+                    notes, created_at, updated_at
+             FROM customers WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![id], |row| {
+            Ok(Customer {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                email: row.get("email")?,
+                phone: row.get("phone")?,
+                loyalty_points: row.get("loyalty_points")?,
+                total_spent_minor: row.get("total_spent_minor")?,
+                currency: row.get("currency")?,
+                notes: row.get("notes")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        });
+        match result {
+            Ok(c) => Ok(Some(c)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Insert a new customer.
+    ///
+    /// Generates a UUID for the customer id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::Validation`] when the name is empty.
+    pub fn create_customer(
+        &self,
+        name: &str,
+        email: Option<&str>,
+        phone: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<Customer, CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "customer name must not be empty".into(),
+            });
+        }
+
+        let id = Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        self.conn.execute(
+            "INSERT INTO customers (id, name, email, phone, notes, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, name.trim(), email, phone, notes.unwrap_or_default(), now, now],
+        )?;
+
+        Ok(Customer {
+            id,
+            name: name.trim().to_owned(),
+            email: email.map(|s| s.to_owned()),
+            phone: phone.map(|s| s.to_owned()),
+            loyalty_points: 0,
+            total_spent_minor: 0,
+            currency: "USD".into(),
+            notes: notes.unwrap_or_default().to_owned(),
+            created_at: now.clone(),
+            updated_at: now,
+        })
+    }
+
+    /// Update an existing customer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NotFound`] when the id doesn't match.
+    /// Returns [`CoreError::Validation`] when the name is empty.
+    pub fn update_customer(
+        &self,
+        id: &str,
+        name: &str,
+        email: Option<&str>,
+        phone: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<Customer, CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "customer name must not be empty".into(),
+            });
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let rows = self.conn.execute(
+            "UPDATE customers
+             SET name = ?1, email = ?2, phone = ?3, notes = ?4, updated_at = ?5
+             WHERE id = ?6",
+            params![name.trim(), email, phone, notes.unwrap_or_default(), now, id],
+        )?;
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "customer",
+                id: id.to_owned(),
+            });
+        }
+
+        self.get_customer(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "customer",
+            id: id.to_owned(),
+        })
+    }
+
+    /// Delete a customer by id.
+    ///
+    /// Returns [`CoreError::NotFound`] when the id doesn't match.
+    pub fn delete_customer(&self, id: &str) -> Result<(), CoreError> {
+        let rows = self.conn.execute(
+            "DELETE FROM customers WHERE id = ?1",
+            params![id],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "customer",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+}
+
+// ── Role CRUD ───────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// List all roles, ordered by name.
+    pub fn list_roles(&self) -> Result<Vec<Role>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, description, permissions, created_at, updated_at
+             FROM roles ORDER BY name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Role {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                description: row.get("description")?,
+                permissions: row.get("permissions")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Look up a single role by id.
+    ///
+    /// Returns `None` when no role matches.
+    pub fn get_role(&self, id: &str) -> Result<Option<Role>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, description, permissions, created_at, updated_at
+             FROM roles WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![id], |row| {
+            Ok(Role {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                description: row.get("description")?,
+                permissions: row.get("permissions")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        });
+        match result {
+            Ok(r) => Ok(Some(r)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Insert a new role.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::Conflict`] when the name already exists.
+    pub fn create_role(
+        &self,
+        id: &str,
+        name: &str,
+        description: &str,
+        permissions: &str,
+    ) -> Result<Role, CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let result = self.conn.execute(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, name.trim(), description, permissions, now, now],
+        );
+
+        match result {
+            Err(rusqlite::Error::SqliteFailure(e, _))
+                if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+            {
+                return Err(CoreError::Conflict {
+                    entity: "role",
+                    field: "name",
+                });
+            }
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+
+        Ok(Role {
+            id: id.to_owned(),
+            name: name.trim().to_owned(),
+            description: description.to_owned(),
+            permissions: permissions.to_owned(),
+            created_at: now.clone(),
+            updated_at: now,
+        })
+    }
+}
+
+// ── User CRUD ───────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// List all users, ordered by display_name.
+    pub fn list_users(&self) -> Result<Vec<User>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, username, pin_hash, display_name, role_id, is_active,
+                    created_at, updated_at
+             FROM users ORDER BY display_name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(User {
+                id: row.get("id")?,
+                username: row.get("username")?,
+                pin_hash: row.get("pin_hash")?,
+                display_name: row.get("display_name")?,
+                role_id: row.get("role_id")?,
+                is_active: row.get("is_active")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Look up a single user by id.
+    ///
+    /// Returns `None` when no user matches.
+    pub fn get_user(&self, id: &str) -> Result<Option<User>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, username, pin_hash, display_name, role_id, is_active,
+                    created_at, updated_at
+             FROM users WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![id], |row| {
+            Ok(User {
+                id: row.get("id")?,
+                username: row.get("username")?,
+                pin_hash: row.get("pin_hash")?,
+                display_name: row.get("display_name")?,
+                role_id: row.get("role_id")?,
+                is_active: row.get("is_active")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        });
+        match result {
+            Ok(u) => Ok(Some(u)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Look up a user by username.
+    ///
+    /// Returns `None` when no user matches.
+    pub fn get_user_by_username(&self, username: &str) -> Result<Option<User>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, username, pin_hash, display_name, role_id, is_active,
+                    created_at, updated_at
+             FROM users WHERE username = ?1",
+        )?;
+        let result = stmt.query_row(params![username], |row| {
+            Ok(User {
+                id: row.get("id")?,
+                username: row.get("username")?,
+                pin_hash: row.get("pin_hash")?,
+                display_name: row.get("display_name")?,
+                role_id: row.get("role_id")?,
+                is_active: row.get("is_active")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        });
+        match result {
+            Ok(u) => Ok(Some(u)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Insert a new user.
+    ///
+    /// Generates a UUID for the user id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::Validation`] when the username or display_name is empty.
+    /// Returns [`CoreError::Conflict`] when the username already exists.
+    pub fn create_user(
+        &self,
+        username: &str,
+        pin_hash: &str,
+        display_name: &str,
+        role_id: &str,
+    ) -> Result<User, CoreError> {
+        if username.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "username",
+                message: "username must not be empty".into(),
+            });
+        }
+        if display_name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "display_name",
+                message: "display name must not be empty".into(),
+            });
+        }
+
+        let id = Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let result = self.conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, username.trim(), pin_hash, display_name.trim(), role_id, now, now],
+        );
+
+        match result {
+            Err(rusqlite::Error::SqliteFailure(e, _))
+                if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+            {
+                return Err(CoreError::Conflict {
+                    entity: "user",
+                    field: "username",
+                });
+            }
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+
+        Ok(User {
+            id,
+            username: username.trim().to_owned(),
+            pin_hash: pin_hash.to_owned(),
+            display_name: display_name.trim().to_owned(),
+            role_id: role_id.to_owned(),
+            is_active: true,
+            created_at: now.clone(),
+            updated_at: now,
+        })
+    }
+
+    /// Update an existing user.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NotFound`] when the id doesn't match.
+    /// Returns [`CoreError::Validation`] when display_name is empty.
+    pub fn update_user(
+        &self,
+        id: &str,
+        username: &str,
+        display_name: &str,
+        role_id: &str,
+        is_active: bool,
+    ) -> Result<User, CoreError> {
+        if display_name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "display_name",
+                message: "display name must not be empty".into(),
+            });
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let rows = self.conn.execute(
+            "UPDATE users
+             SET username = ?1, display_name = ?2, role_id = ?3,
+                 is_active = ?4, updated_at = ?5
+             WHERE id = ?6",
+            params![username.trim(), display_name.trim(), role_id, is_active, now, id],
+        )?;
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "user",
+                id: id.to_owned(),
+            });
+        }
+
+        self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "user",
+            id: id.to_owned(),
+        })
+    }
+
+    /// Delete a user by id.
+    ///
+    /// Returns [`CoreError::NotFound`] when the id doesn't match.
+    pub fn delete_user(&self, id: &str) -> Result<(), CoreError> {
+        let rows = self.conn.execute(
+            "DELETE FROM users WHERE id = ?1",
+            params![id],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "user",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+}
+
 // ── Settings delegation ───────────────────────────────────────────────
 
 impl Store<'_> {
@@ -1510,6 +1968,396 @@ mod tests {
         let conn = fresh();
         let rows = store(&conn).export_sales_by_hour().unwrap();
         assert!(rows.is_empty());
+    }
+
+    // ── Customer CRUD ────────────────────────────────────────────
+
+    fn seed_customers(conn: &Connection) {
+        conn.execute_batch(
+            "INSERT INTO customers (id, name, email, phone, notes, created_at, updated_at) VALUES
+                ('cust-1', 'Alice',  'alice@example.com',  '+1-555-0101', 'Regular',   '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('cust-2', 'Bob',    NULL,                 '+1-555-0102', '',          '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('cust-3', 'Carol',  'carol@example.com',  NULL,          'VIP',       '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn list_customers_empty_db() {
+        let conn = fresh();
+        let customers = store(&conn).list_customers().unwrap();
+        assert!(customers.is_empty());
+    }
+
+    #[test]
+    fn list_customers_returns_all() {
+        let conn = fresh();
+        seed_customers(&conn);
+        let customers = store(&conn).list_customers().unwrap();
+        assert_eq!(customers.len(), 3);
+        assert_eq!(customers[0].name, "Alice");
+        assert_eq!(customers[1].name, "Bob");
+        assert_eq!(customers[2].name, "Carol");
+    }
+
+    #[test]
+    fn get_customer_found() {
+        let conn = fresh();
+        seed_customers(&conn);
+        let c = store(&conn).get_customer("cust-1").unwrap().unwrap();
+        assert_eq!(c.name, "Alice");
+        assert_eq!(c.email.as_deref(), Some("alice@example.com"));
+        assert_eq!(c.phone.as_deref(), Some("+1-555-0101"));
+        assert_eq!(c.notes, "Regular");
+    }
+
+    #[test]
+    fn get_customer_not_found() {
+        let conn = fresh();
+        let c = store(&conn).get_customer("nope").unwrap();
+        assert!(c.is_none());
+    }
+
+    #[test]
+    fn get_customer_nullable_fields() {
+        let conn = fresh();
+        seed_customers(&conn);
+        let c = store(&conn).get_customer("cust-2").unwrap().unwrap();
+        assert_eq!(c.name, "Bob");
+        assert!(c.email.is_none());
+        assert_eq!(c.phone.as_deref(), Some("+1-555-0102"));
+    }
+
+    #[test]
+    fn create_customer_minimal() {
+        let conn = fresh();
+        let c = store(&conn)
+            .create_customer("Diana", None, None, None)
+            .unwrap();
+        assert_eq!(c.name, "Diana");
+        assert!(c.email.is_none());
+        assert!(c.phone.is_none());
+        assert_eq!(c.notes, "");
+        assert!(!c.id.is_empty());
+    }
+
+    #[test]
+    fn create_customer_with_all_fields() {
+        let conn = fresh();
+        let c = store(&conn)
+            .create_customer("Diana", Some("diana@test.com"), Some("555-0100"), Some("Preferred"))
+            .unwrap();
+        assert_eq!(c.name, "Diana");
+        assert_eq!(c.email.as_deref(), Some("diana@test.com"));
+        assert_eq!(c.phone.as_deref(), Some("555-0100"));
+        assert_eq!(c.notes, "Preferred");
+        assert_eq!(c.loyalty_points, 0);
+        assert_eq!(c.total_spent_minor, 0);
+    }
+
+    #[test]
+    fn create_customer_empty_name() {
+        let conn = fresh();
+        let err = store(&conn)
+            .create_customer("   ", None, None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn update_customer_basic() {
+        let conn = fresh();
+        seed_customers(&conn);
+        let updated = store(&conn)
+            .update_customer("cust-1", "Alice Updated", Some("alice@new.com"), None, Some("Changed"))
+            .unwrap();
+        assert_eq!(updated.name, "Alice Updated");
+        assert_eq!(updated.email.as_deref(), Some("alice@new.com"));
+        assert_eq!(updated.notes, "Changed");
+        assert!(updated.updated_at.as_str() > "2025-01-01");
+    }
+
+    #[test]
+    fn update_customer_not_found() {
+        let conn = fresh();
+        let err = store(&conn)
+            .update_customer("nope", "X", None, None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    #[test]
+    fn update_customer_empty_name() {
+        let conn = fresh();
+        seed_customers(&conn);
+        let err = store(&conn)
+            .update_customer("cust-1", "", None, None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn delete_customer_removes_row() {
+        let conn = fresh();
+        seed_customers(&conn);
+        store(&conn).delete_customer("cust-1").unwrap();
+        let c = store(&conn).get_customer("cust-1").unwrap();
+        assert!(c.is_none());
+    }
+
+    #[test]
+    fn delete_customer_not_found() {
+        let conn = fresh();
+        let err = store(&conn).delete_customer("nope").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    // ── Role CRUD ────────────────────────────────────────────────
+
+    fn seed_roles(conn: &Connection) {
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-owner',   'owner',   'Full access',           '[\"*\"]',                                 '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('role-cashier', 'cashier', 'Process sales',         '[\"sales:process\"]',                     '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('role-manager', 'manager', 'Manage products + sales','[\"products:crud\",\"sales:void\"]',  '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn list_roles_empty_db() {
+        let conn = fresh();
+        let roles = store(&conn).list_roles().unwrap();
+        assert!(roles.is_empty());
+    }
+
+    #[test]
+    fn list_roles_seeded() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let roles = store(&conn).list_roles().unwrap();
+        assert_eq!(roles.len(), 3);
+        // Ordered by name: cashier, manager, owner.
+        assert_eq!(roles[0].name, "cashier");
+        assert_eq!(roles[1].name, "manager");
+        assert_eq!(roles[2].name, "owner");
+    }
+
+    #[test]
+    fn get_role_found() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let r = store(&conn).get_role("role-owner").unwrap().unwrap();
+        assert_eq!(r.name, "owner");
+        assert_eq!(r.permissions, "[\"*\"]");
+    }
+
+    #[test]
+    fn get_role_not_found() {
+        let conn = fresh();
+        let r = store(&conn).get_role("nope").unwrap();
+        assert!(r.is_none());
+    }
+
+    #[test]
+    fn create_role_basic() {
+        let conn = fresh();
+        let r = store(&conn)
+            .create_role("role-viewer", "viewer", "Read-only access", "[\"sales:view\"]")
+            .unwrap();
+        assert_eq!(r.name, "viewer");
+        assert_eq!(r.description, "Read-only access");
+        assert_eq!(r.permissions, "[\"sales:view\"]");
+    }
+
+    #[test]
+    fn create_role_duplicate_name() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let err = store(&conn)
+            .create_role("role-dup", "owner", "Dup", "[]")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Conflict { entity, .. } if entity == "role"));
+    }
+
+    // ── User CRUD ────────────────────────────────────────────────
+
+    fn seed_users(conn: &Connection) {
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-owner',   'owner',   'Full access',    '[\"*\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('role-cashier', 'cashier', 'Process sales',  '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-1', 'alice',   'hash_alice',   'Alice',   'role-cashier', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('user-3', 'carol',   'hash_carol',   'Carol',   'role-cashier', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn list_users_empty_db() {
+        let conn = fresh();
+        let users = store(&conn).list_users().unwrap();
+        assert!(users.is_empty());
+    }
+
+    #[test]
+    fn list_users_returns_all() {
+        let conn = fresh();
+        seed_users(&conn);
+        let users = store(&conn).list_users().unwrap();
+        assert_eq!(users.len(), 3);
+        // Ordered by display_name: Alice, Bob, Carol.
+        assert_eq!(users[0].username, "alice");
+        assert_eq!(users[1].username, "bob");
+        assert_eq!(users[2].username, "carol");
+    }
+
+    #[test]
+    fn get_user_found() {
+        let conn = fresh();
+        seed_users(&conn);
+        let u = store(&conn).get_user("user-1").unwrap().unwrap();
+        assert_eq!(u.username, "alice");
+        assert_eq!(u.display_name, "Alice");
+        assert_eq!(u.role_id, "role-cashier");
+        assert!(u.is_active);
+    }
+
+    #[test]
+    fn get_user_not_found() {
+        let conn = fresh();
+        let u = store(&conn).get_user("nope").unwrap();
+        assert!(u.is_none());
+    }
+
+    #[test]
+    fn get_user_by_username_found() {
+        let conn = fresh();
+        seed_users(&conn);
+        let u = store(&conn).get_user_by_username("bob").unwrap().unwrap();
+        assert_eq!(u.id, "user-2");
+        assert_eq!(u.display_name, "Bob");
+    }
+
+    #[test]
+    fn get_user_by_username_not_found() {
+        let conn = fresh();
+        let u = store(&conn).get_user_by_username("nobody").unwrap();
+        assert!(u.is_none());
+    }
+
+    #[test]
+    fn get_user_inactive_user() {
+        let conn = fresh();
+        seed_users(&conn);
+        let u = store(&conn).get_user("user-3").unwrap().unwrap();
+        assert_eq!(u.username, "carol");
+        assert!(!u.is_active);
+    }
+
+    #[test]
+    fn create_user_minimal() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let u = store(&conn)
+            .create_user("diana", "hash_diana", "Diana", "role-cashier")
+            .unwrap();
+        assert_eq!(u.username, "diana");
+        assert_eq!(u.display_name, "Diana");
+        assert_eq!(u.role_id, "role-cashier");
+        assert!(u.is_active);
+        assert!(!u.id.is_empty());
+    }
+
+    #[test]
+    fn create_user_empty_username() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let err = store(&conn)
+            .create_user("", "hash", "Diana", "role-cashier")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "username"));
+    }
+
+    #[test]
+    fn create_user_empty_display_name() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let err = store(&conn)
+            .create_user("diana", "hash", "   ", "role-cashier")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
+    }
+
+    #[test]
+    fn create_user_duplicate_username() {
+        let conn = fresh();
+        seed_users(&conn);
+        let err = store(&conn)
+            .create_user("alice", "hash2", "Alice 2", "role-owner")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Conflict { .. }));
+    }
+
+    #[test]
+    fn update_user_basic() {
+        let conn = fresh();
+        seed_users(&conn);
+        let updated = store(&conn)
+            .update_user("user-1", "alice_new", "Alice Updated", "role-owner", true)
+            .unwrap();
+        assert_eq!(updated.username, "alice_new");
+        assert_eq!(updated.display_name, "Alice Updated");
+        assert_eq!(updated.role_id, "role-owner");
+        assert!(updated.is_active);
+        assert!(updated.updated_at.as_str() > "2025-01-01");
+    }
+
+    #[test]
+    fn update_user_deactivate() {
+        let conn = fresh();
+        seed_users(&conn);
+        let updated = store(&conn)
+            .update_user("user-1", "alice", "Alice", "role-cashier", false)
+            .unwrap();
+        assert!(!updated.is_active);
+    }
+
+    #[test]
+    fn update_user_not_found() {
+        let conn = fresh();
+        let err = store(&conn)
+            .update_user("nope", "u", "U", "role-owner", true)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    #[test]
+    fn update_user_empty_display_name() {
+        let conn = fresh();
+        seed_users(&conn);
+        let err = store(&conn)
+            .update_user("user-1", "alice", "", "role-cashier", true)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
+    }
+
+    #[test]
+    fn delete_user_removes_row() {
+        let conn = fresh();
+        seed_users(&conn);
+        store(&conn).delete_user("user-3").unwrap();
+        let u = store(&conn).get_user("user-3").unwrap();
+        assert!(u.is_none());
+    }
+
+    #[test]
+    fn delete_user_not_found() {
+        let conn = fresh();
+        let err = store(&conn).delete_user("nope").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
     // ── ProductWithDetails equality ──────────────────────────────
