@@ -389,6 +389,22 @@ impl Store<'_> {
         Ok(Category::new(id, name, colour))
     }
 
+    /// Delete a category by id. Returns [`CoreError::NotFound`] when
+    /// the id doesn't match any category.
+    pub fn delete_category(&self, id: &str) -> Result<(), CoreError> {
+        let rows = self.conn.execute(
+            "DELETE FROM categories WHERE id = ?1",
+            params![id],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "category",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// Look up a category by id.
     pub fn get_category(&self, id: &str) -> Result<Option<Category>, CoreError> {
         let mut stmt = self
@@ -1136,6 +1152,24 @@ mod tests {
             .create_category("cat-1", "   ", "#000")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn delete_category_removes_row() {
+        let conn = fresh();
+        store(&conn)
+            .create_category("cat-orphan", "Orphan", "#000")
+            .unwrap();
+        store(&conn).delete_category("cat-orphan").unwrap();
+        let cat = store(&conn).get_category("cat-orphan").unwrap();
+        assert!(cat.is_none());
+    }
+
+    #[test]
+    fn delete_category_not_found() {
+        let conn = fresh();
+        let err = store(&conn).delete_category("nope").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
     #[test]

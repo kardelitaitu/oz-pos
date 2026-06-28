@@ -53,10 +53,43 @@ enum Command {
         /// Report kind (e.g. `daily-summary`, `sales-by-hour`).
         kind: String,
     },
+    /// Manage categories (list, get, create, delete).
+    Category(CategoryArgs),
     /// Manage inventory (get, adjust).
     Inventory(InventoryArgs),
     /// Manage sales (list, get, update-status).
     Sale(SaleArgs),
+}
+
+#[derive(Debug, Args)]
+struct CategoryArgs {
+    #[command(subcommand)]
+    action: CategoryAction,
+}
+
+#[derive(Debug, Subcommand)]
+enum CategoryAction {
+    /// List all categories.
+    List,
+    /// Show a category by id.
+    Get {
+        /// Category id.
+        id: String,
+    },
+    /// Create a new category.
+    Create {
+        /// Unique category id (e.g. "cat-drinks").
+        id: String,
+        /// Display name.
+        name: String,
+        /// Hex colour (e.g. "#06b6d4").
+        colour: String,
+    },
+    /// Delete a category by id.
+    Delete {
+        /// Category id.
+        id: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -178,6 +211,7 @@ fn main() -> Result<()> {
         Some(Command::Product(args)) => run_product(&conn, args),
         Some(Command::Backup { output }) => run_backup(&conn, &output),
         Some(Command::Export { kind }) => run_export(&conn, &kind),
+        Some(Command::Category(args)) => run_category(&conn, args),
         Some(Command::Inventory(args)) => run_inventory(&conn, args),
         Some(Command::Sale(args)) => run_sale(&conn, args),
         None => {
@@ -288,6 +322,91 @@ fn run_export(conn: &Connection, kind: &str) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+// ── Category commands ────────────────────────────────────────────────────
+
+fn run_category(conn: &Connection, args: CategoryArgs) -> Result<()> {
+    let store = Store::new(conn);
+
+    match args.action {
+        CategoryAction::List => run_category_list(&store),
+        CategoryAction::Get { id } => run_category_get(&store, &id),
+        CategoryAction::Create { id, name, colour } => {
+            run_category_create(&store, &id, &name, &colour)
+        }
+        CategoryAction::Delete { id } => run_category_delete(&store, &id),
+    }
+}
+
+fn run_category_list(store: &Store<'_>) -> Result<()> {
+    let categories = store.list_categories().context("listing categories")?;
+
+    if categories.is_empty() {
+        println!("No categories found.");
+        return Ok(());
+    }
+
+    println!("{:<24} {:<24}  Colour", "ID", "Name");
+    println!("{:-<24} {:-<24}  {:-}", "", "", "");
+
+    for c in &categories {
+        println!("{:<24} {:<24}  {}", c.id, c.name, c.colour);
+    }
+
+    Ok(())
+}
+
+fn run_category_get(store: &Store<'_>, id: &str) -> Result<()> {
+    match store.get_category(id).context("looking up category")? {
+        Some(c) => {
+            println!("ID:     {}", c.id);
+            println!("Name:   {}", c.name);
+            println!("Colour: {}", c.colour);
+        }
+        None => {
+            println!("Category not found: {id}");
+        }
+    }
+    Ok(())
+}
+
+fn run_category_create(store: &Store<'_>, id: &str, name: &str, colour: &str) -> Result<()> {
+    match store.create_category(id, name, colour) {
+        Ok(cat) => {
+            println!("Created category: {} ({})", cat.name, cat.id);
+        }
+        Err(CoreError::Validation { message, .. }) => {
+            eprintln!("Validation error: {message}");
+            std::process::exit(1);
+        }
+        Err(CoreError::Conflict { entity, field }) => {
+            eprintln!("Conflict: {entity} already exists ({field})");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    }
+    Ok(())
+}
+
+fn run_category_delete(store: &Store<'_>, id: &str) -> Result<()> {
+    match store.delete_category(id) {
+        Ok(()) => {
+            println!("Deleted category: {id}");
+        }
+        Err(CoreError::NotFound { .. }) => {
+            eprintln!("Category not found: {id}");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    }
     Ok(())
 }
 
