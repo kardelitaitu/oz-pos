@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import AppLayout from '@/components/AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import DesignSystem from '@/features/design/DesignSystem';
+import CartScreen from '@/features/sales/CartScreen';
 import { completeSetup, getSetupStatus } from '@/api/pos';
 import type { WizardState } from '@/features/setup/SetupWizard';
+import type { AppRoute } from '@/components/AppLayout';
 import '@/features/design/DesignSystem.css';
 
 /**
@@ -12,6 +15,9 @@ import '@/features/design/DesignSystem.css';
  * On mount, checks if the Setup Wizard has already been completed
  * (via the IPC bridge). If not, shows the wizard. When the wizard
  * completes, the chosen preset + features are persisted to SQLite.
+ *
+ * After setup, the app renders with a sidebar navigation that lets
+ * the user switch between screens.
  */
 export default function App() {
   return (
@@ -24,6 +30,7 @@ export default function App() {
 function AppShell() {
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>('sales');
 
   // On mount, check if setup was already completed.
   useEffect(() => {
@@ -49,7 +56,7 @@ function AppShell() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleComplete = async (state: WizardState) => {
+  const handleComplete = useCallback(async (state: WizardState) => {
     // Persist to SQLite via Tauri IPC bridge.
     try {
       await completeSetup({
@@ -62,11 +69,15 @@ function AppShell() {
       console.error('Failed to persist setup:', err);
     }
     setHasCompletedSetup(true);
-  };
+  }, []);
 
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     setHasCompletedSetup(true);
-  };
+  }, []);
+
+  const handleNavigate = useCallback((route: AppRoute) => {
+    setCurrentRoute(route);
+  }, []);
 
   // Show a minimal loading state while checking setup status.
   if (loading) {
@@ -87,11 +98,18 @@ function AppShell() {
     );
   }
 
+  // Show the Setup Wizard until completed.
   if (!hasCompletedSetup) {
     return (
       <SetupWizard onComplete={handleComplete} onSkip={handleSkip} />
     );
   }
 
-  return <DesignSystem />;
+  // Main app with sidebar navigation.
+  return (
+    <AppLayout route={currentRoute} onNavigate={handleNavigate}>
+      {currentRoute === 'sales' && <CartScreen />}
+      {currentRoute === 'design' && <DesignSystem />}
+    </AppLayout>
+  );
 }

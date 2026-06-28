@@ -28,7 +28,7 @@ export default function CartScreen({
   };
 
   return (
-    <main aria-labelledby="cart-title">
+    <section aria-labelledby="cart-title">
       <h1 id="cart-title">
         <Localized id="cart-title">
           <span>Cart</span>
@@ -73,6 +73,6 @@ export default function CartScreen({
           <span>Pay</span>
         </Localized>
       </button>
-    </main>
+    </section>
   );
 }
