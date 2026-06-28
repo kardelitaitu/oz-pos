@@ -28,10 +28,16 @@ pub struct Migration {
 /// The list is exhaustive at compile time; adding a new migration means
 /// adding a new `Migration` entry here AND a new file in
 /// `crates/oz-core/migrations/`.
-pub const ALL: &[Migration] = &[Migration {
-    id: "001_sales.sql",
-    sql: include_str!("../migrations/001_sales.sql"),
-}];
+pub const ALL: &[Migration] = &[
+    Migration {
+        id: "001_sales.sql",
+        sql: include_str!("../migrations/001_sales.sql"),
+    },
+    Migration {
+        id: "002_products.sql",
+        sql: include_str!("../migrations/002_products.sql"),
+    },
+];
 
 /// Apply every unapplied migration. Idempotent: running twice is a no-op
 /// after the first call.
