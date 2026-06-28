@@ -33,6 +33,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::currencies::currency_info,
             commands::health::ping,
             commands::health::version,
             commands::sales::start_sale,

@@ -94,3 +94,13 @@ export const onReceiptPrinted = (
   listen<{ lines: number }>('receipt:printed', (e) =>
     handler(e.payload.lines),
   );
+
+// ── Currencies ─────────────────────────────────────────────────────
+
+export interface CurrencyInfo {
+  code: string;
+  exponent: number;
+}
+
+export const getCurrencyInfo = (code: string): Promise<CurrencyInfo> =>
+  invoke<CurrencyInfo>('currency_info', { code });

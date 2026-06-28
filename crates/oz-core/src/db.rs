@@ -562,6 +562,36 @@ impl Store<'_> {
         })
     }
 
+    /// List all sales ordered by creation date (most recent first),
+    /// without line items (each sale has an empty `lines` vec).
+    pub fn list_sales(&self) -> Result<Vec<Sale>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, total_minor, currency, line_count, status, created_at, updated_at
+             FROM sales
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let cur_str: String = row.get("currency")?;
+            let status_str: String = row.get("status")?;
+            let status = SaleStatus::from_stored_str(&status_str)
+                .unwrap_or(SaleStatus::Pending);
+            Ok(Sale {
+                id: row.get("id")?,
+                status,
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency: cur_str.parse().expect("valid currency in DB"),
+                },
+                line_count: row.get("line_count")?,
+                currency: cur_str.parse().expect("valid currency in DB"),
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+                lines: Vec::new(),
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
     /// Look up a single sale by id, including all line items.
     ///
     /// Returns `None` when no sale matches the id.
@@ -1256,6 +1286,36 @@ mod tests {
         assert_eq!(loaded.line_count, 0);
         assert_eq!(loaded.lines.len(), 0);
         assert_eq!(loaded.total.minor_units, 0);
+    }
+
+    #[test]
+    fn list_sales_empty_db() {
+        let conn = fresh();
+        let sales = store(&conn).list_sales().unwrap();
+        assert!(sales.is_empty());
+    }
+
+    #[test]
+    fn list_sales_returns_all() {
+        let conn = fresh();
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
+        store(&conn).create_sale(&sale).unwrap();
+
+        // Also create a second sale with a slightly different cart.
+        let mut cart2 = Cart::new(usd());
+        use crate::CartLine;
+        cart2.add_line(CartLine::new(Sku::new("TEA"), 1, price(200))).unwrap();
+        let sale2 = Sale::from_cart(&cart2).unwrap();
+        store(&conn).create_sale(&sale2).unwrap();
+
+        let sales = store(&conn).list_sales().unwrap();
+        assert_eq!(sales.len(), 2);
+        // Most recent first.
+        assert_eq!(sales[0].id, sale2.id);
+        assert_eq!(sales[1].id, sale.id);
+        // Lines should be empty (not loaded).
+        assert!(sales[0].lines.is_empty());
     }
 
     #[test]

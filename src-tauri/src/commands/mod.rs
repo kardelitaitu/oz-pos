@@ -5,6 +5,7 @@
 //! 2. Add `pub mod <feature>;` here.
 //! 3. Add the command(s) to the `invoke_handler!` macro in `lib.rs`.
 
+pub mod currencies;
 pub mod hardware;
 pub mod health;
 pub mod sales;

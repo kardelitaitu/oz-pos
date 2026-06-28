@@ -18,7 +18,7 @@ use clap::{Args, CommandFactory, Parser, Subcommand};
 use rusqlite::Connection;
 
 use oz_core::db::Store;
-use oz_core::{CoreError, Currency, FeatureRegistry, Money, Settings};
+use oz_core::{CoreError, Currency, FeatureRegistry, Money, Settings, SaleStatus};
 
 // ── CLI structure ─────────────────────────────────────────────────────
 
@@ -52,6 +52,32 @@ enum Command {
     Export {
         /// Report kind (e.g. `daily-summary`, `sales-by-hour`).
         kind: String,
+    },
+    /// Manage sales (list, get, update-status).
+    Sale(SaleArgs),
+}
+
+#[derive(Debug, Args)]
+struct SaleArgs {
+    #[command(subcommand)]
+    action: SaleAction,
+}
+
+#[derive(Debug, Subcommand)]
+enum SaleAction {
+    /// List all sales (most recent first).
+    List,
+    /// Show a sale by id.
+    Get {
+        /// Sale UUID.
+        id: String,
+    },
+    /// Transition a sale to a new status.
+    UpdateStatus {
+        /// Sale UUID.
+        id: String,
+        /// New status (pending, active, completed, voided).
+        status: String,
     },
 }
 
@@ -128,6 +154,7 @@ fn main() -> Result<()> {
         Some(Command::Product(args)) => run_product(&conn, args),
         Some(Command::Backup { output }) => run_backup(&conn, &output),
         Some(Command::Export { kind }) => run_export(&conn, &kind),
+        Some(Command::Sale(args)) => run_sale(&conn, args),
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;
@@ -232,6 +259,117 @@ fn run_export(conn: &Connection, kind: &str) -> Result<()> {
         other => {
             eprintln!("unknown export kind '{other}'");
             eprintln!("available kinds: daily-summary, sales-by-hour");
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+// ── Sale commands ──────────────────────────────────────────────────────
+
+fn run_sale(conn: &Connection, args: SaleArgs) -> Result<()> {
+    let store = Store::new(conn);
+
+    match args.action {
+        SaleAction::List => run_sale_list(&store),
+        SaleAction::Get { id } => run_sale_get(&store, &id),
+        SaleAction::UpdateStatus { id, status } => run_sale_update_status(&store, &id, &status),
+    }
+}
+
+fn run_sale_list(store: &Store<'_>) -> Result<()> {
+    let sales = store.list_sales().context("listing sales")?;
+
+    if sales.is_empty() {
+        println!("No sales found.");
+        return Ok(());
+    }
+
+    println!("{:<40} {:>10} {:>6}  {:>10}  Date", "ID", "Total", "Items", "Status");
+    println!("{:-<40} {:->10} {:->6}  {:->10}  {:-<4}", "", "", "", "", "");
+
+    for s in &sales {
+        let total_str = format!(
+            "{}.{:02}",
+            s.total.minor_units / 100,
+            s.total.minor_units.abs() % 100,
+        );
+        let status_str = match s.status {
+            SaleStatus::Pending => "pending",
+            SaleStatus::Active => "active",
+            SaleStatus::Completed => "done",
+            SaleStatus::Voided => "voided",
+        };
+        // Show only date portion of ISO-8601 timestamp.
+        let date_str = s.created_at.as_str();
+        let date_str = if date_str.len() > 10 { &date_str[..10] } else { date_str };
+        println!("{:<40} {:>10} {:>6}  {:>10}  {}", s.id, total_str, s.line_count, status_str, date_str);
+    }
+
+    Ok(())
+}
+
+fn run_sale_get(store: &Store<'_>, id: &str) -> Result<()> {
+    match store.get_sale(id).context("looking up sale")? {
+        Some(sale) => {
+            let total_str = format!(
+                "{}.{:02} {}",
+                sale.total.minor_units / 100,
+                sale.total.minor_units.abs() % 100,
+                std::str::from_utf8(&sale.currency.0).unwrap_or("???"),
+            );
+            println!("ID:           {}", sale.id);
+            println!("Status:       {:?}", sale.status);
+            println!("Total:        {}", total_str);
+            println!("Line count:   {}", sale.line_count);
+            println!("Currency:     {}", std::str::from_utf8(&sale.currency.0).unwrap_or("???"));
+            println!("Created:      {}", sale.created_at);
+            println!("Updated:      {}", sale.updated_at);
+
+            if !sale.lines.is_empty() {
+                println!();
+                println!("{:<4} {:<24} {:>6} {:>10}", "#", "SKU", "Qty", "Unit");
+                println!("{:-<4} {:-<24} {:->6} {:->10}", "", "", "", "");
+                for line in &sale.lines {
+                    let unit_str = format!(
+                        "{}.{:02}",
+                        line.unit_price.minor_units / 100,
+                        line.unit_price.minor_units.abs() % 100,
+                    );
+                    println!("{:<4} {:<24} {:>6} {:>10}", line.line_position, line.sku, line.qty, unit_str);
+                }
+            }
+        }
+        None => {
+            println!("Sale not found: {id}");
+        }
+    }
+
+    Ok(())
+}
+
+fn run_sale_update_status(store: &Store<'_>, id: &str, status_str: &str) -> Result<()> {
+    let to = SaleStatus::from_stored_str(status_str).ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid status '{status_str}'; expected one of: pending, active, completed, voided"
+        )
+    })?;
+
+    match store.update_sale_status(id, to) {
+        Ok(sale) => {
+            println!("Sale {id} status updated to {:?}", sale.status);
+        }
+        Err(CoreError::NotFound { .. }) => {
+            eprintln!("Sale not found: {id}");
+            std::process::exit(1);
+        }
+        Err(CoreError::Validation { message, .. }) => {
+            eprintln!("Validation error: {message}");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
             std::process::exit(1);
         }
     }
