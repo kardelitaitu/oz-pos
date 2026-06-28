@@ -24,6 +24,7 @@ pub mod inventory;
 pub mod migrations;
 pub mod money;
 pub mod product;
+pub mod settings;
 pub mod sku;
 
 pub use cart::{Cart, CartError, CartId, CartLine};
@@ -33,4 +34,5 @@ pub use features::{Feature, FeatureRegistry};
 pub use inventory::Inventory;
 pub use money::{Currency, Money};
 pub use product::Product;
+pub use settings::Settings;
 pub use sku::{LineId, Sku};
