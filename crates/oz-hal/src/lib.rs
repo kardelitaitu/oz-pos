@@ -22,6 +22,7 @@ pub mod drivers;
 pub mod error;
 pub mod registry;
 pub mod traits;
+pub mod transport;
 pub mod types;
 
 pub use error::HalError;

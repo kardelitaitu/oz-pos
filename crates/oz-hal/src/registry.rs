@@ -82,12 +82,38 @@ impl DriverRegistry {
     }
 
     /// Discover and register available hardware. Failure of one driver
-    /// does not abort the rest. Currently a no-op; real implementations
-    /// probe USB / Bluetooth / serial and add drivers as they appear.
+    /// does not abort the rest. Probes USB HID scanners, serial scanners,
+    /// and USB receipt printers, then registers them all.
     pub async fn discover(&self) {
-        // Intentionally empty in the scaffold. Real hardware probes will
-        // land in `hal/src/transport/{usb,bluetooth,serial}.rs` and call
-        // `register_*` from here.
+        // --- USB HID barcode scanners ---
+        for scanner in crate::drivers::usb_scanner::UsbHidBarcodeScanner::discover_all() {
+            let info = scanner.device_info();
+            let id = if info.serial.is_empty() || info.serial == "0000" {
+                format!("scanner:usb:{}:{}", info.vendor, info.model)
+            } else {
+                format!("scanner:usb:{}", info.serial)
+            };
+            self.register_scanner(&id, Arc::new(scanner)).await;
+        }
+
+        // --- Serial barcode scanners ---
+        for scanner in crate::drivers::serial_scanner::SerialBarcodeScanner::discover_all() {
+            let info = scanner.device_info();
+            // Serial port name is used as the identity key.
+            let id = format!("scanner:serial:{}", info.serial);
+            self.register_scanner(&id, Arc::new(scanner)).await;
+        }
+
+        // --- USB receipt printers ---
+        for printer in crate::drivers::usb_printer::UsbReceiptPrinter::discover_all() {
+            let info = printer.device_info();
+            let id = if info.serial.is_empty() {
+                format!("printer:{}:{}", info.vendor, info.model)
+            } else {
+                format!("printer:{}", info.serial)
+            };
+            self.register_printer(&id, Arc::new(printer)).await;
+        }
     }
 }
 

@@ -5,4 +5,6 @@
 //! never need a `mock` feature flag.
 
 pub mod mock;
-pub mod scanner;
+pub mod serial_scanner;
+pub mod usb_printer;
+pub mod usb_scanner;
