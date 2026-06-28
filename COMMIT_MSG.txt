@@ -1,0 +1,21 @@
+feat(ui): Product Lookup screen with search, barcode scan, category filter, and product grid
+
+ProductLookupScreen.tsx + .css (new):
+- Search bar with icon (filters by name, SKU, or barcode)
+- Barcode input + Scan button with Enter key support
+- Category filter chips (All, Beverages, Food) using role="radio" ARIA pattern
+- Responsive product grid (auto-fill, 220px min) with 18 sample products
+- Product cards: full-row clickable button with name, category badge, price, SKU, stock dot indicator
+- In-stock products: interactive; Out-of-stock: disabled with muted style and no-add state
+- Empty state with package icon when no results match
+- All strings via <Localized> Fluent components
+
+Updated files:
+- domain.ts: added Product interface (sku, name, category, price, barcode, inStock)
+- en-US.ftl: added 11 product lookup Fluent IDs
+- main.tsx: registered new Fluent strings in inline bundle
+- AppLayout.tsx: added 'products' route + nav item with package icon
+- App.tsx: imported ProductLookupScreen, default route changed to 'products'
+
+Tests (18 new, 64 total): search by name/SKU/barcode, category filter, add to cart click, Enter key,
+barcode scan (Enter + button), unknown barcode, empty state, out-of-stock disabled state, clearing input

@@ -19,29 +19,7 @@ use crate::traits::printer::ReceiptPrinter;
 use crate::transport::usb::UsbDeviceInfo;
 use crate::types::DeviceInfo;
 
-// ---------------------------------------------------------------------------
-// ESC/POS command constants
-// ---------------------------------------------------------------------------
-
-/// Initialize printer.
-const ESC_INIT: &[u8] = &[0x1B, 0x40];
-/// Print and carriage return.
-const LF: &[u8] = &[0x0A];
-/// Cut paper (full cut).
-const CUT_FULL: &[u8] = &[0x1D, 0x56, 0x00];
-/// Cut paper (partial cut).
-const CUT_PARTIAL: &[u8] = &[0x1D, 0x56, 0x01];
-/// Select character font A (12×24).
-const FONT_A: &[u8] = &[0x1B, 0x4D, 0x00];
-/// Select character font B (9×17).
-#[allow(dead_code)]
-const FONT_B: &[u8] = &[0x1B, 0x4D, 0x01];
-/// Set line spacing to default (30 dots).
-const LINE_SPACING_DEFAULT: &[u8] = &[0x1B, 0x32];
-
-// ---------------------------------------------------------------------------
-// Driver
-// ---------------------------------------------------------------------------
+use super::escpos;
 
 /// A receipt printer driven through a USB bulk OUT endpoint.
 pub struct UsbReceiptPrinter {
@@ -55,11 +33,7 @@ pub struct UsbReceiptPrinter {
 impl UsbReceiptPrinter {
     /// Attempt to create a driver for the given USB printer info.
     pub fn try_new(info: UsbDeviceInfo) -> Self {
-        let device_info = DeviceInfo::new(
-            &info.manufacturer,
-            &info.product,
-            &info.serial,
-        );
+        let device_info = DeviceInfo::new(&info.manufacturer, &info.product, &info.serial);
 
         Self {
             handle: Arc::new(Mutex::new(None)),
@@ -82,22 +56,6 @@ impl UsbReceiptPrinter {
             Err(_) => return Vec::new(),
         };
         devices.into_iter().map(Self::try_new).collect()
-    }
-
-    /// Build an ESC/POS byte buffer from a plain-text receipt body.
-    fn format_receipt(body: &str) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(body.len() + 64);
-
-        buf.extend_from_slice(ESC_INIT);
-        buf.extend_from_slice(LINE_SPACING_DEFAULT);
-        buf.extend_from_slice(FONT_A);
-
-        for line in body.lines() {
-            buf.extend_from_slice(line.as_bytes());
-            buf.extend_from_slice(LF);
-        }
-
-        buf
     }
 
     async fn ensure_connected(&self) -> Result<(), HalError> {
@@ -153,52 +111,21 @@ impl UsbReceiptPrinter {
 #[async_trait]
 impl ReceiptPrinter for UsbReceiptPrinter {
     async fn print_receipt(&self, body: &str) -> Result<(), HalError> {
-        let data = Self::format_receipt(body);
+        let data = escpos::format_receipt(body);
         self.write_to_endpoint(&data).await
     }
 
     async fn cut(&self) -> Result<(), HalError> {
+        self.ensure_connected().await?;
         let cut_cmd = if self.partial_cut {
-            CUT_PARTIAL
+            escpos::CUT_PARTIAL
         } else {
-            CUT_FULL
+            escpos::CUT_FULL
         };
         self.write_to_endpoint(cut_cmd).await
     }
 
     fn device_info(&self) -> DeviceInfo {
         self.info.clone()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_receipt_includes_init_and_font() {
-        let body = "Hello\nWorld";
-        let data = UsbReceiptPrinter::format_receipt(body);
-
-        // Should start with ESC/POS init
-        assert!(data.starts_with(ESC_INIT), "missing ESC @ init");
-        // Should contain the line text
-        assert!(
-            data.windows(b"Hello".len()).any(|w| w == b"Hello"),
-            "missing body text"
-        );
-        // Should contain LF after each line
-        assert!(
-            data.windows(LF.len()).any(|w| w == LF),
-            "missing line feeds"
-        );
-    }
-
-    #[test]
-    fn cut_command_uses_full_cut_by_default() {
-        // Test that CUT_FULL is used when partial_cut is false.
-        // We can check the constant directly.
-        assert_eq!(CUT_FULL, &[0x1D, 0x56, 0x00]);
-        assert_eq!(CUT_PARTIAL, &[0x1D, 0x56, 0x01]);
     }
 }

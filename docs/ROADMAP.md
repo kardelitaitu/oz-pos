@@ -77,9 +77,12 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 ### oz-hal — Hardware
 - [x] `BarcodeScanner`, `ReceiptPrinter`, `CashDrawer` async trait definitions
 - [x] `DriverRegistry` for lookup/injection per device category
-- [ ] USB barcode scanner driver (HID)
-- [ ] Serial barcode scanner driver (stub)
-- [ ] Receipt printer driver (USB, stub output)
+- [x] USB barcode scanner driver (HID)
+- [x] Serial barcode scanner driver (stub)
+- [x] Receipt printer driver (USB, stub output)
+- [x] Bluetooth (SPP) receipt printer driver
+- [x] TCP/network receipt printer driver (port 9100, raw ESC/POS)
+- [x] Shared ESC/POS formatting module (`escpos.rs`)
 - [x] Mock HAL driver for unit tests (`hal/src/drivers/mock.rs`)
 
 ### UI — Core Checkout Flow

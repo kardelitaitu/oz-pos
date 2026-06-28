@@ -22,6 +22,21 @@ export interface CartLine {
   readonly unit_price: Money;
 }
 
+/**
+ * A product that can be sold in the store.
+ * Mirrors the product domain model from the backend.
+ */
+export interface Product {
+  readonly sku: Sku;
+  readonly name: string;
+  readonly category: string;
+  readonly price: Money;
+  /** Barcode (EAN-13, UPC-A, etc.) if available. */
+  readonly barcode: string | null;
+  /** Whether the product is currently in stock. */
+  readonly inStock: boolean;
+}
+
 /** Mirrors `AppError` in `src-tauri/src/error.rs`. */
 export type AppError =
   | { kind: 'core'; message: string }

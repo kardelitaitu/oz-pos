@@ -44,6 +44,9 @@ pub struct SerialPortInfo {
 
 /// Enumerate serial ports and return those connected via known POS
 /// hardware adapters, or all ports when `only_known` is false.
+///
+/// Use [`probe_bluetooth()`] specifically to find Bluetooth SPP serial
+/// ports that are typically used by BT receipt printers.
 pub fn probe_ports(only_known: bool) -> Result<Vec<SerialPortInfo>, HalError> {
     let ports = available_ports()
         .map_err(|e| HalError::Io(std::io::Error::other(e.to_string())))?;
@@ -105,6 +108,26 @@ pub fn open_port_with_settings(
     builder
         .open()
         .map_err(|e| HalError::NotFound(format!("failed to open serial port: {e}")))
+}
+
+/// Enumerate only Bluetooth SPP serial ports — used by BT receipt printers.
+///
+/// On Windows these appear as virtual COM ports after pairing; on Linux
+/// as `/dev/rfcomm*` or `/dev/tty*` with Bluetooth port type.
+pub fn probe_bluetooth() -> Result<Vec<SerialPortInfo>, HalError> {
+    let ports = available_ports()
+        .map_err(|e| HalError::Io(std::io::Error::other(e.to_string())))?;
+
+    Ok(ports
+        .into_iter()
+        .filter(|p| matches!(p.port_type, SerialPortType::BluetoothPort))
+        .map(|p| SerialPortInfo {
+            port_name: p.port_name,
+            description: description_for_type(&p.port_type),
+            vid: None,
+            pid: None,
+        })
+        .collect())
 }
 
 fn description_for_type(port_type: &SerialPortType) -> String {

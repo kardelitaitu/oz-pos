@@ -41,7 +41,19 @@ oz-pos/
 │   │       ├─ lib.rs        # Public API
 │   │       ├─ traits/       # Device traits (BarcodeScanner, ReceiptPrinter, CashDrawer)
 │   │       ├─ drivers/      # Mock + real device drivers
-│   │       ├─ registry.rs   # DriverRegistry (Arc<RwLock<HashMap<…>>>)
+│   │       │   ├─ mock.rs        # Programmable mocks for all traits
+│   │       │   ├─ escpos.rs      # Shared ESC/POS formatting constants and helpers
+│   │       │   ├─ usb_scanner.rs # USB HID barcode scanner (real)
+│   │       │   ├─ serial_scanner.rs # Serial port scanner (stub)
+│   │       │   ├─ usb_printer.rs # USB receipt printer (stub, ESC/POS)
+│   │       │   ├─ bt_printer.rs  # Bluetooth SPP receipt printer
+│   │       │   └─ tcp_printer.rs # TCP/network receipt printer (raw port 9100)
+│   │       ├─ transport/
+│   │       │   ├─ mod.rs
+│   │       │   ├─ usb.rs    # USB enumeration, VID/PID matching, open/claim
+│   │       │   ├─ serial.rs # Serial port enumeration, BT port detection
+│   │       │   └─ tcp.rs    # TCP connection helper for network printers
+│   │       ├─ registry.rs   # DriverRegistry (discover, register, lookup)
 │   │       ├─ types.rs      # Barcode, BarcodeSymbology, DeviceInfo
 │   │       └─ error.rs      # HalError enum
 │   ├─ oz-api/               # REST API server (axum + JWT auth)
@@ -140,9 +152,18 @@ oz-pos/
 ### oz-hal
 - **Responsibilities**: Uniform async API for all peripheral devices.
 - **Traits**: `BarcodeScanner`, `ReceiptPrinter`, `CashDrawer` (async, in `traits/`).
-- **Registry**: `DriverRegistry` — `HashMap<String, Arc<dyn Trait>>` per device category behind `RwLock`. Register/lookup/discover.
-- **Mock driver**: In `drivers/mock.rs` — programmable queues, error injection, call counters. Gated by the `mock` feature. Required for all tests.
+- **Registry**: `DriverRegistry` — `HashMap<String, Arc<dyn Trait>>` per device category behind `RwLock`. Register/lookup/discover. `discover()` probes USB + serial hardware at startup.
+- **Transport layer** (`transport/`): `usb.rs` enumerates HID-class and printer-class USB devices by known VID/PID pairs. `serial.rs` enumerates serial ports with POS adapter detection and Bluetooth SPP port filtering. `tcp.rs` provides async TCP connection helpers for network printers (port 9100).
+- **Real drivers**:
+  - `UsbHidBarcodeScanner` — USB HID interrupt transfers, HID keycode → ASCII conversion, Enter-terminated scan accumulation.
+  - `SerialBarcodeScanner` — serial port read until `\r`/`\n` terminator, configurable baud rate.
+  - `UsbReceiptPrinter` — ESC/POS formatting over USB bulk OUT.
+  - `BtReceiptPrinter` — Bluetooth SPP printer via virtual COM port. Auto-discovered by `serial::probe_bluetooth()`.
+  - `TcpReceiptPrinter` — TCP/network printer via raw port 9100. Registered through `registry.register_tcp_printer()` with user-provided IP/hostname.
+- **Shared ESC/POS** (`escpos.rs`): all printer drivers use a single `format_receipt()` helper and shared cut/init constants.
+- **Mock driver**: In `drivers/mock.rs` — programmable queues, error injection, call counters. Required for all tests.
 - Business code only uses traits via `DriverRegistry`; never imports concrete drivers.
+- Blocking USB/serial I/O wrapped in `tokio::task::spawn_blocking`. Device handles held behind `tokio::sync::Mutex`.
 
 ### oz-api
 - **Responsibilities**: Standalone REST API server for third-party integrations and headless operation.

@@ -4,6 +4,7 @@ import AppLayout from '@/components/AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import DesignSystem from '@/features/design/DesignSystem';
 import CartScreen from '@/features/sales/CartScreen';
+import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import { completeSetup, getSetupStatus } from '@/api/pos';
 import type { WizardState } from '@/features/setup/SetupWizard';
 import type { AppRoute } from '@/components/AppLayout';
@@ -30,7 +31,7 @@ export default function App() {
 function AppShell() {
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>('sales');
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
 
   // On mount, check if setup was already completed.
   useEffect(() => {
@@ -109,6 +110,7 @@ function AppShell() {
   return (
     <AppLayout route={currentRoute} onNavigate={handleNavigate}>
       {currentRoute === 'sales' && <CartScreen />}
+      {currentRoute === 'products' && <ProductLookupScreen />}
       {currentRoute === 'design' && <DesignSystem />}
     </AppLayout>
   );

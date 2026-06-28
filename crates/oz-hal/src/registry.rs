@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::printer::ReceiptPrinter;
+use crate::types::DeviceInfo;
 
 /// Shared, mutable catalogue of HAL drivers.
 #[derive(Default)]
@@ -114,6 +115,32 @@ impl DriverRegistry {
             };
             self.register_printer(&id, Arc::new(printer)).await;
         }
+
+        // --- Bluetooth (SPP) receipt printers ---
+        let bt_ports = crate::transport::serial::probe_bluetooth().unwrap_or_default();
+        for port_info in bt_ports {
+            let info = DeviceInfo::new("bluetooth", &port_info.description, &port_info.port_name);
+            let printer = crate::drivers::bt_printer::BtReceiptPrinter::new(
+                &port_info.port_name,
+                9600,
+                info,
+            );
+            let id = format!("printer:bt:{}", port_info.port_name);
+            self.register_printer(&id, Arc::new(printer)).await;
+        }
+    }
+
+    /// Register a TCP (network) printer under the given id. This is not
+    /// auto-discovered; the setup wizard calls this when the user
+    /// configures a printer by IP address or hostname.
+    pub async fn register_tcp_printer(
+        &self,
+        id: &str,
+        addr: &str,
+        info: DeviceInfo,
+    ) {
+        let printer = crate::drivers::tcp_printer::TcpReceiptPrinter::new(addr, info);
+        self.register_printer(id, Arc::new(printer)).await;
     }
 }
 

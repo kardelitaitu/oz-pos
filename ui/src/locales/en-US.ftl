@@ -18,6 +18,18 @@ cart-line-add-sample-aria = Add a sample product to the cart for testing
 ds-title = Design System
 theme-toggle-label = Toggle theme
 
+# Product Lookup
+product-lookup-title = Products
+product-lookup-search-placeholder = Search products…
+product-lookup-barcode-placeholder = Scan barcode…
+product-lookup-barcode-scan = Scan
+product-lookup-no-results = No products found
+product-lookup-loading = Loading products…
+product-lookup-add = Add to cart
+product-lookup-in-stock = In stock
+product-lookup-out-of-stock = Out of stock
+product-lookup-all-categories = All Categories
+
 # Setup Wizard
 setup-title = OZ-POS
 setup-tagline = Point of Sale — Simplified
