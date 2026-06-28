@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Localized } from '@fluent/react';
 import {
   getReceiptSettings,
   setReceiptSettings,
@@ -7,9 +8,14 @@ import {
   listCurrencies,
   getDefaultCurrency,
   setDefaultCurrency,
+  getSyncSettings,
+  updateSyncSettings,
+  triggerSync,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
   type CurrencyDto,
+  type SyncSettingsDto,
+  type SyncAttemptResult,
 } from '@/api/pos';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -47,21 +53,34 @@ export default function SettingsPage() {
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [defaultCurrency, setDefaultCurrencyState] = useState<string>('USD');
 
+  const [sync, setSync] = useState<SyncSettingsDto>({
+    serverUrl: null,
+    hasApiKey: false,
+    enabled: false,
+  });
+  const [syncServerUrl, setSyncServerUrl] = useState('');
+  const [syncApiKey, setSyncApiKey] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [r, s, currenciesData, defaultCurrencyData] = await Promise.all([
+        const [r, s, currenciesData, defaultCurrencyData, syncData] = await Promise.all([
           getReceiptSettings(),
           getStoreSettings(),
           listCurrencies(),
           getDefaultCurrency(),
+          getSyncSettings(),
         ]);
         if (!cancelled) {
           setReceipt(r);
           setStore(s);
           setCurrencies(currenciesData);
           setDefaultCurrencyState(defaultCurrencyData ?? 'USD');
+          setSync(syncData);
+          setSyncServerUrl(syncData.serverUrl ?? '');
         }
       } catch {
         // IPC unavailable — use defaults.
@@ -80,9 +99,15 @@ export default function SettingsPage() {
         setReceiptSettings(receipt),
         setStoreSettings(store),
         setDefaultCurrency({ code: defaultCurrency }),
+        updateSyncSettings({
+          serverUrl: syncServerUrl || null,
+          apiKey: syncApiKey || null,
+          enabled: sync.enabled,
+        }),
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      setSyncApiKey('');
     } catch {
       // Toast or error state could go here.
     } finally {
@@ -91,21 +116,25 @@ export default function SettingsPage() {
   }, [receipt, store, defaultCurrency]);
 
   if (loading) {
-    return <div className="settings-page"><p>Loading settings…</p></div>;
+    return <div className="settings-page"><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;
   }
 
   return (
     <div className="settings-page">
-      <h1 className="settings-title">Settings</h1>
+      <Localized id="settings-page-title">
+        <h1 className="settings-title">Settings</h1>
+      </Localized>
 
       {/* ── Store section ────────────────────────── */}
       <Card
         shadow="sm"
-        header={<h2 className="settings-section-title">Store</h2>}
+        header={<Localized id="settings-section-store"><h2 className="settings-section-title">Store</h2></Localized>}
       >
         <div className="settings-form">
           <label className="settings-field">
-            <span className="settings-label">Store name</span>
+            <Localized id="settings-field-store-name">
+              <span className="settings-label">Store name</span>
+            </Localized>
             <input
               className="settings-input"
               type="text"
@@ -116,7 +145,9 @@ export default function SettingsPage() {
           </label>
 
           <label className="settings-field">
-            <span className="settings-label">Address</span>
+            <Localized id="settings-field-address">
+              <span className="settings-label">Address</span>
+            </Localized>
             <input
               className="settings-input"
               type="text"
@@ -127,7 +158,9 @@ export default function SettingsPage() {
           </label>
 
           <label className="settings-field">
-            <span className="settings-label">Tax / VAT ID</span>
+            <Localized id="settings-field-tax-id">
+              <span className="settings-label">Tax / VAT ID</span>
+            </Localized>
             <input
               className="settings-input"
               type="text"
@@ -142,11 +175,13 @@ export default function SettingsPage() {
       {/* ── Currency section ────────────────────── */}
       <Card
         shadow="sm"
-        header={<h2 className="settings-section-title">Currency</h2>}
+        header={<Localized id="settings-section-currency"><h2 className="settings-section-title">Currency</h2></Localized>}
       >
         <div className="settings-form">
           <label className="settings-field">
-            <span className="settings-label">Default currency</span>
+            <Localized id="settings-field-default-currency">
+              <span className="settings-label">Default currency</span>
+            </Localized>
             <select
               className="settings-select"
               value={defaultCurrency}
@@ -165,7 +200,7 @@ export default function SettingsPage() {
       {/* ── Receipt section ───────────────────────── */}
       <Card
         shadow="sm"
-        header={<h2 className="settings-section-title">Receipt</h2>}
+        header={<Localized id="settings-section-receipt"><h2 className="settings-section-title">Receipt</h2></Localized>}
       >
         <div className="settings-form">
           {/* Show currency */}
@@ -175,12 +210,16 @@ export default function SettingsPage() {
               checked={receipt.showCurrency}
               onChange={(e) => setReceipt({ ...receipt, showCurrency: e.target.checked })}
             />
-            <span>Show currency symbol on amounts</span>
+            <Localized id="settings-toggle-show-currency">
+              <span>Show currency symbol on amounts</span>
+            </Localized>
           </label>
 
           {/* Decimal separator */}
           <label className="settings-field">
-            <span className="settings-label">Decimal separator</span>
+            <Localized id="settings-field-decimal-separator">
+              <span className="settings-label">Decimal separator</span>
+            </Localized>
             <select
               className="settings-select"
               value={receipt.decimalSeparator}
@@ -199,12 +238,16 @@ export default function SettingsPage() {
               checked={receipt.showTax}
               onChange={(e) => setReceipt({ ...receipt, showTax: e.target.checked })}
             />
-            <span>Show tax line on receipts</span>
+            <Localized id="settings-toggle-show-tax">
+              <span>Show tax line on receipts</span>
+            </Localized>
           </label>
 
           {/* Paper width */}
           <label className="settings-field">
-            <span className="settings-label">Paper width</span>
+            <Localized id="settings-field-paper-width">
+              <span className="settings-label">Paper width</span>
+            </Localized>
             <select
               className="settings-select"
               value={receipt.paperWidth}
@@ -217,7 +260,9 @@ export default function SettingsPage() {
 
           {/* Footer */}
           <label className="settings-field">
-            <span className="settings-label">Receipt footer</span>
+            <Localized id="settings-field-footer">
+              <span className="settings-label">Receipt footer</span>
+            </Localized>
             <input
               className="settings-input"
               type="text"
@@ -234,10 +279,136 @@ export default function SettingsPage() {
               loading={saving}
               onClick={handleSave}
             >
-              {saved ? 'Saved!' : 'Save'}
+              <Localized id={saved ? 'settings-saved' : 'settings-btn-save'}>
+                <span>{saved ? 'Saved!' : 'Save'}</span>
+              </Localized>
             </Button>
           </div>
         </div>
+      </Card>
+
+      {/* ── Cloud Sync section ────────────────────── */}
+      <Card
+        shadow="sm"
+        header={<Localized id="settings-section-sync"><h2 className="settings-section-title">Cloud Sync</h2></Localized>}
+      >
+        {sync.serverUrl === null && !sync.enabled ? (
+          <div className="settings-form">
+            <p className="settings-hint">
+              <Localized id="settings-sync-not-configured">
+                <span>Sync is not configured. Enter a server URL and enable sync.</span>
+              </Localized>
+            </p>
+            <label className="settings-field">
+              <Localized id="settings-sync-server-url">
+                <span className="settings-label">Server URL</span>
+              </Localized>
+              <input
+                className="settings-input"
+                type="url"
+                placeholder="https://api.example.com"
+                value={syncServerUrl}
+                onChange={(e) => setSyncServerUrl(e.target.value)}
+              />
+            </label>
+
+            <label className="settings-field">
+              <Localized id="settings-sync-api-key">
+                <span className="settings-label">API Key</span>
+              </Localized>
+              <input
+                className="settings-input"
+                type="password"
+                placeholder="Enter API key"
+                value={syncApiKey}
+                onChange={(e) => setSyncApiKey(e.target.value)}
+              />
+            </label>
+
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={sync.enabled}
+                onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
+              />
+              <Localized id="settings-sync-enabled">
+                <span>Enable Cloud Sync</span>
+              </Localized>
+            </label>
+          </div>
+        ) : (
+          <div className="settings-form">
+            <label className="settings-field">
+              <Localized id="settings-sync-server-url">
+                <span className="settings-label">Server URL</span>
+              </Localized>
+              <input
+                className="settings-input"
+                type="url"
+                placeholder="https://api.example.com"
+                value={syncServerUrl}
+                onChange={(e) => setSyncServerUrl(e.target.value)}
+              />
+            </label>
+
+            <label className="settings-field">
+              <Localized id="settings-sync-api-key">
+                <span className="settings-label">API Key</span>
+              </Localized>
+              <input
+                className="settings-input"
+                type="password"
+                placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
+                value={syncApiKey}
+                onChange={(e) => setSyncApiKey(e.target.value)}
+              />
+            </label>
+
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={sync.enabled}
+                onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
+              />
+              <Localized id="settings-sync-enabled">
+                <span>Enable Cloud Sync</span>
+              </Localized>
+            </label>
+
+            <div className="settings-actions">
+              <Button
+                variant="secondary"
+                loading={syncing}
+                onClick={async () => {
+                  setSyncing(true);
+                  try {
+                    const result = await triggerSync();
+                    setSyncResult(result);
+                  } catch {
+                    setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });
+                  } finally {
+                    setSyncing(false);
+                  }
+                }}
+              >
+                <Localized id={syncing ? 'settings-sync-syncing' : 'settings-sync-sync-now'}>
+                  <span>{syncing ? 'Syncing…' : 'Sync Now'}</span>
+                </Localized>
+              </Button>
+            </div>
+
+            {syncResult && (
+              <p className="settings-hint">
+                <Localized
+                  id="settings-sync-result"
+                  vars={{ synced: syncResult.synced, failed: syncResult.failed }}
+                >
+                  <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
+                </Localized>
+              </p>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ToastProvider } from '@/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
+import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
 import AppLayout from '@/components/AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
@@ -23,18 +25,21 @@ import DataManagementScreen from '@/features/settings/DataManagementScreen';
 import InventoryAdjustmentScreen from '@/features/inventory/InventoryAdjustmentScreen';
 import EodReportScreen from '@/features/sales/EodReportScreen';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
+import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import { completeSetup, getSetupStatus } from '@/api/pos';
 import { useFeatures } from '@/hooks/useFeatures';
 import type { WizardState } from '@/features/setup/SetupWizard';
 import type { AppRoute } from '@/components/AppLayout';
 import '@/features/design/DesignSystem.css';
 import '@/features/staff/StaffManagementScreen.css';
+import '@/features/terminals/TerminalManagementScreen.css';
 import '@/features/customers/CustomerManagementScreen.css';
 import '@/features/sales/VoidOrdersScreen.css';
 import '@/features/auth/StaffLoginScreen.css';
 import '@/features/inventory/InventoryAdjustmentScreen.css';
 import '@/features/audit/AuditLogScreen.css';
 import '@/features/currency/ExchangeRateScreen.css';
+import '@/features/offline/OfflineQueueScreen.css';
 import '@/features/sales/EodReportScreen.css';
 
 /**
@@ -51,7 +56,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppShell />
+        <ToastProvider>
+          <AppShell />
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );
@@ -166,9 +173,11 @@ function AppShell() {
       {currentRoute === 'orders' && <VoidOrdersScreen />}
       {currentRoute === 'customers' && <CustomerManagementScreen />}
       {currentRoute === 'staff' && <StaffManagementScreen />}
+      {currentRoute === 'terminals' && <TerminalManagementScreen />}
       {currentRoute === 'eod-report' && <EodReportScreen />}
       {currentRoute === 'audit-log' && <AuditLogScreen />}
       {currentRoute === 'exchange-rates' && <ExchangeRateScreen />}
+      {currentRoute === 'offline-queue' && <OfflineQueueScreen />}
       {currentRoute === 'settings' && <SettingsPage />}
     </AppLayout>
   );

@@ -12,6 +12,8 @@ export interface PaymentModalProps {
   total: Money;
   discountPercent?: number;
   discountLabel?: string;
+  /** User ID of the cashier processing this sale. */
+  userId: string;
   onComplete: () => void;
   onClose: () => void;
 }
@@ -29,6 +31,7 @@ export default function PaymentModal({
   total,
   discountPercent = 0,
   discountLabel,
+  userId,
   onComplete,
   onClose,
 }: PaymentModalProps) {
@@ -110,6 +113,7 @@ export default function PaymentModal({
         cartId,
         paymentMethod: methodLabel,
         tenderedMinor: method === 'cash' ? Number(tenderedMinor) : null,
+        userId,
       });
 
       // 4. Print a receipt via IPC (non-blocking — printer may be absent).
@@ -153,7 +157,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, otherLabel, lineItems, total, discountPercent, discountLabel, change]);
+  }, [method, otherLabel, lineItems, total, discountPercent, discountLabel, change, userId]);
 
   // Auto-close after success.
   useEffect(() => {
@@ -259,6 +263,34 @@ export default function PaymentModal({
                     aria-label="Amount tendered"
                   />
                 </label>
+
+                {/* Quick-cash amount buttons */}
+                <div className="payment-quick-cash">
+                  {[5, 10, 20, 50, 100].map((amount) => {
+                    const totalNum = Number(total.minor_units) / 100;
+                    const quickVal = Math.ceil(totalNum / amount) * amount;
+                    return (
+                      <button
+                        key={amount}
+                        type="button"
+                        className="payment-quick-btn"
+                        onClick={() => setTendered(quickVal.toFixed(2))}
+                        aria-label={`Tender $${quickVal.toFixed(2)}`}
+                      >
+                        ${quickVal}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="payment-quick-btn"
+                    onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
+                    aria-label="Tend exact amount"
+                  >
+                    Exact
+                  </button>
+                </div>
+
                 {tendered.length > 0 && (
                   <div className="payment-change-preview">
                     <span className="payment-change-label">Change</span>

@@ -8,7 +8,7 @@
  * ============================================================ */
 
 .cat-mgmt {
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-4);
 }
 
 .cat-mgmt-header {
@@ -315,6 +315,13 @@
 }
 
 /* ── Actions ────────────────────────────────────────── */
+.cat-mgmt-delete-warning {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  line-height: var(--leading-relaxed);
+  margin: 0;
+}
+
 .cat-mgmt-modal-actions {
   display: flex;
   justify-content: flex-end;

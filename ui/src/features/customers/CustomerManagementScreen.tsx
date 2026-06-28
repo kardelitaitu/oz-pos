@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listCustomers,
   createCustomer,
@@ -29,6 +30,7 @@ const EMPTY_FORM: FormData = {
 // ── Component ───────────────────────────────────────────────────────
 
 export default function CustomerManagementScreen() {
+  const { l10n } = useLocalization();
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,7 +100,7 @@ export default function CustomerManagementScreen() {
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) {
-      setError('Customer name is required');
+      setError(l10n.getString('customer-mgmt-error-name-required'));
       return;
     }
 
@@ -123,7 +125,7 @@ export default function CustomerManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save customer');
+      setError(err instanceof Error ? err.message : l10n.getString('customer-mgmt-error-save-failed'));
     } finally {
       setSaving(false);
     }
@@ -147,8 +149,12 @@ export default function CustomerManagementScreen() {
   return (
     <div className="customer-mgmt">
       <div className="customer-mgmt-header">
-        <h1 className="customer-mgmt-title">Customers</h1>
-        <Button onClick={openCreate}>Add Customer</Button>
+        <Localized id="customer-mgmt-title">
+          <h1 className="customer-mgmt-title">Customers</h1>
+        </Localized>
+        <Localized id="customer-mgmt-add">
+          <Button onClick={openCreate}>Add Customer</Button>
+        </Localized>
       </div>
 
       {/* Search */}
@@ -157,19 +163,23 @@ export default function CustomerManagementScreen() {
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        <input
-          type="search"
-          className="customer-mgmt-search"
-          placeholder="Search by name, email, or phone…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          aria-label="Search customers"
-        />
+        <Localized id="customer-mgmt-search" attrs={{ placeholder: true, 'aria-label': true }}>
+          <input
+            type="search"
+            className="customer-mgmt-search"
+            placeholder="Search by name, email, or phone…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search customers"
+          />
+        </Localized>
       </div>
 
       {/* Content */}
       {loading ? (
-        <p className="customer-mgmt-loading">Loading customers…</p>
+        <Localized id="customer-mgmt-loading">
+          <p className="customer-mgmt-loading">Loading customers…</p>
+        </Localized>
       ) : customers.length === 0 ? (
         <Card shadow="sm">
           <div className="customer-mgmt-empty">
@@ -181,19 +191,27 @@ export default function CustomerManagementScreen() {
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
             </div>
-            <p>No customers yet.</p>
-            <Button variant="secondary" onClick={openCreate}>
-              Add your first customer
-            </Button>
+            <Localized id="customer-mgmt-empty">
+              <p>No customers yet.</p>
+            </Localized>
+            <Localized id="customer-mgmt-empty-cta">
+              <Button variant="secondary" onClick={openCreate}>
+                Add your first customer
+              </Button>
+            </Localized>
           </div>
         </Card>
       ) : filteredCustomers.length === 0 ? (
         <Card shadow="sm">
           <div className="customer-mgmt-empty">
-            <p>No customers match your search.</p>
-            <Button variant="ghost" onClick={() => setSearchQuery('')}>
-              Clear search
-            </Button>
+            <Localized id="customer-mgmt-search-empty">
+              <p>No customers match your search.</p>
+            </Localized>
+            <Localized id="customer-mgmt-search-clear">
+              <Button variant="ghost" onClick={() => setSearchQuery('')}>
+                Clear search
+              </Button>
+            </Localized>
           </div>
         </Card>
       ) : (
@@ -201,11 +219,13 @@ export default function CustomerManagementScreen() {
           <table className="customer-mgmt-table" aria-label="Customers">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Notes</th>
-                <th aria-label="Actions"> </th>
+                <Localized id="customer-mgmt-col-name"><th>Name</th></Localized>
+                <Localized id="customer-mgmt-col-email"><th>Email</th></Localized>
+                <Localized id="customer-mgmt-col-phone"><th>Phone</th></Localized>
+                <Localized id="customer-mgmt-col-notes"><th>Notes</th></Localized>
+                <Localized id="customer-mgmt-col-actions" attrs={{ 'aria-label': true }}>
+                  <th aria-label="Actions"> </th>
+                </Localized>
               </tr>
             </thead>
             <tbody>
@@ -229,23 +249,27 @@ export default function CustomerManagementScreen() {
                     {customer.notes || '\u2014'}
                   </td>
                   <td className="customer-mgmt-cell-actions">
-                    <button
-                      type="button"
-                      className="customer-mgmt-action-btn"
-                      onClick={() => openEdit(customer)}
-                      aria-label={`Edit ${customer.name}`}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="customer-mgmt-action-btn customer-mgmt-action-btn--danger"
-                      onClick={() => confirmDelete(customer.id)}
-                      disabled={deleting === customer.id}
-                      aria-label={`Delete ${customer.name}`}
-                    >
-                      Delete
-                    </button>
+                    <Localized id="customer-mgmt-edit-aria" attrs={{ 'aria-label': true }} vars={{ name: customer.name }}>
+                      <button
+                        type="button"
+                        className="customer-mgmt-action-btn"
+                        onClick={() => openEdit(customer)}
+                        aria-label={`Edit ${customer.name}`}
+                      >
+                        <Localized id="customer-mgmt-edit"><span>Edit</span></Localized>
+                      </button>
+                    </Localized>
+                    <Localized id="customer-mgmt-delete-aria" attrs={{ 'aria-label': true }} vars={{ name: customer.name }}>
+                      <button
+                        type="button"
+                        className="customer-mgmt-action-btn customer-mgmt-action-btn--danger"
+                        onClick={() => confirmDelete(customer.id)}
+                        disabled={deleting === customer.id}
+                        aria-label={`Delete ${customer.name}`}
+                      >
+                        <Localized id="customer-mgmt-delete"><span>Delete</span></Localized>
+                      </button>
+                    </Localized>
                   </td>
                 </tr>
               ))}
@@ -256,70 +280,91 @@ export default function CustomerManagementScreen() {
 
       {/* ── Add/Edit Modal ──────────────────────────────────────── */}
       {showModal && (
-        <div className="customer-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit customer' : 'Add customer'}>
+        <Localized id={editingId ? 'customer-mgmt-modal-edit-aria' : 'customer-mgmt-modal-add-aria'} attrs={{ 'aria-label': true }}>
+          <div className="customer-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit customer' : 'Add customer'}>
           <div className="customer-mgmt-modal">
             <div className="customer-mgmt-modal-header">
-              <h2>{editingId ? 'Edit Customer' : 'Add Customer'}</h2>
-              <button
-                type="button"
-                className="customer-mgmt-modal-close"
-                onClick={closeModal}
-                aria-label="Close"
-              >
-                &times;
-              </button>
+              <Localized id={editingId ? 'customer-mgmt-modal-edit-title' : 'customer-mgmt-modal-add-title'}>
+                <h2>{editingId ? 'Edit Customer' : 'Add Customer'}</h2>
+              </Localized>
+              <Localized id="customer-mgmt-modal-close" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="customer-mgmt-modal-close"
+                  onClick={closeModal}
+                  aria-label="Close"
+                >
+                  &times;
+                </button>
+              </Localized>
             </div>
 
             <div className="customer-mgmt-modal-body">
               <label className="customer-mgmt-field" htmlFor="customer-field-name">
-                <span className="customer-mgmt-label">Name *</span>
-                <input
-                  className="customer-mgmt-input"
-                  type="text"
-                  id="customer-field-name"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Jane Smith"
-                  autoComplete="name"
-                />
+                <Localized id="customer-mgmt-field-name">
+                  <span className="customer-mgmt-label">Name *</span>
+                </Localized>
+                <Localized id="customer-mgmt-name-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="customer-mgmt-input"
+                    type="text"
+                    id="customer-field-name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Jane Smith"
+                    autoComplete="name"
+                  />
+                </Localized>
               </label>
 
               <label className="customer-mgmt-field" htmlFor="customer-field-email">
-                <span className="customer-mgmt-label">Email</span>
-                <input
-                  className="customer-mgmt-input"
-                  type="email"
-                  id="customer-field-email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="jane@example.com"
-                  autoComplete="email"
-                />
+                <Localized id="customer-mgmt-field-email">
+                  <span className="customer-mgmt-label">Email</span>
+                </Localized>
+                <Localized id="customer-mgmt-email-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="customer-mgmt-input"
+                    type="email"
+                    id="customer-field-email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="jane@example.com"
+                    autoComplete="email"
+                  />
+                </Localized>
               </label>
 
               <label className="customer-mgmt-field" htmlFor="customer-field-phone">
-                <span className="customer-mgmt-label">Phone</span>
-                <input
-                  className="customer-mgmt-input"
-                  type="tel"
-                  id="customer-field-phone"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="+1-555-0100"
-                  autoComplete="tel"
-                />
+                <Localized id="customer-mgmt-field-phone">
+                  <span className="customer-mgmt-label">Phone</span>
+                </Localized>
+                <Localized id="customer-mgmt-phone-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="customer-mgmt-input"
+                    type="tel"
+                    id="customer-field-phone"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="+1-555-0100"
+                    autoComplete="tel"
+                  />
+                </Localized>
               </label>
 
               <label className="customer-mgmt-field" htmlFor="customer-field-notes">
-                <span className="customer-mgmt-label">Notes</span>
-                <textarea
-                  className="customer-mgmt-input customer-mgmt-textarea"
-                  id="customer-field-notes"
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Preferences, special notes…"
-                  rows={3}
-                />
+                <Localized id="customer-mgmt-field-notes">
+                  <span className="customer-mgmt-label">Notes</span>
+                </Localized>
+                <Localized id="customer-mgmt-notes-placeholder" attrs={{ placeholder: true }}>
+                  <textarea
+                    className="customer-mgmt-input customer-mgmt-textarea"
+                    id="customer-field-notes"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    placeholder="Preferences, special notes…"
+                    rows={3}
+                  />
+                </Localized>
               </label>
 
               {error && (
@@ -335,16 +380,20 @@ export default function CustomerManagementScreen() {
             </div>
 
             <div className="customer-mgmt-modal-actions">
-              <Button variant="ghost" onClick={closeModal} disabled={saving}>
-                Cancel
-              </Button>
+              <Localized id="customer-mgmt-btn-cancel">
+                <Button variant="ghost" onClick={closeModal} disabled={saving}>
+                  Cancel
+                </Button>
+              </Localized>
               <Button
                 variant="primary"
                 loading={saving}
                 disabled={!form.name.trim()}
                 onClick={handleSave}
               >
-                {editingId ? 'Update' : 'Create'}
+                <Localized id={editingId ? 'customer-mgmt-btn-update' : 'customer-mgmt-btn-create'}>
+                  <span>{editingId ? 'Update' : 'Create'}</span>
+                </Localized>
               </Button>
             </div>
           </div>

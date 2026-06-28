@@ -309,9 +309,9 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] `AuditLog` UI: view and filter audit log entries
 
 ### Tax Engine
-- [ ] Tax inclusive vs. exclusive toggle (per store)
-- [ ] Tax rate per product or per category
-- [ ] Multi-rate support (e.g., 0%, 7%, 10% on different product types)
+- [x] Tax inclusive vs. exclusive toggle (per rate)
+- [x] Tax rate per category (via category_taxes junction table)
+- [x] Multi-rate support (e.g., 0%, 7%, 10% on different product types)
 - [ ] Tax breakdown on receipt and in order records
 
 ### oz-lua — Scripting Runtime
@@ -339,7 +339,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] **Refund / Return UI** — select items to refund (partial or full), amount preview, confirm
 - [ ] **Hold Order UI** — name/tag a held order, resume from holds list
 - [ ] **Split Bill UI** — drag items to split, assign amounts per person / payment method
-- [ ] **Order History UI** — searchable list with filters (date, status, cashier), tap to view detail
+- [x] **Order History UI** — searchable list with filters (date, status, cashier), tap to view detail
 - [ ] **Order Detail UI** — full receipt view with void/refund actions for managers
 
 **Shift & Cash**
@@ -349,7 +349,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 
 **Business Rule UI**
 - [x] **Discount UI** — apply % or fixed discount to whole cart or individual line items
-- [ ] **Tax Configuration UI** — inclusive/exclusive toggle, rate per category table
+- [x] **Tax Configuration UI** — inclusive/exclusive toggle per rate, type column in table, category tax rates section
 - [x] **Customer Management UI** — searchable table with avatar initials, add/edit modal (name/email/phone/notes), delete
 - [x] **Inventory Adjustment UI** — manual stock-in / stock-out with reason field
 

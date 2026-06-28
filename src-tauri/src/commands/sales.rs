@@ -138,6 +138,7 @@ pub struct CompleteSaleArgs {
     pub cart_id: CartId,
     pub payment_method: String,
     pub tendered_minor: Option<i64>,
+    pub user_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -161,8 +162,8 @@ pub async fn complete_sale(
 
     let line_count = cart.line_count();
 
-    // Build sale from cart and attach payment info.
-    let mut sale = oz_core::Sale::from_cart(&cart).ok_or_else(|| {
+    // Build sale from cart and attach payment + user info.
+    let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(args.user_id)).ok_or_else(|| {
         AppError::Invalid("cart total overflowed i64".into())
     })?;
     sale.payment_method = Some(args.payment_method);
@@ -198,6 +199,7 @@ pub struct SaleListItem {
     pub line_count: i64,
     pub status: String,
     pub payment_method: Option<String>,
+    pub user_id: Option<String>,
     pub created_at: String,
 }
 
@@ -217,6 +219,7 @@ pub async fn list_sales(
             line_count: s.line_count,
             status: format!("{:?}", s.status),
             payment_method: s.payment_method,
+            user_id: s.user_id,
             created_at: s.created_at,
         })
         .collect())
@@ -230,6 +233,7 @@ pub struct SaleDetail {
     pub status: String,
     pub payment_method: Option<String>,
     pub tendered_minor: Option<i64>,
+    pub user_id: Option<String>,
     pub created_at: String,
     pub lines: Vec<oz_core::SaleLine>,
 }
@@ -250,6 +254,7 @@ pub async fn get_sale(
         status: format!("{:?}", s.status),
         payment_method: s.payment_method,
         tendered_minor: s.tendered_minor,
+        user_id: s.user_id,
         created_at: s.created_at,
         lines: s.lines,
     }))

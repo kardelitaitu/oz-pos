@@ -6,12 +6,17 @@ import {
   updateProduct,
   deleteProduct,
   listTaxRates,
+  listCategories,
+  listCurrencies,
   type ProductDto,
   type TaxRateDto,
+  type CategoryDto,
+  type CurrencyDto,
 } from '@/api/pos';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import VariantManagementScreen from './VariantManagementScreen';
 import './ProductManagementScreen.css';
 
 interface FormData {
@@ -52,20 +57,26 @@ export default function ProductManagementScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRateDto[]>([]);
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSku, setEditingSku] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [variantProductSku, setVariantProductSku] = useState<string | null>(null);
+  const [variantProductName, setVariantProductName] = useState<string>('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dtos, rates] = await Promise.all([listProducts(), listTaxRates()]);
+      const [dtos, rates, cats, currencyList] = await Promise.all([listProducts(), listTaxRates(), listCategories(), listCurrencies()]);
       setProductDtos(dtos);
       setProducts(dtos.map(dtoToProduct));
       setTaxRates(rates);
+      setCategories(cats);
+      setCurrencies(currencyList);
     } catch {
       // IPC unavailable.
     } finally {
@@ -214,6 +225,17 @@ export default function ProductManagementScreen() {
                     <button
                       type="button"
                       className="product-mgmt-action-btn"
+                      onClick={() => {
+                        setVariantProductSku(p.sku);
+                        setVariantProductName(p.name);
+                      }}
+                      aria-label={`Variants for ${p.name}`}
+                    >
+                      {'Variants'}
+                    </button>
+                    <button
+                      type="button"
+                      className="product-mgmt-action-btn"
                       onClick={() => openEdit(p)}
                       aria-label={`Edit ${p.name}`}
                     >
@@ -309,15 +331,16 @@ export default function ProductManagementScreen() {
                   <Localized id="product-mgmt-field-currency">
                     <span className="product-mgmt-label">Currency</span>
                   </Localized>
-                  <input
-                    className="product-mgmt-input"
-                    type="text"
+                  <select
+                    className="product-mgmt-input product-mgmt-select"
                     id="product-field-currency"
                     value={form.currency}
                     onChange={(e) => setForm({ ...form, currency: e.target.value })}
-                    placeholder="USD"
-                    maxLength={3}
-                  />
+                  >
+                    {currencies.map((c) => (
+                      <option key={c.code} value={c.code}>{c.code} — {c.symbol}</option>
+                    ))}
+                  </select>
                 </label>
               </div>
 
@@ -325,14 +348,17 @@ export default function ProductManagementScreen() {
                 <Localized id="product-mgmt-field-category">
                   <span className="product-mgmt-label">Category</span>
                 </Localized>
-                <input
-                  className="product-mgmt-input"
-                  type="text"
+                <select
+                  className="product-mgmt-input product-mgmt-select"
                   id="product-field-category"
                   value={form.categoryId}
                   onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                  placeholder="e.g. beverages"
-                />
+                >
+                  <option value="">— No category —</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
               </label>
 
               <label className="product-mgmt-field" htmlFor="product-field-barcode" aria-label="Barcode">
@@ -414,6 +440,14 @@ export default function ProductManagementScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {variantProductSku && (
+        <VariantManagementScreen
+          productSku={variantProductSku}
+          productName={variantProductName}
+          onClose={() => setVariantProductSku(null)}
+        />
       )}
     </div>
   );

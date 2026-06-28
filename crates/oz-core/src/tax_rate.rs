@@ -28,6 +28,10 @@ pub struct TaxRate {
     /// Whether this is the default tax rate for the store.
     pub is_default: bool,
 
+    /// Whether tax is included in the displayed price (true) or
+    /// added at checkout (false). Defaults to exclusive.
+    pub is_inclusive: bool,
+
     /// ISO-8601 creation timestamp.
     pub created_at: String,
 
@@ -53,6 +57,7 @@ impl TaxRate {
             name,
             rate_bps,
             is_default: false,
+            is_inclusive: false,
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -62,6 +67,13 @@ impl TaxRate {
     #[must_use]
     pub fn with_default(mut self) -> Self {
         self.is_default = true;
+        self
+    }
+
+    /// Mark this rate as inclusive (tax included in displayed price).
+    #[must_use]
+    pub fn with_inclusive(mut self) -> Self {
+        self.is_inclusive = true;
         self
     }
 

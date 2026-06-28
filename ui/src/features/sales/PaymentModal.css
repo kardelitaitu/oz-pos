@@ -151,6 +151,39 @@
   box-sizing: border-box;
 }
 
+/* ── Quick-cash buttons ───────────────────────────── */
+.payment-quick-cash {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.payment-quick-btn {
+  flex: 1;
+  min-width: 64px;
+  padding: var(--space-1_5) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-sans);
+  color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-100) var(--ease-out);
+}
+
+.payment-quick-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+
+.payment-quick-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
 .payment-tendered-input:focus {
   outline: none;
   border-color: var(--color-border-focus);

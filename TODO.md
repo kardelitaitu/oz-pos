@@ -15,17 +15,18 @@
 - **Sales pipeline persistence** — Sale::from_cart() → Status::Pending → complete_sale transition
 - **Tax assignment** — migration 012 (product_taxes junction table), Store methods, Tauri commands, product form tax-rate checkboxes
 - **Currency configuration** — list_currencies command, default currency dropdown on Settings page
-- **Tests** — 24 new tests across 4 screen test files (122 total, all passing)
-- **Audit Log, Orders, Feature Toggle** — screens already built and wired with routes + nav items
-
-## WIP / Customer Management
-
-- Backend CRUD & Tauri commands exist. Screen exists at `ui/src/features/customers/CustomerManagementScreen.tsx` but marked WIP — not needed for MVP.
+- **Exchange rate management** — UI for exchange_rates table (ExchangeRateScreen with CRUD, Fluent-localized)
+- **User ID on sales** — Migration 014 adds `user_id` column; fully wired through `Sale::from_cart_with_user`, `complete_sale` command, `Store::create_sale`
+- **Active cashier session** — `userId` is required in `completeSale`; POS screen gated behind login; lock button in cart panel header
+- **Customer Management** — backend CRUD + Tauri commands + full screen at `ui/src/features/customers/`
+- **Product variants** — migration 015, domain types, Store methods, Tauri commands, variant management UI (modal in ProductManagementScreen)
+- **Multi-terminal support** — migration 016, terminal registration, Store methods, Tauri commands, management UI
+- **Offline queue** — migration 018, transaction queue for later sync, Store methods, Tauri commands, management UI
+- **Cloud sync** — sync settings in SettingsPage, background daemon (30s interval), Tauri commands (`trigger_sync`, `get_sync_settings`, `update_sync_settings`), `sync_client` module with config + pending sync
+- **Tests** — 460+ tests across all crates, all passing, clippy-clean
 
 ## Medium-term
 
-- **Multi-terminal support** — terminal registration + sync
-- **Offline mode** — queue transactions when network is down
-- **Cloud sync** — push sales to remote server
-- **Exchange rate management** — UI for exchange_rates table
-- **Product variants** — size/color/flavor variants per product
+- **Refund / return flow** — partial or full refund of completed sales
+- **Shift management** — open/close shift with cash reconciliation
+- **Staff RBAC** — role-based permission gating on screens/actions

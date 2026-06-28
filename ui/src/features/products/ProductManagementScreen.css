@@ -226,6 +226,23 @@
   opacity: 0.5;
 }
 
+.product-mgmt-select {
+  cursor: pointer;
+  appearance: auto;
+  -webkit-appearance: auto;
+  -moz-appearance: auto;
+}
+
+.product-mgmt-select option {
+  color: var(--color-fg);
+  background: var(--color-bg-elevated);
+}
+
+.product-mgmt-select:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
 .product-mgmt-modal-actions {
   display: flex;
   justify-content: flex-end;

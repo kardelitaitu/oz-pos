@@ -32,6 +32,7 @@ export interface CompleteSaleArgs {
   cartId: CartId;
   paymentMethod: string;
   tenderedMinor: number | null;
+  userId?: string;
 }
 
 export interface CompleteSaleResult {
@@ -284,10 +285,12 @@ export interface SaleListItem {
   lineCount: number;
   status: string;
   paymentMethod: string | null;
+  userId: string | null;
   createdAt: string;
 }
 
 export interface SaleLineDto {
+  id: string;
   sku: string;
   name: string;
   qty: number;
@@ -302,6 +305,7 @@ export interface SaleDetail {
   status: string;
   paymentMethod: string | null;
   tenderedMinor: number | null;
+  userId: string | null;
   createdAt: string;
   lines: SaleLineDto[];
 }
@@ -335,6 +339,66 @@ export const exportDailySummary = (): Promise<DailySummaryRow[]> =>
 export const exportSalesByHour = (): Promise<SalesByHourRow[]> =>
   invoke<SalesByHourRow[]>('export_sales_by_hour');
 
+// ── Product Variants ─────────────────────────────────────────────────
+
+export interface ProductVariantDto {
+  id: string;
+  parent_sku: string;
+  name: string;
+  sku: string;
+  price: { minor_units: number; currency: string } | null;
+  barcode: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateProductVariantArgs {
+  parentSku: string;
+  name: string;
+  sku: string;
+  priceMinor?: number | null;
+  currency?: string | null;
+  barcode?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface UpdateProductVariantArgs {
+  sku: string;
+  name?: string;
+  priceMinor?: number | null;
+  currency?: string | null;
+  barcode?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export const listProductVariants = (
+  parentSku: string,
+): Promise<ProductVariantDto[]> =>
+  invoke<ProductVariantDto[]>('list_product_variants', { parentSku });
+
+export const getProductVariant = (
+  sku: string,
+): Promise<ProductVariantDto | null> =>
+  invoke<ProductVariantDto | null>('get_product_variant', { sku });
+
+export const createProductVariant = (
+  args: CreateProductVariantArgs,
+): Promise<{ sku: string }> =>
+  invoke<{ sku: string }>('create_product_variant', { args });
+
+export const updateProductVariant = (
+  args: UpdateProductVariantArgs,
+): Promise<{ sku: string }> =>
+  invoke<{ sku: string }>('update_product_variant', { args });
+
+export const deleteProductVariant = (
+  sku: string,
+): Promise<void> => invoke('delete_product_variant', { sku });
+
 // ── Tax Rates ──────────────────────────────────────────────────────
 
 export interface TaxRateDto {
@@ -342,6 +406,7 @@ export interface TaxRateDto {
   name: string;
   rate_bps: number;
   is_default: boolean;
+  is_inclusive: boolean;
   display_rate: string;
   created_at: string;
   updated_at: string;
@@ -351,6 +416,7 @@ export interface CreateTaxRateArgs {
   name: string;
   rateBps: number;
   isDefault: boolean;
+  isInclusive: boolean;
 }
 
 export interface UpdateTaxRateArgs {
@@ -358,6 +424,17 @@ export interface UpdateTaxRateArgs {
   name: string;
   rateBps: number;
   isDefault: boolean;
+  isInclusive: boolean;
+}
+
+export interface CategoryTaxRateRow {
+  category_id: string;
+  tax_rate_ids: string[];
+}
+
+export interface SetCategoryTaxRatesArgs {
+  categoryId: string;
+  taxRateIds: string[];
 }
 
 export const listTaxRates = (): Promise<TaxRateDto[]> =>
@@ -376,6 +453,26 @@ export const updateTaxRate = (
 export const deleteTaxRate = (
   id: string,
 ): Promise<void> => invoke('delete_tax_rate', { id });
+
+/**
+ * List category-to-tax-rate assignments for all categories that have
+ * at least one tax rate assigned.
+ */
+export const listCategoryTaxRates = (): Promise<CategoryTaxRateRow[]> =>
+  invoke<CategoryTaxRateRow[]>('list_category_tax_rates');
+
+/**
+ * Set (replace) the tax rates assigned to a category.
+ */
+export const setCategoryTaxRates = (
+  args: SetCategoryTaxRatesArgs,
+): Promise<void> =>
+  invoke<void>('set_category_tax_rates', {
+    args: {
+      category_id: args.categoryId,
+      tax_rate_ids: args.taxRateIds,
+    },
+  });
 
 // ── Barcode Scanner ─────────────────────────────────────────────────
 
@@ -803,3 +900,186 @@ export const voidSale = (
   args: VoidSaleArgs,
 ): Promise<VoidSaleResult> =>
   invoke<VoidSaleResult>('void_sale', { args });
+
+// ── Terminal Management ───────────────────────────────────────────────
+
+export interface TerminalDto {
+  id: string;
+  name: string;
+  deviceId: string;
+  isActive: boolean;
+  lastSeenAt: string | null;
+  metadata: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RegisterTerminalArgs {
+  name: string;
+  deviceId: string;
+  terminalSecret?: string | null;
+  metadata?: string | null;
+}
+
+export interface UpdateTerminalArgs {
+  id: string;
+  name: string;
+  deviceId: string;
+  isActive: boolean;
+  metadata?: string | null;
+}
+
+export const listTerminals = (): Promise<TerminalDto[]> =>
+  invoke<TerminalDto[]>('list_terminals');
+
+export const getTerminal = (id: string): Promise<TerminalDto | null> =>
+  invoke<TerminalDto | null>('get_terminal', { id });
+
+export const registerTerminal = (
+  args: RegisterTerminalArgs,
+): Promise<{ id: string }> =>
+  invoke<{ id: string }>('register_terminal', { args });
+
+export const updateTerminal = (
+  args: UpdateTerminalArgs,
+): Promise<{ id: string }> =>
+  invoke<{ id: string }>('update_terminal', { args });
+
+export const pingTerminal = (
+  id: string,
+): Promise<void> => invoke<void>('ping_terminal', { id });
+
+export const deleteTerminal = (
+  id: string,
+): Promise<void> => invoke('delete_terminal', { id });
+
+// ── Offline Queue ────────────────────────────────────────────────────
+
+export interface OfflineQueueItemDto {
+  id: string;
+  action: string;
+  status: string;
+  retryCount: number;
+  lastError: string | null;
+  createdAt: string;
+  syncedAt: string | null;
+}
+
+export interface EnqueueOfflineArgs {
+  action: string;
+  payload: string;
+}
+
+export interface SyncResult {
+  synced: number;
+  failed: number;
+}
+
+export const enqueueOffline = (
+  args: EnqueueOfflineArgs,
+): Promise<OfflineQueueItemDto> =>
+  invoke<OfflineQueueItemDto>('enqueue_offline', { args });
+
+export const listPendingOffline = (): Promise<OfflineQueueItemDto[]> =>
+  invoke<OfflineQueueItemDto[]>('list_pending_offline');
+
+export const listAllOffline = (): Promise<OfflineQueueItemDto[]> =>
+  invoke<OfflineQueueItemDto[]>('list_all_offline');
+
+export const pendingOfflineCount = (): Promise<number> =>
+  invoke<number>('pending_offline_count');
+
+export const retryOfflineSync = (): Promise<SyncResult> =>
+  invoke<SyncResult>('retry_offline_sync');
+
+export const deleteOfflineItem = (
+  id: string,
+): Promise<void> => invoke('delete_offline_item', { args: { id } });
+
+// ── Cloud Sync ──────────────────────────────────────────────────────
+
+export interface SyncSettingsDto {
+  serverUrl: string | null;
+  hasApiKey: boolean;
+  enabled: boolean;
+}
+
+export interface UpdateSyncSettingsArgs {
+  serverUrl?: string | null;
+  apiKey?: string | null;
+  enabled: boolean;
+}
+
+export interface SyncAttemptResult {
+  synced: number;
+  failed: number;
+  error: string | null;
+}
+
+export const getSyncSettings = (): Promise<SyncSettingsDto> =>
+  invoke<SyncSettingsDto>('get_sync_settings');
+
+export const updateSyncSettings = (
+  args: UpdateSyncSettingsArgs,
+): Promise<void> => invoke<void>('update_sync_settings', { args });
+
+export const triggerSync = (): Promise<SyncAttemptResult> =>
+  invoke<SyncAttemptResult>('trigger_sync');
+
+export const pendingSyncCount = (): Promise<number> =>
+  invoke<number>('pending_sync_count');
+
+// ── Refunds ─────────────────────────────────────────────────────────
+
+export interface RefundLineArg {
+  saleLineId: string;
+  sku: string;
+  qty: number;
+  unitPriceMinor: number;
+  currency: string;
+  lineTotalMinor: number;
+}
+
+export interface ProcessRefundArgs {
+  saleId: string;
+  reason: string;
+  note?: string | null;
+  userId: string;
+  lines: RefundLineArg[];
+}
+
+export interface ProcessRefundResult {
+  refundId: string;
+  totalMinor: number;
+}
+
+export interface RefundDto {
+  id: string;
+  saleId: string;
+  total: Money;
+  reason: string;
+  note: string;
+  processedBy: string;
+  createdAt: string;
+  lines: RefundLineDto[];
+}
+
+export interface RefundLineDto {
+  id: string;
+  refundId: string;
+  saleLineId: string;
+  sku: string;
+  qty: number;
+  unitPrice: Money;
+  lineTotal: Money;
+}
+
+export const processRefund = (
+  args: ProcessRefundArgs,
+): Promise<ProcessRefundResult> =>
+  invoke<ProcessRefundResult>('process_refund', { args });
+
+export const listRefunds = (
+  saleId: string,
+): Promise<RefundDto[]> =>
+  invoke<RefundDto[]>('list_refunds', { saleId });

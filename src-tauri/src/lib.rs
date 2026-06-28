@@ -16,6 +16,8 @@ pub mod error;
 pub mod state;
 
 use tauri::Manager;
+use oz_core::db::Store;
+use oz_core::sync_client::{SyncConfig, sync_pending as sync_pending_items};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -30,6 +32,29 @@ pub fn run() {
         .setup(|app| {
             let state = AppState::new(app.handle())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            // Spawn the background sync daemon.
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+                loop {
+                    interval.tick().await;
+                    if let Some(state) = app_handle.try_state::<AppState>() {
+                        let db = state.db.lock().await;
+                        let store = Store::new(&db);
+                        match SyncConfig::from_settings(&store) {
+                            Ok(Some(config)) => {
+                                if let Err(e) = sync_pending_items(&store, &config) {
+                                    tracing::error!(error = %e, "sync cycle failed");
+                                }
+                            }
+                            Ok(None) => {}
+                            Err(e) => tracing::error!(error = %e, "failed to load sync config"),
+                        }
+                    }
+                }
+            });
+
             app.manage(state);
             Ok(())
         })
@@ -92,11 +117,36 @@ pub fn run() {
             commands::products::delete_product,
             commands::products::lookup_by_barcode,
             commands::products::adjust_stock,
+            commands::product_variants::list_product_variants,
+            commands::product_variants::get_product_variant,
+            commands::product_variants::create_product_variant,
+            commands::product_variants::update_product_variant,
+            commands::product_variants::delete_product_variant,
             commands::setup::get_setup_status,
             commands::tax::list_tax_rates,
             commands::tax::create_tax_rate,
             commands::tax::update_tax_rate,
             commands::tax::delete_tax_rate,
+            commands::tax::list_category_tax_rates,
+            commands::tax::set_category_tax_rates,
+            commands::terminals::list_terminals,
+            commands::terminals::get_terminal,
+            commands::terminals::register_terminal,
+            commands::terminals::update_terminal,
+            commands::terminals::ping_terminal,
+            commands::terminals::delete_terminal,
+            commands::offline::enqueue_offline,
+            commands::offline::list_pending_offline,
+            commands::offline::list_all_offline,
+            commands::offline::pending_offline_count,
+            commands::offline::retry_offline_sync,
+            commands::offline::delete_offline_item,
+            commands::sync::get_sync_settings,
+            commands::sync::update_sync_settings,
+            commands::sync::trigger_sync,
+            commands::sync::pending_sync_count,
+            commands::refunds::process_refund,
+            commands::refunds::list_refunds,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);

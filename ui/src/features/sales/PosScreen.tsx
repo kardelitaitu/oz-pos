@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Localized } from '@/components/Localized';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import { formatMoney, type LineId, type Product, type Sku } from '@/types/domain';
@@ -70,6 +71,8 @@ export default function PosScreen() {
     resetCart,
     setLines,
   } = usePosState();
+  const { session, logout } = useAuth();
+  const userId = session.user_id;
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
@@ -201,6 +204,17 @@ export default function PosScreen() {
     }
   }, [setLines, setDiscount]);
 
+  if (!session) {
+    return (
+      <div className="pos-screen">
+        <div className="pos-login-required">
+          <h2>Login Required</h2>
+          <p>Please log in to use the POS.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="pos-screen">
       {/* ── Left: Product lookup ─────────────────── */}
@@ -219,6 +233,15 @@ export default function PosScreen() {
               <span className="pos-cart-count">{lines.length}</span>
             )}
           </h2>
+          <button
+            type="button"
+            className="pos-cart-lock-btn"
+            onClick={logout}
+            aria-label="Lock terminal and log out"
+            title="Lock terminal"
+          >
+            Lock
+          </button>
         </div>
 
         {/* ── Cart lines ────────────────────────────── */}
@@ -390,10 +413,23 @@ export default function PosScreen() {
                   {formatMoney(total)}
                 </span>
               </div>
-            )}
-
-            {/* Action buttons row */}
+            )}              {/* Action buttons row */}
             <div className="pos-cart-actions-row">
+              {/* Clear cart button */}
+              <button
+                type="button"
+                className="pos-cart-clear-btn"
+                onClick={resetCart}
+                aria-label="Clear all items from cart"
+                title="Clear cart"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                Clear
+              </button>
+
               {/* Pay button */}
               <button
                 type="button"
@@ -452,6 +488,7 @@ export default function PosScreen() {
           total={total}
           discountPercent={discountPercent}
           discountLabel={discountLabel}
+          userId={userId}
           onComplete={handlePaymentComplete}
           onClose={() => setShowPayment(false)}
         />

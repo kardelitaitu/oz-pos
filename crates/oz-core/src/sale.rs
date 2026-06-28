@@ -187,6 +187,14 @@ impl Sale {
     ///
     /// `None` if the cart's total overflows `i64` (cart is corrupt).
     pub fn from_cart(cart: &Cart) -> Option<Self> {
+        Self::from_cart_with_user(cart, None)
+    }
+
+    /// Create a new sale from a [`Cart`], with an optional user_id.
+    ///
+    /// Like [`from_cart`] but also attaches the user_id of the cashier
+    /// who processed the sale.
+    pub fn from_cart_with_user(cart: &Cart, user_id: Option<String>) -> Option<Self> {
         let id = uuid::Uuid::new_v4().to_string();
         let total = cart.total()?;
         let currency = cart.currency();
@@ -219,6 +227,7 @@ impl Sale {
             currency,
             payment_method: None,
             tendered_minor: None,
+            user_id,
             created_at: now.clone(),
             updated_at: now,
             lines,

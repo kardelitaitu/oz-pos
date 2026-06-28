@@ -1,5 +1,5 @@
 .settings-page {
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-4);
   max-width: 600px;
 }
 
@@ -82,4 +82,10 @@
   display: flex;
   justify-content: flex-end;
   padding-top: var(--space-2);
+}
+
+.settings-hint {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  margin: 0;
 }

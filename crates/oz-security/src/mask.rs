@@ -86,7 +86,7 @@ pub fn is_valid_pan(pan: &str) -> bool {
         double = !double;
     }
 
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 /// Mask a cardholder name — show only the first and last letter of
@@ -97,7 +97,7 @@ pub fn is_valid_pan(pan: &str) -> bool {
 /// ```
 /// use oz_security::mask::mask_name;
 ///
-/// assert_eq!(mask_name("John A. Doe"), "J*** A. D**");
+/// assert_eq!(mask_name("John A. Doe"), "J**n A. D*e");
 /// ```
 pub fn mask_name(name: &str) -> String {
     name.split_whitespace()

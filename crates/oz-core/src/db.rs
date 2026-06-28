@@ -22,7 +22,9 @@ use rusqlite::{Connection, params};
 use uuid::Uuid;
 
 use crate::error::CoreError;
-use crate::{Category, Customer, Money, Product, Role, Sale, SaleLine, SaleStatus, Settings, Sku, User};
+use crate::offline::{OfflineQueueItem, OfflineQueueStatus};
+use crate::refund::{Refund, RefundLine};
+use crate::{Category, Customer, Money, Product, ProductVariant, Role, Sale, SaleLine, SaleStatus, Settings, Sku, Terminal, User};
 use crate::tax_rate::TaxRate;
 
 // ── Store ────────────────────────────────────────────────────────────
@@ -571,8 +573,8 @@ impl Store<'_> {
 
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
-                                discount_percent, discount_label, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                discount_percent, discount_label, user_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 sale.id,
                 sale.total.minor_units,
@@ -583,6 +585,7 @@ impl Store<'_> {
                 sale.tendered_minor,
                 sale.discount_percent,
                 sale.discount_label,
+                sale.user_id,
                 sale.created_at,
                 sale.updated_at,
             ],
@@ -639,7 +642,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
-                    created_at, updated_at
+                    user_id, created_at, updated_at
              FROM sales
              ORDER BY created_at DESC",
         )?;
@@ -661,6 +664,7 @@ impl Store<'_> {
                 tendered_minor: row.get("tendered_minor")?,
                 discount_percent: row.get::<_, Option<i64>>("discount_percent").unwrap_or(Some(0)).unwrap_or(0),
                 discount_label: row.get("discount_label")?,
+                user_id: row.get("user_id")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
                 lines: Vec::new(),
@@ -676,7 +680,7 @@ impl Store<'_> {
         let mut sale_stmt = self.conn.prepare(
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
-                    created_at, updated_at
+                    user_id, created_at, updated_at
              FROM sales WHERE id = ?1",
         )?;
 
@@ -698,6 +702,7 @@ impl Store<'_> {
                 tendered_minor: row.get("tendered_minor")?,
                 discount_percent: row.get::<_, Option<i64>>("discount_percent").unwrap_or(Some(0)).unwrap_or(0),
                 discount_label: row.get("discount_label")?,
+                user_id: row.get("user_id")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
                 lines: Vec::new(), // filled below
@@ -832,23 +837,36 @@ pub struct SalesByHourRow {
 /// Summary row for a held (parked) cart.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HeldCartRow {
+    /// Internal row id (UUID v4).
     pub id: String,
+    /// Human-readable label.
     pub label: String,
+    /// Number of line items.
     pub item_count: i64,
+    /// Cart total in minor units.
     pub total_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
 /// Full held cart data including the JSON cart_data blob.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HeldCartFull {
+    /// Internal row id (UUID v4).
     pub id: String,
+    /// Human-readable label.
     pub label: String,
+    /// JSON-serialized cart data (lines, discount, currency).
     pub cart_data: String,
+    /// Number of line items.
     pub item_count: i64,
+    /// Cart total in minor units.
     pub total_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
@@ -1360,7 +1378,7 @@ impl Store<'_> {
     /// List all tax rates, ordered by name.
     pub fn list_tax_rates(&self) -> Result<Vec<TaxRate>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, rate_bps, is_default, created_at, updated_at
+            "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
              FROM tax_rates ORDER BY name",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -1369,6 +1387,7 @@ impl Store<'_> {
                 name: row.get("name")?,
                 rate_bps: row.get("rate_bps")?,
                 is_default: row.get("is_default")?,
+                is_inclusive: row.get("is_inclusive")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
             })
@@ -1381,7 +1400,7 @@ impl Store<'_> {
     /// Returns `None` when no rate matches.
     pub fn get_tax_rate(&self, id: &str) -> Result<Option<TaxRate>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, rate_bps, is_default, created_at, updated_at
+            "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
              FROM tax_rates WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], |row| {
@@ -1390,6 +1409,7 @@ impl Store<'_> {
                 name: row.get("name")?,
                 rate_bps: row.get("rate_bps")?,
                 is_default: row.get("is_default")?,
+                is_inclusive: row.get("is_inclusive")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
             })
@@ -1413,6 +1433,7 @@ impl Store<'_> {
         name: &str,
         rate_bps: i64,
         is_default: bool,
+        is_inclusive: bool,
     ) -> Result<TaxRate, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -1436,9 +1457,9 @@ impl Store<'_> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         self.conn.execute(
-            "INSERT INTO tax_rates (id, name, rate_bps, is_default, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, name.trim(), rate_bps, is_default, now, now],
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, name.trim(), rate_bps, is_default, is_inclusive, now, now],
         )?;
 
         Ok(TaxRate {
@@ -1446,6 +1467,7 @@ impl Store<'_> {
             name: name.trim().to_owned(),
             rate_bps,
             is_default,
+            is_inclusive,
             created_at: now.clone(),
             updated_at: now,
         })
@@ -1463,6 +1485,7 @@ impl Store<'_> {
         name: &str,
         rate_bps: i64,
         is_default: bool,
+        is_inclusive: bool,
     ) -> Result<TaxRate, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -1485,9 +1508,9 @@ impl Store<'_> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let affected = self.conn.execute(
             "UPDATE tax_rates
-             SET name = ?1, rate_bps = ?2, is_default = ?3, updated_at = ?4
-             WHERE id = ?5",
-            params![name.trim(), rate_bps, is_default, now, id],
+             SET name = ?1, rate_bps = ?2, is_default = ?3, is_inclusive = ?4, updated_at = ?5
+             WHERE id = ?6",
+            params![name.trim(), rate_bps, is_default, is_inclusive, now, id],
         )?;
 
         if affected == 0 {
@@ -1502,6 +1525,7 @@ impl Store<'_> {
             name: name.trim().to_owned(),
             rate_bps,
             is_default,
+            is_inclusive,
             created_at: String::new(),
             updated_at: now,
         })
@@ -1553,6 +1577,32 @@ impl Store<'_> {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ids)
     }
+
+    /// Assign tax rates to a category (replaces any existing assignments).
+    pub fn set_category_tax_rates(&self, category_id: &str, tax_rate_ids: &[String]) -> Result<(), CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM category_taxes WHERE category_id = ?1", params![category_id])?;
+        for id in tax_rate_ids {
+            tx.execute(
+                "INSERT OR IGNORE INTO category_taxes (category_id, tax_rate_id) VALUES (?1, ?2)",
+                params![category_id, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Get all tax rate IDs assigned to a category, ordered by creation time.
+    pub fn get_category_tax_rates(&self, category_id: &str) -> Result<Vec<String>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tax_rate_id FROM category_taxes WHERE category_id = ?1 ORDER BY created_at",
+        )?;
+        let ids = stmt
+            .query_map(params![category_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────
@@ -1941,6 +1991,483 @@ impl Store<'_> {
             });
         }
         Ok(())
+    }
+
+    // ── Product Variants ─────────────────────────────────────────
+
+    /// List all variants for a given parent SKU, ordered by sort_order.
+    pub fn list_product_variants(&self, parent_sku: &str) -> Result<Vec<ProductVariant>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_sku, name, sku, price_minor, currency, barcode,
+                    sort_order, is_active, created_at, updated_at
+             FROM product_variants
+             WHERE parent_sku = ?1
+             ORDER BY sort_order ASC, name ASC"
+        )?;
+        let rows = stmt.query_map(params![parent_sku], Self::row_to_product_variant)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Get a single variant by its own SKU.
+    pub fn get_product_variant(&self, sku: &str) -> Result<Option<ProductVariant>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_sku, name, sku, price_minor, currency, barcode,
+                    sort_order, is_active, created_at, updated_at
+             FROM product_variants WHERE sku = ?1"
+        )?;
+        let result = stmt.query_row(params![sku], Self::row_to_product_variant);
+        match result {
+            Ok(v) => Ok(Some(v)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Create a new product variant.
+    pub fn create_product_variant(&self, variant: &ProductVariant) -> Result<(), CoreError> {
+        let (price_minor, currency_str) = match &variant.price {
+            Some(m) => (Some(m.minor_units), Some(std::str::from_utf8(&m.currency.0).unwrap_or("USD").to_owned())),
+            None => (None, None),
+        };
+
+        self.conn.execute(
+            "INSERT INTO product_variants (id, parent_sku, name, sku, price_minor, currency, barcode,
+                                           sort_order, is_active, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                variant.id, variant.parent_sku, variant.name, variant.sku,
+                price_minor, currency_str, variant.barcode,
+                variant.sort_order, variant.is_active as i64,
+                variant.created_at, variant.updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Update an existing product variant (matched by SKU).
+    pub fn update_product_variant(&self, variant: &ProductVariant) -> Result<(), CoreError> {
+        let (price_minor, currency_str) = match &variant.price {
+            Some(m) => (Some(m.minor_units), Some(std::str::from_utf8(&m.currency.0).unwrap_or("USD").to_owned())),
+            None => (None, None),
+        };
+
+        let affected = self.conn.execute(
+            "UPDATE product_variants SET name = ?1, price_minor = ?2, currency = ?3,
+                                          barcode = ?4, sort_order = ?5, is_active = ?6,
+                                          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE sku = ?7",
+            params![variant.name, price_minor, currency_str, variant.barcode,
+                    variant.sort_order, variant.is_active as i64, variant.sku],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound { entity: "product_variant", id: variant.sku.clone() });
+        }
+        Ok(())
+    }
+
+    /// Delete a product variant by its own SKU.
+    pub fn delete_product_variant(&self, sku: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "DELETE FROM product_variants WHERE sku = ?1",
+            params![sku],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound { entity: "product_variant", id: sku.to_owned() });
+        }
+        Ok(())
+    }
+
+    fn row_to_product_variant(row: &rusqlite::Row) -> rusqlite::Result<ProductVariant> {
+        let price_minor: Option<i64> = row.get("price_minor")?;
+        let currency_str: Option<String> = row.get("currency")?;
+        let price = match (price_minor, currency_str) {
+            (Some(minor), Some(cur)) => {
+                let c: Result<crate::Currency, _> = cur.parse();
+                c.ok().map(|currency| Money { minor_units: minor, currency })
+            }
+            _ => None,
+        };
+
+        Ok(ProductVariant {
+            id: row.get("id")?,
+            parent_sku: row.get("parent_sku")?,
+            name: row.get("name")?,
+            sku: row.get("sku")?,
+            price,
+            barcode: row.get("barcode")?,
+            sort_order: row.get("sort_order")?,
+            is_active: row.get::<_, i64>("is_active")? != 0,
+            created_at: row.get("created_at")?,
+            updated_at: row.get("updated_at")?,
+        })
+    }
+}
+
+// ── Terminal Management ────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// List all registered terminals.
+    pub fn list_terminals(&self) -> Result<Vec<Terminal>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, device_id, terminal_secret, is_active,
+                    last_seen_at, metadata, created_at, updated_at
+             FROM terminals
+             ORDER BY name ASC"
+        )?;
+        let rows = stmt.query_map([], Self::row_to_terminal)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Get a terminal by id.
+    pub fn get_terminal(&self, id: &str) -> Result<Option<Terminal>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, device_id, terminal_secret, is_active,
+                    last_seen_at, metadata, created_at, updated_at
+             FROM terminals WHERE id = ?1"
+        )?;
+        let result = stmt.query_row(params![id], Self::row_to_terminal);
+        match result {
+            Ok(t) => Ok(Some(t)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Get a terminal by device_id.
+    pub fn get_terminal_by_device_id(&self, device_id: &str) -> Result<Option<Terminal>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, device_id, terminal_secret, is_active,
+                    last_seen_at, metadata, created_at, updated_at
+             FROM terminals WHERE device_id = ?1"
+        )?;
+        let result = stmt.query_row(params![device_id], Self::row_to_terminal);
+        match result {
+            Ok(t) => Ok(Some(t)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Register a new terminal.
+    pub fn create_terminal(&self, terminal: &Terminal) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT INTO terminals (id, name, device_id, terminal_secret, is_active,
+                                    last_seen_at, metadata, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                terminal.id, terminal.name, terminal.device_id,
+                terminal.terminal_secret, terminal.is_active as i64,
+                terminal.last_seen_at, terminal.metadata,
+                terminal.created_at, terminal.updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Update an existing terminal.
+    pub fn update_terminal(&self, terminal: &Terminal) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE terminals SET name = ?1, device_id = ?2, terminal_secret = ?3,
+                                   is_active = ?4, last_seen_at = ?5, metadata = ?6,
+                                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?7",
+            params![
+                terminal.name, terminal.device_id, terminal.terminal_secret,
+                terminal.is_active as i64, terminal.last_seen_at, terminal.metadata,
+                terminal.id,
+            ],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound { entity: "terminal", id: terminal.id.clone() });
+        }
+        Ok(())
+    }
+
+    /// Update a terminal's last_seen_at timestamp.
+    pub fn ping_terminal(&self, id: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE terminals SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            params![id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound { entity: "terminal", id: id.to_owned() });
+        }
+        Ok(())
+    }
+
+    /// Delete a terminal by id.
+    pub fn delete_terminal(&self, id: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "DELETE FROM terminals WHERE id = ?1",
+            params![id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound { entity: "terminal", id: id.to_owned() });
+        }
+        Ok(())
+    }
+
+    fn row_to_terminal(row: &rusqlite::Row) -> rusqlite::Result<Terminal> {
+        Ok(Terminal {
+            id: row.get("id")?,
+            name: row.get("name")?,
+            device_id: row.get("device_id")?,
+            terminal_secret: row.get("terminal_secret")?,
+            is_active: row.get::<_, i64>("is_active")? != 0,
+            last_seen_at: row.get("last_seen_at")?,
+            metadata: row.get("metadata")?,
+            created_at: row.get("created_at")?,
+            updated_at: row.get("updated_at")?,
+        })
+    }
+}
+
+// ── Offline Queue ─────────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// Enqueue a transaction for later sync.
+    pub fn enqueue_offline(&self, action: &str, payload: &str) -> Result<OfflineQueueItem, CoreError> {
+        let item = OfflineQueueItem::new(action, payload);
+        self.conn.execute(
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                item.id, item.action, item.payload,
+                item.status.as_stored_str(), item.retry_count,
+                item.last_error, item.created_at, item.synced_at,
+            ],
+        )?;
+        Ok(item)
+    }
+
+    /// List all pending (unsynced) offline queue items, oldest first.
+    pub fn list_pending_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
+             FROM offline_queue
+             WHERE status = 'pending'
+             ORDER BY created_at ASC"
+        )?;
+        let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List all offline queue items.
+    pub fn list_all_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
+             FROM offline_queue
+             ORDER BY created_at DESC"
+        )?;
+        let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Mark an offline queue item as synced.
+    pub fn mark_offline_synced(&self, id: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE offline_queue SET status = 'synced', synced_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            params![id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound { entity: "offline_queue", id: id.to_owned() });
+        }
+        Ok(())
+    }
+
+    /// Mark an offline queue item as failed with an error message.
+    pub fn mark_offline_failed(&self, id: &str, error: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "UPDATE offline_queue SET status = 'failed', last_error = ?1, retry_count = retry_count + 1
+             WHERE id = ?2",
+            params![error, id],
+        )?;
+        Ok(())
+    }
+
+    /// Get the count of pending offline items.
+    pub fn pending_offline_count(&self) -> Result<i64, CoreError> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+            [],
+            |row| row.get(0),
+        ).map_err(Into::into)
+    }
+
+    /// Delete a processed offline queue item.
+    pub fn delete_offline_item(&self, id: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "DELETE FROM offline_queue WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    fn row_to_offline_queue_item(row: &rusqlite::Row) -> rusqlite::Result<OfflineQueueItem> {
+        let status_str: String = row.get("status")?;
+        Ok(OfflineQueueItem {
+            id: row.get("id")?,
+            action: row.get("action")?,
+            payload: row.get("payload")?,
+            status: OfflineQueueStatus::from_stored_str(&status_str).unwrap_or(OfflineQueueStatus::Pending),
+            retry_count: row.get("retry_count")?,
+            last_error: row.get("last_error")?,
+            created_at: row.get("created_at")?,
+            synced_at: row.get("synced_at")?,
+        })
+    }
+}
+
+// ── Refunds ───────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// Process a refund — persist refund + lines inside a transaction.
+    /// Does NOT modify the original sale's status or restore stock.
+    /// Stock restoration is handled separately via inventory adjustment.
+    pub fn create_refund(&self, refund: &Refund) -> Result<(), CoreError> {
+        let cur_str = std::str::from_utf8(&refund.total.currency.0)
+            .expect("currency bytes are valid UTF-8");
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        tx.execute(
+            "INSERT INTO refunds (id, sale_id, total_minor, currency, reason, note, processed_by, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                refund.id, refund.sale_id,
+                refund.total.minor_units, cur_str,
+                refund.reason, refund.note,
+                refund.processed_by, refund.created_at,
+            ],
+        )?;
+
+        for line in &refund.lines {
+            let line_cur = std::str::from_utf8(&line.unit_price.currency.0)
+                .expect("currency bytes are valid UTF-8");
+            tx.execute(
+                "INSERT INTO refund_lines (id, refund_id, sale_line_id, sku, qty, unit_minor, line_minor, currency, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    line.id, line.refund_id, line.sale_line_id,
+                    line.sku, line.qty,
+                    line.unit_price.minor_units, line.line_total.minor_units,
+                    line_cur, line.created_at,
+                ],
+            )?;
+        }
+
+        // Write audit log.
+        tx.execute(
+            "INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, outcome, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                uuid::Uuid::new_v4().to_string(),
+                refund.processed_by,
+                "sale.refund",
+                "sale",
+                refund.sale_id,
+                serde_json::json!({
+                    "refund_id": refund.id,
+                    "reason": refund.reason,
+                    "total_minor": refund.total.minor_units,
+                    "currency": cur_str,
+                    "line_count": refund.lines.len(),
+                }).to_string(),
+                "success",
+                refund.created_at,
+            ],
+        )?;
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// List all refunds for a given sale.
+    pub fn list_refunds_for_sale(&self, sale_id: &str) -> Result<Vec<Refund>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, sale_id, total_minor, currency, reason, note, processed_by, created_at
+             FROM refunds WHERE sale_id = ?1 ORDER BY created_at ASC"
+        )?;
+        let refunds: Vec<Refund> = stmt.query_map(params![sale_id], |row| {
+            let cur_str: String = row.get("currency")?;
+            Ok(Refund {
+                id: row.get("id")?,
+                sale_id: row.get("sale_id")?,
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency: cur_str.parse().expect("valid currency in DB"),
+                },
+                reason: row.get("reason")?,
+                note: row.get("note")?,
+                processed_by: row.get("processed_by")?,
+                created_at: row.get("created_at")?,
+                lines: Vec::new(),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
+
+        // Load lines for each refund.
+        let mut line_stmt = self.conn.prepare(
+            "SELECT id, refund_id, sale_line_id, sku, qty, unit_minor, line_minor, currency, created_at
+             FROM refund_lines WHERE refund_id = ?1 ORDER BY created_at ASC"
+        )?;
+        let mut result: Vec<Refund> = Vec::new();
+        for mut r in refunds {
+            let lines: Vec<RefundLine> = line_stmt.query_map(params![r.id], Self::row_to_refund_line)?
+                .collect::<Result<Vec<_>, _>>()?;
+            r.lines = lines;
+            result.push(r);
+        }
+
+        Ok(result)
+    }
+
+    /// Get total refunded amount for a sale (sum of all refunds).
+    pub fn total_refunded_for_sale(&self, sale_id: &str) -> Result<Money, CoreError> {
+        let row = self.conn.query_row(
+            "SELECT COALESCE(SUM(total_minor), 0) AS total, currency
+             FROM refunds WHERE sale_id = ?1
+             GROUP BY currency",
+            params![sale_id],
+            |row| {
+                let total: i64 = row.get("total")?;
+                let cur_str: String = row.get("currency")?;
+                Ok((total, cur_str))
+            },
+        );
+        match row {
+            Ok((total, cur_str)) => {
+                let currency: crate::Currency = cur_str.parse().expect("valid currency in DB");
+                Ok(Money { minor_units: total, currency })
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(CoreError::NotFound { entity: "refund", id: sale_id.to_owned() })
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn row_to_refund_line(row: &rusqlite::Row) -> rusqlite::Result<RefundLine> {
+        let cur_str: String = row.get("currency")?;
+        Ok(RefundLine {
+            id: row.get("id")?,
+            refund_id: row.get("refund_id")?,
+            sale_line_id: row.get("sale_line_id")?,
+            sku: row.get("sku")?,
+            qty: row.get("qty")?,
+            unit_price: Money {
+                minor_units: row.get("unit_minor")?,
+                currency: cur_str.parse().expect("valid currency in DB"),
+            },
+            line_total: Money {
+                minor_units: row.get("line_minor")?,
+                currency: cur_str.parse().expect("valid currency in DB"),
+            },
+            created_at: row.get("created_at")?,
+        })
     }
 }
 
@@ -3007,5 +3534,122 @@ mod tests {
         assert_eq!(p.category_name.as_deref(), Some("Food"));
         assert_eq!(p.stock_qty, Some(12));
         assert_eq!(p.product.barcode.as_deref(), Some("5901234123457"));
+    }
+
+    // ── Refund tests ─────────────────────────────────────────────
+
+    fn seed_completed_sale(conn: &Connection) {
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES
+                ('ref-p1', 'COFFEE', 'Coffee', 350, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+                ('ref-sale-1', 700, 'USD', 2, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+                ('ref-sl-1', 'ref-sale-1', 'COFFEE', 2, 350, 700, 'USD', 1);"
+        ).unwrap();
+    }
+
+    #[test]
+    fn create_refund_persists() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        let line = RefundLine::new(
+            "ref-sl-1", "COFFEE", 2,
+            price(350), price(700),
+        );
+        let refund = Refund::new(
+            "ref-sale-1",
+            price(700),
+            "customer changed mind",
+            "",
+            "user-1",
+            vec![line],
+        );
+
+        s.create_refund(&refund).unwrap();
+
+        let refunds = s.list_refunds_for_sale("ref-sale-1").unwrap();
+        assert_eq!(refunds.len(), 1);
+        assert_eq!(refunds[0].total.minor_units, 700);
+        assert_eq!(refunds[0].total.currency, usd());
+        assert_eq!(refunds[0].reason, "customer changed mind");
+        assert_eq!(refunds[0].processed_by, "user-1");
+        assert_eq!(refunds[0].lines.len(), 1);
+        assert_eq!(refunds[0].lines[0].sku, "COFFEE");
+        assert_eq!(refunds[0].lines[0].qty, 2);
+    }
+
+    #[test]
+    fn create_refund_nonexistent_sale_fails() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let line = RefundLine::new(
+            "sl-x", "COFFEE", 1, price(350), price(350),
+        );
+        let refund = Refund::new(
+            "nonexistent",
+            price(350),
+            "test", "", "user-1",
+            vec![line],
+        );
+
+        let result = s.create_refund(&refund);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn list_refunds_empty_for_sale() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        let refunds = s.list_refunds_for_sale("ref-sale-1").unwrap();
+        assert!(refunds.is_empty());
+    }
+
+    #[test]
+    fn total_refunded_for_sale_no_refunds() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        let result = s.total_refunded_for_sale("ref-sale-1");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CoreError::NotFound { .. }));
+    }
+
+    #[test]
+    fn multiple_partial_refunds() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        // First refund: 1 item.
+        let line1 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+        let r1 = Refund::new("ref-sale-1", price(350), "partial", "", "user-1", vec![line1]);
+        s.create_refund(&r1).unwrap();
+
+        // Second refund: 1 item.
+        let line2 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+        let r2 = Refund::new("ref-sale-1", price(350), "partial", "", "user-1", vec![line2]);
+        s.create_refund(&r2).unwrap();
+
+        let refunds = s.list_refunds_for_sale("ref-sale-1").unwrap();
+        assert_eq!(refunds.len(), 2);
+        assert_eq!(refunds[0].total.minor_units, 350);
+        assert_eq!(refunds[1].total.minor_units, 350);
+
+        // Verify audit log entries.
+        let audit_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM audit_log WHERE action = 'sale.refund' AND target_id = 'ref-sale-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(audit_count, 2);
     }
 }

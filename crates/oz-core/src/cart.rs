@@ -161,7 +161,6 @@ impl Cart {
     /// `percent` must be between 0 and 100 inclusive.
     /// `label` is an optional human-readable description.
     /// Pass `percent = 0` to clear the discount.
-    #[must_use]
     pub fn set_discount(&mut self, percent: i64, label: Option<String>) -> Result<(), CartError> {
         if !(0..=100).contains(&percent) {
             return Err(CartError::InvalidDiscount(percent));

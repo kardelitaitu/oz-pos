@@ -115,16 +115,14 @@ pub fn init_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
             if let Ok(entries) = std::fs::read_dir(&dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if name.starts_with(&prefix) {
-                            if let Ok(metadata) = std::fs::metadata(&path) {
-                                if let Ok(modified) = metadata.modified() {
-                                    let modified: chrono::DateTime<chrono::Utc> = modified.into();
-                                    if modified < cutoff {
-                                        let _ = std::fs::remove_file(&path);
-                                    }
-                                }
-                            }
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                        && name.starts_with(&prefix)
+                        && let Ok(metadata) = std::fs::metadata(&path)
+                        && let Ok(modified) = metadata.modified()
+                    {
+                        let modified: chrono::DateTime<chrono::Utc> = modified.into();
+                        if modified < cutoff {
+                            let _ = std::fs::remove_file(&path);
                         }
                     }
                 }
@@ -166,16 +164,14 @@ pub fn init_json_with_file(log_dir: &str, file_prefix: &str, retention_days: u32
             if let Ok(entries) = std::fs::read_dir(&dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if name.starts_with(&prefix) {
-                            if let Ok(metadata) = std::fs::metadata(&path) {
-                                if let Ok(modified) = metadata.modified() {
-                                    let modified: chrono::DateTime<chrono::Utc> = modified.into();
-                                    if modified < cutoff {
-                                        let _ = std::fs::remove_file(&path);
-                                    }
-                                }
-                            }
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                        && name.starts_with(&prefix)
+                        && let Ok(metadata) = std::fs::metadata(&path)
+                        && let Ok(modified) = metadata.modified()
+                    {
+                        let modified: chrono::DateTime<chrono::Utc> = modified.into();
+                        if modified < cutoff {
+                            let _ = std::fs::remove_file(&path);
                         }
                     }
                 }

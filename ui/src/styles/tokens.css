@@ -109,15 +109,18 @@
   --color-border-hover:    var(--neutral-300);
   --color-border-strong:   var(--neutral-400);
   --color-border-focus:    var(--primary-500);
+  --color-border-subtle:   var(--neutral-100);
 
   --color-success:         var(--success-500);
   --color-success-bg:      var(--primary-50);
+  --color-success-dim:     #86efac;
   --color-warning:         var(--warning-500);
   --color-warning-bg:      #fffbeb;
   --color-danger:          var(--danger-500);
   --color-danger-hover:    var(--danger-600);
   --color-danger-700:      var(--danger-700);
   --color-danger-bg:       var(--danger-50);
+  --color-danger-dim:      #fecaca;
   --color-danger-fg:       #ffffff;
   --color-info:            var(--info-500);
   --color-info-bg:         #eff6ff;
@@ -125,6 +128,14 @@
   --color-link:            var(--primary-600);
   --color-link-hover:      var(--primary-700);
   --color-link-visited:    #7c3aed;
+
+  --color-bg-primary:      #ffffff;
+  --color-bg-secondary:    var(--neutral-50);
+  --color-bg-hover:        var(--neutral-100);
+
+  --color-accent-dim:      rgba(16, 185, 129, 0.12);
+  --color-accent-alpha:    rgba(16, 185, 129, 0.2);
+  --color-accent-secondary: var(--primary-400);
 
   /* ── Spacing scale (rem) ───────────────────────── */
   --space-0:   0;

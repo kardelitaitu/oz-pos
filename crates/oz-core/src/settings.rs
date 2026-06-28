@@ -154,6 +154,14 @@ pub mod keys {
     pub const RECEIPT_FOOTER: &str = "receipt.footer";
     /// Paper width: `"standard"` (80 mm) or `"narrow"` (58 mm). Default `"standard"`.
     pub const RECEIPT_PAPER_WIDTH: &str = "receipt.paper_width";
+
+    // ── Cloud Sync settings ──────────────────────────────────────
+    /// Remote server URL for syncing offline data.
+    pub const SYNC_SERVER_URL: &str = "sync_server_url";
+    /// API key for server authentication.
+    pub const SYNC_API_KEY: &str = "sync_api_key";
+    /// Whether cloud sync is enabled. `"1"` or `"0"`. Default `"0"`.
+    pub const SYNC_ENABLED: &str = "sync_enabled";
 }
 
 impl Settings {
@@ -255,6 +263,38 @@ impl Settings {
     /// Set the paper width.
     pub fn set_receipt_paper_width(conn: &Connection, val: &str) -> Result<(), CoreError> {
         Self::set(conn, keys::RECEIPT_PAPER_WIDTH, val)
+    }
+
+    // ── Cloud Sync ───────────────────────────────────────────────
+
+    /// Get the configured sync server URL.
+    pub fn get_sync_server_url(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Self::get(conn, keys::SYNC_SERVER_URL)
+    }
+
+    /// Set the sync server URL.
+    pub fn set_sync_server_url(conn: &Connection, url: &str) -> Result<(), CoreError> {
+        Self::set(conn, keys::SYNC_SERVER_URL, url)
+    }
+
+    /// Get the sync API key.
+    pub fn get_sync_api_key(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Self::get(conn, keys::SYNC_API_KEY)
+    }
+
+    /// Set the sync API key.
+    pub fn set_sync_api_key(conn: &Connection, key: &str) -> Result<(), CoreError> {
+        Self::set(conn, keys::SYNC_API_KEY, key)
+    }
+
+    /// Check if sync is enabled.
+    pub fn is_sync_enabled(conn: &Connection) -> Result<bool, CoreError> {
+        Ok(Self::get(conn, keys::SYNC_ENABLED)?.as_deref() == Some("1"))
+    }
+
+    /// Enable or disable sync.
+    pub fn set_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), CoreError> {
+        Self::set(conn, keys::SYNC_ENABLED, if enabled { "1" } else { "0" })
     }
 }
 

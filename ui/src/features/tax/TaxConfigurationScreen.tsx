@@ -1,39 +1,73 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import {
   listTaxRates,
   createTaxRate,
   updateTaxRate,
   deleteTaxRate,
+  listCategories,
+  listCategoryTaxRates,
+  setCategoryTaxRates,
   type TaxRateDto,
+  type CategoryDto,
+  type CategoryTaxRateRow,
 } from '@/api/pos';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import './TaxConfigurationScreen.css';
 
-interface FormData {
+interface TaxFormData {
   name: string;
   rateBps: string;
   isDefault: boolean;
+  isInclusive: boolean;
 }
 
-const EMPTY_FORM: FormData = { name: '', rateBps: '', isDefault: false };
+const EMPTY_TAX_FORM: TaxFormData = {
+  name: '',
+  rateBps: '',
+  isDefault: false,
+  isInclusive: false,
+};
 
 export default function TaxConfigurationScreen() {
+  // ── Tax rates state ─────────────────────────────────────────────
   const [rates, setRates] = useState<TaxRateDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [form, setForm] = useState<TaxFormData>(EMPTY_TAX_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // ── Category tax rates state ────────────────────────────────────
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [catTaxRates, setCatTaxRates] = useState<Map<string, string[]>>(new Map());
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [selectedCatRateIds, setSelectedCatRateIds] = useState<string[]>([]);
+  const [savingCat, setSavingCat] = useState(false);
+
+  // ── Data loading ────────────────────────────────────────────────
+
+  const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const items = await listTaxRates();
+      const [items, cats, catTax] = await Promise.all([
+        listTaxRates(),
+        listCategories(),
+        listCategoryTaxRates(),
+      ]);
       setRates(items);
+      setCategories(cats);
+
+      const map = new Map<string, string[]>();
+      for (const row of catTax) {
+        map.set(row.category_id, row.tax_rate_ids);
+      }
+      setCatTaxRates(map);
     } catch {
       // IPC unavailable.
     } finally {
@@ -41,10 +75,12 @@ export default function TaxConfigurationScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // ── Tax rate CRUD ───────────────────────────────────────────────
 
   const openCreate = useCallback(() => {
-    setForm(EMPTY_FORM);
+    setForm(EMPTY_TAX_FORM);
     setEditingId(null);
     setShowModal(true);
   }, []);
@@ -54,6 +90,7 @@ export default function TaxConfigurationScreen() {
       name: r.name,
       rateBps: String(r.rate_bps),
       isDefault: r.is_default,
+      isInclusive: r.is_inclusive,
     });
     setEditingId(r.id);
     setShowModal(true);
@@ -71,33 +108,73 @@ export default function TaxConfigurationScreen() {
           name: form.name,
           rateBps,
           isDefault: form.isDefault,
+          isInclusive: form.isInclusive,
         });
       } else {
         await createTaxRate({
           name: form.name,
           rateBps,
           isDefault: form.isDefault,
+          isInclusive: form.isInclusive,
         });
       }
       setShowModal(false);
-      await load();
+      await loadAll();
     } catch {
       // Error handling.
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, load]);
+  }, [form, editingId, loadAll]);
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
     try {
       await deleteTaxRate(id);
       setDeleting(null);
-      await load();
+      await loadAll();
     } catch {
       setDeleting(null);
     }
-  }, [load]);
+  }, [loadAll]);
+
+  // ── Category tax rates ──────────────────────────────────────────
+
+  const openCatEdit = useCallback((cat: CategoryDto) => {
+    setEditingCatId(cat.id);
+    setEditingCatName(cat.name);
+    setSelectedCatRateIds(catTaxRates.get(cat.id) ?? []);
+    setShowCatModal(true);
+  }, [catTaxRates]);
+
+  const handleSaveCat = useCallback(async () => {
+    if (!editingCatId) return;
+    setSavingCat(true);
+    try {
+      await setCategoryTaxRates({
+        categoryId: editingCatId,
+        taxRateIds: selectedCatRateIds,
+      });
+      setShowCatModal(false);
+      await loadAll();
+    } catch {
+      // Error handling.
+    } finally {
+      setSavingCat(false);
+    }
+  }, [editingCatId, selectedCatRateIds, loadAll]);
+
+  const toggleCatRate = useCallback((rateId: string) => {
+    setSelectedCatRateIds((prev) =>
+      prev.includes(rateId)
+        ? prev.filter((id) => id !== rateId)
+        : [...prev, rateId],
+    );
+  }, []);
+
+  // ── Refs for focus management ───────────────────────────────────
+
+  const taxNameInputRef = useFocusOnShow(showModal);
 
   return (
     <div className="tax-config">
@@ -114,71 +191,154 @@ export default function TaxConfigurationScreen() {
         <Localized id="tax-config-loading">
           <p className="tax-config-loading">Loading tax rates&hellip;</p>
         </Localized>
-      ) : rates.length === 0 ? (
-        <Card shadow="sm">
-          <div className="tax-config-empty">
-            <Localized id="tax-config-empty">
-              <p>No tax rates configured</p>
-            </Localized>
-            <Localized id="tax-config-add">
-              <Button variant="secondary" onClick={openCreate}>Add Tax Rate</Button>
-            </Localized>
-          </div>
-        </Card>
       ) : (
-        <div className="tax-config-table-wrap">
-          <table className="tax-config-table" aria-label="Tax rates">
-            <thead>
-              <tr>
-                <Localized id="tax-config-col-name"><th>Name</th></Localized>
-                <Localized id="tax-config-col-rate"><th>Rate (%)</th></Localized>
-                <th>Default</th>
-                <th aria-label="Actions"> </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rates.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    {r.name}
-                    {r.is_default && (
-                      <Badge variant="info" size="sm" style={{ marginLeft: 'var(--space-2)' }}>
-                        Default
-                      </Badge>
-                    )}
-                  </td>
-                  <td>{r.display_rate}</td>
-                  <td>{r.is_default ? 'Yes' : '\u2014'}</td>
-                  <td className="tax-config-cell-actions">
-                    <button
-                      type="button"
-                      className="tax-config-action-btn"
-                      onClick={() => openEdit(r)}
-                      aria-label={`Edit ${r.name}`}
-                    >
-                      <Localized id="tax-config-edit">
-                        <span>Edit</span>
-                      </Localized>
-                    </button>
-                    <button
-                      type="button"
-                      className="tax-config-action-btn tax-config-action-btn--danger"
-                      onClick={() => confirmDelete(r.id)}
-                      disabled={deleting === r.id}
-                      aria-label={`Delete ${r.name}`}
-                    >
-                      <Localized id="tax-config-btn-delete">
-                        <span>Delete</span>
-                      </Localized>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* ── Tax Rates Table ────────────────────────────────────── */}
+          {rates.length === 0 ? (
+            <Card shadow="sm">
+              <div className="tax-config-empty">
+                <Localized id="tax-config-empty">
+                  <p>No tax rates configured</p>
+                </Localized>
+                <Localized id="tax-config-add">
+                  <Button variant="secondary" onClick={openCreate}>Add Tax Rate</Button>
+                </Localized>
+              </div>
+            </Card>
+          ) : (
+            <div className="tax-config-table-wrap">
+              <table className="tax-config-table" aria-label="Tax rates">
+                <thead>
+                  <tr>
+                    <Localized id="tax-config-col-name"><th>Name</th></Localized>
+                    <Localized id="tax-config-col-rate"><th>Rate (%)</th></Localized>
+                    <Localized id="tax-config-col-type"><th>Type</th></Localized>
+                    <th>Default</th>
+                    <th aria-label="Actions"> </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rates.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        {r.name}
+                        {r.is_default && (
+                          <Badge variant="info" size="sm" style={{ marginLeft: 'var(--space-2)' }}>
+                            Default
+                          </Badge>
+                        )}
+                      </td>
+                      <td>{r.display_rate}</td>
+                      <td>
+                        <span className={`tax-config-type-badge ${r.is_inclusive ? 'tax-config-type--inclusive' : 'tax-config-type--exclusive'}`}>
+                          {r.is_inclusive ? 'Inclusive' : 'Exclusive'}
+                        </span>
+                      </td>
+                      <td>{r.is_default ? 'Yes' : '\u2014'}</td>
+                      <td className="tax-config-cell-actions">
+                        <button
+                          type="button"
+                          className="tax-config-action-btn"
+                          onClick={() => openEdit(r)}
+                          aria-label={`Edit ${r.name}`}
+                        >
+                          <Localized id="tax-config-edit">
+                            <span>Edit</span>
+                          </Localized>
+                        </button>
+                        <button
+                          type="button"
+                          className="tax-config-action-btn tax-config-action-btn--danger"
+                          onClick={() => confirmDelete(r.id)}
+                          disabled={deleting === r.id}
+                          aria-label={`Delete ${r.name}`}
+                        >
+                          <Localized id="tax-config-btn-delete">
+                            <span>Delete</span>
+                          </Localized>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── Category Tax Rates Section ──────────────────────────── */}
+          <div className="tax-config-section">
+            <h2 className="tax-config-section-title">Category Tax Rates</h2>
+            <p className="tax-config-section-desc">
+              Assign default tax rates to product categories. Products inherit their
+              category&rsquo;s tax rates unless overridden at the product level.
+            </p>
+
+            {categories.length === 0 ? (
+              <p className="tax-config-loading">No categories available.</p>
+            ) : (
+              <div className="tax-config-table-wrap">
+                <table className="tax-config-table" aria-label="Category tax rates">
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Assigned Tax Rates</th>
+                      <th aria-label="Actions"> </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map((cat) => {
+                      const assignedIds = catTaxRates.get(cat.id) ?? [];
+                      const assignedNames = assignedIds
+                        .map((id) => rates.find((r) => r.id === id))
+                        .filter(Boolean)
+                        .map((r) => r!.name);
+                      return (
+                        <tr key={cat.id}>
+                          <td>
+                            <span className="tax-config-cat-name">
+                              <span
+                                className="tax-config-cat-swatch"
+                                style={{ background: cat.colour }}
+                                aria-hidden="true"
+                              />
+                              {cat.name}
+                            </span>
+                          </td>
+                          <td>
+                            {assignedNames.length > 0 ? (
+                              <span className="tax-config-cat-badges">
+                                {assignedNames.map((n) => (
+                                  <Badge key={n} variant="neutral" size="sm">{n}</Badge>
+                                ))}
+                              </span>
+                            ) : (
+                              <span className="tax-config-muted">No rates assigned</span>
+                            )}
+                          </td>
+                          <td className="tax-config-cell-actions">
+                            <button
+                              type="button"
+                              className="tax-config-action-btn"
+                              onClick={() => openCatEdit(cat)}
+                              aria-label={`Edit tax rates for ${cat.name}`}
+                            >
+                              <Localized id="tax-config-edit">
+                                <span>Edit</span>
+                              </Localized>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
+      {/* ── Tax Rate Form Modal ──────────────────────────────────── */}
       {showModal && (
         <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit tax rate' : 'Add tax rate'}>
           <div className="tax-config-modal">
@@ -197,7 +357,7 @@ export default function TaxConfigurationScreen() {
             </div>
 
             <div className="tax-config-modal-body">
-              <label className="tax-config-field" htmlFor="tax-field-name" aria-label="Tax name">
+              <label className="tax-config-field" htmlFor="tax-field-name">
                 <Localized id="tax-config-field-name">
                   <span className="tax-config-label">Tax Name</span>
                 </Localized>
@@ -208,10 +368,11 @@ export default function TaxConfigurationScreen() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. Sales Tax"
+                  ref={taxNameInputRef}
                 />
               </label>
 
-              <label className="tax-config-field" htmlFor="tax-field-rate" aria-label="Rate">
+              <label className="tax-config-field" htmlFor="tax-field-rate">
                 <Localized id="tax-config-field-rate">
                   <span className="tax-config-label">Rate (%)</span>
                 </Localized>
@@ -226,6 +387,33 @@ export default function TaxConfigurationScreen() {
                 />
                 <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
               </label>
+
+              {/* Inclusive / Exclusive toggle */}
+              <div className="tax-config-field">
+                <span className="tax-config-label">Tax Type</span>
+                <div className="tax-config-toggle-group" role="radiogroup" aria-label="Tax type">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={!form.isInclusive}
+                    className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
+                    onClick={() => setForm({ ...form, isInclusive: false })}
+                  >
+                    Exclusive
+                    <span className="tax-config-toggle-desc">Added at checkout</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={form.isInclusive}
+                    className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
+                    onClick={() => setForm({ ...form, isInclusive: true })}
+                  >
+                    Inclusive
+                    <span className="tax-config-toggle-desc">Included in price</span>
+                  </button>
+                </div>
+              </div>
 
               <label className="tax-config-checkbox">
                 <input
@@ -255,6 +443,90 @@ export default function TaxConfigurationScreen() {
           </div>
         </div>
       )}
+
+      {/* ── Category Tax Rates Modal ─────────────────────────────── */}
+      {showCatModal && (
+        <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={`Tax rates for ${editingCatName}`}>
+          <div className="tax-config-modal">
+            <div className="tax-config-modal-header">
+              <h2>Tax Rates &mdash; {editingCatName}</h2>
+              <button
+                type="button"
+                className="tax-config-modal-close"
+                onClick={() => setShowCatModal(false)}
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="tax-config-modal-body">
+              <p className="tax-config-section-desc">
+                Select the tax rates that apply to all products in this category.
+              </p>
+
+              {rates.length === 0 ? (
+                <p className="tax-config-loading">
+                  No tax rates available. Create one first.
+                </p>
+              ) : (
+                <div className="tax-config-cat-rate-list">
+                  {rates.map((r) => {
+                    const checked = selectedCatRateIds.includes(r.id);
+                    return (
+                      <label
+                        key={r.id}
+                        className={`tax-config-cat-rate-item ${checked ? 'tax-config-cat-rate-item--checked' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleCatRate(r.id)}
+                        />
+                        <div className="tax-config-cat-rate-info">
+                          <span className="tax-config-cat-rate-name">{r.name}</span>
+                          <span className="tax-config-cat-rate-meta">
+                            {r.display_rate}
+                            {' \u00b7 '}
+                            {r.is_inclusive ? 'Inclusive' : 'Exclusive'}
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="tax-config-modal-actions">
+              <Localized id="tax-config-btn-cancel">
+                <Button variant="ghost" onClick={() => setShowCatModal(false)} disabled={savingCat}>Cancel</Button>
+              </Localized>
+              <Button
+                variant="primary"
+                loading={savingCat}
+                onClick={handleSaveCat}
+              >
+                <Localized id="tax-config-btn-save">
+                  <span>Save</span>
+                </Localized>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// ── Focus-on-show hook ──────────────────────────────────────────────
+
+function useFocusOnShow(show: boolean) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (show && ref.current) {
+      ref.current.focus();
+    }
+  }, [show]);
+  return ref;
 }

@@ -55,6 +55,7 @@ export default function CategoryManagementScreen() {
   const [newColour, setNewColour] = useState(randomColour());
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -97,17 +98,19 @@ export default function CategoryManagementScreen() {
     }
   }, [newName, newColour, load]);
 
-  const confirmDelete = useCallback(async (id: string) => {
-    setDeleting(id);
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(deleteTarget.id);
+    setDeleteTarget(null);
     try {
-      await deleteCategory(id);
+      await deleteCategory(deleteTarget.id);
       await load();
     } catch (err) {
       console.error('Failed to delete category:', err);
     } finally {
       setDeleting(null);
     }
-  }, [load]);
+  }, [deleteTarget, load]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -157,7 +160,7 @@ export default function CategoryManagementScreen() {
                 <button
                   type="button"
                   className="cat-mgmt-delete-btn"
-                  onClick={() => confirmDelete(cat.id)}
+                  onClick={() => setDeleteTarget({ id: cat.id, name: cat.name })}
                   disabled={deleting === cat.id}
                   aria-label={`Delete category ${cat.name}`}
                 >
@@ -166,6 +169,43 @@ export default function CategoryManagementScreen() {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* ── Delete confirmation modal ──────────────────────── */}
+      {deleteTarget && (
+        <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete category">
+          <div className="cat-mgmt-modal">
+            <div className="cat-mgmt-modal-header">
+              <h2 className="cat-mgmt-modal-title">Delete &quot;{deleteTarget.name}&quot;?</h2>
+              <button
+                type="button"
+                className="cat-mgmt-modal-close"
+                onClick={() => setDeleteTarget(null)}
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="cat-mgmt-modal-body">
+              <p className="cat-mgmt-delete-warning">
+                Are you sure you want to delete this category? This action cannot be undone.
+                Products assigned to this category will lose their category association.
+              </p>
+            </div>
+            <div className="cat-mgmt-modal-actions">
+              <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting !== null}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleting !== null}
+                onClick={confirmDelete}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

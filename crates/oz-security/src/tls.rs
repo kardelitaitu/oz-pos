@@ -70,14 +70,12 @@ impl TlsConfig {
         }
 
         // Verify paths exist.
-        for opt in [&self.cert_path, &self.key_path, &self.ca_path] {
-            if let Some(path) = opt {
-                if !path.exists() {
-                    return Err(SecurityError::KeyUnavailable(format!(
-                        "TLS file not found: {}",
-                        path.display()
-                    )));
-                }
+        for path in self.cert_path.iter().chain(self.key_path.iter()).chain(self.ca_path.iter()) {
+            if !path.exists() {
+                return Err(SecurityError::KeyUnavailable(format!(
+                    "TLS file not found: {}",
+                    path.display()
+                )));
             }
         }
 
@@ -198,17 +196,26 @@ mod tests {
 
     #[test]
     fn tls_config_builder_with_paths() {
+        let dir = std::env::temp_dir();
+        let cert_path = dir.join("oz-pos-test-cert.pem");
+        let key_path = dir.join("oz-pos-test-key.pem");
+        let ca_path = dir.join("oz-pos-test-ca.pem");
+        fs::write(&cert_path, b"cert").unwrap();
+        fs::write(&key_path, b"key").unwrap();
+        fs::write(&ca_path, b"ca").unwrap();
+
         let config = TlsConfig::builder()
-            .cert_path("/tmp/test-cert.pem")
-            .key_path("/tmp/test-key.pem")
-            .ca_path("/tmp/test-ca.pem")
+            .cert_path(cert_path.to_str().unwrap())
+            .key_path(key_path.to_str().unwrap())
+            .ca_path(ca_path.to_str().unwrap())
             .insecure_skip_verify(true)
             .build()
             .unwrap();
-        assert_eq!(
-            config.cert_path.unwrap(),
-            PathBuf::from("/tmp/test-cert.pem")
-        );
+        assert_eq!(config.cert_path.unwrap(), cert_path);
+
+        fs::remove_file(&cert_path).ok();
+        fs::remove_file(&key_path).ok();
+        fs::remove_file(&ca_path).ok();
     }
 
     #[test]
