@@ -24,6 +24,7 @@ pub mod inventory;
 pub mod migrations;
 pub mod money;
 pub mod product;
+pub mod sale;
 pub mod settings;
 pub mod sku;
 
@@ -34,5 +35,6 @@ pub use features::{Feature, FeatureRegistry};
 pub use inventory::Inventory;
 pub use money::{Currency, Money};
 pub use product::Product;
+pub use sale::{InvalidTransition, Sale, SaleLine, SaleStatus};
 pub use settings::Settings;
 pub use sku::{LineId, Sku};
