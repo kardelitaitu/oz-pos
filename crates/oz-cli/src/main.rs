@@ -53,8 +53,32 @@ enum Command {
         /// Report kind (e.g. `daily-summary`, `sales-by-hour`).
         kind: String,
     },
+    /// Manage inventory (get, adjust).
+    Inventory(InventoryArgs),
     /// Manage sales (list, get, update-status).
     Sale(SaleArgs),
+}
+
+#[derive(Debug, Args)]
+struct InventoryArgs {
+    #[command(subcommand)]
+    action: InventoryAction,
+}
+
+#[derive(Debug, Subcommand)]
+enum InventoryAction {
+    /// Show current stock for a product by SKU.
+    Get {
+        /// Product SKU.
+        sku: String,
+    },
+    /// Adjust stock for a product by SKU (e.g. +10 to restock, -3 to sell).
+    Adjust {
+        /// Product SKU.
+        sku: String,
+        /// Signed delta (e.g. +10 or -3).
+        delta: i64,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -154,6 +178,7 @@ fn main() -> Result<()> {
         Some(Command::Product(args)) => run_product(&conn, args),
         Some(Command::Backup { output }) => run_backup(&conn, &output),
         Some(Command::Export { kind }) => run_export(&conn, &kind),
+        Some(Command::Inventory(args)) => run_inventory(&conn, args),
         Some(Command::Sale(args)) => run_sale(&conn, args),
         None => {
             let mut cmd = Cli::command();
@@ -259,6 +284,60 @@ fn run_export(conn: &Connection, kind: &str) -> Result<()> {
         other => {
             eprintln!("unknown export kind '{other}'");
             eprintln!("available kinds: daily-summary, sales-by-hour");
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+// ── Inventory commands ──────────────────────────────────────────────────
+
+fn run_inventory(conn: &Connection, args: InventoryArgs) -> Result<()> {
+    let store = Store::new(conn);
+
+    match args.action {
+        InventoryAction::Get { sku } => run_inventory_get(&store, &sku),
+        InventoryAction::Adjust { sku, delta } => run_inventory_adjust(&store, &sku, delta),
+    }
+}
+
+fn run_inventory_get(store: &Store<'_>, sku: &str) -> Result<()> {
+    let product = store.get_product(sku).context("looking up product")?;
+
+    match product {
+        Some(p) => {
+            let qty = p.stock_qty.unwrap_or(0);
+            println!("SKU:    {}", p.product.sku.as_str());
+            println!("Name:   {}", p.product.name);
+            println!("Stock:  {qty}");
+        }
+        None => {
+            println!("Product not found: {sku}");
+        }
+    }
+
+    Ok(())
+}
+
+fn run_inventory_adjust(store: &Store<'_>, sku: &str, delta: i64) -> Result<()> {
+    match store.adjust_stock(sku, delta) {
+        Ok(new_qty) => {
+            let verb = if delta >= 0 { "restocked" } else { "sold" };
+            println!(
+                "Stock {verb} for {sku} (delta: {delta:+}) — new qty: {new_qty}"
+            );
+        }
+        Err(CoreError::NotFound { .. }) => {
+            eprintln!("Product not found: {sku}");
+            std::process::exit(1);
+        }
+        Err(CoreError::Validation { message, .. }) => {
+            eprintln!("Validation error: {message}");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
             std::process::exit(1);
         }
     }
