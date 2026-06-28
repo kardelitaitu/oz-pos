@@ -35,7 +35,7 @@ use std::sync::Arc;
 use axum::{
     Router,
     middleware,
-    routing::{get, post},
+    routing::{get, patch, post},
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
@@ -78,6 +78,7 @@ pub fn router(state: AppState) -> Router {
     let protected = Router::new()
         .route("/api/v1/products", get(routes::products::list_products).post(routes::products::create_product))
         .route("/api/v1/products/{sku}", get(routes::products::get_product))
+        .route("/api/v1/products/{sku}/stock", patch(routes::products::patch_stock))
         .route("/api/v1/categories", get(routes::categories::list_categories))
         .layer(middleware::from_fn(auth::auth_middleware));
 
@@ -586,6 +587,87 @@ mod tests {
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // ── Stock adjustment endpoint ───────────────────────────────
+
+    fn auth_patch_json(uri: &str, token: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .method("PATCH")
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn patch_stock_sell_reduces_qty() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"delta":-10}"#;
+        let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["sku"], "DRINK-001");
+        assert_eq!(json["previous_qty"], 50);
+        assert_eq!(json["new_qty"], 40);
+    }
+
+    #[tokio::test]
+    async fn patch_stock_restock_increases_qty() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"delta":25}"#;
+        let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["previous_qty"], 50);
+        assert_eq!(json["new_qty"], 75);
+    }
+
+    #[tokio::test]
+    async fn patch_stock_oversell_returns_422() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"delta":-100}"#;
+        let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn patch_stock_unknown_product_returns_404() {
+        let token = auth::create_token("test", Some(1));
+        let body = r#"{"delta":10}"#;
+        let req = auth_patch_json("/api/v1/products/NOPE-999/stock", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn patch_stock_no_inventory_row_treats_as_zero() {
+        let token = auth::create_token("test", Some(1));
+        // DRINK-002 exists but has no inventory row.
+        let body = r#"{"delta":30}"#;
+        let req = auth_patch_json("/api/v1/products/DRINK-002/stock", &token.token, body);
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["previous_qty"], 0);
+        assert_eq!(json["new_qty"], 30);
+    }
+
+    #[tokio::test]
+    async fn patch_stock_requires_auth() {
+        let body = r#"{"delta":10}"#;
+        let req = Request::builder()
+            .method("PATCH")
+            .uri("/api/v1/products/DRINK-001/stock")
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap();
+        let resp = test_app_seeded().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     // ── Category endpoints ───────────────────────────────────────

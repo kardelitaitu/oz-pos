@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn prune_stale_features_removes_old_flags() {
         let conn = fresh();
-        let mut reg = FeatureRegistry::simple_retail();
+        let reg = FeatureRegistry::simple_retail();
         let rows = reg.to_settings_rows();
 
         // Write feature rows directly, including a stale one.

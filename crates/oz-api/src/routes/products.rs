@@ -232,3 +232,97 @@ pub async fn get_product(
         Err(e) => panic!("get_product query failed: {e}"),
     }
 }
+
+/// Request body for adjusting stock.
+#[derive(Deserialize)]
+pub struct PatchStockRequest {
+    /// Positive to restock, negative to sell.
+    pub delta: i64,
+}
+
+/// Response after a successful stock adjustment.
+#[derive(Serialize)]
+pub struct PatchStockResponse {
+    pub sku: String,
+    pub previous_qty: i64,
+    pub new_qty: i64,
+}
+
+/// Adjust stock for a product by SKU.
+///
+/// Accepts `{ "delta": +/-N }`. Reads the current inventory row (or
+/// treats missing rows as qty 0), checks the new qty would be ≥ 0,
+/// and updates inside a single transaction. Returns 200 with previous
+/// and new quantities.
+///
+/// Status codes:
+/// - 200 — stock adjusted successfully
+/// - 404 — product not found
+/// - 422 — adjustment would cause negative stock
+pub async fn patch_stock(
+    State(state): State<AppState>,
+    Path(sku): Path<String>,
+    Json(body): Json<PatchStockRequest>,
+) -> impl IntoResponse {
+    let db = state.db.lock().await;
+
+    // Look up the product id.
+    let product_id: String = match db.query_row(
+        "SELECT id FROM products WHERE sku = ?1",
+        rusqlite::params![sku],
+        |row| row.get(0),
+    ) {
+        Ok(id) => id,
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "product not found"}))).into_response();
+        }
+        Err(e) => panic!("product lookup failed: {e}"),
+    };
+
+    // Read current stock (default 0 if no inventory row).
+    let previous_qty: i64 = match db.query_row(
+        "SELECT qty FROM inventory WHERE product_id = ?1",
+        rusqlite::params![product_id],
+        |row| row.get(0),
+    ) {
+        Ok(q) => q,
+        Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+        Err(e) => panic!("inventory read failed: {e}"),
+    };
+
+    // Check the adjustment is valid.
+    let new_qty = match previous_qty.checked_add(body.delta) {
+        Some(q) if q >= 0 => q,
+        _ => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "adjustment would cause negative stock",
+                    "previous_qty": previous_qty,
+                    "delta": body.delta,
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+    // Update inside a transaction.
+    let tx = db.unchecked_transaction().expect("begin transaction");
+    tx.execute(
+        "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
+                                                updated_at = excluded.updated_at",
+        rusqlite::params![product_id, new_qty, now],
+    )
+    .expect("update inventory");
+    tx.commit().expect("commit stock adjustment");
+
+    let response = PatchStockResponse {
+        sku,
+        previous_qty,
+        new_qty,
+    };
+    Json(response).into_response()
+}
