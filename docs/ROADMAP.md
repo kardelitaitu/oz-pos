@@ -36,11 +36,11 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] GitHub repository init, branch policy (`feat/`, `fix/`, `docs/`, `chore/`)
 
 ### Feature Flag System
-- [ ] `Feature` enum declared in `oz-core` (all 32 toggleable features)
-- [ ] `is_enabled()`, `enable()`, `disable()` helpers in `oz-core`
-- [ ] Feature flags stored in `settings` table as `feature.<name>` rows
-- [ ] Feature dependency resolution (`dependencies()` fn + auto-enable + notification)
-- [ ] Store presets: **Simple Retail**, **Restaurant**, **Full Store**, **Custom**
+- [x] `Feature` enum declared in `oz-core` (all 32 toggleable features)
+- [x] `is_enabled()`, `enable()`, `disable()` helpers in `oz-core`
+- [x] Feature flags stored in `settings` table as `feature.<name>` rows
+- [x] Feature dependency resolution (`dependencies()` fn + auto-enable + notification)
+- [x] Store presets: **Simple Retail**, **Restaurant**, **Full Store**, **Custom**
 
 ### Setup Wizard (UI — First Run)
 - [ ] 8-step Setup Wizard UI (Tauri, React/TS)
@@ -56,16 +56,21 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] Wizard skipped on subsequent launches (flags already set)
 
 ### oz-core — Data Models & Engine
-- [ ] SQLite schema: `product`, `category`, `order`, `order_lines`
-- [ ] SQLite schema: `currency`, `exchange_rate`, `settings`
+- [x] SQLite schema: `product`, `category`, `order`, `order_lines`
+- [x] SQLite schema: `settings`
+- [ ] SQLite schema: `currency`, `exchange_rate`
 - [ ] SQLite schema: `customers`, `users`, `roles`
 - [x] `Money` struct (integer minor units + `Currency` reference)
 - [x] `Currency` struct + ISO-4217 validation
 - [ ] ISO-4217 seed data (gated behind `oz-cli init-db`)
-- [ ] Transaction state machine: `Pending → Active → Completed | Voided`
-- [ ] ACID write wrapper: all writes inside explicit transactions
-- [ ] `updated_at` auto-update triggers on all mutable tables
-- [ ] Auto-increment primary keys (`product_id`, `order_id`, etc.)
+- [x] `Product` domain type with builder pattern (new, with_category, with_barcode)
+- [x] `Category` domain type (id, name, colour)
+- [x] `Inventory` domain type (product_id, qty, updated_at) + is_in_stock, adjust_qty
+- [x] `Sale`/`SaleLine` domain types with state machine `Pending → Active → Completed | Voided`
+- [x] `Settings` store: typed key-value access + feature persistence
+- [x] `Store<'a>` database facade: typed CRUD for Product, Category, Inventory, Settings
+- [x] ACID write wrapper: all multi-statement writes inside explicit transactions
+- [x] `updated_at` auto-update via SQLite `DEFAULT (strftime(...))` on mutable tables
 
 ### oz-hal — Hardware
 - [ ] `Device`, `BarcodeScanner`, `Printer`, `NfcReader` trait definitions
@@ -85,9 +90,23 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] Global navigation (hides items for disabled features)
 
 ### Database
-- [x] `migrations/001_initial_schema.sql` (001_sales.sql)
-- [x] `oz-cli` migration runner (`oz-cli migrate`)
+- [x] `migrations/001_sales.sql` + `002_products.sql` + `003_barcode.sql` + `004_sale_status.sql`
+- [x] `oz-core` migration runner (embedded via `include_str!`, run on startup)
+- [x] Domain-to-schema mapping: `Product`, `Category`, `Inventory`, `Sale`, `SaleLine`, `Settings`
+- [x] `Cart` (in-memory) → `Sale` (persisted) pipeline with `Sale::from_cart()`
 - [ ] `oz-cli init-db` — seed currencies + default settings + preset flags
+
+### API — REST Endpoints (Phase 1 MVP)
+- [x] `GET /api/v1/health` — server health + version
+- [x] `POST /api/v1/tokens` — JWT token creation (label + expiry)
+- [x] JWT auth middleware on all protected routes
+- [x] `GET /api/v1/products` — list products with category name + stock (LEFT JOIN)
+- [x] `GET /api/v1/products/{sku}` — product detail by SKU
+- [x] `POST /api/v1/products` — create product (validates, inserts, optional inventory)
+- [x] `PATCH /api/v1/products/{sku}/stock` — adjust stock with transaction + checked arithmetic
+- [x] `GET /api/v1/categories` — list categories ordered by name
+- [x] CORS enabled, tracing/logging layer
+- [x] Integration tests with in-memory SQLite + seeded data
 
 ### UI / UX — Design System & Core Screens
 
@@ -128,7 +147,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [ ] UI hides all inactive features (e.g., no loyalty tab in Simple Retail)
 - [ ] Dark mode and light mode both render without visual glitches
 - [ ] Design tokens applied consistently — no hardcoded hex colours in components
-- [ ] `cargo test` passes across all crates
+- [x] `cargo test` passes across all crates (203 tests, 0 failed)
+- [x] `cargo clippy -- -D warnings` passes with zero warnings
 - [ ] App launches on Windows and Linux
 
 ---
