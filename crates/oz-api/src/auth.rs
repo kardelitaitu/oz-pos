@@ -142,4 +142,22 @@ mod tests {
         let bad = format!("{}x", resp.token);
         assert!(validate_token(&bad).is_err());
     }
+
+    #[test]
+    fn expired_token_is_rejected() {
+        // Create a token that was already expired 1 hour ago.
+        let resp = create_token("expired", Some(-1));
+        let result = validate_token(&resp.token);
+        assert!(result.is_err(), "expired token should be rejected");
+    }
+
+    #[test]
+    fn empty_token_is_rejected() {
+        assert!(validate_token("").is_err());
+    }
+
+    #[test]
+    fn whitespace_only_token_is_rejected() {
+        assert!(validate_token("   ").is_err());
+    }
 }

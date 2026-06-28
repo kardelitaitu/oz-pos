@@ -22,3 +22,5 @@ chrono = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tower = "0.5"
+http-body-util = "0.1"
+serde_json = { workspace = true }
