@@ -1,18 +1,33 @@
 # oz-logging
 
-Structured logging facade for OZ-POS. Wraps the `tracing` ecosystem with a context-tagged record format (`[session_id][profile][task]`), a file + stdout writer, and a small CLI to inspect recent log output.
+Structured logging facade wrapping the `tracing` ecosystem.
 
 ## Public API
 
-- [`LoggingError`](src/error.rs) — `thiserror`-based error for the logging subsystem.
+| Function | Format | Output |
+|----------|--------|--------|
+| `init()` | Human-readable text | stdout |
+| `init_json()` | Newline-delimited JSON | stdout |
+| `init_with_file(dir, prefix, days)` | Human-readable text | stdout + rolling file |
+| `init_json_with_file(dir, prefix, days)` | JSON | stdout + rolling file |
 
-## Planned surface
+All four read `RUST_LOG` (default `info`). File appender rotates hourly; files older than `retention_days` are cleaned up.
 
-- `init(config)` — install the `tracing-subscriber` with file + stdout writers.
-- `LogContext` thread-local with scoped guards for automatic restore.
-- A `log` CLI subcommand for tailing and filtering the local log file.
-- Health-logger integration (memory + task success rate at a configurable interval).
+```rust
+oz_logging::init();                                      // dev
+oz_logging::init_json_with_file("logs", "oz-pos", 30);   // production
+```
 
-## Status
+### Platform modules
 
-Scaffold only. The file logger and context plumbing land in a follow-up.
+| Module | Platform | Output |
+|--------|----------|--------|
+| `syslog` | Linux | Syslog |
+| `eventlog` | Windows | Event Log |
+
+## Conventions
+
+- `init()` should be called once, early in `main`/`run`, before any `tracing` macro.
+- `#![warn(missing_docs)]`.
+
+> last audited 28-06-26 by docs-auditor

@@ -1,34 +1,18 @@
 # oz-cli
 
-Command-line tools for OZ-POS — migrations, backup, export, smoke tests. The `oz` binary is the maintenance surface a merchant or operator runs from a terminal.
+CLI tool for OZ-POS maintenance — migrations, backup, export.
 
 ## Subcommands
 
-- `oz migrate` — apply pending SQL migrations to the local database
-- `oz backup --output <path>` — snapshot the local SQLite store
-- `oz export <kind>` — write a CSV report (`daily-summary`, `sales-by-hour`, ...)
-- `oz --help` / `oz --version`
-
-## Public API (library)
-
-- [`CliError`](src/error.rs) — `thiserror`-based error type, shared by `main.rs` and the subcommand modules.
-
-## Example
-
-```bash
-# Show version
-oz --version
-
-# Apply migrations
-oz migrate
-
-# Snapshot the local DB
-oz backup --output /var/backups/oz-$(date +%F).db
-
-# Export a daily report
-oz export daily-summary
-```
+| Command | Status |
+|---------|--------|
+| `oz migrate` | Scaffold |
+| `oz backup --output <path>` | Scaffold |
+| `oz export <kind>` | Scaffold |
+| `oz --version` | Implemented |
 
 ## Status
 
-Scaffold only. Subcommands return `not yet implemented (scaffold)` until the corresponding crate lands its real implementation.
+Scaffold only — subcommands return `not yet implemented`. The `oz-core` library backend for each command is already built; the CLI wiring is pending.
+
+> last audited 28-06-26 by docs-auditor

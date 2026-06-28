@@ -1,18 +1,35 @@
 # oz-security
 
-Encryption, secrets, and PCI-DSS helpers for OZ-POS. At-rest encryption, key rotation, and the small set of PCI-DSS-related utilities the cashier flow needs (masked PAN display, audit logging, secure memory).
+Encryption, secrets, and PCI-DSS helpers for OZ-POS.
 
 ## Public API
 
-- [`SecurityError`](src/error.rs) — `thiserror`-based error for the security subsystem.
+| Module | What |
+|--------|------|
+| `error` | `SecurityError` (thiserror) |
+| `mask` | PAN / sensitive-data masking |
+| `tls` | TLS configuration helpers |
+| `linux` | `LibSecretKeyring` — Linux Secret Service (libsecret/DBus) |
+| `macos` | `MacOsKeychain` — macOS Keychain (Security framework) |
+| `windows` | `WindowsCredentialManager` — Windows Credential Manager |
 
-## Planned surface
+### Keyring trait
 
-- AES-GCM helpers for at-rest encryption of `*.db` and exported session data.
-- KEK/DEK envelope with key rotation support.
-- PCI-DSS utilities: PAN masking, audit-log helpers, secure memory zeroing.
-- Integration with the OS keystore (Windows Credential Manager, libsecret, Keychain).
+OS-level credential store abstraction:
 
-## Status
+```rust
+use oz_security::Keyring;
 
-Scaffold only. Production code lands in a follow-up once `oz-payment` defines the secret shape it needs.
+let keyring = oz_security::default_keyring()?;
+keyring.set_secret("api-key", "sk_live_abc123")?;
+let secret = keyring.get_secret("api-key")?;
+keyring.delete_secret("api-key")?;
+```
+
+`default_keyring()` returns the platform-native keyring. CI/dev fallback is `InMemoryKeyring` (not secure).
+
+## Conventions
+
+- `#![deny(unsafe_code)]` — platform modules may use FFI with `// SAFETY:`.
+
+> last audited 28-06-26 by docs-auditor

@@ -154,6 +154,10 @@ pub struct Sale {
     /// Amount tendered by the customer in minor units (for cash).
     pub tendered_minor: Option<i64>,
 
+    /// User ID of the cashier who processed this sale.
+    #[serde(default)]
+    pub user_id: Option<String>,
+
     /// ISO-8601 creation timestamp.
     pub created_at: String,
 

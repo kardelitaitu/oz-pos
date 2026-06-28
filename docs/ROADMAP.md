@@ -291,7 +291,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] `void_sale` Tauri IPC command (`src-tauri/src/commands/sales.rs`)
 - [x] **Void Sale UI** — Orders screen with search, status filters, detail view, reason picker, void confirmation
 - [ ] Refund / return flow (partial or full, linked to original order)
-- [ ] Hold order (park a sale, resume later — multiple holds simultaneously)
+- [x] Hold order (park a sale, resume later — multiple holds simultaneously)
 - [ ] Split bill (divide order across multiple payment methods or customers)
 - [ ] End-of-Day (EOD) report: cash tally, payment breakdown, shift summary
 

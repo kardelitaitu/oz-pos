@@ -1,119 +1,90 @@
 # OZ-POS
 
-> *"Pay no attention to the man behind the curtain."* — The Wizard of Oz
+A modular Point-of-Sale framework built with Rust + Tauri v2.
 
-**OZ-POS** is a magical, modular Point-of-Sale software framework built with Rust and Tauri v2. Like the wizard behind the curtain, it silently powers fast, reliable checkout experiences — while merchants and developers only see effortless simplicity.
-
-The name **OZ** embodies four pillars:
-
-| | Pillar | Meaning |
-|-|--------|---------|
-| 🧙 | **Magical** | Complex operations feel effortless — barcodes, payments, encryption, sync |
-| 🧵 | **Small Core** | Lean `oz-core` crate; every feature is a composable module |
-| ♾️ | **Limitless** | Scales from a single warung to a nationwide chain — no rewrite |
-| 📈 | **Scalable** | Horizontal scaling, cloud sync, multi-store — built in from day one |
-
----
-
-## What is OZ-POS?
-
-A high-performance POS framework for retail stores, restaurants, and any merchant environment. It runs on Windows PCs, Linux PCs, Android tablets, and iPads with full barcode scanner support, offline-first operation, and optional cloud sync.
-
----
-
-## Key Features
-
-- **Barcode Support** – USB, Bluetooth, and serial barcode scanners via a unified HAL
-- **Multi-Currency** – Integer-based money handling with ISO-4217 currency codes
-- **Offline-First** – SQLite on-device storage; cloud sync is optional
-- **Extensible** – Embedded Lua scripting for custom business rules and promotions
-- **Cross-Platform** – Windows, Linux, Android, iPad from a single codebase
-- **Cloud Optional** – On-features cloud DB, analytics, and backup add-ons
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Core Engine | Rust |
-| UI | Tauri v2 + React + TypeScript |
-| Scripting | Lua (via `rlua`) |
-| Local DB | SQLite (`rusqlite`) |
-| Cloud DB | PostgreSQL / CockroachDB (optional) |
-| Cache | Redis (optional) |
-| Build | Cargo + Vite + GitHub Actions |
-
----
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Directory layout and module responsibilities |
-| [WHITEPAPER.md](./docs/WHITEPAPER.md) | Design rationale, tech choices, database strategy |
-| [ROADMAP.md](./docs/ROADMAP.md) | Phased milestones and planned features |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution workflow, branch policy, PR checklist |
-| [docs/QUICKSTART.md](./docs/QUICKSTART.md) | First-time local setup and build |
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Rust stable toolchain (`rustup install stable`)
-- Node.js >= 18
-- Tauri v2 prerequisites ([see Tauri docs](https://tauri.app/v2/guides/))
-
-### Build & Run
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/kardelitaitu/oz-pos.git
-cd oz-pos
-
-# 2. Build Rust workspace
-cargo build --workspace
-
-# 3. Install front-end dependencies
-cd ui && npm install
-
-# 4. Run in development mode
-npm run dev   # launches Tauri dev window
-```
-
-### Run on Android / iPad
-
-```bash
-# Android (requires Android SDK)
-cargo tauri android dev
-
-# iOS/iPadOS (requires Xcode on macOS)
-cargo tauri ios dev
-```
-
----
-
-## Project Structure
+## Architecture
 
 ```
 oz-pos/
-├─ src/          # Rust crates (core, hal, lua, security, logging, payment, reporting, perf, cli)
-├─ ui/           # React + TypeScript front-end
-├─ migrations/   # SQL migration files
-├─ docs/         # Additional documentation
-└─ .github/      # CI/CD workflows
+├── crates/
+│   ├── oz-api/           # REST API server (axum)
+│   ├── oz-cli/           # CLI tool for offline ops
+│   ├── oz-core/          # Domain models, SQLite Store, migrations, settings
+│   ├── oz-hal/           # Hardware Abstraction Layer (printers, scanners, cash drawer)
+│   ├── oz-logging/       # Structured logging (console, file, syslog)
+│   ├── oz-lua/           # Lua scripting engine (rlua)
+│   ├── oz-payment/       # Payment gateway integrations
+│   ├── oz-reporting/     # Report generation (EOD, sales summaries)
+│   └── oz-security/      # TLS config, masking, platform keychains
+├── src-tauri/            # Tauri v2 shell: IPC commands, app state, plugins
+│   └── src/commands/     # 62 Tauri commands grouped by domain
+├── ui/                   # React 18 + TypeScript + Vite
+│   └── src/
+│       ├── api/pos.ts    # Single invoke() bridge — no invoke() in components
+│       ├── components/   # Shared UI (Card, Button, Badge, Toast, etc.)
+│       ├── features/     # 13 screen components by domain
+│       ├── locales/      # Fluent (.ftl) files — 256 IDs
+│       └── __tests__/    # Vitest + testing-library (122 tests, 12 files)
+└── docs/
 ```
 
-See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for the full directory tree.
+## Foundation
 
----
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Backend | Rust | Domain logic, DB access, hardware control |
+| Frontend | React 18 + TS + Vite | POS UI |
+| Shell | Tauri v2 | IPC bridge, native window, updater |
+| DB | SQLite (rusqlite) | On-device persistence, 13 migrations |
+| i18n | @fluent/react | All UI strings in `.ftl` files |
+| Hardware HAL | oz-hal traits | USB/TCP/BT/mock drivers for printer, scanner, cash drawer |
+| Money | i64 minor units | Never f64 — `Currency`, `Money` structs |
 
-## License
+## Quick Start
 
-MIT License. See `LICENSE` for details.
+```bash
+git clone https://github.com/kardelitaitu/oz-pos.git
+cd oz-pos
+cargo build --workspace
+cd ui && npm install && cd ..
+cargo tauri dev
+```
 
----
+### Key scripts (ui/)
 
-*Built with Rust, Tauri v2, and a love for reliable software.*
+| Command | Action |
+|---------|--------|
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run test` | `vitest run` (122 tests, 12 files) |
+| `npm run lint` | ESLint + jsx-a11y |
+
+### Key scripts (root)
+
+| Command | Action |
+|---------|--------|
+| `cargo clippy --all-targets` | Rust lint |
+| `cargo test --workspace` | Rust tests (380+) |
+
+## Backend Conventions
+
+- **Money**: `i64 minor_units` + `Currency` — never `f32`/`f64`
+- **DB writes**: always inside `rusqlite` transactions
+- **Errors**: `thiserror` for libs, `anyhow` for app code
+- **Clippy**: must pass `-- -D warnings` before merge
+- **Migrations**: `.sql` files in `crates/oz-core/migrations/` registered in `migrations.rs`
+
+## Frontend Conventions
+
+- **No `invoke()` in components** — use `api/pos.ts` wrappers
+- **No hardcoded strings** — all text goes through `@fluent/react`
+- **Accessibility**: every interactive element has an `aria-label`
+- **Money display**: `formatMoney()` from `types/domain.ts`
+- **Tests**: every feature screen has a corresponding `__tests__/` file
+
+## Status
+
+Phase 1 MVP complete. 13 migrations, 62 IPC commands, 13 screen components, 122 front-end tests, 380+ Rust tests.
+
+See [TODO.md](./TODO.md) for outstanding items.
+
+> last audited 28-06-26 by docs-auditor
