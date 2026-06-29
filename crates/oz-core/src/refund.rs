@@ -172,4 +172,113 @@ mod tests {
         assert_eq!(deserialized.lines[0].sku, "COFFEE");
         assert_eq!(deserialized.lines[0].qty, 2);
     }
+
+    #[test]
+    fn test_refund_empty_lines() {
+        let r = Refund::new(
+            "sale-1",
+            Money { minor_units: 0, currency: usd() },
+            "no refund",
+            "",
+            "user-1",
+            vec![],
+        );
+        assert!(r.lines.is_empty());
+        assert_eq!(r.total.minor_units, 0);
+    }
+
+    #[test]
+    fn test_refund_multiple_lines() {
+        let line1 = RefundLine::new(
+            "sl-1", "COFFEE", 2,
+            Money { minor_units: 350, currency: usd() },
+            Money { minor_units: 700, currency: usd() },
+        );
+        let line2 = RefundLine::new(
+            "sl-2", "BAGEL", 1,
+            Money { minor_units: 450, currency: usd() },
+            Money { minor_units: 450, currency: usd() },
+        );
+        let r = Refund::new(
+            "sale-1",
+            Money { minor_units: 1150, currency: usd() },
+            "customer returned items",
+            "",
+            "user-1",
+            vec![line1, line2],
+        );
+        assert_eq!(r.lines.len(), 2);
+        assert_eq!(r.lines[0].sku, "COFFEE");
+        assert_eq!(r.lines[1].sku, "BAGEL");
+        assert_eq!(r.total.minor_units, 1150);
+    }
+
+    #[test]
+    fn test_refund_assigns_refund_id_to_lines() {
+        let line = RefundLine::new(
+            "sl-1", "COFFEE", 1,
+            Money { minor_units: 350, currency: usd() },
+            Money { minor_units: 350, currency: usd() },
+        );
+        assert!(line.refund_id.is_empty()); // not yet assigned
+        let r = Refund::new(
+            "sale-1",
+            Money { minor_units: 350, currency: usd() },
+            "test",
+            "",
+            "user-1",
+            vec![line],
+        );
+        assert_eq!(r.lines[0].refund_id, r.id);
+    }
+
+    #[test]
+    fn test_refund_assigns_timestamps_to_lines() {
+        let line = RefundLine::new(
+            "sl-1", "COFFEE", 1,
+            Money { minor_units: 350, currency: usd() },
+            Money { minor_units: 350, currency: usd() },
+        );
+        assert!(line.created_at.is_empty());
+        let r = Refund::new(
+            "sale-1",
+            Money { minor_units: 350, currency: usd() },
+            "test",
+            "",
+            "user-1",
+            vec![line],
+        );
+        assert!(!r.lines[0].created_at.is_empty(), "timestamp should be assigned");
+        assert!(r.lines[0].created_at.contains('T'));
+    }
+
+    #[test]
+    fn test_refund_generates_uuid() {
+        let r = Refund::new(
+            "sale-1",
+            Money { minor_units: 100, currency: usd() },
+            "test",
+            "",
+            "user-1",
+            vec![],
+        );
+        assert_eq!(r.id.len(), 36);
+        assert_eq!(r.id.chars().filter(|&c| c == '-').count(), 4);
+    }
+
+    #[test]
+    fn test_refund_debug_output() {
+        let r = Refund::new(
+            "sale-1",
+            Money { minor_units: 100, currency: usd() },
+            "reason",
+            "note",
+            "user-1",
+            vec![],
+        );
+        let debug = format!("{:?}", r);
+        assert!(debug.contains("sale-1"));
+        assert!(debug.contains("reason"));
+        assert!(debug.contains("note"));
+    }
 }

@@ -1,0 +1,15 @@
+[package]
+name = "foundation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS foundation crate: Money, Currency, Sku, Cart, and shared contracts, errors, enums."
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -1,23 +1,17 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { LocalizationProvider, ReactLocalization } from '@fluent/react';
+import { withFluent } from '@/locales/test-utils';
+import sharedFtl from '@/locales/shared.ftl?raw';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import ThemeToggle from '@/components/ThemeToggle';
 
 // ── Wrapper ──────────────────────────────────────────────────────────
 
 function wrap(children: React.ReactNode) {
-  const bundle = new FluentBundle('en-US');
-  bundle.addResource(
-    new FluentResource('theme-toggle-label = Toggle theme\n'),
-  );
-  const l10n = new ReactLocalization([bundle]);
-  return (
-    <LocalizationProvider l10n={l10n}>
-      <ThemeProvider>{children}</ThemeProvider>
-    </LocalizationProvider>
+  return withFluent(
+    <ThemeProvider>{children}</ThemeProvider>,
+    sharedFtl,
   );
 }
 

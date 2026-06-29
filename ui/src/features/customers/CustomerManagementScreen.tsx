@@ -6,7 +6,7 @@ import {
   updateCustomer,
   deleteCustomer,
   type CustomerDto,
-} from '@/api/pos';
+} from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './CustomerManagementScreen.css';
@@ -110,13 +110,13 @@ export default function CustomerManagementScreen() {
       const name = form.name.trim();
 
       if (editingId) {
-        const args: import('@/api/pos').UpdateCustomerArgs = { id: editingId, name };
+        const args: import('@/api/customers').UpdateCustomerArgs = { id: editingId, name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
         await updateCustomer(args);
       } else {
-        const args: import('@/api/pos').CreateCustomerArgs = { name };
+        const args: import('@/api/customers').CreateCustomerArgs = { name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();

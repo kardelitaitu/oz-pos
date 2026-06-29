@@ -16,6 +16,7 @@ use async_trait::async_trait;
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
+use crate::traits::customer_display::{CustomerDisplay, DisplayContent};
 use crate::traits::printer::ReceiptPrinter;
 use crate::types::{Barcode, DeviceInfo};
 
@@ -168,6 +169,83 @@ impl ReceiptPrinter for MockReceiptPrinter {
 
     async fn cut(&self) -> Result<(), HalError> {
         self.cut_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn device_info(&self) -> DeviceInfo {
+        self.info.clone()
+    }
+}
+
+// --- Customer display mock ---------------------------------------------
+
+/// Programmable mock for `CustomerDisplay`. Records the last content
+/// pushed and supports brightness control.
+#[derive(Clone)]
+pub struct MockCustomerDisplay {
+    pub show_calls: Arc<AtomicUsize>,
+    pub clear_calls: Arc<AtomicUsize>,
+    last_content: Arc<Mutex<Option<DisplayContent>>>,
+    brightness: Arc<Mutex<f32>>,
+    pub info: DeviceInfo,
+}
+
+impl MockCustomerDisplay {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_info(DeviceInfo::new("mock", "MockDisplay", "0000"))
+    }
+
+    #[must_use]
+    pub fn with_info(info: DeviceInfo) -> Self {
+        Self {
+            show_calls: Arc::new(AtomicUsize::new(0)),
+            clear_calls: Arc::new(AtomicUsize::new(0)),
+            last_content: Arc::new(Mutex::new(None)),
+            brightness: Arc::new(Mutex::new(1.0)),
+            info,
+        }
+    }
+
+    /// The last content that was shown on the display.
+    pub fn last_content(&self) -> Option<DisplayContent> {
+        self.last_content.lock().expect("poisoned").clone()
+    }
+
+    /// Current brightness level.
+    #[must_use]
+    pub fn brightness(&self) -> f32 {
+        *self.brightness.lock().expect("poisoned")
+    }
+}
+
+impl Default for MockCustomerDisplay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl CustomerDisplay for MockCustomerDisplay {
+    async fn connect(&self) -> Result<Box<dyn CustomerDisplay>, HalError> {
+        Ok(Box::new(self.clone()))
+    }
+
+    async fn show(&self, content: &DisplayContent) -> Result<(), HalError> {
+        self.show_calls.fetch_add(1, Ordering::SeqCst);
+        *self.last_content.lock().expect("poisoned") = Some(content.clone());
+        Ok(())
+    }
+
+    async fn clear(&self) -> Result<(), HalError> {
+        self.clear_calls.fetch_add(1, Ordering::SeqCst);
+        *self.last_content.lock().expect("poisoned") = None;
+        Ok(())
+    }
+
+    async fn set_brightness(&self, level: f32) -> Result<(), HalError> {
+        let clamped = level.clamp(0.0, 1.0);
+        *self.brightness.lock().expect("poisoned") = clamped;
         Ok(())
     }
 

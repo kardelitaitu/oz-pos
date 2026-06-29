@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { staffLogin, type LoginSessionDto } from '@/api/pos';
+import { staffLogin, type LoginSessionDto } from '@/api/staff';
 
 // ── Types ───────────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@ import {
   updateProductVariant,
   deleteProductVariant,
   type ProductVariantDto,
-} from '@/api/pos';
+} from '@/api/products';
 import { Button } from '@/components/Button';
 
 interface Props {

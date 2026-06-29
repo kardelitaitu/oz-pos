@@ -1,32 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { LocalizationProvider, ReactLocalization } from '@fluent/react';
+import { withFluent } from '@/locales/test-utils';
+import productsFtl from '@/locales/products.ftl?raw';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import type { Product } from '@/types/domain';
 
-// ── Fluent wrapper (matches main.tsx + en-US.ftl) ───────────────
-
-const LOCALE_STRINGS = [
-  'product-lookup-title = Products',
-  'product-lookup-search-placeholder = Search products…',
-  'product-lookup-barcode-placeholder = Scan barcode…',
-  'product-lookup-barcode-scan = Scan',
-  'product-lookup-no-results = No products found',
-  'product-lookup-loading = Loading products…',
-  'product-lookup-add = Add to cart',
-  'product-lookup-in-stock = In stock',
-  'product-lookup-out-of-stock = Out of stock',
-  'product-lookup-all-categories = All Categories',
-].join('\n');
-
-const wrap = (children: React.ReactNode) => {
-  const bundle = new FluentBundle('en-US');
-  bundle.addResource(new FluentResource(LOCALE_STRINGS));
-  const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
-};
+const wrap = (children: React.ReactNode) => withFluent(children, productsFtl);
 
 // ── Tests ────────────────────────────────────────────────────────
 

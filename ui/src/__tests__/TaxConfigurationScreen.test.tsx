@@ -1,32 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { LocalizationProvider, ReactLocalization } from '@fluent/react';
+import { withFluent } from '@/locales/test-utils';
+import taxFtl from '@/locales/tax.ftl?raw';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 
-const LOCALE_STRINGS = [
-  'tax-config-title = Tax Configuration',
-  'tax-config-add = Add Tax Rate',
-  'tax-config-empty = No tax rates configured',
-  'tax-config-loading = Loading tax rates…',
-  'tax-config-col-name = Name',
-  'tax-config-col-rate = Rate (%)',
-  'tax-config-field-name = Tax Name',
-  'tax-config-field-rate = Rate (%)',
-  'tax-config-btn-cancel = Cancel',
-  'tax-config-btn-save = Save',
-  'tax-config-btn-delete = Delete',
-  'tax-config-edit = Edit',
-  'tax-config-modal-title = { $editing -> [true] Edit Tax Rate *[other] Add Tax Rate }',
-].join('\n');
-
-const wrap = (children: React.ReactNode) => {
-  const bundle = new FluentBundle('en-US');
-  bundle.addResource(new FluentResource(LOCALE_STRINGS));
-  const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
-};
+const wrap = (children: React.ReactNode) => withFluent(children, taxFtl);
 
 const SAMPLE_TAX_RATES = [
   { id: 'tax-1', name: 'Sales Tax', rate_bps: 825, is_default: true, display_rate: '8.25%', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
@@ -45,6 +24,8 @@ beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'list_tax_rates') return Promise.resolve(SAMPLE_TAX_RATES);
+    if (cmd === 'list_categories') return Promise.resolve([]);
+    if (cmd === 'list_category_tax_rates') return Promise.resolve([]);
     if (cmd === 'create_tax_rate') return Promise.resolve({ ...SAMPLE_TAX_RATES[0], name: 'New Tax' });
     if (cmd === 'delete_tax_rate') return Promise.resolve(undefined);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));

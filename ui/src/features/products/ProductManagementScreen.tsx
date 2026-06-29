@@ -5,14 +5,12 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
-  listTaxRates,
   listCategories,
-  listCurrencies,
   type ProductDto,
-  type TaxRateDto,
   type CategoryDto,
-  type CurrencyDto,
-} from '@/api/pos';
+} from '@/api/products';
+import { listTaxRates, type TaxRateDto } from '@/api/tax';
+import { listCurrencies, type CurrencyDto } from '@/api/currency';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';

@@ -58,3 +58,4 @@ src-tauri/gen/
 /ui/.vite/
 /ui/.eslintcache
 /ui/.stylelintcache
+nul

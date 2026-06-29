@@ -1,0 +1,183 @@
+/* ============================================================
+ * OZ-POS CSS Reset
+ *
+ * Builds on the standard box-sizing + margin reset with
+ * POS-specific defaults: larger tap targets, system-like
+ * button appearance, and accessible focus rings.
+ * ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  line-height: var(--leading-normal, 1.5);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  font-size: var(--text-base, 0.875rem);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: var(--leading-normal, 1.5);
+  color: var(--color-fg, #1a1a1a);
+  background-color: var(--color-bg, #ffffff);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: var(--color-link, #059669);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-link-hover, #047857);
+  text-decoration: underline;
+}
+
+/* ── Buttons ───────────────────────────────────── */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2, 0.5rem);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── Inputs ────────────────────────────────────── */
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--color-fg, #1a1a1a);
+  background: var(--color-bg-input, #ffffff);
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: var(--radius-lg, 0.5rem);
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  outline: none;
+  transition: border-color var(--duration-150, 150ms) var(--ease-out, ease-out),
+    box-shadow var(--duration-150, 150ms) var(--ease-out, ease-out);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-border-focus, #10b981);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle, #d1fae5);
+}
+
+/* ── Focus ring (keyboard only) ────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-border-focus, #10b981);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Lists ─────────────────────────────────────── */
+ul, ol {
+  list-style: none;
+}
+
+/* ── Tables ────────────────────────────────────── */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* ── Headings ──────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--font-weight-semibold, 600);
+  line-height: var(--leading-tight, 1.25);
+  overflow-wrap: break-word;
+}
+
+h1 { font-size: var(--text-2xl, 1.5rem); }
+h2 { font-size: var(--text-xl, 1.25rem); }
+h3 { font-size: var(--text-lg, 1.125rem); }
+
+/* ── Code / pre ────────────────────────────────── */
+code,
+pre {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9em;
+}
+
+pre {
+  background: var(--color-bg-surface, #f5f5f5);
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: var(--radius-lg, 0.5rem);
+  padding: var(--space-4, 1rem);
+  overflow-x: auto;
+}
+
+/* ── Scrollbar (Webkit) ────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--neutral-300, #d4d4d4);
+  border-radius: var(--radius-full, 9999px);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-400, #a3a3a3);
+}
+
+/* ── Selection ─────────────────────────────────── */
+::selection {
+  background: var(--color-accent, #10b981);
+  color: var(--color-fg-inverse, #ffffff);
+}
+
+/* ── Reduced motion ────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

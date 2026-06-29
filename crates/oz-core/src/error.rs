@@ -14,6 +14,10 @@ pub enum CoreError {
     #[error("database error: {0}")]
     Db(#[from] rusqlite::Error),
 
+    /// A platform infrastructure error.
+    #[error("platform error: {0}")]
+    Platform(#[from] platform_core::PlatformError),
+
     /// Adding two [`crate::Money`] values overflowed `i64`.
     #[error("money overflow: {left} {currency} + {right}")]
     MoneyOverflow {

@@ -4,17 +4,24 @@ import { Localized } from '@/components/Localized';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import { formatMoney, type LineId, type Product, type Sku } from '@/types/domain';
 import {
-  lookupByBarcode,
   holdCart,
   listHeldCarts,
   getHeldCart,
   deleteHeldCart,
-  type BarcodeScannedPayload,
   type HeldCartRow,
-} from '@/api/pos';
+} from '@/api/sales';
+import { lookupByBarcode } from '@/api/products';
+import type { BarcodeScannedPayload } from '@/api/hardware';
 import { usePosState } from './usePosState';
 import { useBarcodeScanner } from './useBarcodeScanner';
+import { useCustomerDisplay } from './useCustomerDisplay';
 import PaymentModal from './PaymentModal';
+import {
+  getActiveShift,
+  openShift,
+  closeShift,
+  type ShiftDto,
+} from '@/api/shifts';
 
 import './PosScreen.css';
 
@@ -106,10 +113,17 @@ export default function PosScreen() {
     setShowPayment(true);
   }, [total]);
 
+  const { handlePaymentComplete: customerDisplayPaymentComplete } = useCustomerDisplay({
+    lines,
+    total,
+  });
+
   const handlePaymentComplete = useCallback(() => {
     setShowPayment(false);
     resetCart();
-  }, [resetCart]);
+    // Also clear the customer-facing pole display.
+    customerDisplayPaymentComplete();
+  }, [resetCart, customerDisplayPaymentComplete]);
 
   const handleApplyDiscount = useCallback(() => {
     const pct = parseInt(discountInput, 10);
@@ -123,6 +137,100 @@ export default function PosScreen() {
   const handleClearDiscount = useCallback(() => {
     setDiscount(0, '');
   }, [setDiscount]);
+
+  // ── Shift management ──────────────────────────────────────────
+  const [activeShift, setActiveShift] = useState<ShiftDto | null>(null);
+  const [shiftLoading, setShiftLoading] = useState(true);
+  const [showCloseShift, setShowCloseShift] = useState(false);
+  const [showOpenShift, setShowOpenShift] = useState(false);
+  const [closingBalance, setClosingBalance] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('');
+  const [shiftNotes, setShiftNotes] = useState('');
+  const [closingShift, setClosingShift] = useState(false);
+  const [openingShift, setOpeningShift] = useState(false);
+  const [closeShiftError, setCloseShiftError] = useState<string | null>(null);
+  const [closedShiftSummary, setClosedShiftSummary] = useState<ShiftDto | null>(null);
+
+  // Load active shift on mount and when session changes.
+  useEffect(() => {
+    if (!userId) {
+      setActiveShift(null);
+      setShiftLoading(false);
+      return;
+    }
+    setShiftLoading(true);
+    getActiveShift(userId)
+      .then((shift) => {
+        setActiveShift(shift);
+      })
+      .catch(() => {
+        setActiveShift(null);
+      })
+      .finally(() => setShiftLoading(false));
+  }, [userId]);
+
+  const handleCloseShiftClick = useCallback(() => {
+    setCloseShiftError(null);
+    setClosedShiftSummary(null);
+    // Enforce: cart must be empty before closing shift.
+    if (lines.length > 0) {
+      setCloseShiftError('Complete or clear the current sale before closing the shift.');
+      return;
+    }
+    setClosingBalance('');
+    setShiftNotes('');
+    setShowCloseShift(true);
+  }, [lines]);
+
+  const handleConfirmCloseShift = useCallback(async () => {
+    if (!activeShift) return;
+    const balance = parseInt(closingBalance, 10);
+    if (Number.isNaN(balance) || balance < 0) return;
+
+    setClosingShift(true);
+    setCloseShiftError(null);
+    try {
+      const closed = await closeShift(
+        activeShift.id,
+        balance,
+        shiftNotes.trim() || null,
+      );
+      setClosedShiftSummary(closed);
+      setActiveShift(null); // no longer active
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to close shift';
+      setCloseShiftError(msg);
+    } finally {
+      setClosingShift(false);
+    }
+  }, [activeShift, closingBalance, shiftNotes]);
+
+  const handleOpenShiftClick = useCallback(() => {
+    setOpeningBalance('');
+    setShowOpenShift(true);
+  }, []);
+
+  const handleConfirmOpenShift = useCallback(async () => {
+    const balance = parseInt(openingBalance, 10);
+    const safeBalance = !Number.isNaN(balance) && balance >= 0 ? balance : 0;
+
+    setOpeningShift(true);
+    try {
+      const shift = await openShift(userId, safeBalance);
+      setActiveShift(shift);
+      setShowOpenShift(false);
+    } catch {
+      // Handled silently — shift open failure is rare.
+    } finally {
+      setOpeningShift(false);
+    }
+  }, [openingBalance, userId]);
+
+  const handleDismissShiftSummary = useCallback(() => {
+    setClosedShiftSummary(null);
+    setShowCloseShift(false);
+    setCloseShiftError(null);
+  }, []);
 
   // ── Hold Order state ──────────────────────────────────────────
   const [showHoldInput, setShowHoldInput] = useState(false);
@@ -242,6 +350,59 @@ export default function PosScreen() {
           >
             Lock
           </button>
+        </div>
+
+        {/* ── Shift status bar ───────────────────────── */}
+        <div className="pos-shift-bar" aria-label="Shift status">
+          {shiftLoading ? (
+            <span className="pos-shift-bar-label">Loading shift…</span>
+          ) : activeShift ? (
+            <>
+              <span className="pos-shift-bar-indicator pos-shift-bar-indicator--open" />
+              <span className="pos-shift-bar-label">
+                Shift open since{' '}
+                {new Date(activeShift.openedAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+              <button
+                type="button"
+                className="pos-shift-close-btn"
+                onClick={handleCloseShiftClick}
+                aria-label="Close current shift"
+              >
+                Close Shift
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="pos-shift-bar-indicator pos-shift-bar-indicator--closed" />
+              <span className="pos-shift-bar-label">No active shift</span>
+              <button
+                type="button"
+                className="pos-shift-open-btn"
+                onClick={handleOpenShiftClick}
+                aria-label="Open a new shift"
+              >
+                Open Shift
+              </button>
+            </>
+          )}
+          {/* ── Inline shift error (cart not empty) ──── */}
+          {closeShiftError && !showCloseShift && (
+            <div className="pos-shift-error" role="alert">
+              {closeShiftError}
+              <button
+                type="button"
+                className="pos-shift-error-dismiss"
+                onClick={() => setCloseShiftError(null)}
+                aria-label="Dismiss error"
+              >
+                &times;
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Cart lines ────────────────────────────── */}
@@ -573,6 +734,233 @@ export default function PosScreen() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Close Shift Confirmation Modal ───────── */}
+      {showCloseShift && activeShift && !closedShiftSummary && (
+        <div
+          className="pos-close-shift-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Close shift"
+        >
+          <div className="pos-close-shift-modal">
+            <h3 className="pos-close-shift-title">Close Shift</h3>
+
+            {closeShiftError && (
+              <div className="pos-close-shift-error">
+                {closeShiftError}
+              </div>
+            )}
+
+            <div className="pos-close-shift-info">
+              <div className="pos-close-shift-info-row">
+                <span>Opened</span>
+                <span>{new Date(activeShift.openedAt).toLocaleString()}</span>
+              </div>
+              <div className="pos-close-shift-info-row">
+                <span>Opening balance</span>
+                <span>{formatMoney({ minor_units: activeShift.openingBalanceMinor, currency: 'USD' })}</span>
+              </div>
+            </div>
+
+            <div className="pos-close-shift-field">
+              <label htmlFor="closing-balance" className="pos-close-shift-label">
+                Counted cash in drawer (minor units)
+              </label>
+              <input
+                id="closing-balance"
+                type="number"
+                className="pos-close-shift-input"
+                min="0"
+                placeholder="e.g. 15000 for $150.00"
+                value={closingBalance}
+                onChange={(e) => setClosingBalance(e.target.value)}
+                aria-label="Closing balance in minor units"
+              />
+            </div>
+
+            <div className="pos-close-shift-field">
+              <label htmlFor="shift-notes" className="pos-close-shift-label">
+                Notes (optional)
+              </label>
+              <textarea
+                id="shift-notes"
+                className="pos-close-shift-textarea"
+                rows={2}
+                placeholder="Any notes about this shift…"
+                value={shiftNotes}
+                onChange={(e) => setShiftNotes(e.target.value)}
+                aria-label="Shift notes"
+              />
+            </div>
+
+            <div className="pos-close-shift-actions">
+              <button
+                type="button"
+                className="pos-close-shift-cancel-btn"
+                onClick={() => {
+                  setShowCloseShift(false);
+                  setCloseShiftError(null);
+                }}
+                disabled={closingShift}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="pos-close-shift-confirm-btn"
+                onClick={handleConfirmCloseShift}
+                disabled={
+                  closingShift ||
+                  !closingBalance ||
+                  parseInt(closingBalance, 10) < 0 ||
+                  Number.isNaN(parseInt(closingBalance, 10))
+                }
+              >
+                {closingShift ? 'Closing…' : 'Close Shift'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Close Shift Success Summary ────────────── */}
+      {closedShiftSummary && (
+        <div
+          className="pos-close-shift-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Shift closed summary"
+        >
+          <div className="pos-close-shift-modal pos-close-shift-summary">
+            <h3 className="pos-close-shift-title">
+              Shift Closed
+            </h3>
+
+            <div className="pos-close-shift-summary-grid">
+              <div className="pos-close-shift-summary-item">
+                <span className="pos-close-shift-summary-label">Total Sales</span>
+                <span className="pos-close-shift-summary-value">
+                  {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: 'USD' })}
+                </span>
+              </div>
+              <div className="pos-close-shift-summary-item">
+                <span className="pos-close-shift-summary-label">Cash Sales</span>
+                <span className="pos-close-shift-summary-value">
+                  {formatMoney({ minor_units: closedShiftSummary.totalCashMinor, currency: 'USD' })}
+                </span>
+              </div>
+              <div className="pos-close-shift-summary-item">
+                <span className="pos-close-shift-summary-label">Card Sales</span>
+                <span className="pos-close-shift-summary-value">
+                  {formatMoney({ minor_units: closedShiftSummary.totalCardMinor, currency: 'USD' })}
+                </span>
+              </div>
+              <div className="pos-close-shift-summary-item">
+                <span className="pos-close-shift-summary-label">Expected Cash</span>
+                <span className="pos-close-shift-summary-value">
+                  {closedShiftSummary.expectedCashMinor !== null
+                    ? formatMoney({ minor_units: closedShiftSummary.expectedCashMinor, currency: 'USD' })
+                    : '—'}
+                </span>
+              </div>
+              <div className="pos-close-shift-summary-item">
+                <span className="pos-close-shift-summary-label">Counted</span>
+                <span className="pos-close-shift-summary-value">
+                  {closedShiftSummary.closingBalanceMinor !== null
+                    ? formatMoney({ minor_units: closedShiftSummary.closingBalanceMinor, currency: 'USD' })
+                    : '—'}
+                </span>
+              </div>
+              <div className="pos-close-shift-summary-item">
+                <span className="pos-close-shift-summary-label">Difference</span>
+                <span
+                  className={`pos-close-shift-summary-value ${
+                    closedShiftSummary.cashDifferenceMinor !== null && closedShiftSummary.cashDifferenceMinor < 0
+                      ? 'pos-close-shift-diff--negative'
+                      : closedShiftSummary.cashDifferenceMinor !== null && closedShiftSummary.cashDifferenceMinor > 0
+                        ? 'pos-close-shift-diff--positive'
+                        : ''
+                  }`}
+                >
+                  {closedShiftSummary.cashDifferenceMinor !== null
+                    ? formatMoney({ minor_units: closedShiftSummary.cashDifferenceMinor, currency: 'USD' })
+                    : '—'}
+                  {closedShiftSummary.cashDifferenceMinor !== null && closedShiftSummary.cashDifferenceMinor !== 0 && (
+                    <span className="pos-close-shift-diff-tag">
+                      {closedShiftSummary.cashDifferenceMinor > 0 ? 'Over' : 'Short'}
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {closedShiftSummary.notes && (
+              <div className="pos-close-shift-notes-display">
+                <span className="pos-close-shift-summary-label">Notes</span>
+                <p>{closedShiftSummary.notes}</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="pos-close-shift-dismiss-btn"
+              onClick={handleDismissShiftSummary}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Open Shift Modal ───────────────────────── */}
+      {showOpenShift && (
+        <div
+          className="pos-close-shift-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Open shift"
+        >
+          <div className="pos-close-shift-modal">
+            <h3 className="pos-close-shift-title">Open Shift</h3>
+
+            <div className="pos-close-shift-field">
+              <label htmlFor="opening-balance" className="pos-close-shift-label">
+                Opening balance (minor units)
+              </label>
+              <input
+                id="opening-balance"
+                type="number"
+                className="pos-close-shift-input"
+                min="0"
+                placeholder="e.g. 500 for $5.00"
+                value={openingBalance}
+                onChange={(e) => setOpeningBalance(e.target.value)}
+                aria-label="Opening balance in minor units"
+              />
+            </div>
+
+            <div className="pos-close-shift-actions">
+              <button
+                type="button"
+                className="pos-close-shift-cancel-btn"
+                onClick={() => setShowOpenShift(false)}
+                disabled={openingShift}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="pos-close-shift-confirm-btn"
+                onClick={handleConfirmOpenShift}
+                disabled={openingShift}
+              >
+                {openingShift ? 'Opening…' : 'Open Shift'}
+              </button>
             </div>
           </div>
         </div>

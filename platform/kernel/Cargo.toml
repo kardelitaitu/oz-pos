@@ -1,0 +1,14 @@
+[package]
+name = "platform-kernel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS module system kernel: lifecycle management, dependency resolution, manifest parsing."
+
+[dependencies]
+foundation = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

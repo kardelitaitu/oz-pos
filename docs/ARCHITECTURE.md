@@ -14,8 +14,8 @@ This document describes the directory layout and module responsibilities for **O
 ## Directory Layout
 ```
 oz-pos/
-├─ Cargo.toml                # Workspace definition (10 members)
-├─ rust-toolchain.toml       # Pinned Rust toolchain
+├─ Cargo.toml                # Workspace definition (15+ members)
+├─ rust-toolchain.toml       # Rust toolchain (stable)
 ├─ package.json              # Front‑end package manager (React/TS)
 ├─ crates/                   # Rust workspace crates
 │   ├─ oz-core/              # Core engine: domain types, Money, Cart, Sale, migrations, DB facade
@@ -29,12 +29,19 @@ oz-pos/
 │   │   │   ├─ category.rs   # Category type (id, name, colour)
 │   │   │   ├─ inventory.rs  # Inventory domain type
 │   │   │   ├─ sku.rs        # Sku, LineId types
-│   │   │   ├─ db.rs         # Store<'a> — typed CRUD facade over &Connection
-│   │   │   ├─ settings.rs   # Settings persistence layer
-│   │   │   ├─ features.rs   # Feature enum (32 flags), registry, presets
-│   │   │   ├─ migrations.rs # Embedded SQL migration runner
-│   │   │   └─ error.rs      # CoreError enum
-│   │   └─ migrations/       # SQL migration files (001–004)
+│   │   │   ├── db/          # Store CRUD modules (sales, products, categories, inventory, tax, customers, staff, settings, offline, audit)
+│   │   │   ├── events.rs    # Domain events (SaleCompleted, etc.)
+│   │   │   ├── offline.rs   # Offline queue
+│   │   │   ├── sync_client.rs # Cloud sync client (HTTP POST via reqwest)
+│   │   │   ├── tax_rate.rs  # Tax rate domain type
+│   │   │   ├── customer.rs  # Customer domain type
+│   │   │   ├── staff.rs     # Staff / Role domain types
+│   │   │   ├── refund.rs    # Refund domain type
+│   │   │   ├── settings.rs  # Settings persistence layer
+│   │   │   ├── features.rs  # Feature enum (32 flags), registry, presets
+│   │   │   ├── migrations.rs# Embedded SQL migration runner (20 migrations)
+│   │   │   └── error.rs     # CoreError enum
+│   │   └── migrations/      # SQL migration files (001–020)
 │   ├─ oz-hal/               # Hardware Abstraction Layer
 │   │   ├─ Cargo.toml
 │   │   └─ src/
@@ -146,7 +153,7 @@ oz-pos/
   - `Product`, `Category`, `Inventory`, `Sku` — domain types with serde.
   - `Feature` — 32 toggleable feature flags with dependency resolution and 4 store presets.
   - `Store<'a>` — typed CRUD facade over `&Connection`. All writes inside transactions.
-- **Migrations**: Embedded via `include_str!` at `crates/oz-core/migrations/`. Run on startup by both `oz-api` and `src-tauri`.
+- **Migrations**: 20 embedded SQL files in `crates/oz-core/migrations/`. Registered and run by `migrations.rs`; executed on startup by `platform-startup`.
 - **Rules**: `#![deny(unsafe_code)]`, `#![warn(missing_docs)]`.
 
 ### oz-hal
@@ -181,22 +188,38 @@ oz-pos/
 - Uses `anyhow` for error propagation.
 
 ### Scaffold Crates
-`oz-lua`, `oz-security`, `oz-payment`, `oz-reporting` currently contain only error types (`LuaError`, `SecurityError`, `PaymentError`, `ReportingError`) and doc headers. Full implementations planned for later phases:
+`oz-lua`, `oz-payment`, `oz-reporting` currently contain error types and doc headers. Full implementations planned for later phases:
 - **oz-lua** → Phase 3 (rlua embedding for dynamic business rules)
-- **oz-security** → Phase 2 (OS key-ring, TLS config, PCI-DSS helpers)
 - **oz-payment** → Phase 4 (PaymentProcessor trait, Stripe/Square/mock impls)
 - **oz-reporting** → Phase 5 (SQL aggregation, CSV export, dashboards)
+
+#### oz-security (implemented)
+- **Keyring trait** with three platform-native backends: Windows Credential Manager (`windows-sys`), macOS Keychain (`security-framework`), Linux Secret Service (`zbus`).
+- **InMemoryKeyring** fallback for development/CI.
+- **TlsConfig** — client cert + CA bundle loading, validation, builder API.
+- **Mask** — card number masking for PCI-DSS safe display.
 
 ### oz-logging
 - `tracing` + `tracing-subscriber` with env-filter.
 - Single `oz_logging::init()` call wires up log sinks. Used by `src-tauri` and `oz-api`.
 - JSON formatter, syslog, and Windows Event Log outputs planned for Phase 2.
 
-### src-tauri (Tauri v2 Shell)
+### apps/desktop-client & apps/tablet-client (Tauri v2 Shells)
+Each app crate has an identical command surface, wired through `platform-startup`:
 - **Entry point**: `main.rs` → `lib.rs::run()`.
 - **State**: `AppState` holds `Mutex<Connection>` (SQLite WAL mode), `Arc<DriverRegistry>`, `AppHandle`.
-- **Commands** (5, registered via `invoke_handler!`): `ping`, `version`, `start_sale`, `add_line`, `complete_sale`, `open_cash_drawer`, `print_receipt`.
+- **Commands** (62+ across health, sales, hardware, tax, staff, customers, products, inventory, offline, reporting, settings, currency).
 - **Error**: `AppError` — tagged JSON with `{kind, message}`, `From` impls for `CoreError`, `HalError`, `tauri::Error`.
+
+### platform/ (Platform Crates)
+- **platform-core**: Shared DB schema, Store facade, migration runner for all platform crates.
+- **platform-startup**: Initialisation orchestration — DB setup, migration run, event handler registration, audit logging.
+- **platform-sync**: Offline-first sync engine with `SyncTransport` (reqwest-based HTTP push/pull), conflict detection, retry logic.
+
+### modules/ (Business Modules)
+9 modules wired via the event bus in `platform-startup`:
+- **sales**, **inventory**, **crm**, **tax**, **settings**, **staff**, **reporting**, **terminal**, **currency**
+- Each module registers event handlers (e.g. `SaleCompleted` → stock decrement, audit log, report update).
 
 ### ui/ (React Frontend)
 - **Stack**: React 18 + TypeScript + Vite + `@fluent/react` (i18n) + Vitest (testing).
@@ -206,7 +229,7 @@ oz-pos/
 
 ---
 ## Build & Run Instructions
-1. **Install Rust toolchain** (≥ 1.88 stable) and `cargo`.
+1. **Install Rust toolchain** (stable) and `cargo`.
 2. **Install Node.js** (≥ 18) for the front‑end.
 3. **Install Tauri prerequisites** — see [Tauri docs](https://tauri.app/v2/guides/) for platform‑specific SDKs.
 4. **Bootstrap workspace**:
@@ -230,4 +253,4 @@ oz-pos/
 - Contributions welcome via pull‑requests; follow the project's coding standards (Rust fmt, Clippy, TypeScript lint).
 
 ---
-*Document generated on 2026‑06‑28.*
+*Document generated on 2026‑06‑29.*

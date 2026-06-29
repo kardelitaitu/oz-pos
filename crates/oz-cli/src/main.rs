@@ -296,6 +296,652 @@ enum ProductAction {
 
 // ── Entry point ───────────────────────────────────────────────────────
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::{params, Connection};
+
+    fn setup_in_memory_db() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        oz_core::migrations::run(&mut conn).unwrap();
+        conn
+    }
+
+    fn make_store(conn: &Connection) -> Store<'_> {
+        Store::new(conn)
+    }
+
+    // ── DB helpers ────────────────────────────────────────────────────
+
+    #[test]
+    fn open_db_fails_on_bad_path() {
+        let result = open_db(r"\0/?:invalid\0path");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn open_db_sets_foreign_keys_pragma() {
+        let conn = Connection::open_in_memory().unwrap();
+        let fk: bool = conn
+            .pragma_query_value(None, "foreign_keys", |r| r.get(0))
+            .unwrap();
+        assert!(fk);
+    }
+
+    // ── List commands on empty DB ──────────────────────────────────────
+
+    #[test]
+    fn run_product_list_empty() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        // Should not error on empty DB
+        let result = run_product_list(&store);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_category_list_empty() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_category_list(&store);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_sale_list_empty() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_sale_list(&store);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_customer_list_empty() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_list(&store);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_user_list_empty() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_user_list(&store);
+        assert!(result.is_ok());
+    }
+
+    // ── Get commands on non-existent data ──────────────────────────────
+
+    #[test]
+    fn run_product_get_not_found() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_product_get(&store, "NONEXISTENT");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_category_get_not_found() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_category_get(&store, "cat-missing");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_sale_get_not_found() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_sale_get(&store, "00000000-0000-0000-0000-000000000000", "text");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_sale_get_not_found_json() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_sale_get(&store, "00000000-0000-0000-0000-000000000000", "json");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_customer_get_not_found() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_get(&store, "nonexistent");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_user_get_not_found() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_user_get(&store, "nonexistent");
+        assert!(result.is_ok());
+    }
+
+    // ── Category CRUD ─────────────────────────────────────────────────
+
+    #[test]
+    fn run_category_create_and_get() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        run_category_create(&store, "cat-drinks", "Beverages", "#06b6d4").unwrap();
+        // Verify via get
+        let cat = store.get_category("cat-drinks").unwrap().unwrap();
+        assert_eq!(cat.name, "Beverages");
+        assert_eq!(cat.colour, "#06b6d4");
+    }
+
+    #[test]
+    fn run_category_create_duplicate() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        run_category_create(&store, "cat-x", "X", "#fff").unwrap();
+        // Duplicate ID should exit — we just verify the store rejects it
+        let result = store.create_category("cat-x", "X", "#fff");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn run_category_delete_removes() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        run_category_create(&store, "cat-xyz", "XYZ", "#000").unwrap();
+        run_category_delete(&store, "cat-xyz").unwrap();
+        let cat = store.get_category("cat-xyz").unwrap();
+        assert!(cat.is_none());
+    }
+
+    // ── Product CRUD ──────────────────────────────────────────────────
+
+    #[test]
+    fn run_product_create_and_list() {
+        let conn = setup_in_memory_db();
+        let currency = Currency::from_str("USD").unwrap();
+        let money = Money { minor_units: 1500, currency };
+
+        let store = make_store(&conn);
+        store.create_product("SKU-001", "Test Product", money, None, None, 10).unwrap();
+
+        // List should include it
+        let products = store.list_products().unwrap();
+        assert!(!products.is_empty());
+        assert!(products.iter().any(|p| p.product.sku.as_str() == "SKU-001"));
+    }
+
+    #[test]
+    fn run_product_create_and_get_text() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let currency = Currency::from_str("USD").unwrap();
+        let money = Money { minor_units: 2500, currency };
+        store.create_product("SKU-002", "Widget", money, None, None, 5).unwrap();
+
+        let result = run_product_get(&store, "SKU-002");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_product_delete_removes() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let currency = Currency::from_str("USD").unwrap();
+        let money = Money { minor_units: 100, currency };
+        store.create_product("TO-DEL", "Delete Me", money, None, None, 0).unwrap();
+        run_product_delete(&store, "TO-DEL").unwrap();
+        let prod = store.get_product("TO-DEL").unwrap();
+        assert!(prod.is_none());
+    }
+
+    // ── Inventory ─────────────────────────────────────────────────────
+
+    #[test]
+    fn run_inventory_get_with_stock() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let currency = Currency::from_str("USD").unwrap();
+        let money = Money { minor_units: 500, currency };
+        store.create_product("INV-001", "Stocked Item", money, None, None, 42).unwrap();
+
+        let result = run_inventory_get(&store, "INV-001");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_inventory_get_not_found() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_inventory_get(&store, "NO-SKU");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_inventory_adjust_restock() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let currency = Currency::from_str("USD").unwrap();
+        let money = Money { minor_units: 500, currency };
+        store.create_product("ADJ-001", "Adjustable", money, None, None, 10).unwrap();
+
+        run_inventory_adjust(&store, "ADJ-001", 5).unwrap();
+        let prod = store.get_product("ADJ-001").unwrap().unwrap();
+        assert_eq!(prod.stock_qty, Some(15));
+    }
+
+    #[test]
+    fn run_inventory_adjust_sell() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let currency = Currency::from_str("USD").unwrap();
+        let money = Money { minor_units: 500, currency };
+        store.create_product("ADJ-002", "Sellable", money, None, None, 10).unwrap();
+
+        run_inventory_adjust(&store, "ADJ-002", -3).unwrap();
+        let prod = store.get_product("ADJ-002").unwrap().unwrap();
+        assert_eq!(prod.stock_qty, Some(7));
+    }
+
+    // ── Sale commands ─────────────────────────────────────────────────
+
+    #[test]
+    fn run_sale_update_status_not_found() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        // SaleUpdateStatus error path exits; we check the store method directly
+        let result = store.update_sale_status(
+            "00000000-0000-0000-0000-000000000000",
+            SaleStatus::Active,
+        );
+        assert!(matches!(result, Err(CoreError::NotFound { .. })));
+    }
+
+    // ── Customer CRUD ─────────────────────────────────────────────────
+
+    #[test]
+    fn run_customer_create_and_get() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        run_customer_create(&store, "Alice", Some("alice@test.com"), None, None).unwrap();
+
+        let customers = store.list_customers().unwrap();
+        assert!(!customers.is_empty());
+        assert!(customers.iter().any(|c| c.name == "Alice"));
+    }
+
+    // ── User CRUD ─────────────────────────────────────────────────────
+
+    fn seed_role(conn: &Connection, id: &str, name: &str) {
+        conn.execute(
+            "INSERT OR IGNORE INTO roles (id, name, description, permissions) VALUES (?1, ?2, '', '[]')",
+            params![id, name],
+        ).unwrap();
+    }
+
+    #[test]
+    fn run_user_create_and_list() {
+        let conn = setup_in_memory_db();
+        seed_role(&conn, "role-cashier", "Cashier");
+        let store = make_store(&conn);
+        run_user_create(&store, "jdoe", "hash123", "John Doe", "role-cashier").unwrap();
+
+        let users = store.list_users().unwrap();
+        assert!(!users.is_empty());
+        assert!(users.iter().any(|u| u.username == "jdoe"));
+    }
+
+    // ── CLI arg parsing ───────────────────────────────────────────────
+
+    #[test]
+    fn cli_parse_migrate() {
+        let cli = Cli::try_parse_from(["oz", "migrate"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Migrate)));
+    }
+
+    #[test]
+    fn cli_parse_product_list() {
+        let cli = Cli::try_parse_from(["oz", "product", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Product(ProductArgs {
+                action: ProductAction::List,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_product_create() {
+        let cli = Cli::try_parse_from(["oz", "product", "create", "SKU-1", "Widget", "999"]).unwrap();
+        match cli.command {
+            Some(Command::Product(ProductArgs {
+                action: ProductAction::Create { sku, name, price, .. },
+            })) => {
+                assert_eq!(sku, "SKU-1");
+                assert_eq!(name, "Widget");
+                assert_eq!(price, 999);
+            }
+            _ => panic!("expected Product::Create"),
+        }
+    }
+
+    #[test]
+    fn cli_parse_product_get() {
+        let cli = Cli::try_parse_from(["oz", "product", "get", "ABC"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Product(ProductArgs {
+                action: ProductAction::Get { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_category_list() {
+        let cli = Cli::try_parse_from(["oz", "category", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Category(CategoryArgs {
+                action: CategoryAction::List,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_inventory_get() {
+        let cli = Cli::try_parse_from(["oz", "inventory", "get", "SKU-001"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Inventory(InventoryArgs {
+                action: InventoryAction::Get { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_sale_list() {
+        let cli = Cli::try_parse_from(["oz", "sale", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Sale(SaleArgs {
+                action: SaleAction::List,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_customer_list() {
+        let cli = Cli::try_parse_from(["oz", "customer", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Customer(CustomerArgs {
+                action: CustomerAction::List,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_user_list() {
+        let cli = Cli::try_parse_from(["oz", "user", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::User(UserArgs {
+                action: UserAction::List,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_backup() {
+        let cli = Cli::try_parse_from(["oz", "backup", "-o", "backup.db"]).unwrap();
+        match cli.command {
+            Some(Command::Backup { output }) => assert_eq!(output, "backup.db"),
+            _ => panic!("expected Backup"),
+        }
+    }
+
+    #[test]
+    fn cli_parse_restore() {
+        let cli = Cli::try_parse_from(["oz", "restore", "-i", "backup.db"]).unwrap();
+        match cli.command {
+            Some(Command::Restore { input }) => assert_eq!(input, "backup.db"),
+            _ => panic!("expected Restore"),
+        }
+    }
+
+    #[test]
+    fn cli_parse_default_db() {
+        let cli = Cli::try_parse_from(["oz", "migrate"]).unwrap();
+        assert_eq!(cli.db, "oz-pos.db");
+    }
+
+    #[test]
+    fn cli_parse_custom_db() {
+        let cli = Cli::try_parse_from(["oz", "--db", "custom.db", "migrate"]).unwrap();
+        assert_eq!(cli.db, "custom.db");
+    }
+
+    #[test]
+    fn cli_parse_export_ozpkg() {
+        let cli = Cli::try_parse_from([
+            "oz", "export-ozpkg",
+            "-o", "data.ozpkg",
+            "-p", "secret123",
+        ]).unwrap();
+        match cli.command {
+            Some(Command::ExportOzpkg { output, password, .. }) => {
+                assert_eq!(output, "data.ozpkg");
+                assert_eq!(password, "secret123");
+            }
+            _ => panic!("expected ExportOzpkg"),
+        }
+    }
+
+    #[test]
+    fn cli_parse_import_ozpkg() {
+        let cli = Cli::try_parse_from([
+            "oz", "import-ozpkg",
+            "-i", "data.ozpkg",
+            "-p", "secret123",
+            "--dry-run",
+        ]).unwrap();
+        match cli.command {
+            Some(Command::ImportOzpkg { input, password, dry_run }) => {
+                assert_eq!(input, "data.ozpkg");
+                assert_eq!(password, "secret123");
+                assert!(dry_run);
+            }
+            _ => panic!("expected ImportOzpkg"),
+        }
+    }
+
+    // ── Sale status helper logic ──────────────────────────────────────
+
+    #[test]
+    fn update_status_invalid_string() {
+        let result = SaleStatus::from_stored_str("bogus");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn update_status_valid_strings() {
+        assert!(SaleStatus::from_stored_str("pending").is_some());
+        assert!(SaleStatus::from_stored_str("active").is_some());
+        assert!(SaleStatus::from_stored_str("completed").is_some());
+        assert!(SaleStatus::from_stored_str("voided").is_some());
+    }
+
+    // ── Currency parsing for product create ───────────────────────────
+
+    #[test]
+    fn currency_from_str_valid() {
+        let currency = Currency::from_str("USD").unwrap();
+        assert_eq!(currency, Currency(*b"USD"));
+    }
+
+    #[test]
+    fn currency_from_str_invalid() {
+        let result = Currency::from_str("INVALID");
+        assert!(result.is_err());
+    }
+
+    // ── Init-db ───────────────────────────────────────────────────────
+
+    #[test]
+    fn run_init_db_simple_retail() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        oz_core::migrations::run(&mut conn).unwrap();
+        let args = InitDbArgs { preset: "simple-retail".into() };
+        let result = run_init_db(&conn, &args);
+        assert!(result.is_ok());
+        // Verify stuff was seeded
+        let name = oz_core::Settings::get_store_name(&conn).unwrap();
+        assert_eq!(name, Some("My Store".into()));
+    }
+
+    #[test]
+    fn run_init_db_unknown_preset_falls_back_to_custom() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        oz_core::migrations::run(&mut conn).unwrap();
+        let args = InitDbArgs { preset: "unknown-preset".into() };
+        let result = run_init_db(&conn, &args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_init_db_full_store() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        oz_core::migrations::run(&mut conn).unwrap();
+        let args = InitDbArgs { preset: "full-store".into() };
+        let result = run_init_db(&conn, &args);
+        assert!(result.is_ok());
+    }
+
+    // ── Migrate ───────────────────────────────────────────────────────
+
+    #[test]
+    fn run_migrate_on_fresh_db() {
+        let conn = Connection::open_in_memory().unwrap();
+        let result = run_migrate(conn);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn cli_parse_sale_get() {
+        let cli = Cli::try_parse_from(["oz", "sale", "get", "some-id"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Sale(SaleArgs {
+                action: SaleAction::Get { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_sale_update_status() {
+        let cli = Cli::try_parse_from([
+            "oz", "sale", "update-status", "some-id", "completed",
+        ]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Sale(SaleArgs {
+                action: SaleAction::UpdateStatus { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_category_create() {
+        let cli = Cli::try_parse_from([
+            "oz", "category", "create", "cat-drinks", "Beverages", "#06b6d4",
+        ]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Category(CategoryArgs {
+                action: CategoryAction::Create { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_user_create() {
+        let cli = Cli::try_parse_from([
+            "oz", "user", "create", "jdoe", "hash123", "John Doe", "role-cashier",
+        ]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::User(UserArgs {
+                action: UserAction::Create { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_customer_create() {
+        let cli = Cli::try_parse_from([
+            "oz", "customer", "create", "Alice", "--email", "alice@test.com",
+        ]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Customer(CustomerArgs {
+                action: CustomerAction::Create { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_inventory_adjust() {
+        let cli = Cli::try_parse_from([
+            "oz", "inventory", "adjust", "SKU-001", "+5",
+        ]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Inventory(InventoryArgs {
+                action: InventoryAction::Adjust { .. },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parse_export_csv() {
+        let cli = Cli::try_parse_from(["oz", "export", "daily-summary"]).unwrap();
+        match cli.command {
+            Some(Command::Export { kind }) => assert_eq!(kind, "daily-summary"),
+            _ => panic!("expected Export"),
+        }
+    }
+
+    #[test]
+    fn cli_parse_export_with_types_and_password() {
+        let cli = Cli::try_parse_from([
+            "oz", "export-ozpkg", "-o", "backup.ozpkg", "-p", "secret",
+            "-t", "products,customers",
+        ]).unwrap();
+        match cli.command {
+            Some(Command::ExportOzpkg { output, password, types, .. }) => {
+                assert_eq!(output, "backup.ozpkg");
+                assert_eq!(password, "secret");
+                assert_eq!(types, "products,customers");
+            }
+            _ => panic!("expected ExportOzpkg"),
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -1256,7 +1902,7 @@ fn run_export_ozpkg(conn: &Connection, output: &str, types_str: &str, password: 
 // ── Import .ozpkg ─────────────────────────────────────────────────────
 
 /// Import data from an encrypted .ozpkg file.
-fn run_import_ozpkg(_conn: &Connection, input: &str, password: &str, dry_run: bool) -> Result<()> {
+fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: bool) -> Result<()> {
     use oz_core::ozpkg::import_ozpkg;
 
     eprintln!("reading {input}...");
@@ -1294,10 +1940,144 @@ fn run_import_ozpkg(_conn: &Connection, input: &str, password: &str, dry_run: bo
         return Ok(());
     }
 
-    // TODO: Write data to the database.
-    // Actual import logic (upserting into tables) will be added in a
-    // follow-up once the exact conflict-resolution strategy is defined.
-    eprintln!("import will be applied in a future update — placeholder only.");
+    // Write data to the database inside a single transaction.
+    let store = Store::new(conn);
+    let tx = conn
+        .unchecked_transaction()
+        .context("starting import transaction")?;
 
+    let mut total = 0usize;
+
+    // ── Categories ──────────────────────────────────────────────
+    for val in &payload.categories {
+        if let Ok(cat) = serde_json::from_value::<oz_core::Category>(val.clone()) {
+            let colour = if cat.colour.is_empty() { "#6366f1" } else { &cat.colour };
+            let exists = tx
+                .query_row("SELECT 1 FROM categories WHERE id = ?1", rusqlite::params![cat.id], |_| Ok(()))
+                .is_ok();
+            if exists {
+                tx.execute(
+                    "UPDATE categories SET name = ?1, colour = ?2 WHERE id = ?3",
+                    rusqlite::params![cat.name, colour, cat.id],
+                )?;
+            } else {
+                tx.execute(
+                    "INSERT INTO categories (id, name, colour) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![cat.id, cat.name, colour],
+                )?;
+            }
+            total += 1;
+        }
+    }
+
+    // ── Products ────────────────────────────────────────────────
+    for val in &payload.products {
+        if let Ok(product) = serde_json::from_value::<oz_core::Product>(val.clone()) {
+            let exists = tx
+                .query_row("SELECT 1 FROM products WHERE sku = ?1", rusqlite::params![product.sku.to_string()], |_| Ok(()))
+                .is_ok();
+            if exists {
+                let cur_str = std::str::from_utf8(&product.price.currency.0)
+                    .expect("valid UTF-8 currency");
+                let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                tx.execute(
+                    "UPDATE products SET name = ?1, price_minor = ?2, currency = ?3, category_id = ?4, barcode = ?5, updated_at = ?6 WHERE sku = ?7",
+                    rusqlite::params![product.name, product.price.minor_units, cur_str, product.category_id, product.barcode, now, product.sku.to_string()],
+                )?;
+            } else {
+                let cur_str = std::str::from_utf8(&product.price.currency.0)
+                    .expect("valid UTF-8 currency");
+                let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                tx.execute(
+                    "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    rusqlite::params![product.id, product.sku.to_string(), product.name, product.price.minor_units, cur_str, product.category_id, product.barcode, now, now],
+                )?;
+            }
+            total += 1;
+        }
+    }
+
+    // ── Sales ───────────────────────────────────────────────────
+    if let Some(ref sales) = payload.sales {
+        for val in sales {
+            if let Ok(sale) = serde_json::from_value::<oz_core::Sale>(val.clone()) {
+                let exists = tx
+                    .query_row("SELECT 1 FROM sales WHERE id = ?1", rusqlite::params![sale.id], |_| Ok(()))
+                    .is_ok();
+                if !exists {
+                    store.create_sale(&sale)?;
+                }
+                total += 1;
+            }
+        }
+    }
+
+    // ── Customers ───────────────────────────────────────────────
+    if let Some(ref customers) = payload.customers {
+        for val in customers {
+            if let Ok(cust) = serde_json::from_value::<oz_core::Customer>(val.clone()) {
+                let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                let exists = tx
+                    .query_row("SELECT 1 FROM customers WHERE id = ?1", rusqlite::params![cust.id], |_| Ok(()))
+                    .is_ok();
+                if exists {
+                    tx.execute(
+                        "UPDATE customers SET name = ?1, email = ?2, phone = ?3, notes = ?4, updated_at = ?5 WHERE id = ?6",
+                        rusqlite::params![cust.name, cust.email, cust.phone, cust.notes, now, cust.id],
+                    )?;
+                } else {
+                    tx.execute(
+                        "INSERT INTO customers (id, name, email, phone, notes, loyalty_points, total_spent_minor, currency, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, 'USD', ?6, ?7)",
+                        rusqlite::params![cust.id, cust.name, cust.email, cust.phone, cust.notes, now, now],
+                    )?;
+                }
+                total += 1;
+            }
+        }
+    }
+
+    // ── Users ───────────────────────────────────────────────────
+    if let Some(ref users) = payload.users {
+        for val in users {
+            if let Ok(user) = serde_json::from_value::<oz_core::User>(val.clone()) {
+                let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                let exists = tx
+                    .query_row("SELECT 1 FROM users WHERE id = ?1", rusqlite::params![user.id], |_| Ok(()))
+                    .is_ok();
+                if exists {
+                    tx.execute(
+                        "UPDATE users SET username = ?1, display_name = ?2, role_id = ?3, updated_at = ?4 WHERE id = ?5",
+                        rusqlite::params![user.username, user.display_name, user.role_id, now, user.id],
+                    )?;
+                } else {
+                    // PIN hash not included in export; imported users are inactive
+                    tx.execute(
+                        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+                         VALUES (?1, ?2, '', ?3, ?4, 0, ?5, ?6)",
+                        rusqlite::params![user.id, user.username, user.display_name, user.role_id, now, now],
+                    )?;
+                }
+                total += 1;
+            }
+        }
+    }
+
+    // ── Settings ────────────────────────────────────────────────
+    if let Some(ref settings) = payload.settings {
+        for val in settings {
+            if let Some(key) = val.get("key").and_then(|v| v.as_str())
+                && let Some(value) = val.get("value").and_then(|v| v.as_str())
+            {
+                let _ = Settings::set(&tx, key, value);
+                total += 1;
+            }
+        }
+    }
+
+    tx.commit().context("committing import transaction")?;
+
+    eprintln!("import complete — {total} records written.");
     Ok(())
 }

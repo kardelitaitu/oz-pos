@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { getEnabledFeatures } from '@/api/pos';
+import { getEnabledFeatures } from '@/api/settings';
 
 // ── Feature key constants (must match the Rust Feature enum kebab-case keys) ─
 

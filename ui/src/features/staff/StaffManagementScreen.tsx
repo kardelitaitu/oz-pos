@@ -7,7 +7,7 @@ import {
   updateStaff,
   type StaffMemberDto,
   type RoleDto,
-} from '@/api/pos';
+} from '@/api/staff';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';

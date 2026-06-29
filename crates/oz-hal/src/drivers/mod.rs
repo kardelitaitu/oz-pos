@@ -5,8 +5,11 @@
 //! never need a `mock` feature flag.
 
 pub mod bt_printer;
+pub mod bt_scanner;
 pub mod escpos;
 pub mod mock;
+pub mod drawer;
+pub mod serial_display;
 pub mod receipt;
 pub mod serial_scanner;
 pub mod tcp_printer;

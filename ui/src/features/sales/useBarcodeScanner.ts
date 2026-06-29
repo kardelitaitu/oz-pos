@@ -4,9 +4,9 @@ import {
   stopScanner,
   onBarcodeScanned,
   onBarcodeError,
-  lookupByBarcode,
   type BarcodeScannedPayload,
-} from '@/api/pos';
+} from '@/api/hardware';
+import { lookupByBarcode } from '@/api/products';
 
 export interface UseBarcodeScannerOptions {
   /** Scanner device id. Defaults to auto-select first available. */
@@ -91,7 +91,7 @@ export function useBarcodeScanner({
 
 async function autoDetectScanner(): Promise<string | null> {
   try {
-    const scanners = await import('@/api/pos').then((m) => m.listScanners());
+    const scanners = await import('@/api/hardware').then((m) => m.listScanners());
     return scanners[0]?.id ?? null;
   } catch {
     return null;

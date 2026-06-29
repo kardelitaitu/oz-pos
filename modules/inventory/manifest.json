@@ -1,0 +1,12 @@
+{
+  "id": "inventory",
+  "name": "Inventory",
+  "version": "1.0.0",
+  "description": "Product catalog and stock management module: product CRUD, barcode lookup, variants, categories, stock adjustments, inventory tracking.",
+  "dependencies": [],
+  "permissions": [
+    "inventory:view",
+    "inventory:edit",
+    "inventory:adjust"
+  ]
+}

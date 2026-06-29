@@ -39,15 +39,46 @@ export default function StaffLoginScreen() {
   const [pin, setPin] = useState<string[]>([]);
   const usernameInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus username input on mount.
+  const pinSectionRef = useRef<HTMLDivElement>(null);
+
+  // Focus appropriate element when step changes.
   useEffect(() => {
-    usernameInputRef.current?.focus();
-  }, []);
+    if (step === 'username') {
+      usernameInputRef.current?.focus();
+    } else if (step === 'pin') {
+      pinSectionRef.current?.focus();
+    }
+  }, [step]);
 
   // Reset error when step changes.
   useEffect(() => {
     clearError();
   }, [step, clearError]);
+
+  // ── Hardware keyboard handler for PIN step ────────────────────
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (step !== 'pin') return;
+      if (loading) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handlePinDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handlePinBackspace();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handlePinClear();
+        goBack();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (pin.length >= 1) attemptLogin();
+      }
+    },
+    [step, loading, handlePinDigit, handlePinBackspace, handlePinClear, goBack, attemptLogin, pin.length],
+  );
 
   // ── Username handlers ──────────────────────────────────────────
 
@@ -226,7 +257,14 @@ export default function StaffLoginScreen() {
 
         {/* PIN step */}
         {step === 'pin' && (
-          <div className="staff-login-pin-section">
+          <div
+            className="staff-login-pin-section"
+            ref={pinSectionRef}
+            tabIndex={-1}
+            onKeyDown={handleKeyDown}
+            role="application"
+            aria-label="PIN entry — type digits on your keyboard or use the on-screen keypad"
+          >
             {renderPinDots(pin.length)}
             {renderPinPad()}
 

@@ -6,7 +6,7 @@ import {
   updateTerminal,
   deleteTerminal,
   type TerminalDto,
-} from '@/api/pos';
+} from '@/api/terminals';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './TerminalManagementScreen.css';

@@ -17,4 +17,8 @@ pub enum LuaError {
     /// A script tried to call a binding that is not exposed.
     #[error("unknown binding: {0}")]
     UnknownBinding(String),
+
+    /// Failed to load a script from disk.
+    #[error("lua script load failed: {0}")]
+    Load(String),
 }

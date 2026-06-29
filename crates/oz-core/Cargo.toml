@@ -7,6 +7,8 @@ license.workspace = true
 description = "Domain types for OZ-POS: money, currency, cart, sale, inventory."
 
 [dependencies]
+foundation = { workspace = true }
+platform-core = { workspace = true }
 serde = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
@@ -21,5 +23,12 @@ rand = { workspace = true }
 hex = "0.4"
 serde_json = { workspace = true }
 
-# Property-based testing for feature flag invariants.
+[features]
+default = ["sync-http"]
+sync-http = ["reqwest"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { workspace = true, optional = true }
+
+[dev-dependencies]
 proptest = "1"

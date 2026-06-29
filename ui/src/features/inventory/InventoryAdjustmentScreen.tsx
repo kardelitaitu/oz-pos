@@ -4,7 +4,7 @@ import {
   listProducts,
   adjustStock,
   type ProductDto,
-} from '@/api/pos';
+} from '@/api/products';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';

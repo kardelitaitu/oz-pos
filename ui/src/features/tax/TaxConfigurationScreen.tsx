@@ -5,13 +5,12 @@ import {
   createTaxRate,
   updateTaxRate,
   deleteTaxRate,
-  listCategories,
   listCategoryTaxRates,
   setCategoryTaxRates,
   type TaxRateDto,
-  type CategoryDto,
   type CategoryTaxRateRow,
-} from '@/api/pos';
+} from '@/api/tax';
+import { listCategories, type CategoryDto } from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';

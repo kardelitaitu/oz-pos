@@ -5,18 +5,22 @@ import {
   setReceiptSettings,
   getStoreSettings,
   setStoreSettings,
+  type ReceiptSettingsDto,
+  type StoreSettingsDto,
+} from '@/api/settings';
+import {
   listCurrencies,
   getDefaultCurrency,
   setDefaultCurrency,
+  type CurrencyDto,
+} from '@/api/currency';
+import {
   getSyncSettings,
   updateSyncSettings,
   triggerSync,
-  type ReceiptSettingsDto,
-  type StoreSettingsDto,
-  type CurrencyDto,
   type SyncSettingsDto,
   type SyncAttemptResult,
-} from '@/api/pos';
+} from '@/api/offline';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './SettingsPage.css';

@@ -7,7 +7,17 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- (nothing yet)
+- **Real platform keychains**: Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`), macOS Keychain (`security-framework`), Linux Secret Service (`zbus`) — all three platform backends for the `Keyring` trait are now implemented.
+- **Sync HTTP transport**: `sync_client.rs` now performs an actual `reqwest` blocking POST to the configured server URL instead of logging "would sync".
+- **Tax breakdown on receipt**: `LineItem` carries `tax_amount: Option<Money>`, receipt shows per-line `Tax: $X.XX` inline when `show_tax` is enabled.
+- **8 tax computation unit tests**: no rates, default exclusive, default inclusive, product-level wins, category-level wins, multi-line, persisted after create, empty sale.
+- **122 UI tests passing** (was 113): fixed 9 test failures across `SalesDashboardScreen`, `TaxConfigurationScreen`, and `StaffManagementScreen` caused by widget-registry architecture and Fluent bidi isolate characters in aria-labels.
+- **`oz-core` Cargo.toml**: `sync-http` feature (enabled by default) gates the `reqwest` dependency.
+
+### Changed
+- `SalesDashboardScreen` is now widget-based — widget registration (`registerSalesWidgets`) must be called before rendering.
+- `TaxConfigurationScreen` requires `list_categories` and `list_category_tax_rates` invoke mocks in tests.
+- `rust-toolchain.toml`: restored comment accuracy (channel is `stable`, MSRV floor is 1.88 in `Cargo.toml`).
 
 ## [0.0.1] — 2026-06-28
 

@@ -4,13 +4,12 @@ import {
   listSales,
   getSale,
   printSalesReceipt,
-  listStaff,
   listRefunds,
   type SaleListItem,
   type SaleDetail,
-  type StaffMemberDto,
   type RefundDto,
-} from '@/api/pos';
+} from '@/api/sales';
+import { listStaff, type StaffMemberDto } from '@/api/staff';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -196,8 +195,14 @@ export default function SalesHistoryScreen() {
           quantity: l.qty,
           unitPrice: { minorUnits: l.unit_price.minor_units, currency: l.unit_price.currency },
           totalPrice: { minorUnits: l.total_minor, currency: l.unit_price.currency },
+          taxAmount: l.tax_amount
+            ? { minorUnits: l.tax_amount.minor_units, currency: l.tax_amount.currency }
+            : undefined,
         })),
-        subtotal: { minorUnits: subtotalMinor, currency: detail.total.currency },
+        subtotal: { minorUnits: detail.subtotal.minor_units, currency: detail.total.currency },
+        tax: detail.taxTotal.minor_units > 0
+          ? { minorUnits: detail.taxTotal.minor_units, currency: detail.total.currency }
+          : undefined,
         total: { minorUnits: detail.total.minor_units, currency: detail.total.currency },
         payments: [
           {
@@ -575,6 +580,14 @@ export default function SalesHistoryScreen() {
                   <div><strong>Payment:</strong> {detail.paymentMethod ?? '\u2014'}</div>
                   <div><strong>Cashier:</strong> {cashierName(detail.userId)}</div>
                   <div>
+                    <strong>Subtotal:</strong> {formatMoney(detail.subtotal)}
+                  </div>
+                  {detail.taxTotal.minor_units > 0 && (
+                    <div>
+                      <strong>Tax:</strong> {formatMoney(detail.taxTotal)}
+                    </div>
+                  )}
+                  <div>
                     <strong>Total:</strong> {formatMoney(detail.total)}
                     {refunds.length > 0 && (
                       <Badge variant="warning" style={{ marginLeft: 8 }}>
@@ -595,6 +608,7 @@ export default function SalesHistoryScreen() {
                       <th>Qty</th>
                       <th>Unit Price</th>
                       <th>Total</th>
+                      {detail.lines.some((l) => l.tax_amount) && <th>Tax</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -605,6 +619,7 @@ export default function SalesHistoryScreen() {
                         <td>{line.qty}</td>
                         <td>{formatMoney(line.unit_price)}</td>
                         <td>{formatMoney({ minor_units: line.total_minor, currency: line.unit_price.currency })}</td>
+                        <td>{line.tax_amount ? formatMoney(line.tax_amount) : '\u2014'}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -8,89 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Cart, Currency, Money};
-
-/// The lifecycle state of a sale./// 
-/// ```text
-/// Pending ──→ Active ──→ Completed
-///               │
-///               └──→ Voided
-/// ```
-///
-/// `Completed` and `Voided` are terminal — no further transitions are
-/// allowed from either state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum SaleStatus {
-    /// Sale has been created but not yet started.
-    Pending,
-    /// Sale is in progress (items being scanned, cart open).
-    Active,
-    /// Sale has been paid and finalised.
-    Completed,
-    /// Sale has been cancelled.
-    Voided,
-}
-
-impl SaleStatus {
-    /// Returns `true` when no further transitions are allowed.
-    pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Completed | Self::Voided)
-    }
-
-    /// Canonical string representation for database storage (kebab-case).
-    pub fn as_stored_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Active => "active",
-            Self::Completed => "completed",
-            Self::Voided => "voided",
-        }
-    }
-
-    /// Parse a status from its stored string representation.
-    pub fn from_stored_str(s: &str) -> Option<Self> {
-        match s {
-            "pending" => Some(Self::Pending),
-            "active" => Some(Self::Active),
-            "completed" => Some(Self::Completed),
-            "voided" => Some(Self::Voided),
-            _ => None,
-        }
-    }
-
-    /// Check whether a transition from `from` to `to` is valid by the
-    /// state machine rules (without needing a full `Sale` instance).
-    pub fn can_transition_to(from: Self, to: Self) -> bool {
-        matches!(
-            (from, to),
-            (Self::Pending, Self::Active)
-                | (Self::Active, Self::Completed)
-                | (Self::Active, Self::Voided)
-        )
-    }
-}
-
-/// Error returned when an invalid state transition is attempted.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvalidTransition {
-    /// The state before the attempted transition.
-    pub from: SaleStatus,
-    /// The state that was requested.
-    pub to: SaleStatus,
-}
-
-impl std::fmt::Display for InvalidTransition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "cannot transition from {:?} to {:?}",
-            self.from, self.to
-        )
-    }
-}
-
-impl std::error::Error for InvalidTransition {}
+use foundation::{Cart, Currency, InvalidTransition, Money, SaleStatus};
 
 /// A single line item within a sale.
 ///
@@ -121,6 +39,16 @@ pub struct SaleLine {
 
     /// Ordinal position of this line within the sale (1-indexed).
     pub line_position: i64,
+
+    /// Tax amount for this line (same currency as the sale).
+    /// Defaults to zero when no tax has been computed.
+    #[serde(default)]
+    pub tax_amount: Money,
+
+    /// Tax rate ID applied to this line.
+    /// `None` when no tax was applied (e.g. tax-exempt product).
+    #[serde(default)]
+    pub tax_rate_id: Option<String>,
 }
 
 /// A point-of-sale transaction with line items and a state machine.
@@ -174,6 +102,17 @@ pub struct Sale {
     /// Human-readable discount label (e.g. "Senior 10%").
     #[serde(default)]
     pub discount_label: Option<String>,
+
+    /// Subtotal before discount (sum of line totals).
+    /// Defaults to [`total`] when no subtotal has been computed
+    /// (backward-compat with sales created before Phase 3).
+    #[serde(default)]
+    pub subtotal: Money,
+
+    /// Total tax amount across all line items.
+    /// Defaults to zero for sales created before Phase 3.
+    #[serde(default)]
+    pub tax_total: Money,
 }
 
 impl Sale {
@@ -215,6 +154,8 @@ impl Sale {
                     unit_price: cl.unit_price,
                     line_total,
                     line_position: (i as i64) + 1,
+                    tax_amount: Money::zero(currency),
+                    tax_rate_id: None,
                 })
             })
             .collect::<Option<Vec<_>>>()?;
@@ -233,6 +174,8 @@ impl Sale {
             lines,
             discount_percent: cart.discount_percent(),
             discount_label: cart.discount_label().map(String::from),
+            subtotal: Money::zero(currency),
+            tax_total: Money::zero(currency),
         })
     }
 

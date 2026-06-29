@@ -7,7 +7,7 @@ import {
   listCurrencies,
   type ExchangeRateDto,
   type CurrencyDto,
-} from '@/api/pos';
+} from '@/api/currency';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './ExchangeRateScreen.css';

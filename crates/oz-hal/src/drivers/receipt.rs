@@ -136,6 +136,8 @@ pub struct LineItem {
     pub unit_price: Money,
     /// Quantity × unit price.
     pub total_price: Money,
+    /// Tax amount for this line (None if tax is not itemised).
+    pub tax_amount: Option<Money>,
 }
 
 // ── Payment info ─────────────────────────────────────────
@@ -403,6 +405,12 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
             total_pad = total_pad,
         );
         b.text(&line);
+        if config.show_tax && let Some(ref tax) = item.tax_amount {
+            let indent = cols.name + cols.sep.len() + cols.qty + cols.sep.len() + cols.price + cols.sep.len();
+            let tax_str = format_money(tax, config);
+            let tax_line = format!("{:indent$}Tax: {:>tax_pad$}{tax_str}", "", "", indent = indent, tax_pad = cols.total.saturating_sub(tax_str.len() + 5));
+            b.text(&tax_line);
+        }
     }
     b.separator();
 
@@ -489,18 +497,21 @@ mod tests {
                     quantity: 1,
                     unit_price: usd_money(350),
                     total_price: usd_money(350),
+                    tax_amount: Some(usd_money(35)),
                 },
                 LineItem {
                     name: "Bread White".into(),
                     quantity: 2,
                     unit_price: usd_money(200),
                     total_price: usd_money(400),
+                    tax_amount: Some(usd_money(40)),
                 },
                 LineItem {
                     name: "Eggs (dozen)".into(),
                     quantity: 1,
                     unit_price: usd_money(450),
                     total_price: usd_money(450),
+                    tax_amount: Some(usd_money(45)),
                 },
             ],
             subtotal: usd_money(1200),
@@ -625,6 +636,25 @@ mod tests {
         let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
         assert!(!text.contains("TAX:"), "tax should not appear when show_tax=false");
+    }
+
+    #[test]
+    fn sales_receipt_shows_per_line_tax() {
+        let cfg = ReceiptConfig { show_tax: true, ..default_config() };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(text.contains("Tax:"), "per-line tax label should appear");
+        assert!(text.contains("0.35"), "milk tax should appear");
+        assert!(text.contains("0.40"), "bread tax should appear");
+        assert!(text.contains("0.45"), "egg tax should appear");
+    }
+
+    #[test]
+    fn sales_receipt_hides_per_line_tax_when_show_tax_false() {
+        let cfg = ReceiptConfig { show_tax: false, ..default_config() };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(!text.contains("Tax:"), "per-line tax should not appear when show_tax=false");
     }
 
     #[test]

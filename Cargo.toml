@@ -10,7 +10,22 @@ members = [
     "crates/oz-reporting",
     "crates/oz-logging",
     "crates/oz-cli",
-    "src-tauri",
+    "foundation",
+    "platform/core",
+    "platform/kernel",
+    "platform/startup",
+    "platform/sync",
+    "modules/sales",
+    "modules/inventory",
+    "modules/crm",
+    "modules/tax",
+    "modules/settings",
+    "modules/staff",
+    "modules/reporting",
+    "modules/terminal",
+    "modules/currency",
+    "apps/desktop-client",
+    "apps/tablet-client",
 ]
 
 [workspace.package]
@@ -33,6 +48,20 @@ oz-payment = { path = "crates/oz-payment" }
 oz-reporting = { path = "crates/oz-reporting" }
 oz-logging = { path = "crates/oz-logging" }
 oz-cli = { path = "crates/oz-cli" }
+foundation = { path = "foundation" }
+platform-core = { path = "platform/core" }
+platform-kernel = { path = "platform/kernel" }
+modules-sales = { path = "modules/sales" }
+modules-inventory = { path = "modules/inventory" }
+modules-crm = { path = "modules/crm" }
+modules-tax = { path = "modules/tax" }
+modules-settings = { path = "modules/settings" }
+modules-staff = { path = "modules/staff" }
+modules-reporting = { path = "modules/reporting" }
+modules-terminal = { path = "modules/terminal" }
+modules-currency = { path = "modules/currency" }
+platform-startup = { path = "platform/startup" }
+platform-sync = { path = "platform/sync" }
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 
@@ -55,14 +84,18 @@ axum = { version = "0.8", features = ["macros"] }
 jsonwebtoken = "9"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
 rusb = "0.9"
 serialport = "4"
-argon2 = "0.5"
+argon2 = { version = "0.5", features = ["std", "rand"] }
 aes-gcm = "0.10"
 zstd = { version = "0.13", features = ["zstdmt"] }
 aead = "0.5"
 rand = "0.8"
 tracing-appender = "0.2"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+rlua = "0.20"
+stripe = "0.34"
 
 [profile.release]
 opt-level = 3

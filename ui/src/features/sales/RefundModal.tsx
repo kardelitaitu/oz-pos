@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { processRefund, type SaleDetail } from '@/api/pos';
+import { processRefund, type SaleDetail } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney, type Money } from '@/types/domain';
 import { Button } from '@/components/Button';

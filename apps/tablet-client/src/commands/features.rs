@@ -1,0 +1,209 @@
+//! Feature flag management Tauri commands.
+//!
+//! Exposes `list_all_features` (returns all 32 features with enabled
+//! status and metadata) and `set_feature` (toggle a single feature on
+//! or off with automatic dependency resolution).
+//!
+//! The front-end consumes these via the Feature Toggle screen
+//! (Settings → Features) so users can enable/disable capabilities
+//! after the initial Setup Wizard.
+
+use serde::{Deserialize, Serialize};
+use tauri::{command, State};
+
+use oz_core::{Feature, Store};
+
+use crate::error::AppError;
+use crate::state::AppState;
+
+/// A single feature with its current state and metadata.
+#[derive(Debug, Clone, Serialize)]
+pub struct FeatureDto {
+    /// Kebab-case key (e.g. "simple-retail").
+    pub key: String,
+    /// Human-readable display name.
+    pub name: &'static str,
+    /// Short description of what the feature provides.
+    pub description: &'static str,
+    /// Logical group (e.g. "Core", "Payments", "Products", etc.).
+    pub group: &'static str,
+    /// Whether this feature is currently enabled.
+    pub enabled: bool,
+    /// Kebab-case keys of features this one depends on.
+    pub dependencies: Vec<String>,
+}
+
+/// Response from `list_all_features`.
+#[derive(Debug, Serialize)]
+pub struct ListAllFeaturesResult {
+    /// All 32 features with metadata and enabled status.
+    pub features: Vec<FeatureDto>,
+}
+
+/// Fetch every known feature with its current enabled status, metadata,
+/// and dependency information.
+///
+/// The front-end renders this into the Feature Toggle screen.
+#[command]
+pub async fn list_all_features(
+    state: State<'_, AppState>,
+) -> Result<ListAllFeaturesResult, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let reg = store.load_features()?;
+
+    let features = all_feature_metadata()
+        .into_iter()
+        .map(|(feat, name, desc, group)| {
+            let key = oz_core::features::feature_key(feat).to_string();
+            let deps: Vec<String> = feat
+                .dependencies()
+                .iter()
+                .map(|d| oz_core::features::feature_key(*d).to_string())
+                .collect();
+            FeatureDto {
+                key,
+                name,
+                description: desc,
+                group,
+                enabled: reg.is_enabled(feat),
+                dependencies: deps,
+            }
+        })
+        .collect();
+
+    Ok(ListAllFeaturesResult { features })
+}
+
+// ── Set feature ──────────────────────────────────────────────────────
+
+/// Arguments for `set_feature`.
+#[derive(Debug, Deserialize)]
+pub struct SetFeatureArgs {
+    /// Kebab-case key of the feature to toggle.
+    pub key: String,
+    /// Whether to enable (`true`) or disable (`false`).
+    pub enabled: bool,
+}
+
+/// Response from `set_feature`.
+#[derive(Debug, Serialize)]
+pub struct SetFeatureResult {
+    /// Whether the operation succeeded.
+    pub success: bool,
+    /// Updated list of all features (same shape as `list_all_features`).
+    pub features: Vec<FeatureDto>,
+    /// If the operation cascaded (auto-enabled dependencies), these were
+    /// also enabled.
+    pub auto_enabled: Vec<String>,
+}
+
+/// Enable or disable a single feature flag.
+///
+/// When enabling, all required dependencies are automatically enabled
+/// as well. When disabling, only the specified feature is turned off
+/// (dependents are NOT cascaded — the UI must handle that).
+#[command]
+pub async fn set_feature(
+    args: SetFeatureArgs,
+    state: State<'_, AppState>,
+) -> Result<SetFeatureResult, AppError> {
+    let feature = oz_core::features::feature_from_key(&args.key).ok_or_else(|| {
+        AppError::Invalid(format!("unknown feature key: {}", args.key))
+    })?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+
+    let mut reg = store.load_features()?;
+    let mut auto_enabled: Vec<String> = Vec::new();
+
+    if args.enabled {
+        // Before enabling, track what was already enabled.
+        let before_enable: Vec<Feature> = reg.enabled_features().collect();
+
+        // Enable the feature (this auto-enables dependencies).
+        reg.enable(feature);
+
+        // Figure out what was newly auto-enabled.
+        for f in reg.enabled_features() {
+            if !before_enable.contains(&f) && f != feature {
+                auto_enabled.push(oz_core::features::feature_key(f).to_string());
+            }
+        }
+    } else {
+        reg.disable(feature);
+    }
+
+    // Persist the updated registry and prune stale rows (from disabling).
+    store.save_features(&reg)?;
+    store.prune_stale_features(&reg)?;
+
+    // Build the full feature list response.
+    let features = all_feature_metadata()
+        .into_iter()
+        .map(|(feat, name, desc, group)| {
+            let key = oz_core::features::feature_key(feat).to_string();
+            let deps: Vec<String> = feat
+                .dependencies()
+                .iter()
+                .map(|d| oz_core::features::feature_key(*d).to_string())
+                .collect();
+            FeatureDto {
+                key,
+                name,
+                description: desc,
+                group,
+                enabled: reg.is_enabled(feat),
+                dependencies: deps,
+            }
+        })
+        .collect();
+
+    Ok(SetFeatureResult {
+        success: true,
+        features,
+        auto_enabled,
+    })
+}
+
+// ── Feature metadata ────────────────────────────────────────────────
+
+/// Returns all 32 features with their human-readable name, description,
+/// and logical group.
+fn all_feature_metadata() -> Vec<(Feature, &'static str, &'static str, &'static str)> {
+    vec![
+        (Feature::SimpleRetail, "Simple Retail", "Core POS: scan, sell, print receipt", "Core"),
+        (Feature::Restaurant, "Restaurant Mode", "Table management and KDS", "Core"),
+        (Feature::CashPayment, "Cash Payment", "Accept cash at checkout", "Payments"),
+        (Feature::CardPayment, "Card Payment", "Accept debit/credit cards", "Payments"),
+        (Feature::MultiCurrency, "Multi-Currency", "Support multiple currencies with exchange rates", "Payments"),
+        (Feature::InventoryTracking, "Inventory Tracking", "Track stock levels per product", "Products"),
+        (Feature::ProductVariants, "Product Variants", "Size, colour, flavour variants", "Products"),
+        (Feature::CategoriesEnabled, "Categories", "Group products into categories", "Products"),
+        (Feature::StaffLogin, "Staff Login", "PIN/password login for staff", "Staff"),
+        (Feature::StaffRoles, "Staff Roles", "Role-based permissions (owner, manager, cashier)", "Staff"),
+        (Feature::ShiftManagement, "Shift Management", "Open/close shift with cash reconciliation", "Staff"),
+        (Feature::AuditLog, "Audit Log", "Immutable append-only action log", "Staff"),
+        (Feature::BarcodeScanning, "Barcode Scanning", "USB/serial/Bluetooth barcode scanner", "Hardware"),
+        (Feature::ReceiptPrinting, "Receipt Printing", "USB/serial/network receipt printer", "Hardware"),
+        (Feature::CashDrawer, "Cash Drawer", "Cash drawer trigger via printer GPIO", "Hardware"),
+        (Feature::CustomerDisplay, "Customer Display", "Secondary customer-facing screen", "Hardware"),
+        (Feature::NfcReader, "NFC Reader", "Contactless card/NFC reader", "Hardware"),
+        (Feature::DiscountEngine, "Discount Engine", "Percentage and fixed-amount discounts", "Business Rules"),
+        (Feature::TaxEngine, "Tax Engine", "Tax calculation with configurable rates", "Business Rules"),
+        (Feature::LoyaltyProgram, "Loyalty Program", "Customer points, tiers, and redemption", "Business Rules"),
+        (Feature::PromotionsEngine, "Promotions Engine", "Time-limited buy-X-get-Y and % off", "Business Rules"),
+        (Feature::ProductBundles, "Product Bundles", "Sell multiple SKUs as one bundle", "Business Rules"),
+        (Feature::KitchenDisplay, "Kitchen Display", "Order routing to kitchen screens", "Restaurant"),
+        (Feature::TableManagement, "Table Management", "Interactive restaurant floor plan", "Restaurant"),
+        (Feature::SelfServiceKiosk, "Self-Service Kiosk", "Locked-down fullscreen kiosk mode", "Restaurant"),
+        (Feature::CloudSync, "Cloud Sync", "Database synchronisation to cloud", "Scaling"),
+        (Feature::MultiStore, "Multi-Store", "Manage multiple store locations", "Scaling"),
+        (Feature::MultiTerminal, "Multi-Terminal", "Multiple terminals per store", "Scaling"),
+        (Feature::Reporting, "Reporting", "Sales, inventory, and shift reports", "Reporting"),
+        (Feature::Analytics, "Analytics", "Advanced charts and data exports", "Reporting"),
+        (Feature::ExportImport, "Export / Import", "Data export/import in .ozpkg format", "Advanced"),
+        (Feature::PluginSystem, "Plugin System", "Third-party plugin support", "Advanced"),
+    ]
+}

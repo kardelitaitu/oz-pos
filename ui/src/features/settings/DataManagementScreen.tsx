@@ -8,6 +8,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import {
+  getBackupStatus,
+  createBackup,
+  exportData,
+  importPreview,
+  importData,
+  pickExportPath,
+  pickImportFile,
+} from '@/api/data';
 import './DataManagementScreen.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -53,7 +62,7 @@ interface ImportState {
 
 interface BackupInfo {
   lastBackup: string | null;
-  lastBackupSize: string | null;
+  lastBackupSize: string | null | undefined;
   backingUp: boolean;
 }
 
@@ -97,11 +106,17 @@ export default function DataManagementScreen() {
   // ── Load backup status on mount ─────────────────────────────────
 
   useEffect(() => {
-    // TODO: Call IPC to get last backup status
-    setBackup((prev) => ({
-      ...prev,
-      lastBackup: null,
-    }));
+    getBackupStatus()
+      .then((status) => {
+        setBackup((prev) => ({
+          ...prev,
+          lastBackup: status.lastBackup,
+          lastBackupSize: status.lastBackupSize ?? undefined,
+        }));
+      })
+      .catch(() => {
+        setBackup((prev) => ({ ...prev, lastBackup: null }));
+      });
   }, []);
 
   // ── Backup handlers ─────────────────────────────────────────────
@@ -109,11 +124,10 @@ export default function DataManagementScreen() {
   const handleBackup = useCallback(async () => {
     setBackup((prev) => ({ ...prev, backingUp: true }));
     try {
-      // TODO: Call IPC to create backup
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const result = await createBackup();
       setBackup({
         lastBackup: new Date().toLocaleString(),
-        lastBackupSize: '1.2 MB',
+        lastBackupSize: `${(result.sizeBytes / 1024 / 1024).toFixed(1)} MB`,
         backingUp: false,
       });
       setToast({ message: 'Backup created successfully', variant: 'success' });
@@ -164,21 +178,40 @@ export default function DataManagementScreen() {
       return;
     }
 
-    setExportState((prev) => ({ ...prev, step: 'exporting', progress: 0, error: null }));
+    setExportState((prev) => ({ ...prev, step: 'exporting', progress: 10, error: null }));
 
-    // Simulate export progress
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise((r) => setTimeout(r, 200));
-      setExportState((prev) => ({ ...prev, progress: i }));
+    try {
+      const filePath = await pickExportPath();
+      if (!filePath) {
+        setExportState((prev) => ({ ...prev, step: 'encrypt', progress: 0 }));
+        return;
+      }
+
+      setExportState((prev) => ({ ...prev, progress: 30 }));
+
+      const result = await exportData({
+        types: Array.from(exportState.selectedTypes),
+        password: exportState.password,
+        outputPath: filePath,
+        dateFrom: exportState.dateFrom || undefined,
+        dateTo: exportState.dateTo || undefined,
+      });
+
+      setExportState((prev) => ({
+        ...prev,
+        step: 'done',
+        progress: 100,
+        outputFile: result.path,
+      }));
+      setToast({ message: 'Export complete', variant: 'success' });
+    } catch (err) {
+      setExportState((prev) => ({
+        ...prev,
+        step: 'encrypt',
+        error: err instanceof Error ? err.message : 'Export failed',
+      }));
+      setToast({ message: 'Export failed', variant: 'error' });
     }
-
-    setExportState((prev) => ({
-      ...prev,
-      step: 'done',
-      progress: 100,
-      outputFile: `${new Date().toISOString().slice(0, 10)}_ozpos_export.ozpkg`,
-    }));
-    setToast({ message: 'Export complete', variant: 'success' });
   }, [exportState.password, exportState.passwordConfirm]);
 
   const resetExport = useCallback(() => {
@@ -188,19 +221,21 @@ export default function DataManagementScreen() {
   // ── Import flow ─────────────────────────────────────────────────
 
   const handleFileSelect = useCallback(async () => {
-    // TODO: Use Tauri dialog to pick a .ozpkg file
-    // For now, simulate selecting a file
-    setImportState((prev) => ({
-      ...prev,
-      selectedFile: 'ozpos_export.ozpkg',
-      metadata: {
-        name: 'My Store Backup',
-        version: '0.0.1',
-        types: ['products', 'categories', 'settings'],
-        created: '2026-06-28T10:30:00Z',
-      },
-      step: 'preview',
-    }));
+    try {
+      const filePath = await pickImportFile();
+      if (!filePath) return;
+      setImportState((prev) => ({
+        ...prev,
+        selectedFile: filePath,
+        metadata: null,
+        step: 'preview',
+      }));
+
+      // Preview the file (requires password — skip for now, user enters it later)
+      // We just set the file path and let the user enter the password.
+    } catch {
+      setToast({ message: 'Failed to open file picker', variant: 'error' });
+    }
   }, []);
 
   const startImport = useCallback(async () => {
@@ -208,26 +243,69 @@ export default function DataManagementScreen() {
       setToast({ message: 'Enter the export password', variant: 'error' });
       return;
     }
-
-    setImportState((prev) => ({ ...prev, step: 'importing', progress: 0, error: null }));
-
-    // Simulate dry-run
-    await new Promise((r) => setTimeout(r, 500));
-    setImportState((prev) => ({
-      ...prev,
-      progress: 30,
-      dryRun: { added: 15, updated: 3, skipped: 0 },
-    }));
-
-    // Simulate import
-    for (let i = 30; i <= 100; i += 10) {
-      await new Promise((r) => setTimeout(r, 200));
-      setImportState((prev) => ({ ...prev, progress: i }));
+    if (!importState.selectedFile) {
+      setToast({ message: 'No file selected', variant: 'error' });
+      return;
     }
 
-    setImportState((prev) => ({ ...prev, step: 'done' }));
-    setToast({ message: 'Import complete', variant: 'success' });
-  }, [importState.password]);
+    setImportState((prev) => ({ ...prev, step: 'importing', progress: 10, error: null }));
+
+    try {
+      // Preview first
+      const preview = await importPreview(importState.selectedFile, importState.password);
+      setImportState((prev) => ({
+        ...prev,
+        progress: 30,
+        metadata: {
+          name: preview.storeName,
+          version: preview.appVersion,
+          types: preview.types,
+          created: preview.createdAt,
+        },
+        dryRun: {
+          added:
+            preview.categoryCount +
+            preview.productCount +
+            (preview.saleCount ?? 0) +
+            (preview.customerCount ?? 0) +
+            (preview.userCount ?? 0) +
+            (preview.settingCount ?? 0),
+          updated: 0,
+          skipped: 0,
+        },
+      }));
+
+      setImportState((prev) => ({ ...prev, progress: 50 }));
+
+      // Execute import
+      const result = await importData(importState.selectedFile, importState.password);
+
+      setImportState((prev) => ({
+        ...prev,
+        progress: 100,
+        dryRun: {
+          added:
+            result.productsImported +
+            result.categoriesImported +
+            result.salesImported +
+            result.customersImported +
+            result.usersImported +
+            result.settingsImported,
+          updated: 0,
+          skipped: 0,
+        },
+        step: 'done',
+      }));
+      setToast({ message: 'Import complete', variant: 'success' });
+    } catch (err) {
+      setImportState((prev) => ({
+        ...prev,
+        step: 'select',
+        error: err instanceof Error ? err.message : 'Import failed',
+      }));
+      setToast({ message: 'Import failed', variant: 'error' });
+    }
+  }, [importState.password, importState.selectedFile]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
@@ -447,7 +525,7 @@ export default function DataManagementScreen() {
             </Card>
           )}
 
-          {importState.step === 'preview' && importState.metadata && (
+          {importState.step === 'preview' && (
             <Card shadow="sm">
               <div className="data-mgmt-section">
                 <h2 className="data-mgmt-section-title">Preview import</h2>
@@ -455,24 +533,28 @@ export default function DataManagementScreen() {
                 <div className="data-mgmt-meta">
                   <div className="data-mgmt-meta-row">
                     <span className="data-mgmt-meta-label">File</span>
-                    <span>{importState.selectedFile}</span>
+                    <span className="data-mgmt-meta-value">{importState.selectedFile ?? 'Not selected'}</span>
                   </div>
-                  <div className="data-mgmt-meta-row">
-                    <span className="data-mgmt-meta-label">Store</span>
-                    <span>{importState.metadata.name}</span>
-                  </div>
-                  <div className="data-mgmt-meta-row">
-                    <span className="data-mgmt-meta-label">Version</span>
-                    <span>{importState.metadata.version}</span>
-                  </div>
-                  <div className="data-mgmt-meta-row">
-                    <span className="data-mgmt-meta-label">Created</span>
-                    <span>{new Date(importState.metadata.created).toLocaleString()}</span>
-                  </div>
-                  <div className="data-mgmt-meta-row">
-                    <span className="data-mgmt-meta-label">Contains</span>
-                    <span>{importState.metadata.types.join(', ')}</span>
-                  </div>
+                  {importState.metadata && (
+                    <>
+                      <div className="data-mgmt-meta-row">
+                        <span className="data-mgmt-meta-label">Store</span>
+                        <span>{importState.metadata.name}</span>
+                      </div>
+                      <div className="data-mgmt-meta-row">
+                        <span className="data-mgmt-meta-label">Version</span>
+                        <span>{importState.metadata.version}</span>
+                      </div>
+                      <div className="data-mgmt-meta-row">
+                        <span className="data-mgmt-meta-label">Created</span>
+                        <span>{new Date(importState.metadata.created).toLocaleString()}</span>
+                      </div>
+                      <div className="data-mgmt-meta-row">
+                        <span className="data-mgmt-meta-label">Contains</span>
+                        <span>{importState.metadata.types.join(', ')}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="data-mgmt-field">
@@ -491,7 +573,7 @@ export default function DataManagementScreen() {
                   <Button variant="ghost" onClick={resetImport}>
                     Cancel
                   </Button>
-                  <Button variant="primary" onClick={startImport}>
+                  <Button variant="primary" onClick={startImport} disabled={!importState.password}>
                     Start import
                   </Button>
                 </div>

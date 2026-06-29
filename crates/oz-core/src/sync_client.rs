@@ -80,20 +80,51 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
 }
 
 /// Send a single offline queue item to the remote server via HTTP POST.
+#[cfg(feature = "sync-http")]
 fn send_item_to_server(config: &SyncConfig, item: &OfflineQueueItem) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Replace with actual HTTP POST request using ureq or reqwest.
-    //
-    // The payload structure sent to the server:
-    // {
-    //   "action": "complete_sale",
-    //   "payload": { ... item payload ... },
-    //   "id": "item.id"
-    // }
+    let url = format!("{}/api/events", config.server_url.trim_end_matches('/'));
+    let payload = serde_json::json!({
+        "id": item.id,
+        "action": item.action,
+        "payload": item.payload,
+    });
+
+    let mut headers = reqwest::blocking::Client::new()
+        .post(&url)
+        .header("Content-Type", "application/json");
+
+    if let Some(ref key) = config.api_key {
+        headers = headers.header("Authorization", &format!("Bearer {key}"));
+    }
+
+    let resp = headers
+        .json(&payload)
+        .send()
+        .map_err(|e| format!("sync HTTP request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        return Err(format!("sync server returned {status}: {body}").into());
+    }
+
     tracing::info!(
         item_id = %item.id,
         action = %item.action,
         server = %config.server_url,
-        "would sync item to server"
+        "synced item to server"
+    );
+    Ok(())
+}
+
+/// Stub used when `sync-http` feature is disabled — just logs the intent.
+#[cfg(not(feature = "sync-http"))]
+fn send_item_to_server(config: &SyncConfig, item: &OfflineQueueItem) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!(
+        item_id = %item.id,
+        action = %item.action,
+        server = %config.server_url,
+        "sync-http feature disabled; would sync item to server"
     );
     Ok(())
 }
@@ -112,6 +143,7 @@ pub async fn sync_pending_async(
 mod tests {
     use super::*;
     use crate::migrations;
+    use crate::settings::Settings;
     use rusqlite::Connection;
 
     fn setup() -> Store<'static> {
@@ -151,10 +183,116 @@ mod tests {
             server_url: "http://localhost:3099".into(),
             api_key: None,
         };
+        // No server running locally — sync should fail with a transport error.
         let result = sync_pending(&store, &config).unwrap();
-        assert_eq!(result.synced, 1);
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 1);
+        assert!(result.error.is_some(), "should report a network error");
 
+        // Item should be marked as failed (no longer pending).
         let pending = store.list_pending_offline().unwrap();
-        assert!(pending.is_empty());
+        assert!(pending.is_empty(), "failed item is no longer pending");
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all.len(), 1, "item still in queue with failed status");
+        assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Failed);
+    }
+
+    #[test]
+    fn sync_pending_multiple_items() {
+        let store = setup();
+        store.enqueue_offline("complete_sale", r#"{"id":1}"#).unwrap();
+        store.enqueue_offline("complete_sale", r#"{"id":2}"#).unwrap();
+
+        let config = SyncConfig {
+            server_url: "http://localhost:3099".into(),
+            api_key: None,
+        };
+        let result = sync_pending(&store, &config).unwrap();
+        // No server running — all items fail.
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 2);
+        assert!(result.error.is_some(), "should report a network error");
+    }
+
+    #[test]
+    fn sync_config_from_settings_enabled_with_url() {
+        let store = setup();
+        let conn = store.conn();
+        Settings::set_sync_enabled(conn, true).unwrap();
+        Settings::set_sync_server_url(conn, "http://sync.example.com").unwrap();
+
+        let config = SyncConfig::from_settings(&store).unwrap();
+        assert!(config.is_some());
+        assert_eq!(config.unwrap().server_url, "http://sync.example.com");
+    }
+
+    #[test]
+    fn sync_config_from_settings_enabled_no_url() {
+        let store = setup();
+        let conn = store.conn();
+        Settings::set_sync_enabled(conn, true).unwrap();
+        // Don't set a URL
+        let config = SyncConfig::from_settings(&store).unwrap();
+        assert!(config.is_none(), "should be None when no URL is set");
+    }
+
+    #[test]
+    fn sync_config_from_settings_enabled_empty_url() {
+        let store = setup();
+        let conn = store.conn();
+        Settings::set_sync_enabled(conn, true).unwrap();
+        Settings::set_sync_server_url(conn, "").unwrap();
+
+        let config = SyncConfig::from_settings(&store).unwrap();
+        assert!(config.is_none(), "should be None when URL is empty");
+    }
+
+    #[test]
+    fn sync_config_from_settings_with_api_key() {
+        let store = setup();
+        let conn = store.conn();
+        Settings::set_sync_enabled(conn, true).unwrap();
+        Settings::set_sync_server_url(conn, "http://sync.example.com").unwrap();
+        Settings::set_sync_api_key(conn, "sk-test-key").unwrap();
+
+        let config = SyncConfig::from_settings(&store).unwrap().unwrap();
+        assert_eq!(config.server_url, "http://sync.example.com");
+        assert_eq!(config.api_key, Some("sk-test-key".into()));
+    }
+
+    #[test]
+    fn sync_attempt_result_debug() {
+        let result = SyncAttemptResult {
+            synced: 5,
+            failed: 1,
+            error: Some("network error".into()),
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("synced: 5"));
+        assert!(debug.contains("failed: 1"));
+    }
+
+    #[test]
+    fn sync_attempt_result_serde_roundtrip() {
+        let result = SyncAttemptResult {
+            synced: 10,
+            failed: 2,
+            error: Some("timeout".into()),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let back: SyncAttemptResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.synced, 10);
+        assert_eq!(back.failed, 2);
+        assert_eq!(back.error, Some("timeout".into()));
+    }
+
+    #[test]
+    fn sync_attempt_result_no_error() {
+        let result = SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: None,
+        };
+        assert!(result.error.is_none());
     }
 }

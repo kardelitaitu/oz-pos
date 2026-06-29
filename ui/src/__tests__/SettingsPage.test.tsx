@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { withFluent } from '@/locales/test-utils';
+import settingsFtl from '@/locales/settings.ftl?raw';
+import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
 
 const SAMPLE_CURRENCIES = [
@@ -41,9 +44,11 @@ beforeEach(() => {
   invokeMock.mockClear();
 });
 
+const wrap = (children: React.ReactNode) => withFluent(children, settingsFtl, sharedFtl);
+
 describe('SettingsPage', () => {
   it('renders the settings title and receipt section', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
@@ -52,7 +57,7 @@ describe('SettingsPage', () => {
   });
 
   it('loads receipt settings and populates the form', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/show currency symbol/i)).not.toBeChecked();
@@ -64,7 +69,7 @@ describe('SettingsPage', () => {
   });
 
   it('toggles show-currency and show-tax checkboxes', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/show currency symbol/i)).toBeInTheDocument();
@@ -81,7 +86,7 @@ describe('SettingsPage', () => {
   });
 
   it('changes decimal separator and paper width via select', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/decimal separator/i)).toBeInTheDocument();
@@ -98,7 +103,7 @@ describe('SettingsPage', () => {
   });
 
   it('updates footer input', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/thank you/i)).toBeInTheDocument();
@@ -111,7 +116,7 @@ describe('SettingsPage', () => {
   });
 
   it('calls set_receipt_settings and set_store_settings on save', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
@@ -126,7 +131,7 @@ describe('SettingsPage', () => {
   });
 
   it('shows "Saved!" after successful save', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
@@ -140,7 +145,7 @@ describe('SettingsPage', () => {
   });
 
   it('renders the Store section with name, address, and tax ID fields', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
@@ -152,7 +157,7 @@ describe('SettingsPage', () => {
   });
 
   it('updates store name input', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/store name/i)).toBeInTheDocument();
@@ -165,7 +170,7 @@ describe('SettingsPage', () => {
   });
 
   it('updates store address input', async () => {
-    render(<SettingsPage />);
+    render(wrap(<SettingsPage />));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/address/i)).toBeInTheDocument();

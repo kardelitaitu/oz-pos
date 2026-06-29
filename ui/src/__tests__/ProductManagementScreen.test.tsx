@@ -1,47 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { LocalizationProvider, ReactLocalization } from '@fluent/react';
+import { withFluent } from '@/locales/test-utils';
+import productsFtl from '@/locales/products.ftl?raw';
 import ProductManagementScreen from '@/features/products/ProductManagementScreen';
 
-const LOCALE_STRINGS = [
-  'product-mgmt-title = Products',
-  'product-mgmt-add = Add Product',
-  'product-mgmt-loading = Loading products…',
-  'product-mgmt-empty = No products yet.',
-  'product-mgmt-empty-cta = Add your first product',
-  'product-mgmt-col-sku = SKU',
-  'product-mgmt-col-name = Name',
-  'product-mgmt-col-category = Category',
-  'product-mgmt-col-price = Price',
-  'product-mgmt-col-barcode = Barcode',
-  'product-mgmt-col-stock = Stock',
-  'product-mgmt-stock-in = In stock',
-  'product-mgmt-stock-out = Out of stock',
-  'product-mgmt-edit = Edit',
-  'product-mgmt-delete = Delete',
-  'product-mgmt-modal-add-title = Add Product',
-  'product-mgmt-modal-edit-title = Edit Product',
-  'product-mgmt-modal-close = Close',
-  'product-mgmt-field-sku-required = SKU *',
-  'product-mgmt-field-name-required = Name *',
-  'product-mgmt-field-price = Price (minor units)',
-  'product-mgmt-field-currency = Currency',
-  'product-mgmt-field-category = Category',
-  'product-mgmt-field-barcode = Barcode',
-  'product-mgmt-field-stock = Initial stock',
-  'product-mgmt-btn-cancel = Cancel',
-  'product-mgmt-btn-create = Create',
-  'product-mgmt-btn-update = Update',
-].join('\n');
-
-const wrap = (children: React.ReactNode) => {
-  const bundle = new FluentBundle('en-US');
-  bundle.addResource(new FluentResource(LOCALE_STRINGS));
-  const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
-};
+const wrap = (children: React.ReactNode) => withFluent(children, productsFtl);
 
 const SAMPLE_PRODUCTS = [
   {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { listProducts, type ProductDto } from '@/api/pos';
+import { listProducts, type ProductDto } from '@/api/products';
 import { type Product, type Sku } from '@/types/domain';
 
 // ── Sample product fallback ─────────────────────────────────────────

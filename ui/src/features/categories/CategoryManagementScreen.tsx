@@ -4,7 +4,7 @@ import {
   createCategory,
   deleteCategory,
   type CategoryDto,
-} from '@/api/pos';
+} from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './CategoryManagementScreen.css';

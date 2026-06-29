@@ -7,7 +7,7 @@ import {
   deleteOfflineItem,
   type OfflineQueueItemDto,
   type SyncResult,
-} from '@/api/pos';
+} from '@/api/offline';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './OfflineQueueScreen.css';

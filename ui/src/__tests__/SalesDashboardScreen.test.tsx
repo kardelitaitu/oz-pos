@@ -1,25 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { LocalizationProvider, ReactLocalization } from '@fluent/react';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 import SalesDashboardScreen from '@/features/sales/SalesDashboardScreen';
+import { registerSalesWidgets } from '@/features/sales/widgets';
+import { clearWidgets } from '@/platform/ui/widget-registry';
 
-const LOCALE_STRINGS = [
-  'sales-dashboard-title = Sales Dashboard',
-  'sales-dashboard-daily-total = Daily Total',
-  'sales-dashboard-total-sales = Total Sales',
-  'sales-dashboard-total-items = Total Items',
-  'sales-dashboard-hourly-title = Sales by Hour',
-  'sales-dashboard-loading = Loading…',
-  'sales-dashboard-no-data = No data for today',
-].join('\n');
-
-const wrap = (children: React.ReactNode) => {
-  const bundle = new FluentBundle('en-US');
-  bundle.addResource(new FluentResource(LOCALE_STRINGS));
-  const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
-};
+const wrap = (children: React.ReactNode) => withFluent(children, salesFtl);
 
 const SAMPLE_SUMMARY = [
   { sale_id: 'sale-1', total_minor: 1250, currency: 'USD', line_count: 2, status: 'completed', created_at: '2026-06-28T10:00:00Z' },
@@ -39,7 +26,20 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
+vi.mock('@/hooks/useFeatures', () => ({
+  useFeatures: () => ({
+    enabled: new Set(['simple-retail']),
+    loading: false,
+    isEnabled: (key: string) => key === 'simple-retail',
+    filterRoutes: (routes: string[]) => routes,
+    error: null,
+    loaded: true,
+  }),
+}));
+
 beforeEach(() => {
+  clearWidgets();
+  registerSalesWidgets();
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'export_daily_summary') return Promise.resolve(SAMPLE_SUMMARY);
@@ -59,7 +59,7 @@ describe('SalesDashboardScreen', () => {
   it('shows KPI cards', async () => {
     render(wrap(<SalesDashboardScreen />));
     await waitFor(() => {
-      expect(screen.getByText(/daily total/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /daily total/i })).toBeInTheDocument();
     });
     expect(screen.getByText(/total sales/i)).toBeInTheDocument();
     expect(screen.getByText(/total items/i)).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('SalesDashboardScreen', () => {
   it('shows loading state initially', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
     render(wrap(<SalesDashboardScreen />));
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/loading/i).length).toBeGreaterThan(0);
   });
 
   it('displays hourly data', async () => {
@@ -76,7 +76,7 @@ describe('SalesDashboardScreen', () => {
     await waitFor(() => {
       expect(screen.getByText(/sales by hour/i)).toBeInTheDocument();
     });
-    expect(screen.getByLabelText(/sales by hour bar chart/i)).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: /hourly sales bars/i })).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
     expect(screen.getByText('11')).toBeInTheDocument();
   });
@@ -96,7 +96,7 @@ describe('SalesDashboardScreen', () => {
   it('formats currency correctly', async () => {
     render(wrap(<SalesDashboardScreen />));
     await waitFor(() => {
-      expect(screen.getByText(/daily total/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /daily total/i })).toBeInTheDocument();
     });
     expect(screen.getByText('$12.50')).toBeInTheDocument();
     expect(screen.getByText('$8.00')).toBeInTheDocument();

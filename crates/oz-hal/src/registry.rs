@@ -13,8 +13,10 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use crate::drivers::drawer::PrinterKickCashDrawer;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
+use crate::traits::customer_display::CustomerDisplay;
 use crate::traits::printer::ReceiptPrinter;
 use crate::types::DeviceInfo;
 
@@ -24,6 +26,7 @@ pub struct DriverRegistry {
     scanners: RwLock<HashMap<String, Arc<dyn BarcodeScanner>>>,
     printers: RwLock<HashMap<String, Arc<dyn ReceiptPrinter>>>,
     drawers: RwLock<HashMap<String, Arc<dyn CashDrawer>>>,
+    displays: RwLock<HashMap<String, Arc<dyn CustomerDisplay>>>,
 }
 
 impl DriverRegistry {
@@ -77,9 +80,25 @@ impl DriverRegistry {
         self.printers.read().await.keys().cloned().collect()
     }
 
+    /// Register a customer display under `id`. Overwrites any previous
+    /// entry with the same id.
+    pub async fn register_display(&self, id: &str, driver: Arc<dyn CustomerDisplay>) {
+        self.displays.write().await.insert(id.to_owned(), driver);
+    }
+
+    /// Look up a customer display by id. Returns `None` if no display is registered.
+    pub async fn display(&self, id: &str) -> Option<Arc<dyn CustomerDisplay>> {
+        self.displays.read().await.get(id).cloned()
+    }
+
     /// Snapshot of registered cash drawer ids.
     pub async fn drawer_ids(&self) -> Vec<String> {
         self.drawers.read().await.keys().cloned().collect()
+    }
+
+    /// Snapshot of registered customer display ids.
+    pub async fn display_ids(&self) -> Vec<String> {
+        self.displays.read().await.keys().cloned().collect()
     }
 
     /// Discover and register available hardware. Failure of one driver
@@ -105,7 +124,7 @@ impl DriverRegistry {
             self.register_scanner(&id, Arc::new(scanner)).await;
         }
 
-        // --- USB receipt printers ---
+        // --- USB receipt printers (and companion cash drawers) ---
         for printer in crate::drivers::usb_printer::UsbReceiptPrinter::discover_all() {
             let info = printer.device_info();
             let id = if info.serial.is_empty() {
@@ -113,10 +132,29 @@ impl DriverRegistry {
             } else {
                 format!("printer:{}", info.serial)
             };
-            self.register_printer(&id, Arc::new(printer)).await;
+            let printer_arc = Arc::new(printer);
+            self.register_printer(&id, printer_arc.clone()).await;
+            // Register a companion cash drawer that kicks through this printer.
+            let drawer_id = format!("drawer:kick:{}", id);
+            let drawer = Arc::new(PrinterKickCashDrawer::new_pin2(printer_arc));
+            self.register_cash_drawer(&drawer_id, drawer).await;
         }
 
-        // --- Bluetooth (SPP) receipt printers ---
+        // --- Bluetooth (SPP) barcode scanners ---
+        for scanner in crate::drivers::bt_scanner::BtBarcodeScanner::discover_all() {
+            let info = scanner.device_info();
+            let id = format!("scanner:bt:{}", info.serial);
+            self.register_scanner(&id, Arc::new(scanner)).await;
+        }
+
+        // --- Serial customer-facing pole displays ---
+        for display in crate::drivers::serial_display::SerialCustomerDisplay::discover_all() {
+            let info = display.device_info();
+            let id = format!("display:serial:{}", info.serial);
+            self.register_display(&id, Arc::new(display)).await;
+        }
+
+        // --- Bluetooth (SPP) receipt printers (and companion cash drawers) ---
         let bt_ports = crate::transport::serial::probe_bluetooth().unwrap_or_default();
         for port_info in bt_ports {
             let info = DeviceInfo::new("bluetooth", &port_info.description, &port_info.port_name);
@@ -126,12 +164,18 @@ impl DriverRegistry {
                 info,
             );
             let id = format!("printer:bt:{}", port_info.port_name);
-            self.register_printer(&id, Arc::new(printer)).await;
+            let printer_arc = Arc::new(printer);
+            self.register_printer(&id, printer_arc.clone()).await;
+            // Companion drawer for BT printers.
+            let drawer_id = format!("drawer:kick:{}", id);
+            let drawer = Arc::new(PrinterKickCashDrawer::new_pin2(printer_arc));
+            self.register_cash_drawer(&drawer_id, drawer).await;
         }
     }
 
-    /// Register a TCP (network) printer under the given id. This is not
-    /// auto-discovered; the setup wizard calls this when the user
+    /// Register a TCP (network) printer under the given id. Also registers
+    /// a companion cash drawer that kicks through this printer. This is
+    /// not auto-discovered; the setup wizard calls this when the user
     /// configures a printer by IP address or hostname.
     pub async fn register_tcp_printer(
         &self,
@@ -139,8 +183,44 @@ impl DriverRegistry {
         addr: &str,
         info: DeviceInfo,
     ) {
-        let printer = crate::drivers::tcp_printer::TcpReceiptPrinter::new(addr, info);
-        self.register_printer(id, Arc::new(printer)).await;
+        let printer_arc = Arc::new(crate::drivers::tcp_printer::TcpReceiptPrinter::new(addr, info));
+        self.register_printer(id, printer_arc.clone()).await;
+        // Companion drawer for TCP printer.
+        let drawer_id = format!("drawer:kick:{id}");
+        let drawer = Arc::new(PrinterKickCashDrawer::new_pin2(printer_arc));
+        self.register_cash_drawer(&drawer_id, drawer).await;
+    }
+
+    /// Register a serial customer display under the given id. The setup
+    /// wizard calls this when the user configures a pole display by port name.
+    pub async fn register_serial_display(
+        &self,
+        id: &str,
+        port_name: &str,
+        info: DeviceInfo,
+    ) {
+        let display = Arc::new(
+            crate::drivers::serial_display::SerialCustomerDisplay::new(
+                port_name,
+                crate::drivers::serial_display::DISPLAY_DEFAULT_BAUD,
+                info,
+            ),
+        );
+        self.register_display(id, display).await;
+    }
+
+    /// Register a serial cash drawer under the given id. The setup wizard
+    /// calls this when the user configures a standalone drawer by port name.
+    pub async fn register_serial_drawer(
+        &self,
+        id: &str,
+        port_name: &str,
+        info: DeviceInfo,
+    ) {
+        let drawer = Arc::new(
+            crate::drivers::drawer::SerialCashDrawer::new(port_name, 9600, info),
+        );
+        self.register_cash_drawer(id, drawer).await;
     }
 }
 

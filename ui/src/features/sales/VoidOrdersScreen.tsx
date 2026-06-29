@@ -5,7 +5,7 @@ import {
   voidSale,
   type SaleListItem,
   type SaleDetail,
-} from '@/api/pos';
+} from '@/api/sales';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { listAuditLog, type AuditEntryDto } from '@/api/pos';
+import { listAuditLog, type AuditEntryDto } from '@/api/audit';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './AuditLogScreen.css';

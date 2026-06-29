@@ -1,56 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { LocalizationProvider, ReactLocalization } from '@fluent/react';
+import { withFluent } from '@/locales/test-utils';
+import staffFtl from '@/locales/staff.ftl?raw';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 
-const LOCALE_STRINGS = [
-  'staff-title = Staff',
-  'staff-add-button = Add Staff',
-  'staff-loading = Loading staff…',
-  'staff-empty = No staff members yet.',
-  'staff-empty-cta = Add your first staff member',
-  'staff-col-name = Name',
-  'staff-col-username = Username',
-  'staff-col-role = Role',
-  'staff-col-status = Status',
-  'staff-status-active = Active',
-  'staff-status-inactive = Inactive',
-  'staff-edit = Edit',
-  'staff-deactivate = Deactivate',
-  'staff-restore = Restore',
-  'staff-modal-add-title = Add Staff Member',
-  'staff-modal-edit-title = Edit Staff Member',
-  'staff-modal-close = Close',
-  'staff-field-username-label = Username *',
-  'staff-field-name-label = Display Name *',
-  'staff-field-pin-label = PIN * (4+ characters)',
-  'staff-field-role-label = Role *',
-  'staff-role-select-default = Select a role…',
-  'staff-btn-cancel = Cancel',
-  'staff-btn-create = Create',
-  'staff-btn-update = Update',
-  'staff-error-generic = { $message }',
-  'staff-modal-add-aria = Add staff member',
-  'staff-modal-edit-aria = Edit staff member',
-  'staff-edit-aria = { $name }',
-  'staff-deactivate-aria = { $name }',
-  'staff-restore-aria = { $name }',
-  'staff-col-actions = Actions',
-  'staff-username-placeholder = e.g. jane',
-  'staff-name-placeholder = e.g. Jane Smith',
-  'staff-pin-placeholder = Enter PIN',
-  'staff-field-pin-edit-label = New PIN (leave blank to keep current)',
-  'staff-pin-edit-placeholder = Leave blank to keep current',
-].join('\n');
-
-const wrap = (children: React.ReactNode) => {
-  const bundle = new FluentBundle('en-US');
-  bundle.addResource(new FluentResource(LOCALE_STRINGS));
-  const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
-};
+const wrap = (children: React.ReactNode) => withFluent(children, staffFtl);
 
 const SAMPLE_ROLES = [
   { id: 'role-1', name: 'owner', description: 'Owner' },
@@ -138,7 +93,7 @@ describe('StaffManagementScreen', () => {
   it('opens edit modal pre-filled', async () => {
     render(wrap(<StaffManagementScreen />));
     await waitForTable();
-    const editBtn = screen.getByRole('button', { name: /edit jane smith/i });
+    const editBtn = screen.getByRole('button', { name: /edit.*jane smith/i });
     await userEvent.click(editBtn);
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();

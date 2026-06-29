@@ -1,10 +1,12 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   exportEodReport,
   type EodReport,
-} from '@/api/pos';
+} from '@/api/sales';
+import { listShifts, type ShiftDto } from '@/api/shifts';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
+import { printReceipt } from '@/api/hardware';
 import './EodReportScreen.css';
 
 /**
@@ -14,21 +16,322 @@ import './EodReportScreen.css';
  * revenue KPIs, payment method breakdown, void/discount statistics,
  * and an hourly sales chart.
  */
+// ── Shift Summary Sub-component ──────────────────────────────────
+
+interface ShiftSummaryProps {
+  shifts: ShiftDto[];
+  currency: string;
+}
+
+function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayClosed = shifts.filter(
+    (s) => s.status === 'closed' && s.closedAt && s.closedAt.startsWith(today),
+  );
+  const activeShift = shifts.find((s) => s.status === 'open');
+
+  if (todayClosed.length === 0 && !activeShift) {
+    return null;
+  }
+
+  const fmt = (minor: number) => formatMoney({ minor_units: minor, currency });
+  const totalOpening = todayClosed.reduce((acc, s) => acc + s.openingBalanceMinor, 0);
+  const totalClosing = todayClosed.reduce((acc, s) => acc + (s.closingBalanceMinor ?? 0), 0);
+  const totalExpected = todayClosed.reduce((acc, s) => acc + (s.expectedCashMinor ?? 0), 0);
+  const totalCashDiff = todayClosed.reduce((acc, s) => acc + (s.cashDifferenceMinor ?? 0), 0);
+
+  return (
+    <Card shadow="sm" className="eod-report-section-card">
+      {/* ── Section header ──────────────────────── */}
+      <div className="eod-report-shift-header">
+        <h2 className="eod-report-section-title" style={{ margin: 0 }}>Cashier Shifts</h2>
+        {activeShift && (
+          <span className="eod-report-shift-active-badge">
+            <span className="eod-report-shift-active-dot" />
+            Shift in progress
+          </span>
+        )}
+      </div>
+
+      {/* ── Active shift card ────────────────────── */}
+      {activeShift && (
+        <div className="eod-report-active-shift">
+          <div className="eod-report-active-shift-row">
+            <span className="eod-report-active-shift-label">Active shift since</span>
+            <span className="eod-report-active-shift-value">
+              {new Date(activeShift.openedAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+          </div>
+          <div className="eod-report-active-shift-row">
+            <span className="eod-report-active-shift-label">Opening balance</span>
+            <span className="eod-report-active-shift-value">
+              {fmt(activeShift.openingBalanceMinor)}
+            </span>
+          </div>
+          <div className="eod-report-active-shift-row">
+            <span className="eod-report-active-shift-label">Sales this shift</span>
+            <span className="eod-report-active-shift-value">
+              {fmt(activeShift.totalSalesMinor)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Closed shifts list ──────────────────── */}
+      {todayClosed.length > 0 && (
+        <>
+          <div className="eod-report-shift-list-header">
+            <span>Closed Shifts Today</span>
+            <span className="eod-report-shift-count">{todayClosed.length}</span>
+          </div>
+
+          <div className="eod-report-shift-table">
+            <div className="eod-report-shift-table-header">
+              <span>Opened</span>
+              <span>Closed</span>
+              <span>Opening</span>
+              <span>Counted</span>
+              <span>Expected</span>
+              <span>Diff</span>
+            </div>
+            {todayClosed.map((s) => {
+              const diff = s.cashDifferenceMinor;
+              const diffClass =
+                diff !== null && diff < 0
+                  ? 'eod-report-shift-diff--negative'
+                  : diff !== null && diff > 0
+                    ? 'eod-report-shift-diff--positive'
+                    : '';
+              return (
+                <div key={s.id} className="eod-report-shift-row">
+                  <span className="eod-report-shift-cell">
+                    {new Date(s.openedAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <span className="eod-report-shift-cell">
+                    {s.closedAt
+                      ? new Date(s.closedAt).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—'}
+                  </span>
+                  <span className="eod-report-shift-cell eod-report-shift-cell--mono">
+                    {fmt(s.openingBalanceMinor)}
+                  </span>
+                  <span className="eod-report-shift-cell eod-report-shift-cell--mono">
+                    {s.closingBalanceMinor !== null
+                      ? fmt(s.closingBalanceMinor)
+                      : '—'}
+                  </span>
+                  <span className="eod-report-shift-cell eod-report-shift-cell--mono">
+                    {s.expectedCashMinor !== null
+                      ? fmt(s.expectedCashMinor)
+                      : '—'}
+                  </span>
+                  <span className={`eod-report-shift-cell eod-report-shift-cell--mono ${diffClass}`}>
+                    {diff !== null ? fmt(diff) : '—'}
+                    {diff !== null && diff !== 0 && (
+                      <span className="eod-report-shift-tag">
+                        {diff > 0 ? 'Over' : 'Short'}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+
+            {/* ── Totals row ──────────────────────── */}
+            <div className="eod-report-shift-row eod-report-shift-row--total">
+              <span className="eod-report-shift-cell" />
+              <span className="eod-report-shift-cell">Total</span>
+              <span className="eod-report-shift-cell eod-report-shift-cell--mono">
+                {fmt(totalOpening)}
+              </span>
+              <span className="eod-report-shift-cell eod-report-shift-cell--mono">
+                {fmt(totalClosing)}
+              </span>
+              <span className="eod-report-shift-cell eod-report-shift-cell--mono">
+                {fmt(totalExpected)}
+              </span>
+              <span className={`eod-report-shift-cell eod-report-shift-cell--mono ${
+                totalCashDiff < 0
+                  ? 'eod-report-shift-diff--negative'
+                  : totalCashDiff > 0
+                    ? 'eod-report-shift-diff--positive'
+                    : ''
+              }`}>
+                {fmt(totalCashDiff)}
+                {totalCashDiff !== 0 && (
+                  <span className="eod-report-shift-tag">
+                    {totalCashDiff > 0 ? 'Over' : 'Short'}
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Combined cash summary ───────────────── */}
+      {todayClosed.length > 1 && (
+        <div className="eod-report-shift-cash-summary">
+          <span className="eod-report-shift-cash-summary-label">Cash Reconciliation</span>
+          <div className="eod-report-shift-cash-grid">
+            <div className="eod-report-shift-cash-item">
+              <span className="eod-report-shift-cash-label">Total opening</span>
+              <span className="eod-report-shift-cash-value">{fmt(totalOpening)}</span>
+            </div>
+            <div className="eod-report-shift-cash-item">
+              <span className="eod-report-shift-cash-label">Total counted</span>
+              <span className="eod-report-shift-cash-value">{fmt(totalClosing)}</span>
+            </div>
+            <div className="eod-report-shift-cash-item">
+              <span className="eod-report-shift-cash-label">Total expected</span>
+              <span className="eod-report-shift-cash-value">{fmt(totalExpected)}</span>
+            </div>
+            <div className="eod-report-shift-cash-item">
+              <span className="eod-report-shift-cash-label">Net difference</span>
+              <span
+                className={`eod-report-shift-cash-value ${
+                  totalCashDiff < 0
+                    ? 'eod-report-shift-diff--negative'
+                    : totalCashDiff > 0
+                      ? 'eod-report-shift-diff--positive'
+                      : ''
+                }`}
+              >
+                {fmt(totalCashDiff)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function EodReportScreen() {
   const [report, setReport] = useState<EodReport | null>(null);
+  const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [printing, setPrinting] = useState(false);
+  const reportRef = useRef(report);
+  const shiftsRef = useRef(shifts);
+
+  // Keep refs in sync for the print callback to access latest values.
+  reportRef.current = report;
+  shiftsRef.current = shifts;
+
+  const handlePrint = useCallback(async () => {
+    const r = reportRef.current;
+    if (!r) return;
+    setPrinting(true);
+    try {
+      const cur = r.currency ?? 'USD';
+      const line = (text = '') => `${text}\n`;
+      const sep = line('─'.repeat(38));
+      const money = (minor: number) => formatMoney({ minor_units: minor, currency: cur });
+
+      // Build a hard-wrapped receipt body (~38 chars wide for 58mm paper).
+      let body = '';
+
+      // Header.
+      body += line('    END-OF-DAY REPORT');
+      body += line(`    ${lastRefresh.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`);
+      body += sep;
+
+      // Revenue KPIs.
+      body += line(`Total Revenue        ${money(r.total_revenue).padStart(14)}`);
+      body += line(`Completed Sales      ${String(r.total_sales).padStart(14)}`);
+      if (r.total_sales > 0) {
+        body += line(`Average Sale         ${money(Math.round(r.total_revenue / r.total_sales)).padStart(14)}`);
+      }
+      body += line(`Voids                ${String(r.void_count).padStart(8)}  ${money(r.void_total).padStart(10)}`);
+      body += line(`Discounts Applied    ${String(r.discount_count).padStart(14)}`);
+      body += sep;
+
+      // Payment breakdown.
+      body += line('  PAYMENT BREAKDOWN');
+      body += line('');
+      for (const pmt of r.payment_breakdown) {
+        const pct = r.total_revenue > 0 ? Math.round((pmt.total / r.total_revenue) * 100) : 0;
+        const label = pmt.method.charAt(0).toUpperCase() + pmt.method.slice(1);
+        body += line(`${label.padEnd(12)} ${String(pmt.count).padStart(3)} tx  ${money(pmt.total).padStart(12)}  ${String(pct).padStart(2)}%`);
+      }
+      body += sep;
+
+      // Shift summary.
+      const activeShift = shiftsRef.current.find((s) => s.status === 'open');
+      if (activeShift) {
+        body += line('  ACTIVE SHIFT IN PROGRESS');
+        body += line(`  Since: ${new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+        body += line(`  Opening: ${money(activeShift.openingBalanceMinor)}`);
+        body += line(`  Sales: ${money(activeShift.totalSalesMinor)}`);
+        body += sep;
+      }
+
+      const todayClosed = shiftsRef.current.filter(
+        (s) => s.status === 'closed' && s.closedAt && s.closedAt.startsWith(new Date().toISOString().slice(0, 10)),
+      );
+      if (todayClosed.length > 0) {
+        body += line('  CLOSED SHIFTS');
+        for (const s of todayClosed) {
+          const diff = s.cashDifferenceMinor;
+          const diffStr = diff !== null ? `${diff > 0 ? '+' : ''}${money(diff)}` : '—';
+          body += line(`  ${new Date(s.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}  ${money(s.openingBalanceMinor).padStart(10)}  ${diffStr.padStart(12)}`);
+        }
+        body += sep;
+      }
+
+      // Hourly breakdown (condensed).
+      if (r.hourly_breakdown.length > 0) {
+        body += line('  HOURLY BREAKDOWN');
+        body += line('');
+        const peak = Math.max(...r.hourly_breakdown.map((h) => h.total_minor), 1);
+        for (let hour = 0; hour < 24; hour++) {
+          const h = r.hourly_breakdown.find((r) => r.hour === hour);
+          if (h) {
+            const barLen = Math.round((h.total_minor / peak) * 12);
+            const bar = '█'.repeat(Math.max(barLen, 1));
+            body += line(`${String(hour).padStart(2)}:00 ${bar.padEnd(14)} ${money(h.total_minor).padStart(10)}`);
+          }
+        }
+        body += sep;
+      }
+
+      // Footer.
+      body += line('           *** END ***');
+      body += line('');
+
+      await printReceipt({ body });
+    } catch {
+      // Printing error — silently handled.
+    } finally {
+      setPrinting(false);
+    }
+  }, [lastRefresh]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await exportEodReport();
+      const [data, shiftData] = await Promise.all([
+        exportEodReport(),
+        listShifts(),
+      ]);
       setReport(data);
+      setShifts(shiftData);
       setLastRefresh(new Date());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load EOD report');
+      setError(err instanceof Error ? err.message : 'Failed to load report');
     } finally {
       setLoading(false);
     }
@@ -67,8 +370,27 @@ export default function EodReportScreen() {
             </svg>
             Refresh
           </button>
+          <button
+            type="button"
+            className="eod-report-refresh-btn eod-report-print-btn"
+            onClick={handlePrint}
+            disabled={printing || !report}
+            aria-label="Print EOD report"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+              <polyline points="6 9 6 2 18 2 18 9" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+            {printing ? 'Printing…' : 'Print'}
+          </button>
         </div>
       </div>
+
+      {/* ── Shift Summary Section ────────────────── */}
+      {!loading && !error && report && (
+        <ShiftSummarySection shifts={shifts} currency={currency} />
+      )}
 
       {loading && !report ? (
         <div className="eod-report-loading">

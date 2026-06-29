@@ -57,6 +57,18 @@ pub const DBL_WIDTH: &[u8] = &[0x1D, 0x21, 0x10];
 #[allow(dead_code)]
 pub const DBL_BOTH: &[u8] = &[0x1D, 0x21, 0x11];
 
+// ── Cash drawer kick ────────────────────────────────────
+/// Pulse pin 2 on the RJ12 cash drawer port for the default duration
+/// (typically 50–100 ms). Sends the standard ESC/POS kick command
+/// `ESC p m t1 t2` where m=0 (pin 2), t1=on time, t2=off time.
+///
+/// Most thermal receipt printers support this command on the
+/// serial/USB/BT interface and will pulse the designated pin on the
+/// cash drawer port when they receive it.
+pub const KICK_DRAWER_PIN2: &[u8] = &[0x1B, 0x70, 0x00, 0x19, 0x32];
+/// Pulse pin 5 on the RJ12 cash drawer port (`ESC p m t1 t2` with m=1).
+pub const KICK_DRAWER_PIN5: &[u8] = &[0x1B, 0x70, 0x01, 0x19, 0x32];
+
 // ── Feed / spacing ───────────────────────────────────────
 /// Feed n lines (ESC d n). Call with the desired count.
 pub fn feed(n: u8) -> Vec<u8> {
@@ -113,6 +125,14 @@ mod tests {
     fn cut_commands_are_correct() {
         assert_eq!(CUT_FULL, &[0x1D, 0x56, 0x00]);
         assert_eq!(CUT_PARTIAL, &[0x1D, 0x56, 0x01]);
+    }
+
+    #[test]
+    fn kick_drawer_commands_are_correct() {
+        // ESC p 0 25 50 — pin 2, 25*2ms on, 50*2ms off
+        assert_eq!(KICK_DRAWER_PIN2, &[0x1B, 0x70, 0x00, 0x19, 0x32]);
+        // ESC p 1 25 50 — pin 5, 25*2ms on, 50*2ms off
+        assert_eq!(KICK_DRAWER_PIN5, &[0x1B, 0x70, 0x01, 0x19, 0x32]);
     }
 
     #[test]
