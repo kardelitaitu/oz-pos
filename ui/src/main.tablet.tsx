@@ -12,6 +12,7 @@ import { registerSalesWidgets } from '@/features/sales/widgets';
 import './frontend/themes/reset.css';
 import './frontend/themes/tokens.css';
 import './frontend/themes/components.css';
+import './frontend/themes/responsive.css';
 
 // ── Register all feature pages (same as desktop App.tsx) ──────────
 
@@ -32,6 +33,7 @@ import DataManagementScreen from '@/features/settings/DataManagementScreen';
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
+import { MultiStoreDashboardScreen } from '@/features/stores';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import _DesignSystem from '@/features/design/DesignSystem';
@@ -82,6 +84,7 @@ registerPage({ route: 'categories', component: CategoryManagementScreen, label: 
 registerPage({ route: 'inventory-adjustment', component: InventoryAdjustmentScreen, label: 'Stock Adjust', requiredRole: 'manager' });
 registerPage({ route: 'staff', component: StaffManagementScreen, label: 'Staff', requiredRole: 'manager' });
 registerPage({ route: 'terminals', component: TerminalManagementScreen, label: 'Terminals', requiredRole: 'manager' });
+registerPage({ route: 'stores', component: MultiStoreDashboardScreen, label: 'Stores', feature: 'multi-store', requiredRole: 'manager' });
 registerPage({ route: 'features', component: FeatureToggleScreen, label: 'Features', requiredRole: 'owner' });
 registerPage({ route: 'data-management', component: DataManagementScreen, label: 'Data', requiredRole: 'owner' });
 registerPage({ route: 'audit-log', component: AuditLogScreen, label: 'Audit Log', requiredRole: 'manager' });

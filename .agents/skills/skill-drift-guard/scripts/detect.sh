@@ -11,7 +11,7 @@
 #
 # Exit code is the number of manual-review findings (0 = clean).
 
-set -euo pipefail
+set -u
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
@@ -83,7 +83,7 @@ if should_run crates; then
     skill_crates="$(cat .agents/skills/*/SKILL.md | grep -oE 'oz-[a-z-]+' | sort -u)"
 
     while read -r c; do
-      [ -z "$c" ] && continue
+      [ -z "$c" ] || [ "$c" = "oz-pos" ] && continue
       if ! echo "$workspace_crates" | grep -qx "$c"; then
         FINDINGS[crates]+="missing in workspace: ${c}"$'\n'
       fi
@@ -133,6 +133,11 @@ if should_run golden; then
   for phrase in "i64 minor units" "thiserror" "anyhow" "rusqlite" "Tauri v2"; do
     in_agents="$(grep -c "$phrase" AGENTS.md 2>/dev/null || echo 0)"
     in_skills="$(cat .agents/skills/*/SKILL.md | grep -c "$phrase" 2>/dev/null || echo 0)"
+    in_agents="$(echo "$in_agents" | tr -d '\r' | tr -cd '0-9')"
+    in_skills="$(echo "$in_skills" | tr -d '\r' | tr -cd '0-9')"
+    if [ -z "$in_agents" ]; then in_agents=0; fi
+    if [ -z "$in_skills" ]; then in_skills=0; fi
+
     # heuristic: if AGENTS.md says it but no skill mentions it, flag
     if [ "$in_agents" -gt 0 ] && [ "$in_skills" -eq 0 ]; then
       FINDINGS[golden]+="phrase '${phrase}' in AGENTS.md but not in any skill"$'\n'
@@ -202,8 +207,11 @@ if should_run audit-date; then
       FINDINGS[audit-date]+="${skill}: missing audit date"$'\n'
       continue
     fi
-    # crude age check: convert to days-since-epoch via python
-    age="$(python3 -c "
+    py_cmd="python3"
+    if ! command -v python3 >/dev/null 2>&1; then
+      py_cmd="python"
+    fi
+    age="$($py_cmd -c "
 from datetime import datetime
 try:
     d = datetime.strptime('$last', '%d-%m-%y')

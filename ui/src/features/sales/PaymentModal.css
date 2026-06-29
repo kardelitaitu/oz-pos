@@ -433,3 +433,123 @@
 .payment-split-remaining-positive {
   color: var(--color-danger, #dc2626);
 }
+
+/* ── Currency Selector ──────────────────────────── */
+.payment-currency-selector {
+  padding: var(--space-3) var(--space-5);
+}
+
+.payment-currency-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-1_5);
+}
+
+.payment-currency-select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  font-family: var(--font-sans);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  outline: none;
+  appearance: auto;
+}
+
+.payment-currency-select:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
+/* ── Exchange Rate Notice ───────────────────────── */
+.payment-exchange-notice {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.payment-exchange-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-0_5) 0;
+  color: var(--color-fg-secondary);
+}
+
+.payment-exchange-row span:last-child {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Receipt Currency Info ─────────────────────── */
+.payment-receipt-currency {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-accent-subtle);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.payment-receipt-currency-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-0_5) 0;
+  color: var(--color-fg-secondary);
+}
+
+/* ── QRIS Payment ──────────────────────────────── */
+.payment-qris-section {
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.payment-qris-description {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  text-align: center;
+  margin: 0;
+}
+
+.payment-qris-btn {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-fg, #fff);
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+
+.payment-qris-btn:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.payment-qris-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.payment-qris-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.payment-receipt-currency-row span:last-child {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}

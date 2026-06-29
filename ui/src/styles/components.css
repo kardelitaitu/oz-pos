@@ -515,6 +515,16 @@
   margin-top: var(--space-2);
 }
 
+/* ── Touch-friendly sizing ─────────────────────────── */
+@media (pointer: coarse) {
+  button, a, [role="button"], input, select, textarea {
+    min-height: var(--touch-target-min);
+  }
+  .btn, .card-clickable, .nav-item {
+    min-height: var(--touch-target-comfortable);
+  }
+}
+
 /* ── Error State ─────────────────────────────────────── */
 .error-state {
   display: flex;

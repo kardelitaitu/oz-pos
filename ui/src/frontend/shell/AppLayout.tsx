@@ -1,7 +1,10 @@
-import { type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import RoleBadge from './RoleBadge';
 import ThemeToggle from './ThemeToggle';
 import UpdateBanner from './UpdateBanner';
+import StoreSwitcher from '@/components/StoreSwitcher';
+import { GatewayStatusBadge } from '@/components/GatewayStatusBadge';
+import { useGatewayStatus } from '@/hooks/useGatewayStatus';
 import { getNavItems } from '@/platform/ui/menu-registry';
 import './AppLayout.css';
 
@@ -39,16 +42,35 @@ export interface AppLayoutProps {
  */
 export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole }: AppLayoutProps) {
   const navItems = getNavItems(enabledFeatures, userRole);
+  const stripeStatus = useGatewayStatus();
+
+  // ── Sidebar collapse state (persisted to localStorage) ─────
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('app-sidebar-collapsed') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('app-sidebar-collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
 
   return (
     <div className="app-layout">
       {/* ── Sidebar ──────────────────────────────── */}
-      <aside className="app-sidebar" aria-label="Main navigation">
+      <aside className={`app-sidebar${sidebarCollapsed ? ' collapsed' : ''}`} aria-label="Main navigation">
         <div className="app-sidebar-header">
           <span className="app-sidebar-logo">OZ-POS</span>
         </div>
         <div className="app-sidebar-user">
           <RoleBadge />
+        </div>
+        <div className="app-sidebar-gateway">
+          <GatewayStatusBadge
+            gatewayName="Stripe"
+            isConfigured={stripeStatus.configured}
+            isOnline={stripeStatus.online}
+          />
         </div>
 
         <nav className="app-sidebar-nav">
@@ -85,6 +107,33 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
 
       {/* ── Content area ─────────────────────────── */}
       <main className="app-content">
+        <div className="app-topbar" role="banner">
+          <div className="app-topbar-left">
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={toggleSidebar}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-expanded={!sidebarCollapsed}
+            >
+              {sidebarCollapsed ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              )}
+            </button>
+          </div>
+          <div className="app-topbar-right">
+            <StoreSwitcher />
+          </div>
+        </div>
         <UpdateBanner />
         <div className="app-content-inner" key={route}>
           {children}

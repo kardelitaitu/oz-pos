@@ -2,9 +2,18 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { startSale, addLine, completeSale, setCartDiscount, printSalesReceipt, getSale, type SetCartDiscountArgs, type PaymentSplitArg } from '@/api/sales';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
+import { useFeatures, FEATURES } from '@/hooks/useFeatures';
+import {
+  listCurrencies,
+  listExchangeRates,
+  getDefaultCurrency,
+  type CurrencyDto,
+  type ExchangeRateDto,
+} from '@/api/currency';
+import QrisQrDisplay from '@/components/QrisQrDisplay';
 import './PaymentModal.css';
 
-type PaymentMethod = 'cash' | 'card' | 'other';
+type PaymentMethod = 'cash' | 'card' | 'qris' | 'other';
 
 interface SplitRow {
   id: number;
@@ -41,12 +50,59 @@ export default function PaymentModal({
   const [done, setDone] = useState(false);
   const [changeDue, setChangeDue] = useState<Money | null>(null);
 
+  const [showQr, setShowQr] = useState(false);
+  const [qrReference, setQrReference] = useState('');
+
   const [splitMode, setSplitMode] = useState(false);
   const [splits, setSplits] = useState<SplitRow[]>([
     { id: 1, method: 'cash', otherLabel: '', amountMinor: '' },
     { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
   ]);
   let nextSplitId = 3;
+
+  const { isEnabled } = useFeatures();
+  const multiCurrency = isEnabled(FEATURES.MULTI_CURRENCY);
+
+  const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRateDto[]>([]);
+  const [selectedCurrency, setSelectedCurrency] = useState(total.currency);
+  const [baseCurrency, setBaseCurrency] = useState(total.currency);
+
+  useEffect(() => {
+    if (open && multiCurrency) {
+      Promise.all([
+        listCurrencies(),
+        listExchangeRates(),
+        getDefaultCurrency(),
+      ])
+        .then(([currs, rates, base]) => {
+          setCurrencies(currs);
+          setExchangeRates(rates);
+          if (base) setBaseCurrency(base);
+        })
+        .catch(() => {});
+    }
+  }, [open, multiCurrency]);
+
+  const exchangeRateInfo = useMemo(() => {
+    if (selectedCurrency === total.currency) return null;
+    const rate = exchangeRates.find(
+      (r) => r.from_currency === total.currency && r.to_currency === selectedCurrency,
+    );
+    if (rate) return rate;
+    const inverse = exchangeRates.find(
+      (r) => r.from_currency === selectedCurrency && r.to_currency === total.currency,
+    );
+    if (inverse) {
+      return {
+        ...inverse,
+        rate: 1 / inverse.rate,
+        from_currency: total.currency,
+        to_currency: selectedCurrency,
+      };
+    }
+    return null;
+  }, [selectedCurrency, total.currency, exchangeRates]);
 
   useEffect(() => {
     if (open) {
@@ -57,12 +113,15 @@ export default function PaymentModal({
       setDone(false);
       setChangeDue(null);
       setSplitMode(false);
+      setShowQr(false);
+      setQrReference('');
+      setSelectedCurrency(total.currency);
       setSplits([
         { id: 1, method: 'cash', otherLabel: '', amountMinor: '' },
         { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
       ]);
     }
-  }, [open]);
+  }, [open, total.currency]);
 
   const totalMinor = useMemo(() => BigInt(total.minor_units), [total.minor_units]);
 
@@ -76,6 +135,100 @@ export default function PaymentModal({
     const exp = known[total.currency] ?? 2;
     return BigInt(Math.round(num * 10 ** exp));
   }, [tendered, total.currency]);
+
+  const handleQrPay = useCallback(() => {
+    const ref = `QR-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    setQrReference(ref);
+    setShowQr(true);
+  }, []);
+
+  const handleQrConfirmed = useCallback(async () => {
+    setShowQr(false);
+    setProcessing(true);
+
+    try {
+      const { cartId } = await startSale({ currency: total.currency });
+
+      if (discountPercent > 0) {
+        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent };
+        if (discountLabel) discountArgs.label = discountLabel;
+        await setCartDiscount(discountArgs);
+      }
+
+      for (const line of lineItems) {
+        await addLine({
+          cartId,
+          sku: line.sku,
+          qty: line.qty,
+          unitPriceMinor: line.unit_price.minor_units,
+        });
+      }
+
+      const saleResult = await completeSale({
+        cartId,
+        paymentMethod: 'QRIS',
+        tenderedMinor: null,
+        userId,
+        paymentSplits: [
+          {
+            method: 'QRIS',
+            amountMinor: total.minor_units,
+            gatewayReference: qrReference,
+            gatewayStatus: 'completed',
+            gatewayResponse: 'QRIS payment confirmed',
+          },
+        ],
+      });
+
+      try {
+        const completedSale = await getSale(saleResult.saleId);
+
+        await printSalesReceipt({
+          date: new Date().toLocaleDateString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+          }),
+          receiptNumber: `SALE-${saleResult.saleId}`,
+          items: lineItems.map((line, i) => {
+            const computedLine = completedSale?.lines[i];
+            return {
+              name: line.name ?? line.sku,
+              quantity: line.qty,
+              unitPrice: { minorUnits: line.unit_price.minor_units, currency: line.unit_price.currency },
+              totalPrice: {
+                minorUnits: line.unit_price.minor_units * line.qty,
+                currency: line.unit_price.currency,
+              },
+              taxAmount: computedLine?.tax_amount
+                ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
+                : undefined,
+            };
+          }),
+          subtotal: completedSale
+            ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
+            : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+          tax: completedSale && completedSale.taxTotal.minor_units > 0
+            ? { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency }
+            : undefined,
+          total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+          payments: [
+            {
+              method: 'QRIS',
+              amount: { minorUnits: total.minor_units, currency: total.currency },
+              change: null,
+            },
+          ],
+        });
+      } catch {
+        // Printer may not be connected.
+      }
+
+      setDone(true);
+    } catch (err) {
+      console.error('QR payment failed:', err);
+    } finally {
+      setProcessing(false);
+    }
+  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -160,6 +313,7 @@ export default function PaymentModal({
     if (splitMode) return splitComplete;
     if (method === 'other' && !otherLabel.trim()) return false;
     if (method === 'cash') return sufficient;
+    if (method === 'qris') return true;
     return true;
   }, [splitMode, splitComplete, method, otherLabel, sufficient]);
 
@@ -284,6 +438,15 @@ export default function PaymentModal({
 
   return (
     <div className="payment-overlay" role="dialog" aria-modal="true" aria-label="Payment">
+      <QrisQrDisplay
+        amount={total.minor_units}
+        currency={total.currency}
+        reference={qrReference}
+        isOpen={showQr}
+        onClose={() => setShowQr(false)}
+        onPaymentConfirmed={handleQrConfirmed}
+      />
+
       <div className="payment-modal">
         {done ? (
           <div className="payment-done">
@@ -317,12 +480,81 @@ export default function PaymentModal({
               <span className="payment-total-amount">{formatMoney(total)}</span>
             </div>
 
+            {multiCurrency && (
+              <div className="payment-currency-selector">
+                <label htmlFor="payment-currency-select" aria-label="Charge currency">
+                  <span className="payment-currency-label">Charge Currency</span>
+                  <select
+                    id="payment-currency-select"
+                    className="payment-currency-select"
+                    value={selectedCurrency}
+                    onChange={(e) => setSelectedCurrency(e.target.value)}
+                    aria-label="Select charge currency"
+                  >
+                    {currencies.length === 0 && (
+                      <option value={total.currency}>{total.currency}</option>
+                    )}
+                    {currencies.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            {selectedCurrency !== total.currency && exchangeRateInfo && (
+              <div className="payment-exchange-notice" aria-label="Exchange rate information">
+                <div className="payment-exchange-row">
+                  <span>Exchange rate</span>
+                  <span>
+                    1 {exchangeRateInfo.from_currency} = {exchangeRateInfo.rate.toFixed(6)} {exchangeRateInfo.to_currency}
+                  </span>
+                </div>
+                <div className="payment-exchange-row">
+                  <span>Rate source</span>
+                  <span>{exchangeRateInfo.source || 'manual'}</span>
+                </div>
+                <div className="payment-exchange-row">
+                  <span>Rate timestamp</span>
+                  <span>{exchangeRateInfo.effective_date}</span>
+                </div>
+              </div>
+            )}
+
+            {selectedCurrency !== total.currency && (
+              <div className="payment-receipt-currency" aria-label="Receipt currency information">
+                <div className="payment-receipt-currency-row">
+                  <span>Charged in</span>
+                  <span>{selectedCurrency}</span>
+                </div>
+                <div className="payment-receipt-currency-row">
+                  <span>Default currency</span>
+                  <span>{baseCurrency}</span>
+                </div>
+                <div className="payment-receipt-currency-row">
+                  <span>Base amount</span>
+                  <span>{formatMoney(total)}</span>
+                </div>
+                <div className="payment-receipt-currency-row">
+                  <span>Charge amount</span>
+                  <span>
+                    {formatMoney({
+                      minor_units: Math.round(total.minor_units * (exchangeRateInfo?.rate ?? 1)),
+                      currency: selectedCurrency,
+                    } as Money)}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {!splitMode && (
               <>
                 <fieldset className="payment-methods">
                   <legend className="payment-section-title">Payment Method</legend>
                   <div className="payment-method-options">
-                    {(['cash', 'card'] as const).map((m) => (
+                    {(['cash', 'card', 'qris'] as const).map((m) => (
                       <label key={m} className="payment-method-label">
                         <input
                           type="radio"
@@ -332,7 +564,7 @@ export default function PaymentModal({
                           onChange={() => setMethod(m)}
                         />
                         <span className="payment-method-name">
-                          {m === 'cash' ? 'Cash' : 'Card'}
+                          {m === 'cash' ? 'Cash' : m === 'card' ? 'Card' : 'QRIS'}
                         </span>
                       </label>
                     ))}
@@ -413,6 +645,23 @@ export default function PaymentModal({
                         </span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {method === 'qris' && (
+                  <div className="payment-qris-section">
+                    <p className="payment-qris-description">
+                      Generate a QRIS QR code for the customer to scan with their payment app.
+                    </p>
+                    <button
+                      type="button"
+                      className="payment-qris-btn"
+                      onClick={handleQrPay}
+                      disabled={processing}
+                      aria-label="Generate QRIS QR code"
+                    >
+                      Pay with QR
+                    </button>
                   </div>
                 )}
               </>

@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::{Store, Terminal};
+use oz_core::{Store, Terminal, TerminalFeatureOverride};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -217,6 +217,71 @@ pub async fn delete_terminal(id: String, state: State<'_, AppState>) -> Result<(
     drop(db);
 
     tracing::info!(id, "terminal deleted");
+    Ok(())
+}
+
+/// List all feature overrides for a terminal.
+#[command]
+pub async fn list_terminal_overrides(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalFeatureOverride>, AppError> {
+    if terminal_id.trim().is_empty() {
+        return Err(AppError::Invalid("terminal_id must not be empty".into()));
+    }
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let overrides = store.list_terminal_overrides(&terminal_id)?;
+    drop(db);
+
+    Ok(overrides)
+}
+
+/// Set (upsert) a feature override for a terminal.
+#[command]
+pub async fn set_terminal_override(
+    terminal_id: String,
+    feature: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    if terminal_id.trim().is_empty() {
+        return Err(AppError::Invalid("terminal_id must not be empty".into()));
+    }
+    if feature.trim().is_empty() {
+        return Err(AppError::Invalid("feature must not be empty".into()));
+    }
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    store.set_terminal_override(&terminal_id, &feature, enabled)?;
+    drop(db);
+
+    tracing::info!(terminal_id, feature, enabled, "terminal feature override set");
+    Ok(())
+}
+
+/// Delete a single feature override for a terminal.
+#[command]
+pub async fn delete_terminal_override(
+    terminal_id: String,
+    feature: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    if terminal_id.trim().is_empty() {
+        return Err(AppError::Invalid("terminal_id must not be empty".into()));
+    }
+    if feature.trim().is_empty() {
+        return Err(AppError::Invalid("feature must not be empty".into()));
+    }
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    store.delete_terminal_override(&terminal_id, &feature)?;
+    drop(db);
+
+    tracing::info!(terminal_id, feature, "terminal feature override deleted");
     Ok(())
 }
 

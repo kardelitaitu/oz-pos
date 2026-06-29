@@ -27,6 +27,7 @@ import DataManagementScreen from '@/features/settings/DataManagementScreen';
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
+import { MultiStoreDashboardScreen } from '@/features/stores';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
@@ -93,6 +94,9 @@ registerNavItem({ route: 'staff', label: 'Staff', requiredRole: 'manager', icon:
 
 registerPage({ route: 'terminals', component: TerminalManagementScreen, label: 'Terminals', requiredRole: 'manager' });
 registerNavItem({ route: 'terminals', label: 'Terminals', requiredRole: 'manager', icon: icon('M2 3h20v14H2z', <line x1="8" y1="21" x2="16" y2="21" />, <line x1="12" y1="17" x2="12" y2="21" />, <path d="M7 7l3 3-3 3" />) });
+
+registerPage({ route: 'stores', component: MultiStoreDashboardScreen, label: 'Stores', feature: 'multi-store', requiredRole: 'manager' });
+registerNavItem({ route: 'stores', label: 'Stores', feature: 'multi-store', requiredRole: 'manager', icon: icon('M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', <polyline points="9 22 9 12 15 12 15 22" />) });
 
 registerPage({ route: 'features', component: FeatureToggleScreen, label: 'Features', requiredRole: 'owner' });
 registerNavItem({ route: 'features', label: 'Features', requiredRole: 'owner', icon: icon('M13 2 3 14h9l-1 8 10-12h-9z') });

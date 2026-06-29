@@ -5,8 +5,13 @@ import {
   registerTerminal,
   updateTerminal,
   deleteTerminal,
+  listTerminalOverrides,
+  setTerminalOverride,
+  deleteTerminalOverride,
   type TerminalDto,
+  type TerminalFeatureOverride,
 } from '@/api/terminals';
+import { FEATURES } from '@/hooks/useFeatures';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './TerminalManagementScreen.css';
@@ -60,6 +65,11 @@ export default function TerminalManagementScreen() {
 
   const [saving, setSaving] = useState(false);
 
+  // Feature overrides
+  const [overrides, setOverrides] = useState<TerminalFeatureOverride[]>([]);
+  const [overridesLoading, setOverridesLoading] = useState(false);
+  const [overridesError, setOverridesError] = useState<string | null>(null);
+
   // ── Load data ──────────────────────────────────────────────────
 
   const load = useCallback(async () => {
@@ -96,12 +106,35 @@ export default function TerminalManagementScreen() {
     });
     setEditingId(terminal.id);
     setError(null);
+    setOverrides([]);
+    setOverridesError(null);
     setShowModal(true);
   }, []);
+
+  // Load overrides when the edit modal opens for a terminal.
+  useEffect(() => {
+    if (!editingId) return;
+    let cancelled = false;
+    (async () => {
+      setOverridesLoading(true);
+      setOverridesError(null);
+      try {
+        const data = await listTerminalOverrides(editingId);
+        if (!cancelled) setOverrides(data);
+      } catch {
+        if (!cancelled) setOverridesError('Failed to load feature overrides');
+      } finally {
+        if (!cancelled) setOverridesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editingId]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
     setError(null);
+    setOverrides([]);
+    setOverridesError(null);
   }, []);
 
   const openDelete = useCallback((terminal: TerminalDto) => {
@@ -113,6 +146,44 @@ export default function TerminalManagementScreen() {
   }, []);
 
   // ── Save / Update ──────────────────────────────────────────────
+
+  // ── Feature override handlers ─────────────────────────────────
+
+  const overrideEnabled = useCallback(
+    (featureKey: string): boolean | undefined => {
+      const ov = overrides.find((o) => o.feature === featureKey);
+      return ov?.enabled;
+    },
+    [overrides],
+  );
+
+  const handleToggleOverride = useCallback(
+    async (featureKey: string, currentEnabled: boolean) => {
+      if (!editingId) return;
+      try {
+        await setTerminalOverride(editingId, featureKey, !currentEnabled);
+        const data = await listTerminalOverrides(editingId);
+        setOverrides(data);
+      } catch {
+        setOverridesError('Failed to update feature override');
+      }
+    },
+    [editingId],
+  );
+
+  const handleResetOverrides = useCallback(async () => {
+    if (!editingId) return;
+    try {
+      // Delete each known override.
+      const promises = overrides.map((o) =>
+        deleteTerminalOverride(editingId, o.feature),
+      );
+      await Promise.all(promises);
+      setOverrides([]);
+    } catch {
+      setOverridesError('Failed to reset overrides');
+    }
+  }, [editingId, overrides]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -393,6 +464,66 @@ export default function TerminalManagementScreen() {
                         Active
                       </label>
                     </Localized>
+                  </div>
+                )}
+
+                {/* Feature Overrides — edit mode only */}
+                {isEditing && (
+                  <div className="terminal-mgmt-feature-overrides">
+                    <h3 className="terminal-mgmt-feature-overrides-title">
+                      Feature Overrides
+                    </h3>
+                    {overridesLoading ? (
+                      <p className="terminal-mgmt-loading">Loading overrides…</p>
+                    ) : (
+                      <div className="terminal-mgmt-feature-grid">
+                        {Object.entries(FEATURES).map(([_, featureKey]) => {
+                          const ov = overrideEnabled(featureKey);
+                          const isOverridden = ov !== undefined;
+                          return (
+                            <div
+                              key={featureKey}
+                              className={
+                                'terminal-mgmt-feature-row' +
+                                (isOverridden ? ' terminal-mgmt-feature-row--overridden' : '')
+                              }
+                            >
+                              <span className="terminal-mgmt-feature-name">
+                                {featureKey}
+                                {isOverridden && (
+                                  <span className="terminal-mgmt-feature-badge">
+                                    overridden
+                                  </span>
+                                )}
+                              </span>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  className="terminal-mgmt-feature-toggle"
+                                  checked={ov ?? false}
+                                  onChange={() =>
+                                    handleToggleOverride(featureKey, ov ?? false)
+                                  }
+                                  aria-label={`Override ${featureKey}`}
+                                />
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {overridesError && (
+                      <div className="terminal-mgmt-error" role="alert">
+                        <span>{overridesError}</span>
+                      </div>
+                    )}
+                    {overrides.length > 0 && (
+                      <div className="terminal-mgmt-reset-overrides">
+                        <Button variant="ghost" size="sm" onClick={handleResetOverrides}>
+                          Reset all overrides
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 

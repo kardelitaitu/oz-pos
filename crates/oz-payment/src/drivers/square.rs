@@ -21,7 +21,7 @@ use crate::PaymentProcessor;
 use crate::error::PaymentError;
 use crate::types::{PaymentMethod, PaymentReceipt, PaymentRequest, PaymentResult};
 
-/// Base URL for the Square API.
+/// Default base URL for the Square API.
 const SQUARE_API_BASE: &str = "https://connect.squareup.com/v2";
 
 /// A [`PaymentProcessor`] implementation backed by the Square REST API.
@@ -42,6 +42,8 @@ pub struct SquarePaymentProcessor {
     api_key: String,
     location_id: String,
     client: reqwest::Client,
+    /// Base URL for the Square API (configurable for testing).
+    api_base: String,
 }
 
 impl fmt::Debug for SquarePaymentProcessor {
@@ -50,6 +52,7 @@ impl fmt::Debug for SquarePaymentProcessor {
             .field("api_key", &"***")
             .field("location_id", &self.location_id)
             .field("client", &self.client)
+            .field("api_base", &self.api_base)
             .finish()
     }
 }
@@ -128,7 +131,17 @@ struct SquareErrorDetail {
 
 impl SquarePaymentProcessor {
     /// Create a new Square payment processor with the given API key and location ID.
+    ///
+    /// Requests are sent to the live Square API at `https://connect.squareup.com/v2`.
     pub fn new(api_key: &str, location_id: &str) -> Self {
+        Self::new_with_endpoint(api_key, location_id, SQUARE_API_BASE)
+    }
+
+    /// Create a new Square payment processor with a custom API endpoint.
+    ///
+    /// This constructor is useful for integration tests where requests
+    /// should be directed to a mock server (e.g. `wiremock`).
+    pub fn new_with_endpoint(api_key: &str, location_id: &str, api_base: &str) -> Self {
         let mut headers = HeaderMap::new();
         let mut auth_value =
             HeaderValue::from_str(&format!("Bearer {}", api_key)).expect("valid header value");
@@ -145,6 +158,7 @@ impl SquarePaymentProcessor {
             api_key: api_key.to_owned(),
             location_id: location_id.to_owned(),
             client,
+            api_base: api_base.to_owned(),
         }
     }
 
@@ -172,7 +186,7 @@ impl SquarePaymentProcessor {
         path: &str,
         body: &T,
     ) -> Result<(u16, String), PaymentError> {
-        let url = format!("{}{}", SQUARE_API_BASE, path);
+        let url = format!("{}{}", self.api_base, path);
         let resp = self
             .client
             .post(&url)
@@ -191,7 +205,7 @@ impl SquarePaymentProcessor {
 
     /// Perform an HTTP GET to the Square API and return (status, body).
     async fn get(&self, path: &str) -> Result<(u16, String), PaymentError> {
-        let url = format!("{}{}", SQUARE_API_BASE, path);
+        let url = format!("{}{}", self.api_base, path);
         let resp = self
             .client
             .get(&url)

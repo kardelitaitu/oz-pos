@@ -14,7 +14,7 @@ use super::{Store, row_to_product};
 
 /// A [`Product`] enriched with category name and stock quantity from
 /// LEFT JOINs on `categories` and `inventory`.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProductWithDetails {
     /// The core product fields (flattened into the parent JSON).
     #[serde(flatten)]
@@ -54,7 +54,16 @@ impl Store<'_> {
     }
 
     /// Look up a single product by SKU, including category and stock.
+    ///
+    /// Checks the cache first; on cache miss, queries the database and
+    /// populates the cache.
     pub fn get_product(&self, sku: &str) -> Result<Option<ProductWithDetails>, CoreError> {
+        if let Some(cache) = &self.cache
+            && let Some(product) = cache.get_product(sku)
+        {
+            return Ok(Some(product));
+        }
+
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                     p.category_id, p.barcode, p.created_at, p.updated_at,
@@ -66,11 +75,17 @@ impl Store<'_> {
              WHERE p.sku = ?1",
         )?;
         let result = stmt.query_row(params![sku], row_to_product_with_details);
-        match result {
-            Ok(p) => Ok(Some(p)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e.into()),
+        let product = match result {
+            Ok(p) => Some(p),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e.into()),
+        };
+
+        if let (Some(cache), Some(p)) = (&self.cache, &product) {
+            cache.set_product(sku, p);
         }
+
+        Ok(product)
     }
 
     /// Look up a single product by barcode, including category and stock.
@@ -180,6 +195,10 @@ impl Store<'_> {
 
         tx.commit()?;
 
+        if let Some(cache) = &self.cache {
+            cache.invalidate_product(sku.trim());
+        }
+
         Ok(Product {
             id,
             sku: Sku::new(sku.trim()),
@@ -242,6 +261,10 @@ impl Store<'_> {
             });
         }
 
+        if let Some(cache) = &self.cache {
+            cache.invalidate_product(sku);
+        }
+
         let mut stmt = self.conn.prepare(
             "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at
              FROM products WHERE sku = ?1",
@@ -278,6 +301,11 @@ impl Store<'_> {
                 id: sku.to_owned(),
             });
         }
+
+        if let Some(cache) = &self.cache {
+            cache.invalidate_product(sku);
+        }
+
         Ok(())
     }
 }
@@ -373,17 +401,32 @@ impl Store<'_> {
 
 impl Store<'_> {
     /// Read the current stock quantity for a product.
+    ///
+    /// Checks the cache first; on cache miss, queries the database and
+    /// populates the cache.
     pub fn get_stock(&self, product_id: &str) -> Result<i64, CoreError> {
+        if let Some(cache) = &self.cache
+            && let Some(qty) = cache.get_inventory(product_id)
+        {
+            return Ok(qty);
+        }
+
         let result = self.conn.query_row(
             "SELECT qty FROM inventory WHERE product_id = ?1",
             params![product_id],
             |row| row.get(0),
         );
-        match result {
-            Ok(q) => Ok(q),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
-            Err(e) => Err(e.into()),
+        let qty = match result {
+            Ok(q) => q,
+            Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+            Err(e) => return Err(e.into()),
+        };
+
+        if let Some(cache) = &self.cache {
+            cache.set_inventory(product_id, qty);
         }
+
+        Ok(qty)
     }
 
     /// Look up a product id by SKU.
@@ -427,10 +470,14 @@ impl Store<'_> {
         tx.execute(
             "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
              ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
-                                                    updated_at = excluded.updated_at",
+                                                     updated_at = excluded.updated_at",
             params![product_id, new_qty, now],
         )?;
         tx.commit()?;
+
+        if let Some(cache) = &self.cache {
+            cache.invalidate_inventory(&product_id);
+        }
 
         Ok(new_qty)
     }

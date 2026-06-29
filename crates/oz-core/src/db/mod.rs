@@ -11,6 +11,7 @@
 
 use rusqlite::Connection;
 
+use crate::cache::Cache;
 use crate::Money;
 use crate::error::CoreError;
 
@@ -27,6 +28,7 @@ pub mod shifts;
 pub mod staff;
 pub mod store_profiles;
 pub mod tax;
+pub mod terminal_overrides;
 pub mod terminals;
 
 // ── Re-exports ──────────────────────────────────────────────────────
@@ -44,13 +46,24 @@ pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 /// synchronisation (e.g. `Mutex<Connection>`) and transaction
 /// boundaries for multi-statement workflows.
 pub struct Store<'a> {
-    conn: &'a Connection,
+    /// Underlying SQLite connection.
+    pub conn: &'a Connection,
+    /// Optional caching layer for product and inventory lookups.
+    pub cache: Option<Box<dyn Cache>>,
 }
 
 impl<'a> Store<'a> {
-    /// Wrap an existing connection.
+    /// Wrap an existing connection with no cache.
     pub fn new(conn: &'a Connection) -> Self {
-        Self { conn }
+        Self { conn, cache: None }
+    }
+
+    /// Wrap an existing connection with a cache backend.
+    pub fn with_cache(conn: &'a Connection, cache: Box<dyn Cache>) -> Self {
+        Self {
+            conn,
+            cache: Some(cache),
+        }
     }
 
     /// Return a reference to the underlying connection.

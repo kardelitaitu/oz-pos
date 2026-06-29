@@ -37,33 +37,7 @@ total_start=$(date +%s)
 # ── Rust (mirrors CI `rust` job) ──────────────────────────────────────────
 step "cargo fmt" "cargo fmt --all -- --check" cargo fmt --all -- --check
 
-packages=(
-    "oz-api"
-    "oz-core"
-    "oz-hal"
-    "oz-lua"
-    "oz-security"
-    "oz-payment"
-    "oz-reporting"
-    "oz-logging"
-    "oz-cli"
-    "foundation"
-    "platform-core"
-    "platform-kernel"
-    "platform-startup"
-    "platform-sync"
-    "modules-sales"
-    "modules-inventory"
-    "modules-crm"
-    "modules-tax"
-    "modules-settings"
-    "modules-staff"
-    "modules-reporting"
-    "modules-terminal"
-    "modules-currency"
-    "oz-pos-app"
-    "oz-pos-tablet"
-)
+packages=($(cargo metadata --format-version 1 --no-deps | grep -oE '"name":"[^"]+"' | cut -d'"' -f4))
 
 for pkg in "${packages[@]}"; do
     step "clippy $pkg" "cargo clippy -p $pkg --all-targets --all-features -- -D warnings" cargo clippy -p "$pkg" --all-targets --all-features -- -D warnings

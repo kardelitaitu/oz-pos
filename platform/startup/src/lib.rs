@@ -16,9 +16,11 @@
 //! ```
 
 pub mod event_handlers;
+pub mod rate_sync;
 
 use std::sync::{Arc, Mutex};
 
+use oz_core::cache::Cache;
 use platform_kernel::Kernel;
 use rusqlite::Connection;
 use tokio::sync::Mutex as AsyncMutex;
@@ -32,6 +34,15 @@ fn open_handler_connection(
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     Ok(Arc::new(Mutex::new(conn)))
+}
+
+/// Initialise the caching layer.
+///
+/// Attempts a Redis connection using `redis_url` and `ttl_seconds`.
+/// Falls back to a no-op cache when Redis is unavailable or the
+/// `cache-redis` feature is disabled.
+pub fn init_cache(redis_url: &str, ttl_seconds: u64) -> Box<dyn Cache> {
+    oz_core::cache::create_cache(redis_url, ttl_seconds)
 }
 
 /// Register all business modules and wire event handlers on the kernel.
@@ -122,6 +133,18 @@ pub fn init_module_system(
 
     info!("module system initialised with event bus handlers");
     Ok(())
+}
+
+/// Initialise and start the exchange rate auto-sync daemon.
+///
+/// Spawns a background task that periodically fetches exchange rates
+/// from the public Frankfurter API and stores them in the database.
+/// Returns the daemon handle so callers can inspect status or shut it
+/// down.
+pub async fn init_rate_sync(db: rate_sync::DbConnection) -> rate_sync::RateSyncDaemon {
+    let daemon = rate_sync::RateSyncDaemon::new();
+    daemon.start(db).await;
+    daemon
 }
 
 #[cfg(test)]

@@ -22,6 +22,11 @@
 //! The processor reads `MIDTRANS_SERVER_KEY` from the environment at
 //! construction. The server key is found in the Midtrans dashboard
 //! under Settings → Access Keys.
+//!
+//! # Testing
+//!
+//! Use [`new_with_endpoint`](Self::new_with_endpoint) to direct requests
+//! to a local mock server (e.g. `wiremock`) during integration tests.
 
 use async_trait::async_trait;
 use std::fmt;
@@ -65,6 +70,8 @@ pub struct QrisPaymentProcessor {
     client: Arc<reqwest::Client>,
     /// Whether to use the sandbox endpoint.
     sandbox: bool,
+    /// Base URL for the Midtrans API (configurable for testing).
+    api_base: String,
 }
 
 impl fmt::Debug for QrisPaymentProcessor {
@@ -73,6 +80,7 @@ impl fmt::Debug for QrisPaymentProcessor {
             .field("client", &self.client)
             .field("server_key", &"***")
             .field("sandbox", &self.sandbox)
+            .field("api_base", &self.api_base)
             .finish()
     }
 }
@@ -82,6 +90,7 @@ impl Clone for QrisPaymentProcessor {
         Self {
             client: Arc::clone(&self.client),
             sandbox: self.sandbox,
+            api_base: self.api_base.clone(),
         }
     }
 }
@@ -156,6 +165,19 @@ impl QrisPaymentProcessor {
     /// When `sandbox` is true, requests go to the Midtrans sandbox
     /// environment (`api.sandbox.midtrans.com`).
     pub fn new(server_key: &str, sandbox: bool) -> Self {
+        let api_base = if sandbox {
+            MIDTRANS_SANDBOX_BASE
+        } else {
+            MIDTRANS_API_BASE
+        };
+        Self::new_with_endpoint(server_key, api_base, sandbox)
+    }
+
+    /// Create a new QRIS payment processor with a custom API endpoint.
+    ///
+    /// This constructor is useful for integration tests where requests
+    /// should be directed to a mock server (e.g. `wiremock`).
+    pub fn new_with_endpoint(server_key: &str, api_base: &str, sandbox: bool) -> Self {
         let mut headers = HeaderMap::new();
         let encoded = base64_standard(&format!("{}:", server_key));
         let mut auth_value =
@@ -172,6 +194,7 @@ impl QrisPaymentProcessor {
         Self {
             client: Arc::new(client),
             sandbox,
+            api_base: api_base.to_owned(),
         }
     }
 
@@ -195,11 +218,7 @@ impl QrisPaymentProcessor {
 
     /// The base URL for API calls.
     fn base_url(&self) -> &str {
-        if self.sandbox {
-            MIDTRANS_SANDBOX_BASE
-        } else {
-            MIDTRANS_API_BASE
-        }
+        &self.api_base
     }
 
     /// Generate a unique order ID for a QRIS transaction.
@@ -506,7 +525,10 @@ impl PaymentProcessor for QrisPaymentProcessor {
         }
 
         let cancel: CancelResponse = serde_json::from_str(&text).map_err(|e| {
-            PaymentError::InvalidResponse(format!("failed to parse cancel: {} — body: {}", e, text))
+            PaymentError::InvalidResponse(format!(
+                "failed to parse cancel: {} — body: {}",
+                e, text
+            ))
         })?;
 
         Ok(PaymentResult {
@@ -598,6 +620,12 @@ mod tests {
     fn qris_base_url_sandbox() {
         let proc = QrisPaymentProcessor::new(&test_key(), true);
         assert_eq!(proc.base_url(), "https://api.sandbox.midtrans.com/v2");
+    }
+
+    #[test]
+    fn qris_base_url_custom_endpoint() {
+        let proc = QrisPaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
+        assert_eq!(proc.base_url(), "http://localhost:9999");
     }
 
     #[test]

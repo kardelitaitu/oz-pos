@@ -6,6 +6,26 @@
 use oz_core::db::Store;
 use oz_core::error::CoreError;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct SalePayload {
+    #[serde(default)]
+    line_items: Vec<SaleLinePayload>,
+}
+
+#[derive(Deserialize)]
+struct SaleLinePayload {
+    sku: String,
+    #[serde(default)]
+    qty: i64,
+}
+
+#[derive(Deserialize)]
+struct StockAdjustmentPayload {
+    sku: String,
+    delta: i64,
+}
 
 /// A resolved item after conflict resolution — may be accepted from either
 /// the local or remote side, or a merged version.
@@ -109,17 +129,36 @@ impl SyncQueue {
 
     /// Apply a remote item to the local store.
     ///
-    /// For now, this is a no-op placeholder — the remote server handles
-    /// writing its own data. In a full bidirectional sync, this would
-    /// apply remote updates to the local database.
+    /// Parses the `action` field and dispatches to the appropriate local
+    /// mutation (stock deduction for sales, stock adjustment, etc.).
     pub fn apply_remote(
         &self,
-        _store: &Store<'_>,
-        _item: &OfflineQueueItem,
+        store: &Store<'_>,
+        item: &OfflineQueueItem,
     ) -> Result<(), CoreError> {
-        // TODO(bidirectional-sync): apply remote mutations to local DB
-        // (e.g. update product catalog from server, sync staff changes, etc.)
-        Ok(())
+        match item.action.as_str() {
+            // A sale completed on another terminal — deduct stock.
+            "complete_sale" => {
+                let payload: SalePayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid sale payload: {e}")))?;
+                for line in &payload.line_items {
+                    store.adjust_stock(&line.sku, -line.qty)?;
+                }
+                Ok(())
+            }
+            // Stock adjustment from another terminal.
+            "stock.adjusted" => {
+                let payload: StockAdjustmentPayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid stock payload: {e}")))?;
+                store.adjust_stock(&payload.sku, payload.delta)?;
+                Ok(())
+            }
+            // Unsupported action — log and skip.
+            _ => {
+                tracing::warn!(action = %item.action, "unsupported remote sync action");
+                Ok(())
+            }
+        }
     }
 }
 
@@ -344,15 +383,67 @@ mod tests {
         assert_eq!(all[0].status, OfflineQueueStatus::Synced);
     }
 
+    fn seed_product_and_inventory(store: &Store<'_>) {
+        store.conn().execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES
+                ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('prod-bagel', 'BAGEL', 'Bagel', 450, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty, updated_at) VALUES
+                ('prod-coffee', 50, '2025-01-01T00:00:00.000Z'),
+                ('prod-bagel', 30, '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+    }
+
+    fn inventory_qty(store: &Store<'_>, sku: &str) -> i64 {
+        let pid = store.product_id_by_sku(sku).unwrap().unwrap();
+        store.get_stock(&pid).unwrap()
+    }
+
     #[test]
-    fn queue_apply_remote_is_noop() {
+    fn apply_remote_complete_sale_deducts_stock() {
         let store = setup_store();
+        seed_product_and_inventory(&store);
         let queue = SyncQueue::new();
-        let remote = OfflineQueueItem::new("remote_update", r#"{"data":"test"}"#);
+
+        let payload = r#"{"line_items":[{"sku":"COFFEE","qty":2},{"sku":"BAGEL","qty":1}]}"#;
+        let remote = OfflineQueueItem::new("complete_sale", payload);
         let result = queue.apply_remote(&store, &remote);
         assert!(result.is_ok(), "apply_remote should succeed");
-        // Verify no items were created in the queue.
+
+        assert_eq!(inventory_qty(&store, "COFFEE"), 48, "COFFEE should drop from 50 to 48");
+        assert_eq!(inventory_qty(&store, "BAGEL"), 29, "BAGEL should drop from 30 to 29");
+    }
+
+    #[test]
+    fn apply_remote_stock_adjustment() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+
+        // Add 10 units.
+        let payload = r#"{"sku":"COFFEE","delta":10}"#;
+        let remote = OfflineQueueItem::new("stock.adjusted", payload);
+        let result = queue.apply_remote(&store, &remote);
+        assert!(result.is_ok());
+        assert_eq!(inventory_qty(&store, "COFFEE"), 60, "COFFEE should increase from 50 to 60");
+
+        // Remove 5 units.
+        let payload = r#"{"sku":"BAGEL","delta":-5}"#;
+        let remote = OfflineQueueItem::new("stock.adjusted", payload);
+        let result = queue.apply_remote(&store, &remote);
+        assert!(result.is_ok());
+        assert_eq!(inventory_qty(&store, "BAGEL"), 25, "BAGEL should drop from 30 to 25");
+    }
+
+    #[test]
+    fn apply_remote_unknown_action_is_noop() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem::new("unknown.action", r#"{"data":"test"}"#);
+        let result = queue.apply_remote(&store, &remote);
+        assert!(result.is_ok(), "unknown action should not error");
         let all = store.list_all_offline().unwrap();
-        assert!(all.is_empty());
+        assert!(all.is_empty(), "no queue items should be created");
     }
 }

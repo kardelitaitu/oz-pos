@@ -1,8 +1,9 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Localized } from '@/components/Localized';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
-import { formatMoney, type LineId, type Product, type Sku } from '@/types/domain';
+import { formatMoney, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
+import { useSwipe } from '@/hooks/useSwipe';
 import {
   holdCart,
   listHeldCarts,
@@ -51,6 +52,104 @@ function PlusIcon() {
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
+  );
+}
+
+// ── Swipeable cart line item ──────────────────────────────────────────
+
+interface CartLineItemProps {
+  line: CartLine;
+  onRemove: (line: CartLine) => void;
+  onDecreaseQty: (line: CartLine) => void;
+  onIncreaseQty: (line: CartLine) => void;
+}
+
+function CartLineItem({ line, onRemove, onDecreaseQty, onIncreaseQty }: CartLineItemProps) {
+  const [revealed, setRevealed] = useState(false);
+  const swipe = useSwipe({
+    onSwipeLeft: () => setRevealed(true),
+    onSwipeRight: () => setRevealed(false),
+  });
+
+  return (
+    <div
+      className={`pos-cart-line-wrap ${revealed ? 'pos-cart-line-wrap--revealed' : ''}`}
+      {...swipe}
+    >
+      <div
+        className="pos-cart-line"
+        aria-label={`${line.sku}, ${line.qty} × ${formatMoney(line.unit_price)}`}
+      >
+        {/* Info: name, SKU, unit price */}
+        <div className="pos-cart-line-info">
+          <div className="pos-cart-line-name">{line.name ?? line.sku}</div>
+          <div className="pos-cart-line-sku">{line.sku}</div>
+          <div className="pos-cart-line-price">
+            {formatMoney(line.unit_price)} each
+          </div>
+
+          {/* Quantity controls */}
+          <div className="pos-cart-line-controls">
+            <button
+              type="button"
+              className="pos-cart-qty-btn"
+              onClick={() => onDecreaseQty(line)}
+              disabled={line.qty <= 1}
+              aria-label={`Decrease quantity of ${line.sku}`}
+            >
+              <MinusIcon />
+            </button>
+            <span className="pos-cart-qty-value" aria-label={`Quantity: ${line.qty}`}>
+              {line.qty}
+            </span>
+            <button
+              type="button"
+              className="pos-cart-qty-btn"
+              onClick={() => onIncreaseQty(line)}
+              aria-label={`Increase quantity of ${line.sku}`}
+            >
+              <PlusIcon />
+            </button>
+          </div>
+        </div>
+
+        {/* Line total */}
+        <div className="pos-cart-line-total">
+          {formatMoney({
+            minor_units: line.unit_price.minor_units * line.qty,
+            currency: line.unit_price.currency,
+          })}
+        </div>
+
+        {/* Remove button */}
+        <button
+          type="button"
+          className="pos-cart-line-remove"
+          onClick={() => {
+            onRemove(line);
+            setRevealed(false);
+          }}
+          aria-label={`Remove ${line.sku} from cart`}
+        >
+          <TrashIcon />
+        </button>
+      </div>
+
+      {/* Revealed swipe action */}
+      <div className="pos-cart-line-swipe-action" aria-hidden={!revealed}>
+        <button
+          type="button"
+          className="pos-cart-line-swipe-remove"
+          onClick={() => {
+            onRemove(line);
+            setRevealed(false);
+          }}
+          aria-label={`Remove ${line.sku}`}
+        >
+          Remove
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -137,6 +236,38 @@ export default function PosScreen() {
   const handleClearDiscount = useCallback(() => {
     setDiscount(0, '');
   }, [setDiscount]);
+
+  // ── Swipe-to-remove undo ────────────────────────────────────────
+  const [undoCartLine, setUndoCartLine] = useState<CartLine | null>(null);
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleRemoveLine = useCallback((line: CartLine) => {
+    removeLine(line.id);
+    setUndoCartLine(line);
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    undoTimeoutRef.current = setTimeout(() => {
+      setUndoCartLine(null);
+      undoTimeoutRef.current = null;
+    }, 3000);
+  }, [removeLine]);
+
+  const handleUndoRemove = useCallback(() => {
+    if (!undoCartLine) return;
+    setLines((prev) => [undoCartLine, ...prev]);
+    setUndoCartLine(null);
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = null;
+    }
+  }, [undoCartLine, setLines]);
+
+  const handleDecreaseQty = useCallback((line: CartLine) => {
+    updateQty(line.id, line.qty - 1);
+  }, [updateQty]);
+
+  const handleIncreaseQty = useCallback((line: CartLine) => {
+    updateQty(line.id, line.qty + 1);
+  }, [updateQty]);
 
   // ── Shift management ──────────────────────────────────────────
   const [activeShift, setActiveShift] = useState<ShiftDto | null>(null);
@@ -415,62 +546,13 @@ export default function PosScreen() {
             </div>
           ) : (
             lines.map((line) => (
-              <div
+              <CartLineItem
                 key={line.id}
-                className="pos-cart-line"
-                aria-label={`${line.sku}, ${line.qty} × ${formatMoney(line.unit_price)}`}
-              >
-                {/* Info: name, SKU, unit price */}
-                <div className="pos-cart-line-info">
-                  <div className="pos-cart-line-name">{line.name ?? line.sku}</div>
-                  <div className="pos-cart-line-sku">{line.sku}</div>
-                  <div className="pos-cart-line-price">
-                    {formatMoney(line.unit_price)} each
-                  </div>
-
-                  {/* Quantity controls */}
-                  <div className="pos-cart-line-controls">
-                    <button
-                      type="button"
-                      className="pos-cart-qty-btn"
-                      onClick={() => updateQty(line.id, line.qty - 1)}
-                      disabled={line.qty <= 1}
-                      aria-label={`Decrease quantity of ${line.sku}`}
-                    >
-                      <MinusIcon />
-                    </button>
-                    <span className="pos-cart-qty-value" aria-label={`Quantity: ${line.qty}`}>
-                      {line.qty}
-                    </span>
-                    <button
-                      type="button"
-                      className="pos-cart-qty-btn"
-                      onClick={() => updateQty(line.id, line.qty + 1)}
-                      aria-label={`Increase quantity of ${line.sku}`}
-                    >
-                      <PlusIcon />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Line total */}
-                <div className="pos-cart-line-total">
-                  {formatMoney({
-                    minor_units: line.unit_price.minor_units * line.qty,
-                    currency: line.unit_price.currency,
-                  })}
-                </div>
-
-                {/* Remove button */}
-                <button
-                  type="button"
-                  className="pos-cart-line-remove"
-                  onClick={() => removeLine(line.id)}
-                  aria-label={`Remove ${line.sku} from cart`}
-                >
-                  <TrashIcon />
-                </button>
-              </div>
+                line={line}
+                onRemove={handleRemoveLine}
+                onDecreaseQty={handleDecreaseQty}
+                onIncreaseQty={handleIncreaseQty}
+              />
             ))
           )}
         </div>
@@ -618,6 +700,23 @@ export default function PosScreen() {
                 Hold
               </button>
             </div>
+
+            {/* ── Undo bar ────────────────────────────── */}
+            {undoCartLine && (
+              <div className="pos-cart-undo-bar" role="status" aria-live="polite">
+                <span className="pos-cart-undo-message">
+                  Removed {undoCartLine.name ?? undoCartLine.sku}
+                </span>
+                <button
+                  type="button"
+                  className="pos-cart-undo-btn"
+                  onClick={handleUndoRemove}
+                  aria-label="Undo remove from cart"
+                >
+                  Undo
+                </button>
+              </div>
+            )}
           </div>
         )}
 

@@ -6,6 +6,7 @@ import App from './App';
 import './frontend/themes/reset.css';
 import './frontend/themes/tokens.css';
 import './frontend/themes/components.css';
+import './frontend/themes/responsive.css';
 
 const l10n = createEnUsLocalization();
 

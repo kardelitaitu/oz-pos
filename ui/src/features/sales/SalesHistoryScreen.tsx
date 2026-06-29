@@ -5,6 +5,7 @@ import {
   getSale,
   printSalesReceipt,
   listRefunds,
+  voidSale,
   type SaleListItem,
   type SaleDetail,
   type RefundDto,
@@ -15,6 +16,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSwipe } from '@/hooks/useSwipe';
 import RefundModal from './RefundModal';
 import './SalesHistoryScreen.css';
 
@@ -38,6 +40,71 @@ function statusFluentId(status: string): string {
   }
 }
 
+// ── Swipeable order row ──────────────────────────────────────────────
+
+interface SwipeableOrderRowProps {
+  sale: SaleListItem;
+  isManager: boolean;
+  onView: (id: string) => void;
+  onVoid: (sale: SaleListItem) => void;
+  cashierName: string;
+}
+
+function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: SwipeableOrderRowProps) {
+  const [revealed, setRevealed] = useState(false);
+  const swipe = useSwipe({
+    onSwipeLeft: () => { if (isManager) setRevealed(true); },
+    onSwipeRight: () => setRevealed(false),
+  });
+
+  return (
+    <tr
+      className="sales-history-row-wrap"
+      data-revealed={revealed ? 'true' : undefined}
+      {...swipe}
+    >
+      <td className="sales-history-cell-id">{sale.id.slice(0, 8)}&hellip;</td>
+      <td>{new Date(sale.createdAt).toLocaleString()}</td>
+      <td className="sales-history-cell-total">{formatMoney(sale.total)}</td>
+      <td>{sale.lineCount}</td>
+      <td>
+        <Badge variant={statusBadgeVariant(sale.status)}>
+          <Localized id={statusFluentId(sale.status)}>
+            <span>{sale.status}</span>
+          </Localized>
+        </Badge>
+      </td>
+      <td>{sale.paymentMethod ?? '\u2014'}</td>
+      <td className="sales-history-cell-cashier">{cashierName}</td>
+      <td className="sales-history-cell-actions">
+        <div className="sales-history-cell-actions-inner">
+          <button
+            type="button"
+            className="sales-history-action-btn"
+            onClick={() => onView(sale.id)}
+            aria-label={`View ${sale.id}`}
+          >
+            View
+          </button>
+          {isManager && revealed && (
+            <button
+              type="button"
+              className="sales-history-void-btn"
+              onClick={() => {
+                onVoid(sale);
+                setRevealed(false);
+              }}
+              aria-label={`Void order ${sale.id}`}
+            >
+              Void
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export default function SalesHistoryScreen() {
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +115,7 @@ export default function SalesHistoryScreen() {
   const [refundSaleId, setRefundSaleId] = useState<string | null>(null);
   const [refunds, setRefunds] = useState<RefundDto[]>([]);
   const [_refundsLoading, setRefundsLoading] = useState(false);
-  const { session } = useAuth();
+  const { session, isManager } = useAuth();
 
   // ── Filters ────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,6 +165,44 @@ export default function SalesHistoryScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Void state ──────────────────────────────────────────────────────
+  const [voidTarget, setVoidTarget] = useState<SaleListItem | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voiding, setVoiding] = useState(false);
+  const [voidError, setVoidError] = useState<string | null>(null);
+
+  const handleOpenVoid = useCallback((sale: SaleListItem) => {
+    setVoidTarget(sale);
+    setVoidReason('');
+    setVoidError(null);
+  }, []);
+
+  const handleCloseVoid = useCallback(() => {
+    setVoidTarget(null);
+    setVoidReason('');
+    setVoidError(null);
+  }, []);
+
+  const handleConfirmVoid = useCallback(async () => {
+    if (!voidTarget) return;
+    setVoiding(true);
+    setVoidError(null);
+    try {
+      await voidSale({
+        saleId: voidTarget.id,
+        userId: session?.user_id ?? 'unknown',
+        reason: voidReason || 'Voided from sales history',
+      });
+      setVoidTarget(null);
+      setVoidReason('');
+      load();
+    } catch (err) {
+      setVoidError(err instanceof Error ? err.message : 'Failed to void order');
+    } finally {
+      setVoiding(false);
+    }
+  }, [voidTarget, voidReason, session, load]);
 
   // ── Client-side filtering + sorting ────────────────────────────
   const filteredSales = useMemo(() => {
@@ -460,31 +565,14 @@ export default function SalesHistoryScreen() {
             </thead>
             <tbody>
               {paginatedSales.map((s) => (
-                <tr key={s.id}>
-                  <td className="sales-history-cell-id">{s.id.slice(0, 8)}&hellip;</td>
-                  <td>{new Date(s.createdAt).toLocaleString()}</td>
-                  <td className="sales-history-cell-total">{formatMoney(s.total)}</td>
-                  <td>{s.lineCount}</td>
-                  <td>
-                    <Badge variant={statusBadgeVariant(s.status)}>
-                      <Localized id={statusFluentId(s.status)}>
-                        <span>{s.status}</span>
-                      </Localized>
-                    </Badge>
-                  </td>
-                  <td>{s.paymentMethod ?? '\u2014'}</td>
-                  <td className="sales-history-cell-cashier">{cashierName(s.userId)}</td>
-                  <td className="sales-history-cell-actions">
-                    <button
-                      type="button"
-                      className="sales-history-action-btn"
-                      onClick={() => openDetail(s.id)}
-                      aria-label={`View ${s.id}`}
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
+                <SwipeableOrderRow
+                  key={s.id}
+                  sale={s}
+                  isManager={isManager}
+                  onView={openDetail}
+                  onVoid={handleOpenVoid}
+                  cashierName={cashierName(s.userId)}
+                />
               ))}
             </tbody>
           </table>
@@ -540,6 +628,66 @@ export default function SalesHistoryScreen() {
           onClose={closeRefund}
           onRefunded={handleRefunded}
         />
+      )}
+
+      {/* ── Void Confirmation Modal ──────────────────────────── */}
+      {voidTarget && (
+        <div className="sales-history-overlay" role="dialog" aria-modal="true" aria-label="Void order">
+          <div className="sales-history-modal sales-history-void-modal">
+            <div className="sales-history-modal-header">
+              <h2>Void Order</h2>
+              <button
+                type="button"
+                className="sales-history-modal-close"
+                onClick={handleCloseVoid}
+                aria-label="Close void dialog"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="sales-history-modal-body">
+              <p className="sales-history-void-desc">
+                This will cancel order <strong>{voidTarget.id.slice(0, 8)}</strong>
+                {' '}for {formatMoney(voidTarget.total)} and restore inventory.
+                This action cannot be undone.
+              </p>
+
+              <div className="sales-history-void-field">
+                <label htmlFor="sh-void-reason" className="sales-history-void-label">
+                  Reason for void
+                </label>
+                <input
+                  id="sh-void-reason"
+                  type="text"
+                  className="sales-history-void-input"
+                  placeholder="e.g. Customer cancellation"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  aria-label="Void reason"
+                />
+              </div>
+
+              {voidError && (
+                <div className="sales-history-void-error" role="alert">
+                  {voidError}
+                </div>
+              )}
+
+              <div className="sales-history-modal-actions">
+                <Button variant="ghost" onClick={handleCloseVoid} disabled={voiding}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={handleConfirmVoid}
+                  loading={voiding}
+                >
+                  {voiding ? 'Voiding…' : 'Confirm Void'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Detail modal ────────────────────────────────────────── */}

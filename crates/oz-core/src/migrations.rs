@@ -115,6 +115,10 @@ pub const ALL: &[Migration] = &[
         id: "027_payment_gateway_fields.sql",
         sql: include_str!("../migrations/027_payment_gateway_fields.sql"),
     },
+    Migration {
+        id: "028_terminal_feature_overrides.sql",
+        sql: include_str!("../migrations/028_terminal_feature_overrides.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -236,6 +240,7 @@ mod tests {
             "payments",
             "cash_payouts",
             "store_profiles",
+            "terminal_feature_overrides",
         ];
 
         for table in &expected_tables {

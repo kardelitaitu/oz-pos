@@ -158,6 +158,28 @@ impl Settings {
         )?)
     }
 
+    // ── Redis Cache ─────────────────────────────────────────────────
+
+    /// Get the Redis server URL.
+    pub fn get_redis_url(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_redis_url(conn)?)
+    }
+
+    /// Set the Redis server URL.
+    pub fn set_redis_url(conn: &Connection, url: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_redis_url(conn, url)?)
+    }
+
+    /// Get the Redis cache TTL in seconds.
+    pub fn get_redis_cache_ttl(conn: &Connection) -> Result<u64, CoreError> {
+        Ok(platform_core::settings::Settings::get_redis_cache_ttl(conn)?)
+    }
+
+    /// Set the Redis cache TTL in seconds.
+    pub fn set_redis_cache_ttl(conn: &Connection, ttl: u64) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_redis_cache_ttl(conn, ttl)?)
+    }
+
     /// Get the configured sync server URL.
     pub fn get_sync_server_url(conn: &Connection) -> Result<Option<String>, CoreError> {
         Ok(platform_core::settings::Settings::get_sync_server_url(
@@ -182,6 +204,48 @@ impl Settings {
         Ok(platform_core::settings::Settings::set_sync_api_key(
             conn, key,
         )?)
+    }
+
+    // ── Exchange Rate Auto-Sync ─────────────────────────────────
+
+    /// Check if exchange rate auto-sync is enabled.
+    pub fn is_rate_sync_enabled(conn: &Connection) -> Result<bool, CoreError> {
+        Ok(platform_core::settings::Settings::is_rate_sync_enabled(conn)?)
+    }
+
+    /// Enable or disable exchange rate auto-sync.
+    pub fn set_rate_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_rate_sync_enabled(conn, enabled)?)
+    }
+
+    /// Get the exchange rate API key.
+    pub fn get_rate_sync_api_key(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_rate_sync_api_key(conn)?)
+    }
+
+    /// Set the exchange rate API key.
+    pub fn set_rate_sync_api_key(conn: &Connection, key: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_rate_sync_api_key(conn, key)?)
+    }
+
+    /// Get the exchange rate sync interval in minutes.
+    pub fn get_rate_sync_interval(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_rate_sync_interval(conn)?)
+    }
+
+    /// Set the exchange rate sync interval in minutes.
+    pub fn set_rate_sync_interval(conn: &Connection, val: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_rate_sync_interval(conn, val)?)
+    }
+
+    /// Get the base currency for exchange rate sync.
+    pub fn get_rate_sync_base_currency(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_rate_sync_base_currency(conn)?)
+    }
+
+    /// Set the base currency for exchange rate sync.
+    pub fn set_rate_sync_base_currency(conn: &Connection, currency: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_rate_sync_base_currency(conn, currency)?)
     }
 
     /// Check if sync is enabled.

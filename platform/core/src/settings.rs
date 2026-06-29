@@ -118,6 +118,22 @@ pub mod keys {
     pub const PG_SYNC_USER: &str = "pg_sync.user";
     /// PostgreSQL password.
     pub const PG_SYNC_PASSWORD: &str = "pg_sync.password";
+
+    // ── Redis Cache settings ─────────────────────────────────────
+    /// Redis server URL. Default `"redis://localhost:6379"`.
+    pub const REDIS_URL: &str = "redis.url";
+    /// Redis cache TTL in seconds. Default `300`.
+    pub const REDIS_CACHE_TTL: &str = "redis.cache_ttl";
+
+    // ── Exchange Rate Auto-Sync settings ─────────────────────────
+    /// Whether exchange rate auto-sync is enabled. `"1"` or `"0"`. Default `"0"`.
+    pub const RATE_SYNC_ENABLED: &str = "rate_sync.enabled";
+    /// API key for the exchange rate provider.
+    pub const RATE_SYNC_API_KEY: &str = "rate_sync.api_key";
+    /// Sync interval in minutes. Default `"360"` (6 hours).
+    pub const RATE_SYNC_INTERVAL: &str = "rate_sync.interval";
+    /// Base currency for exchange rates. Default `"USD"`.
+    pub const RATE_SYNC_BASE_CURRENCY: &str = "rate_sync.base_currency";
 }
 
 impl Settings {
@@ -318,6 +334,71 @@ impl Settings {
     /// Set the PostgreSQL password.
     pub fn set_pg_sync_password(conn: &Connection, password: &str) -> Result<(), PlatformError> {
         Self::set(conn, keys::PG_SYNC_PASSWORD, password)
+    }
+
+    // ── Redis Cache ────────────────────────────────────────────────
+
+    /// Get the Redis server URL.
+    pub fn get_redis_url(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::REDIS_URL)?.unwrap_or_else(|| "redis://localhost:6379".into()))
+    }
+
+    /// Set the Redis server URL.
+    pub fn set_redis_url(conn: &Connection, url: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::REDIS_URL, url)
+    }
+
+    /// Get the Redis cache TTL in seconds.
+    pub fn get_redis_cache_ttl(conn: &Connection) -> Result<u64, PlatformError> {
+        let val = Self::get(conn, keys::REDIS_CACHE_TTL)?;
+        Ok(val.as_deref().unwrap_or("300").parse().unwrap_or(300))
+    }
+
+    /// Set the Redis cache TTL in seconds.
+    pub fn set_redis_cache_ttl(conn: &Connection, ttl: u64) -> Result<(), PlatformError> {
+        Self::set(conn, keys::REDIS_CACHE_TTL, &ttl.to_string())
+    }
+
+    // ── Exchange Rate Auto-Sync ────────────────────────────────────
+
+    /// Check if exchange rate auto-sync is enabled.
+    pub fn is_rate_sync_enabled(conn: &Connection) -> Result<bool, PlatformError> {
+        Ok(Self::get(conn, keys::RATE_SYNC_ENABLED)?.as_deref() == Some("1"))
+    }
+
+    /// Enable or disable exchange rate auto-sync.
+    pub fn set_rate_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RATE_SYNC_ENABLED, if enabled { "1" } else { "0" })
+    }
+
+    /// Get the exchange rate API key.
+    pub fn get_rate_sync_api_key(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::RATE_SYNC_API_KEY)
+    }
+
+    /// Set the exchange rate API key.
+    pub fn set_rate_sync_api_key(conn: &Connection, key: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RATE_SYNC_API_KEY, key)
+    }
+
+    /// Get the exchange rate sync interval in minutes.
+    pub fn get_rate_sync_interval(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::RATE_SYNC_INTERVAL)?.unwrap_or_else(|| "360".into()))
+    }
+
+    /// Set the exchange rate sync interval in minutes.
+    pub fn set_rate_sync_interval(conn: &Connection, val: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RATE_SYNC_INTERVAL, val)
+    }
+
+    /// Get the base currency for exchange rate sync.
+    pub fn get_rate_sync_base_currency(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::RATE_SYNC_BASE_CURRENCY)?.unwrap_or_else(|| "USD".into()))
+    }
+
+    /// Set the base currency for exchange rate sync.
+    pub fn set_rate_sync_base_currency(conn: &Connection, currency: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RATE_SYNC_BASE_CURRENCY, currency)
     }
 }
 
@@ -647,6 +728,71 @@ mod tests {
         assert_eq!(Settings::get(&conn, "empty.key").unwrap(), Some("".into()));
     }
 
+    // ── Exchange Rate Auto-Sync ─────────────────────────────────
+
+    #[test]
+    fn rate_sync_enabled_default_false() {
+        let conn = fresh();
+        assert!(!Settings::is_rate_sync_enabled(&conn).unwrap());
+    }
+
+    #[test]
+    fn set_rate_sync_enabled() {
+        let conn = fresh();
+        Settings::set_rate_sync_enabled(&conn, true).unwrap();
+        assert!(Settings::is_rate_sync_enabled(&conn).unwrap());
+        Settings::set_rate_sync_enabled(&conn, false).unwrap();
+        assert!(!Settings::is_rate_sync_enabled(&conn).unwrap());
+    }
+
+    #[test]
+    fn rate_sync_api_key_default_none() {
+        let conn = fresh();
+        assert_eq!(Settings::get_rate_sync_api_key(&conn).unwrap(), None);
+    }
+
+    #[test]
+    fn set_rate_sync_api_key() {
+        let conn = fresh();
+        Settings::set_rate_sync_api_key(&conn, "my-key").unwrap();
+        assert_eq!(
+            Settings::get_rate_sync_api_key(&conn).unwrap(),
+            Some("my-key".into())
+        );
+    }
+
+    #[test]
+    fn rate_sync_interval_default_360() {
+        let conn = fresh();
+        assert_eq!(Settings::get_rate_sync_interval(&conn).unwrap(), "360");
+    }
+
+    #[test]
+    fn set_rate_sync_interval() {
+        let conn = fresh();
+        Settings::set_rate_sync_interval(&conn, "60").unwrap();
+        assert_eq!(Settings::get_rate_sync_interval(&conn).unwrap(), "60");
+    }
+
+    #[test]
+    fn rate_sync_base_currency_default_usd() {
+        let conn = fresh();
+        assert_eq!(
+            Settings::get_rate_sync_base_currency(&conn).unwrap(),
+            "USD"
+        );
+    }
+
+    #[test]
+    fn set_rate_sync_base_currency() {
+        let conn = fresh();
+        Settings::set_rate_sync_base_currency(&conn, "EUR").unwrap();
+        assert_eq!(
+            Settings::get_rate_sync_base_currency(&conn).unwrap(),
+            "EUR"
+        );
+    }
+
     #[test]
     fn overwrite_with_same_value() {
         let conn = fresh();
@@ -677,5 +823,9 @@ mod tests {
         assert!(!keys::PG_SYNC_DBNAME.is_empty());
         assert!(!keys::PG_SYNC_USER.is_empty());
         assert!(!keys::PG_SYNC_PASSWORD.is_empty());
+        assert!(!keys::RATE_SYNC_ENABLED.is_empty());
+        assert!(!keys::RATE_SYNC_API_KEY.is_empty());
+        assert!(!keys::RATE_SYNC_INTERVAL.is_empty());
+        assert!(!keys::RATE_SYNC_BASE_CURRENCY.is_empty());
     }
 }

@@ -148,6 +148,41 @@ impl Store<'_> {
         Ok(row)
     }
 
+    /// Insert or replace an exchange rate.
+    ///
+    /// Uses `INSERT OR REPLACE` so that a rate with the same
+    /// `(from_currency, to_currency, effective_date)` is replaced
+    /// with a new row and a fresh id.
+    pub fn upsert_exchange_rate(
+        &self,
+        from_currency: &str,
+        to_currency: &str,
+        rate: f64,
+        source: &str,
+        effective_date: &str,
+    ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO exchange_rates (id, from_currency, to_currency, rate, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![id, from_currency, to_currency, rate, source, effective_date],
+        )?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, from_currency, to_currency, rate, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
+        )?;
+        let row = stmt.query_row(rusqlite::params![id], |row| {
+            Ok(crate::exchange_rate::ExchangeRateRow {
+                id: row.get(0)?,
+                from_currency: row.get(1)?,
+                to_currency: row.get(2)?,
+                rate: row.get(3)?,
+                source: row.get(4)?,
+                effective_date: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        Ok(row)
+    }
+
     /// Delete an exchange rate by ID.
     pub fn delete_exchange_rate(&self, id: &str) -> Result<(), CoreError> {
         let affected = self.conn.execute(
@@ -365,6 +400,27 @@ mod tests {
         s.delete_exchange_rate(&row.id).unwrap();
         let rates = s.list_exchange_rates().unwrap();
         assert!(rates.is_empty());
+    }
+
+    #[test]
+    fn upsert_exchange_rate_replaces_existing() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let s = store(&conn);
+        let first = s
+            .create_exchange_rate("USD", "EUR", 0.90, "manual", "2026-07-01")
+            .unwrap();
+        let second = s
+            .upsert_exchange_rate("USD", "EUR", 0.92, "auto-sync", "2026-07-01")
+            .unwrap();
+        // Same (from, to, date) but different id and updated rate
+        assert_ne!(first.id, second.id);
+        assert!((second.rate - 0.92).abs() < 0.001);
+        assert_eq!(second.source, "auto-sync");
+        // Only one row in the table
+        let rates = s.list_exchange_rates().unwrap();
+        assert_eq!(rates.len(), 1);
     }
 
     #[test]

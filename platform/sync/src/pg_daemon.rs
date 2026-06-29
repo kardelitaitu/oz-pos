@@ -14,6 +14,7 @@ use tokio::sync::{Mutex, RwLock, watch};
 use oz_core::db::Store;
 use oz_core::settings::Settings;
 
+use crate::queue::SyncQueue;
 use crate::pg_transport::PgTransport;
 
 /// Default interval between PG sync cycles (60 seconds — PG sync is
@@ -169,51 +170,83 @@ impl PgSyncDaemon {
 
         // Phase 2: Do async PG sync if configured
         let mut pushed = 0usize;
-        let pulled = 0usize;
+        let mut pulled = 0usize;
         let mut sync_error: Option<String> = None;
 
-        if let Some((host, port, dbname, user, password)) = &pg_config {
+        let pg_transport = pg_config.as_ref().and_then(|(host, port, dbname, user, password)| {
             let port_u16: u16 = port.parse().unwrap_or(5432);
-            match PgTransport::new(host, port_u16, dbname, user, password) {
-                Ok(transport) => {
-                    match transport.push_items(&pending).await {
-                        Ok(results) => {
-                            pushed = results.len();
-                            // Phase 3: Apply results to local DB (blocking)
-                            let db_clone = db.clone();
-                            let ids: Vec<String> = pending.iter().map(|i| i.id.clone()).collect();
-                            let outcome = tokio::task::spawn_blocking(move || {
-                                let conn = db_clone.blocking_lock();
-                                let store = Store::new(&conn);
-                                for (i, outcome) in ids.iter().zip(results.iter()) {
-                                    match outcome {
-                                        crate::transport::PushOutcome::Accepted => {
-                                            let _ = store.mark_offline_synced(i);
-                                        }
-                                        crate::transport::PushOutcome::Rejected { reason } => {
-                                            let _ = store.mark_offline_failed(i, reason);
-                                        }
-                                        crate::transport::PushOutcome::Conflict(remote) => {
-                                            let _ = store.mark_offline_synced(i);
-                                            let _ = store
-                                                .enqueue_offline(&remote.action, &remote.payload);
-                                        }
-                                    }
-                                }
-                            })
-                            .await;
+            PgTransport::new(host, port_u16, dbname, user, password).ok()
+        });
 
-                            if let Err(e) = outcome {
-                                sync_error = Some(format!("apply phase: {e}"));
+        if let Some(ref transport) = pg_transport {
+            match transport.push_items(&pending).await {
+                Ok(results) => {
+                    pushed = results.len();
+                    // Phase 3: Apply push results to local DB (blocking)
+                    let db_clone = db.clone();
+                    let ids: Vec<String> = pending.iter().map(|i| i.id.clone()).collect();
+                    let outcome = tokio::task::spawn_blocking(move || {
+                        let conn = db_clone.blocking_lock();
+                        let store = Store::new(&conn);
+                        for (i, outcome) in ids.iter().zip(results.iter()) {
+                            match outcome {
+                                crate::transport::PushOutcome::Accepted => {
+                                    let _ = store.mark_offline_synced(i);
+                                }
+                                crate::transport::PushOutcome::Rejected { reason } => {
+                                    let _ = store.mark_offline_failed(i, reason);
+                                }
+                                crate::transport::PushOutcome::Conflict(remote) => {
+                                    let _ = store.mark_offline_synced(i);
+                                    let _ = store
+                                        .enqueue_offline(&remote.action, &remote.payload);
+                                }
                             }
                         }
-                        Err(e) => {
-                            sync_error = Some(e.to_string());
+                    })
+                    .await;
+
+                    if let Err(e) = outcome {
+                        sync_error = Some(format!("apply push phase: {e}"));
+                    }
+                }
+                Err(e) => {
+                    sync_error = Some(e.to_string());
+                }
+            }
+
+            // Phase 4: Pull remote updates and apply them locally.
+            match transport.pull_updates(None).await {
+                Ok(pull_resp) => {
+                    pulled = pull_resp.items.len();
+                    if !pull_resp.items.is_empty() {
+                        let db_clone = db.clone();
+                        let items = pull_resp.items;
+                        let outcome = tokio::task::spawn_blocking(move || {
+                            let conn = db_clone.blocking_lock();
+                            let store = Store::new(&conn);
+                            let queue = SyncQueue::new();
+                            for item in &items {
+                                if let Err(e) = queue.apply_remote(&store, item) {
+                                    tracing::error!(
+                                        item_id = %item.id,
+                                        action = %item.action,
+                                        error = %e,
+                                        "failed to apply remote item"
+                                    );
+                                }
+                            }
+                        })
+                        .await;
+                        if let Err(e) = outcome {
+                            sync_error = Some(format!("apply pull phase: {e}"));
                         }
                     }
                 }
                 Err(e) => {
-                    sync_error = Some(format!("failed to create pg transport: {e}"));
+                    if sync_error.is_none() {
+                        sync_error = Some(format!("pull phase: {e}"));
+                    }
                 }
             }
         }

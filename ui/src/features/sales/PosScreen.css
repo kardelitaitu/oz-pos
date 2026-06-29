@@ -1155,3 +1155,119 @@
   padding: 2rem;
   text-align: center;
 }
+
+/* ── Swipeable cart line item ────────────────────────── */
+.pos-cart-line-wrap {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.pos-cart-line-swipe-action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(100%);
+  transition: transform var(--duration-200) var(--ease-out);
+}
+
+.pos-cart-line-wrap--revealed .pos-cart-line-swipe-action {
+  transform: translateX(0);
+}
+
+.pos-cart-line-swipe-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-fg, #fff);
+  background: var(--color-danger, #ef4444);
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background-color var(--duration-100) var(--ease-out);
+}
+
+.pos-cart-line-swipe-remove:hover {
+  background: var(--color-danger-hover, #dc2626);
+}
+
+.pos-cart-line-swipe-remove:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+/* ── Undo bar ────────────────────────────────────────── */
+.pos-cart-undo-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  animation: pos-cart-undo-slide-in var(--duration-200) var(--ease-out);
+}
+
+@keyframes pos-cart-undo-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pos-cart-undo-message {
+  flex: 1;
+  color: var(--color-fg-secondary);
+}
+
+.pos-cart-undo-btn {
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--duration-100) var(--ease-out);
+}
+
+.pos-cart-undo-btn:hover {
+  background: var(--color-accent-hover);
+}
+
+.pos-cart-undo-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+@media (max-width: 1023px) {
+  .pos-screen {
+    flex-direction: column;
+  }
+  .pos-screen .product-lookup {
+    flex: 1;
+  }
+  .pos-screen .cart-panel {
+    width: 100%;
+    max-height: 40vh;
+  }
+}

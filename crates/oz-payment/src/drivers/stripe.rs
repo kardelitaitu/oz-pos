@@ -7,6 +7,11 @@
 //! construction. In production the key should be set in the OS key-ring
 //! (see `oz_core::Keyring`); this driver provides a `new` constructor
 //! that accepts an explicit key for that use case.
+//!
+//! # Testing
+//!
+//! Use [`new_with_endpoint`](Self::new_with_endpoint) to direct requests
+//! to a local mock server (e.g. `wiremock`) during integration tests.
 
 use async_trait::async_trait;
 use std::fmt;
@@ -20,7 +25,7 @@ use crate::PaymentProcessor;
 use crate::error::PaymentError;
 use crate::types::{PaymentMethod, PaymentReceipt, PaymentRequest, PaymentResult};
 
-/// Base URL for the Stripe API.
+/// Default base URL for the Stripe API.
 const STRIPE_API_BASE: &str = "https://api.stripe.com/v1";
 
 /// A [`PaymentProcessor`] implementation backed by the Stripe REST API.
@@ -42,6 +47,8 @@ pub struct StripePaymentProcessor {
     client: Arc<reqwest::Client>,
     /// Whether to use card-present terminal API (vs card-not-present).
     card_present: bool,
+    /// Base URL for the Stripe API (configurable for testing).
+    api_base: String,
 }
 
 impl fmt::Debug for StripePaymentProcessor {
@@ -50,6 +57,7 @@ impl fmt::Debug for StripePaymentProcessor {
             .field("client", &self.client)
             .field("secret_key", &"***")
             .field("card_present", &self.card_present)
+            .field("api_base", &self.api_base)
             .finish()
     }
 }
@@ -59,6 +67,7 @@ impl Clone for StripePaymentProcessor {
         Self {
             client: Arc::clone(&self.client),
             card_present: self.card_present,
+            api_base: self.api_base.clone(),
         }
     }
 }
@@ -102,8 +111,17 @@ impl StripePaymentProcessor {
     /// Create a new Stripe payment processor with the given secret key.
     ///
     /// The `card_present` flag switches between `card_present` and `card`
-    /// payment method types.
+    /// payment method types. Requests are sent to the live Stripe API at
+    /// `https://api.stripe.com/v1`.
     pub fn new(secret_key: &str, card_present: bool) -> Self {
+        Self::new_with_endpoint(secret_key, STRIPE_API_BASE, card_present)
+    }
+
+    /// Create a new Stripe payment processor with a custom API endpoint.
+    ///
+    /// This constructor is useful for integration tests where requests
+    /// should be directed to a mock server (e.g. `wiremock`).
+    pub fn new_with_endpoint(secret_key: &str, api_base: &str, card_present: bool) -> Self {
         let mut headers = HeaderMap::new();
         let mut auth_value =
             HeaderValue::from_str(&format!("Bearer {}", secret_key)).expect("valid header value");
@@ -122,6 +140,7 @@ impl StripePaymentProcessor {
         Self {
             client: Arc::new(client),
             card_present,
+            api_base: api_base.to_owned(),
         }
     }
 
@@ -180,7 +199,7 @@ impl StripePaymentProcessor {
         path: &str,
         form: Vec<(&str, &str)>,
     ) -> Result<(u16, String), PaymentError> {
-        let url = format!("{}{}", STRIPE_API_BASE, path);
+        let url = format!("{}{}", self.api_base, path);
         let resp = self
             .client
             .post(&url)
@@ -199,7 +218,7 @@ impl StripePaymentProcessor {
 
     /// Perform an HTTP GET to the Stripe API and return (status, body).
     async fn get(&self, path: &str) -> Result<(u16, String), PaymentError> {
-        let url = format!("{}{}", STRIPE_API_BASE, path);
+        let url = format!("{}{}", self.api_base, path);
         let resp = self
             .client
             .get(&url)
@@ -232,7 +251,7 @@ impl StripePaymentProcessor {
     fn parse_intent(body: &str) -> Result<PaymentIntentResponse, PaymentError> {
         serde_json::from_str(body).map_err(|e| {
             PaymentError::Network(format!(
-                "failed to parse PaymentIntent: {} — body: {}",
+                "failed to parse PaymentIntent: {} -- body: {}",
                 e, body
             ))
         })
@@ -241,7 +260,7 @@ impl StripePaymentProcessor {
     /// Parse a successful Stripe response body into a [`RefundResponse`].
     fn parse_refund(body: &str) -> Result<RefundResponse, PaymentError> {
         serde_json::from_str(body).map_err(|e| {
-            PaymentError::Network(format!("failed to parse Refund: {} — body: {}", e, body))
+            PaymentError::Network(format!("failed to parse Refund: {} -- body: {}", e, body))
         })
     }
 
@@ -487,9 +506,6 @@ mod tests {
 
     #[test]
     fn stripe_secret_key_from_env_error_check() {
-        // Verify the error path of `secret_key_from_env` by checking
-        // that calling `from_env` works when STRIPE_SECRET_KEY is set
-        // (in CI) or fails gracefully when it's not set (local dev).
         let result = StripePaymentProcessor::from_env();
         match std::env::var("STRIPE_SECRET_KEY") {
             Ok(_) => assert!(result.is_ok()),
@@ -576,5 +592,13 @@ mod tests {
         assert_eq!(cloned.pm_type(), "card_present");
         let info = cloned.device_info();
         assert_eq!(info.vendor, "Stripe");
+    }
+
+    #[test]
+    fn stripe_new_with_endpoint_uses_custom_base() {
+        let proc =
+            StripePaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
+        let debug = format!("{:?}", proc);
+        assert!(debug.contains("localhost:9999"));
     }
 }

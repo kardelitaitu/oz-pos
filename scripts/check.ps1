@@ -23,20 +23,24 @@ function Step {
     $failed = $false
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "SilentlyContinue"
+    $output = ""
     try {
         $global:LASTEXITCODE = 0
-        & $ScriptBlock > $null 2>$null
+        $output = & $ScriptBlock 2>&1
         if ($LASTEXITCODE -ne 0) {
             $failed = $true
         }
     } catch {
         $failed = $true
+        $output = $_
     } finally {
         $ErrorActionPreference = $oldEAP
     }
 
     if ($failed) {
         Write-Host "FAIL" -ForegroundColor Red
+        Write-Host "Output/Error from failed command:"
+        Write-Host $output
         Write-Host "run `"$RetryCommand`" for full detailed error messages"
         exit 1
     } else {
@@ -49,33 +53,7 @@ function Step {
 # --- Rust (mirrors CI rust job) -------------------------------------------
 Step -Name "cargo fmt" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
 
-$Packages = @(
-    "oz-api",
-    "oz-core",
-    "oz-hal",
-    "oz-lua",
-    "oz-security",
-    "oz-payment",
-    "oz-reporting",
-    "oz-logging",
-    "oz-cli",
-    "foundation",
-    "platform-core",
-    "platform-kernel",
-    "platform-startup",
-    "platform-sync",
-    "modules-sales",
-    "modules-inventory",
-    "modules-crm",
-    "modules-tax",
-    "modules-settings",
-    "modules-staff",
-    "modules-reporting",
-    "modules-terminal",
-    "modules-currency",
-    "oz-pos-app",
-    "oz-pos-tablet"
-)
+$Packages = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).packages.name
 
 foreach ($pkg in $Packages) {
     Step -Name "clippy $pkg" -RetryCommand "cargo clippy -p $pkg --all-targets --all-features -- -D warnings" -ScriptBlock {

@@ -16,6 +16,7 @@ use tokio::sync::{Mutex, RwLock, watch};
 use oz_core::db::Store;
 use oz_core::sync_client::SyncConfig;
 
+use crate::queue::SyncQueue;
 use crate::transport::{PushOutcome, SyncTransport};
 
 /// Default interval between sync cycles (30 seconds).
@@ -143,6 +144,7 @@ impl SyncDaemon {
 
         // Phase 2: Do async sync if configured and there are pending items
         let pushed;
+        let pulled;
         let mut sync_error: Option<String> = None;
 
         if let Some(cfg) = &config {
@@ -151,7 +153,7 @@ impl SyncDaemon {
                 match transport.push_items(&pending).await {
                     Ok(results) => {
                         pushed = results.len();
-                        // Phase 3: Apply results to DB (blocking)
+                        // Phase 3: Apply push results to DB (blocking)
                         let db_clone = db.clone();
                         let ids: Vec<String> = pending.iter().map(|i| i.id.clone()).collect();
                         let outcome = tokio::task::spawn_blocking(move || {
@@ -178,7 +180,7 @@ impl SyncDaemon {
                         .await;
 
                         if let Err(e) = outcome {
-                            sync_error = Some(format!("apply phase: {e}"));
+                            sync_error = Some(format!("apply push phase: {e}"));
                         }
                     }
                     Err(e) => {
@@ -189,8 +191,50 @@ impl SyncDaemon {
             } else {
                 pushed = 0;
             }
+
+            // Phase 4: Pull remote updates and apply them locally.
+            if !cfg.server_url.is_empty() {
+                let transport = SyncTransport::new(&cfg.server_url, cfg.api_key.as_deref());
+                match transport.pull_updates(None).await {
+                    Ok(pull_resp) => {
+                        pulled = pull_resp.items.len();
+                        if !pull_resp.items.is_empty() {
+                            let db_clone = db.clone();
+                            let items = pull_resp.items;
+                            let outcome = tokio::task::spawn_blocking(move || {
+                                let conn = db_clone.blocking_lock();
+                                let store = Store::new(&conn);
+                                let queue = SyncQueue::new();
+                                for item in &items {
+                                    if let Err(e) = queue.apply_remote(&store, item) {
+                                        tracing::error!(
+                                            item_id = %item.id,
+                                            action = %item.action,
+                                            error = %e,
+                                            "failed to apply remote item"
+                                        );
+                                    }
+                                }
+                            })
+                            .await;
+                            if let Err(e) = outcome {
+                                sync_error = Some(format!("apply pull phase: {e}"));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        pulled = 0;
+                        if sync_error.is_none() {
+                            sync_error = Some(format!("pull phase: {e}"));
+                        }
+                    }
+                }
+            } else {
+                pulled = 0;
+            }
         } else {
             pushed = 0;
+            pulled = 0;
         }
 
         // Get pending count
@@ -209,7 +253,7 @@ impl SyncDaemon {
             Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
         s.pending_count = pending_count;
         s.last_pushed = pushed;
-        s.last_pulled = 0;
+        s.last_pulled = pulled;
         s.last_error = sync_error.clone();
 
         if let Some(ref err) = sync_error {

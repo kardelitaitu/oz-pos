@@ -89,3 +89,17 @@
   color: var(--color-fg-secondary);
   margin: 0;
 }
+
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 12px;
+  }
+  .settings-page .tab-list {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .settings-page .tab-list button {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+}

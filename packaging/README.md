@@ -11,6 +11,7 @@ packaging/
 │   └── deb/
 │       ├── postinst      # Post-install script
 │       └── prerm         # Pre-removal script
+├── mobile/               # Tauri mobile build guide for Android tablets and iPads
 ```
 
 Package builds are handled by Tauri's bundler during `cargo tauri build`:

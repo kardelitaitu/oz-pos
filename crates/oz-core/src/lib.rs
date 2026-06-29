@@ -18,6 +18,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod cache;
 pub mod cart;
 pub mod cash_payout;
 pub mod category;
@@ -44,8 +45,12 @@ pub mod store_profile;
 pub mod sync_client;
 pub mod tax_rate;
 pub mod terminal;
+pub mod terminal_override;
 pub mod user;
 
+pub use cache::{Cache, NoopCache, create_cache};
+#[cfg(feature = "cache-redis")]
+pub use cache::redis_cache::RedisCache;
 pub use audit::AuditEntry;
 pub use cart::{Cart, CartError, CartId, CartLine};
 pub use cash_payout::CashPayout;
@@ -70,4 +75,5 @@ pub use sku::{LineId, Sku};
 pub use store_profile::StoreProfile;
 pub use sync_client::{SyncAttemptResult, SyncConfig, sync_pending, sync_pending_async};
 pub use terminal::Terminal;
+pub use terminal_override::TerminalFeatureOverride;
 pub use user::{Role, User, builtin_roles, seed_users};

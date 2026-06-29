@@ -191,6 +191,17 @@
   --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
   --ease-linear:   linear;
 
+  /* ── Breakpoints ──────────────────────────────────── */
+  /* Usage: @media (max-width: var(--bp-tablet)) { ... }       */
+  --bp-desktop: 1024px;
+  --bp-tablet: 1023px;
+  --bp-tablet-portrait: 768px;
+  --bp-mobile: 480px;
+
+  /* ── Touch targets ─────────────────────────────────── */
+  --touch-target-min: 44px;  /* Apple HIG minimum */
+  --touch-target-comfortable: 48px;  /* Comfortable tap target */
+
   /* ── Z-index layers ────────────────────────────── */
   --z-base:      0;
   --z-dropdown:  100;
