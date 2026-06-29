@@ -143,4 +143,3 @@ mod tests {
         assert!((row.rate - 102345.67).abs() < f64::EPSILON);
     }
 }
-

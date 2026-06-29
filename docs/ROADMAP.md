@@ -393,7 +393,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 ### oz-payment
 - [x] `PaymentProcessor` trait definition
 - [x] Mock payment processor (for testing and offline demo)
-- [ ] Stripe integration (card present + card not present)
+- [x] Stripe integration (card present + card not present)
 - [ ] Square integration (optional)
 - [ ] QRIS / local payment gateway support (Indonesian market)
 - [ ] Payment result stored in `payments` table linked to `order_id`

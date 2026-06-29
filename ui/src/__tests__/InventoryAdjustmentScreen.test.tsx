@@ -7,6 +7,7 @@ import InventoryAdjustmentScreen from '@/features/inventory/InventoryAdjustmentS
 
 const wrap = (children: React.ReactNode) => withFluent(children, inventoryFtl);
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const SAMPLE_PRODUCTS: any[] = [
   { sku: 'LATTE', name: 'Caffè Latte', price: { minor_units: 450, currency: 'USD' }, barcode: null, in_stock: true, stock_qty: 20, category: 'Beverages' },
   { sku: 'BAGEL', name: 'Plain Bagel', price: { minor_units: 250, currency: 'USD' }, barcode: '4901234567890', in_stock: true, stock_qty: 5, category: 'Food' },
@@ -14,6 +15,7 @@ const SAMPLE_PRODUCTS: any[] = [
 ];
 
 const { invokeMock } = vi.hoisted(() => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invokeMock: vi.fn() as any,
 }));
 

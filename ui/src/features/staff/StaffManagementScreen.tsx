@@ -308,7 +308,7 @@ export default function StaffManagementScreen() {
 
               <div className="staff-mgmt-modal-body">
                 {/* Username */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-username">
+                <label className="staff-mgmt-field" htmlFor="staff-field-username" aria-label="Username">
                   <Localized id="staff-field-username-label">
                     <span className="staff-mgmt-label">Username *</span>
                   </Localized>
@@ -327,7 +327,7 @@ export default function StaffManagementScreen() {
                 </label>
 
                 {/* Display name */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-name">
+                <label className="staff-mgmt-field" htmlFor="staff-field-name" aria-label="Display Name">
                   <Localized id="staff-field-name-label">
                     <span className="staff-mgmt-label">Display Name *</span>
                   </Localized>
@@ -345,7 +345,7 @@ export default function StaffManagementScreen() {
                 </label>
 
                 {/* PIN */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-pin">
+                <label className="staff-mgmt-field" htmlFor="staff-field-pin" aria-label="PIN">
                   <Localized id={isEditing ? 'staff-field-pin-edit-label' : 'staff-field-pin-label'}>
                     <span className="staff-mgmt-label">
                       {isEditing ? 'New PIN (leave blank to keep current)' : 'PIN * (4+ characters)'}

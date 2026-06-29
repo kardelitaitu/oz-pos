@@ -85,7 +85,11 @@ mod tests {
 
     impl TestModule {
         fn new(id: &'static str) -> Self {
-            Self { id, started: false, stopped: false }
+            Self {
+                id,
+                started: false,
+                stopped: false,
+            }
         }
     }
 
@@ -256,7 +260,9 @@ mod tests {
 
     impl TestHandler {
         fn new() -> Self {
-            Self { calls: std::sync::atomic::AtomicUsize::new(0) }
+            Self {
+                calls: std::sync::atomic::AtomicUsize::new(0),
+            }
         }
     }
 

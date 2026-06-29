@@ -4,7 +4,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
-use oz_core::{Store, migrations, Terminal};
+use oz_core::{Store, Terminal, migrations};
 use rusqlite::Connection;
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -96,7 +96,10 @@ fn get_terminal_not_found() {
 fn get_terminal_by_device_id() {
     let conn = setup();
     seed_terminals(&conn);
-    let t = store(&conn).get_terminal_by_device_id("dev-002").unwrap().unwrap();
+    let t = store(&conn)
+        .get_terminal_by_device_id("dev-002")
+        .unwrap()
+        .unwrap();
     assert_eq!(t.name, "Back Office");
     assert_eq!(t.id, "term-b");
 }
@@ -104,7 +107,9 @@ fn get_terminal_by_device_id() {
 #[test]
 fn get_terminal_by_device_id_not_found() {
     let conn = setup();
-    let t = store(&conn).get_terminal_by_device_id("unknown-device").unwrap();
+    let t = store(&conn)
+        .get_terminal_by_device_id("unknown-device")
+        .unwrap();
     assert!(t.is_none());
 }
 
@@ -226,8 +231,14 @@ fn ping_terminal_sets_last_seen_at() {
     s.ping_terminal("term-b").unwrap();
 
     let loaded = s.get_terminal("term-b").unwrap().unwrap();
-    assert!(loaded.last_seen_at.is_some(), "last_seen_at should be set after ping");
-    assert!(!loaded.updated_at.is_empty(), "updated_at should be set after ping");
+    assert!(
+        loaded.last_seen_at.is_some(),
+        "last_seen_at should be set after ping"
+    );
+    assert!(
+        !loaded.updated_at.is_empty(),
+        "updated_at should be set after ping"
+    );
 }
 
 #[test]
@@ -244,14 +255,22 @@ fn ping_terminal_updates_timestamp() {
     let s = store(&conn);
 
     s.ping_terminal("term-a").unwrap();
-    let after_first = s.get_terminal("term-a").unwrap().unwrap().last_seen_at.clone();
+    let after_first = s
+        .get_terminal("term-a")
+        .unwrap()
+        .unwrap()
+        .last_seen_at
+        .clone();
 
     std::thread::sleep(std::time::Duration::from_millis(2));
 
     s.ping_terminal("term-a").unwrap();
     let after_second = s.get_terminal("term-a").unwrap().unwrap().last_seen_at;
 
-    assert!(after_second > after_first, "second ping should produce a newer timestamp");
+    assert!(
+        after_second > after_first,
+        "second ping should produce a newer timestamp"
+    );
 }
 
 // ── Delete ───────────────────────────────────────────────────────────
@@ -296,7 +315,10 @@ fn terminal_metadata_roundtrip() {
 
     let loaded = store(&conn).get_terminal("term-meta").unwrap().unwrap();
     assert!(!loaded.is_active);
-    assert_eq!(loaded.metadata.as_deref(), Some(r#"{"os":"windows","app_version":"1.2.3"}"#));
+    assert_eq!(
+        loaded.metadata.as_deref(),
+        Some(r#"{"os":"windows","app_version":"1.2.3"}"#)
+    );
     assert_eq!(loaded.terminal_secret.as_deref(), Some("sec-meta"));
 }
 
@@ -341,7 +363,12 @@ fn terminal_updated_at_increases_on_ping() {
     seed_terminals(&conn);
     let s = store(&conn);
 
-    let initial = s.get_terminal("term-a").unwrap().unwrap().updated_at.clone();
+    let initial = s
+        .get_terminal("term-a")
+        .unwrap()
+        .unwrap()
+        .updated_at
+        .clone();
 
     std::thread::sleep(std::time::Duration::from_millis(2));
 

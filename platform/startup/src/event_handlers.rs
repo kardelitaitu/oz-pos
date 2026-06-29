@@ -51,14 +51,16 @@ impl EventHandler<SaleCompleted> for SaleSyncEnqueuer {
         })
         .to_string();
 
-        store.enqueue_offline("complete_sale", &payload).map_err(|e| {
-            error!(
-                sale_id = %event.sale_id,
-                error = %e,
-                "sync enqueuer: failed to enqueue completed sale"
-            );
-            format!("sync enqueuer: enqueue_offline failed: {e}")
-        })?;
+        store
+            .enqueue_offline("complete_sale", &payload)
+            .map_err(|e| {
+                error!(
+                    sale_id = %event.sale_id,
+                    error = %e,
+                    "sync enqueuer: failed to enqueue completed sale"
+                );
+                format!("sync enqueuer: enqueue_offline failed: {e}")
+            })?;
 
         info!(
             sale_id = %event.sale_id,
@@ -108,14 +110,16 @@ impl EventHandler<ProductCreated> for InventorySyncEnqueuer {
         })
         .to_string();
 
-        store.enqueue_offline("product_created", &payload).map_err(|e| {
-            error!(
-                sku = %event.sku,
-                error = %e,
-                "inv sync enqueuer: failed to enqueue product.created"
-            );
-            format!("inv sync enqueuer: enqueue_offline failed: {e}")
-        })?;
+        store
+            .enqueue_offline("product_created", &payload)
+            .map_err(|e| {
+                error!(
+                    sku = %event.sku,
+                    error = %e,
+                    "inv sync enqueuer: failed to enqueue product.created"
+                );
+                format!("inv sync enqueuer: enqueue_offline failed: {e}")
+            })?;
 
         info!(
             sku = %event.sku,
@@ -142,14 +146,16 @@ impl EventHandler<StockAdjusted> for InventorySyncEnqueuer {
         })
         .to_string();
 
-        store.enqueue_offline("stock_adjusted", &payload).map_err(|e| {
-            error!(
-                sku = %event.sku,
-                error = %e,
-                "inv sync enqueuer: failed to enqueue stock.adjusted"
-            );
-            format!("inv sync enqueuer: enqueue_offline failed: {e}")
-        })?;
+        store
+            .enqueue_offline("stock_adjusted", &payload)
+            .map_err(|e| {
+                error!(
+                    sku = %event.sku,
+                    error = %e,
+                    "inv sync enqueuer: failed to enqueue stock.adjusted"
+                );
+                format!("inv sync enqueuer: enqueue_offline failed: {e}")
+            })?;
 
         info!(
             sku = %event.sku,

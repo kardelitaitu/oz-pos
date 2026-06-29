@@ -90,17 +90,32 @@ mod tests {
             dep: "inventory",
         };
         let msg = err.to_string();
-        assert!(msg.contains("sales"), "msg should contain 'sales', got: {msg}");
-        assert!(msg.contains("inventory"), "msg should contain 'inventory', got: {msg}");
-        assert!(msg.contains("depends"), "msg should contain 'depends', got: {msg}");
+        assert!(
+            msg.contains("sales"),
+            "msg should contain 'sales', got: {msg}"
+        );
+        assert!(
+            msg.contains("inventory"),
+            "msg should contain 'inventory', got: {msg}"
+        );
+        assert!(
+            msg.contains("depends"),
+            "msg should contain 'depends', got: {msg}"
+        );
     }
 
     #[test]
     fn circular_dependency_display() {
         let err = KernelError::CircularDependency("a, b, c".into());
         let msg = err.to_string();
-        assert!(msg.contains("circular"), "msg should contain 'circular', got: {msg}");
-        assert!(msg.contains("a, b, c"), "msg should contain 'a, b, c', got: {msg}");
+        assert!(
+            msg.contains("circular"),
+            "msg should contain 'circular', got: {msg}"
+        );
+        assert!(
+            msg.contains("a, b, c"),
+            "msg should contain 'a, b, c', got: {msg}"
+        );
     }
 
     #[test]
@@ -110,9 +125,18 @@ mod tests {
             message: "invalid JSON".into(),
         };
         let msg = err.to_string();
-        assert!(msg.contains("sales"), "msg should contain 'sales', got: {msg}");
-        assert!(msg.contains("invalid JSON"), "msg should contain 'invalid JSON', got: {msg}");
-        assert!(msg.contains("manifest"), "msg should contain 'manifest', got: {msg}");
+        assert!(
+            msg.contains("sales"),
+            "msg should contain 'sales', got: {msg}"
+        );
+        assert!(
+            msg.contains("invalid JSON"),
+            "msg should contain 'invalid JSON', got: {msg}"
+        );
+        assert!(
+            msg.contains("manifest"),
+            "msg should contain 'manifest', got: {msg}"
+        );
     }
 
     #[test]
@@ -123,9 +147,18 @@ mod tests {
             source: "disk full".into(),
         };
         let msg = err.to_string();
-        assert!(msg.contains("inventory"), "msg should contain 'inventory', got: {msg}");
-        assert!(msg.contains("start"), "msg should contain 'start', got: {msg}");
-        assert!(msg.contains("disk full"), "msg should contain 'disk full', got: {msg}");
+        assert!(
+            msg.contains("inventory"),
+            "msg should contain 'inventory', got: {msg}"
+        );
+        assert!(
+            msg.contains("start"),
+            "msg should contain 'start', got: {msg}"
+        );
+        assert!(
+            msg.contains("disk full"),
+            "msg should contain 'disk full', got: {msg}"
+        );
     }
 
     #[test]
@@ -149,9 +182,18 @@ mod tests {
             source: "timeout".into(),
         };
         let msg = err.to_string();
-        assert!(msg.contains("sync-engine"), "msg should contain 'sync-engine', got: {msg}");
-        assert!(msg.contains("stop"), "msg should contain 'stop', got: {msg}");
-        assert!(msg.contains("timeout"), "msg should contain 'timeout', got: {msg}");
+        assert!(
+            msg.contains("sync-engine"),
+            "msg should contain 'sync-engine', got: {msg}"
+        );
+        assert!(
+            msg.contains("stop"),
+            "msg should contain 'stop', got: {msg}"
+        );
+        assert!(
+            msg.contains("timeout"),
+            "msg should contain 'timeout', got: {msg}"
+        );
     }
 
     #[test]

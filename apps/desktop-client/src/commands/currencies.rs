@@ -17,9 +17,7 @@ pub struct CurrencyInfo {
 }
 
 #[command]
-pub async fn currency_info(
-    code: String,
-) -> Result<CurrencyInfo, AppError> {
+pub async fn currency_info(code: String) -> Result<CurrencyInfo, AppError> {
     let currency: oz_core::Currency = code
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {code}")))?;
@@ -39,9 +37,7 @@ pub struct CurrencyDto {
 }
 
 #[command]
-pub async fn list_currencies(
-    state: State<'_, AppState>,
-) -> Result<Vec<CurrencyDto>, AppError> {
+pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyDto>, AppError> {
     let db = state.db.lock().await;
     let store = oz_core::db::Store::new(&db);
     let rows = store.list_currencies()?;
@@ -62,9 +58,7 @@ pub struct SetDefaultCurrencyArgs {
 }
 
 #[command]
-pub async fn get_default_currency(
-    state: State<'_, AppState>,
-) -> Result<Option<String>, AppError> {
+pub async fn get_default_currency(state: State<'_, AppState>) -> Result<Option<String>, AppError> {
     let db = state.db.lock().await;
     let store = oz_core::db::Store::new(&db);
     Ok(store.get_default_currency()?)

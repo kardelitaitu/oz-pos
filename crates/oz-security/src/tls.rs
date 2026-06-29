@@ -70,7 +70,12 @@ impl TlsConfig {
         }
 
         // Verify paths exist.
-        for path in self.cert_path.iter().chain(self.key_path.iter()).chain(self.ca_path.iter()) {
+        for path in self
+            .cert_path
+            .iter()
+            .chain(self.key_path.iter())
+            .chain(self.ca_path.iter())
+        {
             if !path.exists() {
                 return Err(SecurityError::KeyUnavailable(format!(
                     "TLS file not found: {}",
@@ -120,7 +125,6 @@ impl TlsConfig {
             }
             None => Ok(None),
         }
-
     }
 }
 
@@ -255,11 +259,14 @@ mod tests {
         let ca_path = dir.join("ca.pem");
 
         let mut f = fs::File::create(&cert_path).unwrap();
-        f.write_all(b"-----BEGIN CERTIFICATE-----\nfake-cert\n-----END CERTIFICATE-----\n").unwrap();
+        f.write_all(b"-----BEGIN CERTIFICATE-----\nfake-cert\n-----END CERTIFICATE-----\n")
+            .unwrap();
         let mut f = fs::File::create(&key_path).unwrap();
-        f.write_all(b"-----BEGIN PRIVATE KEY-----\nfake-key\n-----END PRIVATE KEY-----\n").unwrap();
+        f.write_all(b"-----BEGIN PRIVATE KEY-----\nfake-key\n-----END PRIVATE KEY-----\n")
+            .unwrap();
         let mut f = fs::File::create(&ca_path).unwrap();
-        f.write_all(b"-----BEGIN CERTIFICATE-----\nfake-ca\n-----END CERTIFICATE-----\n").unwrap();
+        f.write_all(b"-----BEGIN CERTIFICATE-----\nfake-ca\n-----END CERTIFICATE-----\n")
+            .unwrap();
 
         let config = TlsConfig::builder()
             .cert_path(&cert_path)

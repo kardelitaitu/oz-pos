@@ -64,10 +64,17 @@ impl Shift {
     /// # Panics
     ///
     /// Panics if `user_id` is empty after trimming.
-    pub fn new(user_id: impl Into<String>, terminal_id: Option<impl Into<String>>, opening_balance_minor: i64) -> Self {
+    pub fn new(
+        user_id: impl Into<String>,
+        terminal_id: Option<impl Into<String>>,
+        opening_balance_minor: i64,
+    ) -> Self {
         let user_id = user_id.into().trim().to_owned();
         assert!(!user_id.is_empty(), "user_id must not be empty");
-        assert!(opening_balance_minor >= 0, "opening_balance_minor must be ≥ 0");
+        assert!(
+            opening_balance_minor >= 0,
+            "opening_balance_minor must be ≥ 0"
+        );
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         Self {

@@ -312,7 +312,7 @@ export default function TerminalManagementScreen() {
 
               <div className="terminal-mgmt-modal-body">
                 {/* Name */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-name">
+                <label className="terminal-mgmt-field" htmlFor="terminal-field-name" aria-label="Terminal name">
                   <Localized id="terminal-name-label">
                     <span className="terminal-mgmt-label">Terminal name</span>
                   </Localized>
@@ -330,7 +330,7 @@ export default function TerminalManagementScreen() {
                 </label>
 
                 {/* Device ID */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-device-id">
+                <label className="terminal-mgmt-field" htmlFor="terminal-field-device-id" aria-label="Device identifier">
                   <Localized id="terminal-device-id-label">
                     <span className="terminal-mgmt-label">Device identifier</span>
                   </Localized>
@@ -349,7 +349,7 @@ export default function TerminalManagementScreen() {
 
                 {/* Secret — only for register */}
                 {!isEditing && (
-                  <label className="terminal-mgmt-field" htmlFor="terminal-field-secret">
+                  <label className="terminal-mgmt-field" htmlFor="terminal-field-secret" aria-label="Shared secret">
                     <Localized id="terminal-secret-label">
                       <span className="terminal-mgmt-label">Optional shared secret for sync authentication</span>
                     </Localized>
@@ -365,7 +365,7 @@ export default function TerminalManagementScreen() {
                 )}
 
                 {/* Metadata */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-metadata">
+                <label className="terminal-mgmt-field" htmlFor="terminal-field-metadata" aria-label="JSON metadata">
                   <Localized id="terminal-metadata-label">
                     <span className="terminal-mgmt-label">Optional JSON metadata</span>
                   </Localized>
@@ -451,7 +451,7 @@ export default function TerminalManagementScreen() {
 
             <div className="terminal-mgmt-modal-body">
               <Localized id="terminal-delete-confirm" vars={{ name: deleteTarget.name }}>
-                <p>Are you sure you want to delete terminal "{deleteTarget.name}"? This action cannot be undone.</p>
+                <p>Are you sure you want to delete terminal &quot;{deleteTarget.name}&quot;? This action cannot be undone.</p>
               </Localized>
             </div>
 

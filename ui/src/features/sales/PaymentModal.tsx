@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { startSale, addLine, completeSale, setCartDiscount, printSalesReceipt, getSale } from '@/api/sales';
+import { startSale, addLine, completeSale, setCartDiscount, printSalesReceipt, getSale, type SetCartDiscountArgs, type PaymentSplitArg } from '@/api/sales';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
 import './PaymentModal.css';
@@ -170,7 +170,7 @@ export default function PaymentModal({
       const { cartId } = await startSale({ currency: total.currency });
 
       if (discountPercent > 0) {
-        const discountArgs: import('@/api/sales').SetCartDiscountArgs = { cartId, percent: discountPercent };
+        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent };
         if (discountLabel) discountArgs.label = discountLabel;
         await setCartDiscount(discountArgs);
       }
@@ -184,7 +184,7 @@ export default function PaymentModal({
         });
       }
 
-      let paymentSplits: import('@/api/sales').PaymentSplitArg[] | undefined;
+      let paymentSplits: PaymentSplitArg[] | undefined;
 
       if (splitMode) {
         const known: Record<string, number> = {

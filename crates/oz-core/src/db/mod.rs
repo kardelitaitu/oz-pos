@@ -11,8 +11,8 @@
 
 use rusqlite::Connection;
 
-use crate::error::CoreError;
 use crate::Money;
+use crate::error::CoreError;
 
 pub mod audit;
 pub mod cash_payouts;
@@ -22,8 +22,8 @@ pub mod payments;
 pub mod products;
 pub mod refunds;
 pub mod sales;
-pub mod shifts;
 pub mod settings;
+pub mod shifts;
 pub mod staff;
 pub mod store_profiles;
 pub mod tax;
@@ -96,4 +96,3 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         updated_at: row.get("updated_at")?,
     })
 }
-

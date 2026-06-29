@@ -3,8 +3,8 @@
 //! Talks to the `org.freedesktop.secrets` DBus service to store and
 //! retrieve secrets.
 
-use crate::error::SecurityError;
 use crate::Keyring;
+use crate::error::SecurityError;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
 use zbus::Connection;
@@ -29,14 +29,10 @@ impl LibSecretKeyring {
     /// Create a new libsecret keyring instance.
     pub fn new() -> Result<Self, SecurityError> {
         let rt = Runtime::new().map_err(|e| {
-            SecurityError::KeyUnavailable(format!(
-                "failed to create tokio runtime: {e}"
-            ))
+            SecurityError::KeyUnavailable(format!("failed to create tokio runtime: {e}"))
         })?;
         let conn = rt.block_on(Connection::session()).map_err(|e| {
-            SecurityError::KeyUnavailable(format!(
-                "failed to connect to session D-Bus: {e}"
-            ))
+            SecurityError::KeyUnavailable(format!("failed to connect to session D-Bus: {e}"))
         })?;
         Ok(Self { rt, conn })
     }
@@ -52,16 +48,10 @@ impl LibSecretKeyring {
                 &("plain", Value::new("")),
             )
             .await
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "OpenSession failed: {e}"
-                ))
-            })?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("OpenSession failed: {e}")))?
             .body()
             .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "OpenSession body deserialize failed: {e}"
-                ))
+                SecurityError::KeyUnavailable(format!("OpenSession body deserialize failed: {e}"))
             })?;
         Ok(result.1)
     }
@@ -77,16 +67,10 @@ impl LibSecretKeyring {
                 &("default",),
             )
             .await
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "ReadAlias failed: {e}"
-                ))
-            })?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("ReadAlias failed: {e}")))?
             .body()
             .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "ReadAlias body deserialize failed: {e}"
-                ))
+                SecurityError::KeyUnavailable(format!("ReadAlias body deserialize failed: {e}"))
             })?;
         Ok(path)
     }
@@ -105,16 +89,10 @@ impl LibSecretKeyring {
                 &(attrs,),
             )
             .await
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "SearchItems failed: {e}"
-                ))
-            })?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("SearchItems failed: {e}")))?
             .body()
             .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "SearchItems body deserialize failed: {e}"
-                ))
+                SecurityError::KeyUnavailable(format!("SearchItems body deserialize failed: {e}"))
             })?;
         Ok(unlocked)
     }
@@ -133,31 +111,21 @@ impl Keyring for LibSecretKeyring {
 
         let secret: (OwnedObjectPath, Vec<u8>, String) = self
             .rt
-            .block_on(
-                self.conn.call_method(
-                    Some(SECRET_SERVICE),
-                    &items[0],
-                    Some(ITEM_IFACE),
-                    "GetSecret",
-                    &(&session,),
-                ),
-            )
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "GetSecret failed: {e}"
-                ))
-            })?
+            .block_on(self.conn.call_method(
+                Some(SECRET_SERVICE),
+                &items[0],
+                Some(ITEM_IFACE),
+                "GetSecret",
+                &(&session,),
+            ))
+            .map_err(|e| SecurityError::KeyUnavailable(format!("GetSecret failed: {e}")))?
             .body()
             .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "GetSecret body deserialize failed: {e}"
-                ))
+                SecurityError::KeyUnavailable(format!("GetSecret body deserialize failed: {e}"))
             })?;
 
         let s = String::from_utf8(secret.1).map_err(|e| {
-            SecurityError::KeyUnavailable(format!(
-                "secret is not valid UTF-8: {e}"
-            ))
+            SecurityError::KeyUnavailable(format!("secret is not valid UTF-8: {e}"))
         })?;
 
         Ok(Some(s))
@@ -173,20 +141,14 @@ impl Keyring for LibSecretKeyring {
         for item_path in &items {
             let _: Result<(), _> = self
                 .rt
-                .block_on(
-                    self.conn.call_method::<(), _, ()>(
-                        Some(SECRET_SERVICE),
-                        item_path,
-                        Some(ITEM_IFACE),
-                        "Delete",
-                        &(),
-                    ),
-                )
-                .map_err(|e| {
-                    SecurityError::KeyUnavailable(format!(
-                        "Delete failed: {e}"
-                    ))
-                });
+                .block_on(self.conn.call_method::<(), _, ()>(
+                    Some(SECRET_SERVICE),
+                    item_path,
+                    Some(ITEM_IFACE),
+                    "Delete",
+                    &(),
+                ))
+                .map_err(|e| SecurityError::KeyUnavailable(format!("Delete failed: {e}")));
         }
 
         let properties = HashMap::from([
@@ -205,25 +167,17 @@ impl Keyring for LibSecretKeyring {
 
         let (_item, _created): (OwnedObjectPath, bool) = self
             .rt
-            .block_on(
-                self.conn.call_method(
-                    Some(SECRET_SERVICE),
-                    &collection,
-                    Some(COLLECTION_IFACE),
-                    "CreateItem",
-                    &(properties, secret, true),
-                ),
-            )
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "CreateItem failed: {e}"
-                ))
-            })?
+            .block_on(self.conn.call_method(
+                Some(SECRET_SERVICE),
+                &collection,
+                Some(COLLECTION_IFACE),
+                "CreateItem",
+                &(properties, secret, true),
+            ))
+            .map_err(|e| SecurityError::KeyUnavailable(format!("CreateItem failed: {e}")))?
             .body()
             .map_err(|e| {
-                SecurityError::KeyUnavailable(format!(
-                    "CreateItem body deserialize failed: {e}"
-                ))
+                SecurityError::KeyUnavailable(format!("CreateItem body deserialize failed: {e}"))
             })?;
 
         Ok(())
@@ -239,20 +193,14 @@ impl Keyring for LibSecretKeyring {
 
         for item_path in &items {
             self.rt
-                .block_on(
-                    self.conn.call_method::<(), _, ()>(
-                        Some(SECRET_SERVICE),
-                        item_path,
-                        Some(ITEM_IFACE),
-                        "Delete",
-                        &(),
-                    ),
-                )
-                .map_err(|e| {
-                    SecurityError::KeyUnavailable(format!(
-                        "Delete failed: {e}"
-                    ))
-                })?;
+                .block_on(self.conn.call_method::<(), _, ()>(
+                    Some(SECRET_SERVICE),
+                    item_path,
+                    Some(ITEM_IFACE),
+                    "Delete",
+                    &(),
+                ))
+                .map_err(|e| SecurityError::KeyUnavailable(format!("Delete failed: {e}")))?;
         }
 
         Ok(true)
@@ -283,10 +231,7 @@ mod tests {
         assert_eq!(k.get_secret(name).unwrap(), None);
 
         k.set_secret(name, "linux-secret-42").unwrap();
-        assert_eq!(
-            k.get_secret(name).unwrap(),
-            Some("linux-secret-42".into())
-        );
+        assert_eq!(k.get_secret(name).unwrap(), Some("linux-secret-42".into()));
 
         assert!(k.delete_secret(name).unwrap());
         assert_eq!(k.get_secret(name).unwrap(), None);
@@ -295,9 +240,7 @@ mod tests {
     #[test]
     fn linux_delete_nonexistent_returns_false() {
         let k = test_keyring();
-        assert!(!k
-            .delete_secret("oz-pos-test-nonexistent-linux")
-            .unwrap());
+        assert!(!k.delete_secret("oz-pos-test-nonexistent-linux").unwrap());
     }
 
     #[test]
@@ -308,10 +251,7 @@ mod tests {
 
         k.set_secret(name, "original").unwrap();
         k.set_secret(name, "replacement").unwrap();
-        assert_eq!(
-            k.get_secret(name).unwrap(),
-            Some("replacement".into())
-        );
+        assert_eq!(k.get_secret(name).unwrap(), Some("replacement".into()));
 
         k.delete_secret(name).unwrap();
     }

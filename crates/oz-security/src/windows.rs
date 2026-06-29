@@ -5,12 +5,12 @@
 
 #![allow(unsafe_code)]
 
-use crate::error::SecurityError;
 use crate::Keyring;
-use windows_sys::Win32::Foundation::{GetLastError, ERROR_NOT_FOUND, FALSE};
+use crate::error::SecurityError;
+use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND, FALSE, GetLastError};
 use windows_sys::Win32::Security::Credentials::{
-    CredDeleteW, CredFree, CredReadW, CredWriteW, CREDENTIALW,
-    CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
+    CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW, CredFree, CredReadW,
+    CredWriteW,
 };
 
 /// Windows Credential Manager keyring.
@@ -96,9 +96,7 @@ impl Keyring for WindowsCredentialManager {
     fn delete_secret(&self, name: &str) -> Result<bool, SecurityError> {
         let target = encode_utf16_null(&format!("OZ-POS:{name}"));
 
-        let rc = unsafe {
-            CredDeleteW(target.as_ptr() as *mut u16, CRED_TYPE_GENERIC, 0)
-        };
+        let rc = unsafe { CredDeleteW(target.as_ptr() as *mut u16, CRED_TYPE_GENERIC, 0) };
 
         if rc == FALSE {
             let err = unsafe { GetLastError() };
@@ -134,10 +132,7 @@ mod tests {
         assert_eq!(k.get_secret(name).unwrap(), None);
 
         k.set_secret(name, "test-value-123").unwrap();
-        assert_eq!(
-            k.get_secret(name).unwrap(),
-            Some("test-value-123".into())
-        );
+        assert_eq!(k.get_secret(name).unwrap(), Some("test-value-123".into()));
 
         assert!(k.delete_secret(name).unwrap());
         assert_eq!(k.get_secret(name).unwrap(), None);

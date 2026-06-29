@@ -85,18 +85,27 @@ impl Store<'_> {
             sale_id: row.get("sale_id")?,
             sku: row.get("sku")?,
             qty: row.get("qty")?,
-            unit_price: Money { minor_units: row.get("unit_minor")?, currency },
-            line_total: Money { minor_units: row.get("line_minor")?, currency },
+            unit_price: Money {
+                minor_units: row.get("unit_minor")?,
+                currency,
+            },
+            line_total: Money {
+                minor_units: row.get("line_minor")?,
+                currency,
+            },
             line_position: row.get("line_position")?,
-            tax_amount: Money { minor_units: row.get("tax_minor")?, currency },
+            tax_amount: Money {
+                minor_units: row.get("tax_minor")?,
+                currency,
+            },
             tax_rate_id: row.get("tax_rate_id")?,
         })
     }
 
     /// Persist a [`Sale`] (header + all line items) inside a single transaction.
     pub fn create_sale(&self, sale: &Sale) -> Result<(), CoreError> {
-        let cur_str = std::str::from_utf8(&sale.currency.0)
-            .expect("currency bytes are valid UTF-8");
+        let cur_str =
+            std::str::from_utf8(&sale.currency.0).expect("currency bytes are valid UTF-8");
         let status_str = sale.status.as_stored_str();
 
         let tx = self.conn.unchecked_transaction()?;
@@ -152,19 +161,31 @@ impl Store<'_> {
             Ok(Sale {
                 id: row.get("id")?,
                 status,
-                total: Money { minor_units: row.get("total_minor")?, currency },
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency,
+                },
                 line_count: row.get("line_count")?,
                 currency,
                 payment_method: row.get("payment_method")?,
                 tendered_minor: row.get("tendered_minor")?,
-                discount_percent: row.get::<_, Option<i64>>("discount_percent").unwrap_or(Some(0)).unwrap_or(0),
+                discount_percent: row
+                    .get::<_, Option<i64>>("discount_percent")
+                    .unwrap_or(Some(0))
+                    .unwrap_or(0),
                 discount_label: row.get("discount_label")?,
                 user_id: row.get("user_id")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
                 lines: Vec::new(),
-                subtotal: Money { minor_units: row.get("subtotal_minor")?, currency },
-                tax_total: Money { minor_units: row.get("tax_total_minor")?, currency },
+                subtotal: Money {
+                    minor_units: row.get("subtotal_minor")?,
+                    currency,
+                },
+                tax_total: Money {
+                    minor_units: row.get("tax_total_minor")?,
+                    currency,
+                },
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -188,19 +209,31 @@ impl Store<'_> {
             Ok(Sale {
                 id: row.get("id")?,
                 status,
-                total: Money { minor_units: row.get("total_minor")?, currency },
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency,
+                },
                 line_count: row.get("line_count")?,
                 currency,
                 payment_method: row.get("payment_method")?,
                 tendered_minor: row.get("tendered_minor")?,
-                discount_percent: row.get::<_, Option<i64>>("discount_percent").unwrap_or(Some(0)).unwrap_or(0),
+                discount_percent: row
+                    .get::<_, Option<i64>>("discount_percent")
+                    .unwrap_or(Some(0))
+                    .unwrap_or(0),
                 discount_label: row.get("discount_label")?,
                 user_id: row.get("user_id")?,
                 created_at: row.get("created_at")?,
                 updated_at: row.get("updated_at")?,
                 lines: Vec::new(),
-                subtotal: Money { minor_units: row.get("subtotal_minor")?, currency },
-                tax_total: Money { minor_units: row.get("tax_total_minor")?, currency },
+                subtotal: Money {
+                    minor_units: row.get("subtotal_minor")?,
+                    currency,
+                },
+                tax_total: Money {
+                    minor_units: row.get("tax_total_minor")?,
+                    currency,
+                },
             })
         });
 
@@ -234,14 +267,19 @@ impl Store<'_> {
         let current_str = match result {
             Ok(s) => s,
             Err(rusqlite::Error::QueryReturnedNoRows) => {
-                return Err(CoreError::NotFound { entity: "sale", id: id.to_owned() });
+                return Err(CoreError::NotFound {
+                    entity: "sale",
+                    id: id.to_owned(),
+                });
             }
             Err(e) => return Err(e.into()),
         };
 
-        let current = SaleStatus::from_stored_str(&current_str).ok_or_else(|| {
-            CoreError::Validation { field: "status", message: format!("invalid stored status: {current_str}") }
-        })?;
+        let current =
+            SaleStatus::from_stored_str(&current_str).ok_or_else(|| CoreError::Validation {
+                field: "status",
+                message: format!("invalid stored status: {current_str}"),
+            })?;
 
         if !SaleStatus::can_transition_to(current, to) {
             return Err(CoreError::Validation {
@@ -257,7 +295,10 @@ impl Store<'_> {
             params![status_str, now, id],
         )?;
 
-        self.get_sale(id)?.ok_or_else(|| CoreError::NotFound { entity: "sale", id: id.to_owned() })
+        self.get_sale(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "sale",
+            id: id.to_owned(),
+        })
     }
 }
 
@@ -307,13 +348,25 @@ impl Store<'_> {
 impl Store<'_> {
     /// Persist a cart as a held (parked) order.
     pub fn hold_cart(
-        &self, label: &str, cart_data: &str, item_count: i64, total_minor: i64, currency: &str,
+        &self,
+        label: &str,
+        cart_data: &str,
+        item_count: i64,
+        total_minor: i64,
+        currency: &str,
     ) -> Result<String, CoreError> {
         let id = uuid::Uuid::new_v4().to_string();
         self.conn.execute(
             "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, label.trim(), cart_data, item_count, total_minor, currency],
+            params![
+                id,
+                label.trim(),
+                cart_data,
+                item_count,
+                total_minor,
+                currency
+            ],
         )?;
         Ok(id)
     }
@@ -363,12 +416,14 @@ impl Store<'_> {
 
     /// Delete a held cart by id.
     pub fn delete_held_cart(&self, id: &str) -> Result<(), CoreError> {
-        let rows = self.conn.execute(
-            "DELETE FROM held_carts WHERE id = ?1",
-            params![id],
-        )?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM held_carts WHERE id = ?1", params![id])?;
         if rows == 0 {
-            return Err(CoreError::NotFound { entity: "held_cart", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "held_cart",
+                id: id.to_owned(),
+            });
         }
         Ok(())
     }
@@ -379,13 +434,18 @@ impl Store<'_> {
 impl Store<'_> {
     /// Void a sale and restore stock for all line items.
     pub fn void_sale(&self, sale_id: &str, user_id: &str, reason: &str) -> Result<Sale, CoreError> {
-        let sale = self.get_sale(sale_id)?
-            .ok_or_else(|| CoreError::NotFound { entity: "sale", id: sale_id.to_owned() })?;
+        let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "sale",
+            id: sale_id.to_owned(),
+        })?;
 
         if sale.status != SaleStatus::Active {
             return Err(CoreError::Validation {
                 field: "status",
-                message: format!("only active sales can be voided (current: {:?})", sale.status),
+                message: format!(
+                    "only active sales can be voided (current: {:?})",
+                    sale.status
+                ),
             });
         }
 
@@ -402,9 +462,13 @@ impl Store<'_> {
         for line in &sale.lines {
             if let Some(product_id) = self.product_id_by_sku(&line.sku)? {
                 let current_qty = self.get_stock(&product_id)?;
-                let new_qty = current_qty.checked_add(line.qty).ok_or_else(|| {
-                    CoreError::Validation { field: "qty", message: "stock overflow during void".into() }
-                })?;
+                let new_qty =
+                    current_qty
+                        .checked_add(line.qty)
+                        .ok_or_else(|| CoreError::Validation {
+                            field: "qty",
+                            message: "stock overflow during void".into(),
+                        })?;
                 tx.execute(
                     "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
                      ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
@@ -418,13 +482,24 @@ impl Store<'_> {
         let details = serde_json::json!({
             "reason": reason,
             "total_minor": sale.total.minor_units,
-        }).to_string();
-        let audit = AuditEntry::new(user_id, "sale.void", Some("sale"), Some(sale_id), Some(details), "success");
+        })
+        .to_string();
+        let audit = AuditEntry::new(
+            user_id,
+            "sale.void",
+            Some("sale"),
+            Some(sale_id),
+            Some(details),
+            "success",
+        );
         self.log_audit(&audit)?;
 
         tx.commit()?;
 
-        self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound { entity: "sale", id: sale_id.to_owned() })
+        self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "sale",
+            id: sale_id.to_owned(),
+        })
     }
 }
 
@@ -455,12 +530,18 @@ impl Store<'_> {
                     // tax = price * rate / (1 + rate)
                     let divisor = 10_000 + rate.rate_bps;
                     let tax_minor = line_subtotal.minor_units * rate.rate_bps / divisor;
-                    Money { minor_units: tax_minor, currency: line_subtotal.currency }
+                    Money {
+                        minor_units: tax_minor,
+                        currency: line_subtotal.currency,
+                    }
                 } else {
                     // Exclusive: tax is added on top of the price.
                     // tax = price * rate / 10000
                     let tax_minor = line_subtotal.minor_units * rate.rate_bps / 10_000;
-                    Money { minor_units: tax_minor, currency: line_subtotal.currency }
+                    Money {
+                        minor_units: tax_minor,
+                        currency: line_subtotal.currency,
+                    }
                 };
                 line.tax_amount = tax;
                 line.tax_rate_id = Some(rate.id.clone());
@@ -483,7 +564,10 @@ impl Store<'_> {
 
     /// Resolve the best tax rate for a SKU using the chain:
     /// product rates → category rates → default rate.
-    fn resolve_best_tax_rate_for_sku(&self, sku: &str) -> Result<Option<crate::tax_rate::TaxRate>, CoreError> {
+    fn resolve_best_tax_rate_for_sku(
+        &self,
+        sku: &str,
+    ) -> Result<Option<crate::tax_rate::TaxRate>, CoreError> {
         // 1. Product-level tax rates.
         let product_rate_ids = self.get_product_tax_rates(sku)?;
         if !product_rate_ids.is_empty() {
@@ -493,11 +577,15 @@ impl Store<'_> {
         // 2. Category-level tax rates (via product.category_id).
         let product_id = self.product_id_by_sku(sku)?;
         if let Some(pid) = product_id {
-            let category_id: Option<String> = self.conn.query_row(
-                "SELECT category_id FROM products WHERE id = ?1",
-                params![pid],
-                |row| row.get(0),
-            ).ok().and_then(|v| v);
+            let category_id: Option<String> = self
+                .conn
+                .query_row(
+                    "SELECT category_id FROM products WHERE id = ?1",
+                    params![pid],
+                    |row| row.get(0),
+                )
+                .ok()
+                .and_then(|v| v);
 
             if let Some(cid) = category_id {
                 let cat_rate_ids = self.get_category_tax_rates(&cid)?;
@@ -542,13 +630,18 @@ mod tests {
     }
 
     fn price(minor: i64) -> Money {
-        Money { minor_units: minor, currency: usd() }
+        Money {
+            minor_units: minor,
+            currency: usd(),
+        }
     }
 
     fn make_cart() -> Cart {
         let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(Sku::new("COFFEE"), 2, price(350))).unwrap();
-        cart.add_line(CartLine::new(Sku::new("BAGEL"), 1, price(450))).unwrap();
+        cart.add_line(CartLine::new(Sku::new("COFFEE"), 2, price(350)))
+            .unwrap();
+        cart.add_line(CartLine::new(Sku::new("BAGEL"), 1, price(450)))
+            .unwrap();
         cart
     }
 
@@ -613,7 +706,9 @@ mod tests {
         store(&conn).create_sale(&sale).unwrap();
 
         let mut cart2 = Cart::new(usd());
-        cart2.add_line(CartLine::new(Sku::new("TEA"), 1, price(200))).unwrap();
+        cart2
+            .add_line(CartLine::new(Sku::new("TEA"), 1, price(200)))
+            .unwrap();
         let sale2 = Sale::from_cart(&cart2).unwrap();
         store(&conn).create_sale(&sale2).unwrap();
 
@@ -640,7 +735,9 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         store(&conn).create_sale(&sale).unwrap();
 
-        let updated = store(&conn).update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        let updated = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Active)
+            .unwrap();
         assert_eq!(updated.status, SaleStatus::Active);
         assert!(!updated.updated_at.is_empty());
     }
@@ -653,22 +750,30 @@ mod tests {
         store(&conn).create_sale(&sale).unwrap();
 
         // Pending -> Active.
-        let s = store(&conn).update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        let s = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Active)
+            .unwrap();
         assert_eq!(s.status, SaleStatus::Active);
 
         // Active -> Completed.
-        let s = store(&conn).update_sale_status(&sale.id, SaleStatus::Completed).unwrap();
+        let s = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap();
         assert_eq!(s.status, SaleStatus::Completed);
 
         // Terminal -> rejected (Completed -> Voided is invalid).
-        let err = store(&conn).update_sale_status(&sale.id, SaleStatus::Voided).unwrap_err();
+        let err = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Voided)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { .. }));
     }
 
     #[test]
     fn update_sale_status_not_found() {
         let conn = fresh();
-        let err = store(&conn).update_sale_status("nope", SaleStatus::Active).unwrap_err();
+        let err = store(&conn)
+            .update_sale_status("nope", SaleStatus::Active)
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
@@ -680,7 +785,9 @@ mod tests {
         store(&conn).create_sale(&sale).unwrap();
 
         // Pending -> Completed is invalid.
-        let err = store(&conn).update_sale_status(&sale.id, SaleStatus::Completed).unwrap_err();
+        let err = store(&conn)
+            .update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { .. }));
     }
 
@@ -706,7 +813,9 @@ mod tests {
     fn hold_cart_creates_and_list() {
         let conn = fresh();
         let s = store(&conn);
-        let id = s.hold_cart("Cart 1", r#"{"items":[]}"#, 0, 0, "USD").unwrap();
+        let id = s
+            .hold_cart("Cart 1", r#"{"items":[]}"#, 0, 0, "USD")
+            .unwrap();
         assert!(!id.is_empty());
 
         let carts = s.list_held_carts().unwrap();
@@ -719,7 +828,14 @@ mod tests {
     fn hold_cart_with_items() {
         let conn = fresh();
         let s = store(&conn);
-        s.hold_cart("Active Cart", r#"{"lines":[{"sku":"COFFEE","qty":2}]}"#, 2, 700, "USD").unwrap();
+        s.hold_cart(
+            "Active Cart",
+            r#"{"lines":[{"sku":"COFFEE","qty":2}]}"#,
+            2,
+            700,
+            "USD",
+        )
+        .unwrap();
 
         let carts = s.list_held_carts().unwrap();
         assert_eq!(carts.len(), 1);
@@ -732,7 +848,9 @@ mod tests {
     fn get_held_cart_found() {
         let conn = fresh();
         let s = store(&conn);
-        let id = s.hold_cart("Test Cart", "{\"data\":\"value\"}", 3, 1500, "EUR").unwrap();
+        let id = s
+            .hold_cart("Test Cart", "{\"data\":\"value\"}", 3, 1500, "EUR")
+            .unwrap();
 
         let full = s.get_held_cart(&id).unwrap().unwrap();
         assert_eq!(full.label, "Test Cart");
@@ -795,8 +913,12 @@ mod tests {
 
         // Create a product with stock.
         let currency: crate::money::Currency = "USD".parse().unwrap();
-        let money = crate::Money { minor_units: 500, currency };
-        s.create_product("VOID-SKU", "Voidable", money, None, None, 10).unwrap();
+        let money = crate::Money {
+            minor_units: 500,
+            currency,
+        };
+        s.create_product("VOID-SKU", "Voidable", money, None, None, 10)
+            .unwrap();
 
         // Create an active sale with the product.
         let cart = make_cart(); // COFFEE x 2 (350) + BAGEL x 1 (450)
@@ -817,27 +939,27 @@ mod tests {
             updated_at: sale.updated_at.clone(),
             subtotal: sale.total,
             tax_total: price(0),
-            lines: vec![
-                SaleLine {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    sale_id: sale.id.clone(),
-                    sku: "VOID-SKU".into(),
-                    qty: 2,
-                    unit_price: price(500),
-                    line_total: price(1000),
-                    line_position: 1,
-                    tax_amount: price(0),
-                    tax_rate_id: None,
-                },
-            ],
+            lines: vec![SaleLine {
+                id: uuid::Uuid::new_v4().to_string(),
+                sale_id: sale.id.clone(),
+                sku: "VOID-SKU".into(),
+                qty: 2,
+                unit_price: price(500),
+                line_total: price(1000),
+                line_position: 1,
+                tax_amount: price(0),
+                tax_rate_id: None,
+            }],
         };
 
         s.create_sale(&sale_with_stock).unwrap();
         // Move to Active so it can be voided.
-        s.update_sale_status(&sale_with_stock.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale_with_stock.id, SaleStatus::Active)
+            .unwrap();
 
         // Void the sale.
-        s.void_sale(&sale_with_stock.id, "user-2", "customer request").unwrap();
+        s.void_sale(&sale_with_stock.id, "user-2", "customer request")
+            .unwrap();
 
         // Verify status is voided.
         let loaded = s.get_sale(&sale_with_stock.id).unwrap().unwrap();
@@ -888,7 +1010,8 @@ mod tests {
         s.create_sale(&sale).unwrap();
         // Move to Active, then Completed.
         s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
-        s.update_sale_status(&sale.id, SaleStatus::Completed).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap();
 
         let err = s.void_sale(&sale.id, "user-1", "test").unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
@@ -975,7 +1098,9 @@ mod tests {
         )
         .unwrap();
 
-        let err = s.update_sale_status(&sale.id, SaleStatus::Active).unwrap_err();
+        let err = s
+            .update_sale_status(&sale.id, SaleStatus::Active)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
     }
 
@@ -993,23 +1118,38 @@ mod tests {
 
         // Void should succeed and skip stock restoration for unknown SKUs.
         let result = s.void_sale(&sale.id, "user-1", "no product record");
-        assert!(result.is_ok(), "void should succeed even when SKU has no product record");
+        assert!(
+            result.is_ok(),
+            "void should succeed even when SKU has no product record"
+        );
         let loaded = result.unwrap();
         assert_eq!(loaded.status, SaleStatus::Voided);
     }
 
     // ── Tax Computation ─────────────────────────────
 
-    fn seed_tax_rate(conn: &Connection, name: &str, rate_bps: i64, is_default: bool, is_inclusive: bool) -> String {
+    fn seed_tax_rate(
+        conn: &Connection,
+        name: &str,
+        rate_bps: i64,
+        is_default: bool,
+        is_inclusive: bool,
+    ) -> String {
         let s = store(conn);
-        s.create_tax_rate(name, rate_bps, is_default, is_inclusive).unwrap().id
+        s.create_tax_rate(name, rate_bps, is_default, is_inclusive)
+            .unwrap()
+            .id
     }
 
     fn seed_product_with_category(conn: &Connection, sku: &str, category_id: Option<&str>) {
         let s = store(conn);
         let currency: crate::money::Currency = "USD".parse().unwrap();
-        let money = crate::Money { minor_units: 1000, currency };
-        s.create_product(sku, sku, money, category_id, None, 100).unwrap();
+        let money = crate::Money {
+            minor_units: 1000,
+            currency,
+        };
+        s.create_product(sku, sku, money, category_id, None, 100)
+            .unwrap();
     }
 
     fn make_single_line_sale(sku: &str, qty: i64, unit_minor: i64) -> Sale {
@@ -1093,13 +1233,17 @@ mod tests {
         let _default_id = seed_tax_rate(&conn, "Default 5%", 500, true, false);
         let product_id = seed_tax_rate(&conn, "Product 10%", 1000, false, false);
         seed_product_with_category(&conn, "COFFEE", None);
-        s.set_product_tax_rates("COFFEE", &[product_id.clone()]).unwrap();
+        s.set_product_tax_rates("COFFEE", &[product_id.clone()])
+            .unwrap();
 
         let mut sale = make_single_line_sale("COFFEE", 1, 1000);
         s.compute_sale_tax(&mut sale).unwrap();
         // product rate (10%) wins over default (5%): tax = 1000 * 1000 / 10000 = 100
         assert_eq!(sale.tax_total.minor_units, 100);
-        assert_eq!(sale.lines[0].tax_rate_id.as_deref(), Some(product_id.as_str()));
+        assert_eq!(
+            sale.lines[0].tax_rate_id.as_deref(),
+            Some(product_id.as_str())
+        );
     }
 
     #[test]
@@ -1109,7 +1253,8 @@ mod tests {
         let _default_id = seed_tax_rate(&conn, "Default 5%", 500, true, false);
         let cat_id = seed_tax_rate(&conn, "Category 8%", 800, false, false);
         s.create_category("cat-1", "Beverages", "#fff").unwrap();
-        s.set_category_tax_rates("cat-1", &[cat_id.clone()]).unwrap();
+        s.set_category_tax_rates("cat-1", &[cat_id.clone()])
+            .unwrap();
         seed_product_with_category(&conn, "COFFEE", Some("cat-1"));
 
         let mut sale = make_single_line_sale("COFFEE", 1, 1000);
@@ -1225,10 +1370,20 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let currency: crate::money::Currency = "USD".parse().unwrap();
-        let money = crate::Money { minor_units: 500, currency };
+        let money = crate::Money {
+            minor_units: 500,
+            currency,
+        };
         // Create a product with near-max stock.
-        s.create_product("OVERFLOW-SKU", "Near Overflow", money, None, None, i64::MAX - 1)
-            .unwrap();
+        s.create_product(
+            "OVERFLOW-SKU",
+            "Near Overflow",
+            money,
+            None,
+            None,
+            i64::MAX - 1,
+        )
+        .unwrap();
 
         let sale_id = uuid::Uuid::new_v4().to_string();
         let line_id = uuid::Uuid::new_v4().to_string();
@@ -1264,7 +1419,9 @@ mod tests {
         s.update_sale_status(&sale_id, SaleStatus::Active).unwrap();
 
         // Stock restore would overflow i64::MAX - 1 + 10.
-        let err = s.void_sale(&sale_id, "user-1", "trigger overflow").unwrap_err();
+        let err = s
+            .void_sale(&sale_id, "user-1", "trigger overflow")
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "qty"));
     }
 }

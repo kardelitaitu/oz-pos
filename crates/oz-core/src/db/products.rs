@@ -8,7 +8,7 @@ use crate::error::CoreError;
 use crate::money::Currency;
 use crate::{Category, Money, Product, ProductVariant, Sku};
 
-use super::{row_to_product, Store};
+use super::{Store, row_to_product};
 
 // ── Enriched product type ────────────────────────────────────────────
 
@@ -269,10 +269,9 @@ impl Store<'_> {
 
     /// Delete a product by SKU.
     pub fn delete_product(&self, sku: &str) -> Result<(), CoreError> {
-        let rows = self.conn.execute(
-            "DELETE FROM products WHERE sku = ?1",
-            params![sku],
-        )?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM products WHERE sku = ?1", params![sku])?;
         if rows == 0 {
             return Err(CoreError::NotFound {
                 entity: "product",
@@ -338,10 +337,9 @@ impl Store<'_> {
 
     /// Delete a category by id.
     pub fn delete_category(&self, id: &str) -> Result<(), CoreError> {
-        let rows = self.conn.execute(
-            "DELETE FROM categories WHERE id = ?1",
-            params![id],
-        )?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM categories WHERE id = ?1", params![id])?;
         if rows == 0 {
             return Err(CoreError::NotFound {
                 entity: "category",
@@ -442,13 +440,16 @@ impl Store<'_> {
 
 impl Store<'_> {
     /// List all variants for a given parent SKU, ordered by sort_order.
-    pub fn list_product_variants(&self, parent_sku: &str) -> Result<Vec<ProductVariant>, CoreError> {
+    pub fn list_product_variants(
+        &self,
+        parent_sku: &str,
+    ) -> Result<Vec<ProductVariant>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_sku, name, sku, price_minor, currency, barcode,
                     sort_order, is_active, created_at, updated_at
              FROM product_variants
              WHERE parent_sku = ?1
-             ORDER BY sort_order ASC, name ASC"
+             ORDER BY sort_order ASC, name ASC",
         )?;
         let rows = stmt.query_map(params![parent_sku], Self::row_to_product_variant)?;
         rows.map(|r| Ok(r?)).collect()
@@ -459,7 +460,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_sku, name, sku, price_minor, currency, barcode,
                     sort_order, is_active, created_at, updated_at
-             FROM product_variants WHERE sku = ?1"
+             FROM product_variants WHERE sku = ?1",
         )?;
         let result = stmt.query_row(params![sku], Self::row_to_product_variant);
         match result {
@@ -472,7 +473,14 @@ impl Store<'_> {
     /// Create a new product variant.
     pub fn create_product_variant(&self, variant: &ProductVariant) -> Result<(), CoreError> {
         let (price_minor, currency_str) = match &variant.price {
-            Some(m) => (Some(m.minor_units), Some(std::str::from_utf8(&m.currency.0).unwrap_or("USD").to_owned())),
+            Some(m) => (
+                Some(m.minor_units),
+                Some(
+                    std::str::from_utf8(&m.currency.0)
+                        .unwrap_or("USD")
+                        .to_owned(),
+                ),
+            ),
             None => (None, None),
         };
 
@@ -493,7 +501,14 @@ impl Store<'_> {
     /// Update an existing product variant (matched by SKU).
     pub fn update_product_variant(&self, variant: &ProductVariant) -> Result<(), CoreError> {
         let (price_minor, currency_str) = match &variant.price {
-            Some(m) => (Some(m.minor_units), Some(std::str::from_utf8(&m.currency.0).unwrap_or("USD").to_owned())),
+            Some(m) => (
+                Some(m.minor_units),
+                Some(
+                    std::str::from_utf8(&m.currency.0)
+                        .unwrap_or("USD")
+                        .to_owned(),
+                ),
+            ),
             None => (None, None),
         };
 
@@ -502,23 +517,35 @@ impl Store<'_> {
                                           barcode = ?4, sort_order = ?5, is_active = ?6,
                                           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE sku = ?7",
-            params![variant.name, price_minor, currency_str, variant.barcode,
-                    variant.sort_order, variant.is_active as i64, variant.sku],
+            params![
+                variant.name,
+                price_minor,
+                currency_str,
+                variant.barcode,
+                variant.sort_order,
+                variant.is_active as i64,
+                variant.sku
+            ],
         )?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "product_variant", id: variant.sku.clone() });
+            return Err(CoreError::NotFound {
+                entity: "product_variant",
+                id: variant.sku.clone(),
+            });
         }
         Ok(())
     }
 
     /// Delete a product variant by its own SKU.
     pub fn delete_product_variant(&self, sku: &str) -> Result<(), CoreError> {
-        let affected = self.conn.execute(
-            "DELETE FROM product_variants WHERE sku = ?1",
-            params![sku],
-        )?;
+        let affected = self
+            .conn
+            .execute("DELETE FROM product_variants WHERE sku = ?1", params![sku])?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "product_variant", id: sku.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "product_variant",
+                id: sku.to_owned(),
+            });
         }
         Ok(())
     }
@@ -529,7 +556,10 @@ impl Store<'_> {
         let price = match (price_minor, currency_str) {
             (Some(minor), Some(cur)) => {
                 let c: Result<Currency, _> = cur.parse();
-                c.ok().map(|currency| Money { minor_units: minor, currency })
+                c.ok().map(|currency| Money {
+                    minor_units: minor,
+                    currency,
+                })
             }
             _ => None,
         };
@@ -554,8 +584,8 @@ impl Store<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::migrations;
     use crate::Money;
+    use crate::migrations;
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
@@ -585,9 +615,16 @@ mod tests {
         Store::new(conn)
     }
 
-    fn usd() -> Currency { "USD".parse().unwrap() }
+    fn usd() -> Currency {
+        "USD".parse().unwrap()
+    }
 
-    fn price(minor: i64) -> Money { Money { minor_units: minor, currency: usd() } }
+    fn price(minor: i64) -> Money {
+        Money {
+            minor_units: minor,
+            currency: usd(),
+        }
+    }
 
     // ── Product queries ──────────────────────────────────────────
 
@@ -611,7 +648,10 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let products = store(&conn).list_products().unwrap();
-        let espresso = products.iter().find(|p| p.product.sku.as_str() == "DRINK-001").unwrap();
+        let espresso = products
+            .iter()
+            .find(|p| p.product.sku.as_str() == "DRINK-001")
+            .unwrap();
         assert_eq!(espresso.category_name.as_deref(), Some("Drinks"));
     }
 
@@ -620,9 +660,15 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let products = store(&conn).list_products().unwrap();
-        let espresso = products.iter().find(|p| p.product.sku.as_str() == "DRINK-001").unwrap();
+        let espresso = products
+            .iter()
+            .find(|p| p.product.sku.as_str() == "DRINK-001")
+            .unwrap();
         assert_eq!(espresso.stock_qty, Some(50));
-        let tea = products.iter().find(|p| p.product.sku.as_str() == "DRINK-002").unwrap();
+        let tea = products
+            .iter()
+            .find(|p| p.product.sku.as_str() == "DRINK-002")
+            .unwrap();
         assert_eq!(tea.stock_qty, None);
     }
 
@@ -665,7 +711,14 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let p = store(&conn)
-            .create_product("FULL-001", "Full Item", price(999), Some("cat-drinks"), Some("1234567890123"), 5)
+            .create_product(
+                "FULL-001",
+                "Full Item",
+                price(999),
+                Some("cat-drinks"),
+                Some("1234567890123"),
+                5,
+            )
             .unwrap();
         assert_eq!(p.category_id.as_deref(), Some("cat-drinks"));
         assert_eq!(p.barcode.as_deref(), Some("1234567890123"));
@@ -676,7 +729,9 @@ mod tests {
     #[test]
     fn create_product_without_stock() {
         let conn = fresh();
-        let p = store(&conn).create_product("NOSTOCK", "No Stock", price(100), None, None, 0).unwrap();
+        let p = store(&conn)
+            .create_product("NOSTOCK", "No Stock", price(100), None, None, 0)
+            .unwrap();
         let qty = store(&conn).get_stock(&p.id).unwrap();
         assert_eq!(qty, 0);
     }
@@ -684,8 +739,12 @@ mod tests {
     #[test]
     fn create_product_duplicate_sku() {
         let conn = fresh();
-        store(&conn).create_product("DUP", "First", price(100), None, None, 0).unwrap();
-        let err = store(&conn).create_product("DUP", "Second", price(200), None, None, 0).unwrap_err();
+        store(&conn)
+            .create_product("DUP", "First", price(100), None, None, 0)
+            .unwrap();
+        let err = store(&conn)
+            .create_product("DUP", "Second", price(200), None, None, 0)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { .. }));
     }
 
@@ -693,13 +752,21 @@ mod tests {
     fn create_product_validation_errors() {
         let conn = fresh();
         let s = store(&conn);
-        let err = s.create_product("  ", "X", price(1), None, None, 0).unwrap_err();
+        let err = s
+            .create_product("  ", "X", price(1), None, None, 0)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "sku"));
-        let err = s.create_product("SKU", "", price(1), None, None, 0).unwrap_err();
+        let err = s
+            .create_product("SKU", "", price(1), None, None, 0)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
-        let err = s.create_product("SKU", "X", price(-1), None, None, 0).unwrap_err();
+        let err = s
+            .create_product("SKU", "X", price(-1), None, None, 0)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
-        let err = s.create_product("SKU", "X", price(1), None, None, -5).unwrap_err();
+        let err = s
+            .create_product("SKU", "X", price(1), None, None, -5)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "initial_stock"));
     }
 
@@ -709,7 +776,9 @@ mod tests {
     fn update_product_basic() {
         let conn = fresh();
         seed_everything(&conn);
-        let updated = store(&conn).update_product("DRINK-001", "Latte", price(400), None, None).unwrap();
+        let updated = store(&conn)
+            .update_product("DRINK-001", "Latte", price(400), None, None)
+            .unwrap();
         assert_eq!(updated.name, "Latte");
         assert_eq!(updated.price.minor_units, 400);
         assert_eq!(updated.sku.as_str(), "DRINK-001");
@@ -718,7 +787,9 @@ mod tests {
     #[test]
     fn update_product_not_found() {
         let conn = fresh();
-        let err = store(&conn).update_product("NOPE", "X", price(1), None, None).unwrap_err();
+        let err = store(&conn)
+            .update_product("NOPE", "X", price(1), None, None)
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
@@ -726,7 +797,9 @@ mod tests {
     fn update_product_empty_name() {
         let conn = fresh();
         seed_everything(&conn);
-        let err = store(&conn).update_product("DRINK-001", "", price(1), None, None).unwrap_err();
+        let err = store(&conn)
+            .update_product("DRINK-001", "", price(1), None, None)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
 
@@ -734,7 +807,9 @@ mod tests {
     fn update_product_negative_price() {
         let conn = fresh();
         seed_everything(&conn);
-        let err = store(&conn).update_product("DRINK-001", "X", price(-1), None, None).unwrap_err();
+        let err = store(&conn)
+            .update_product("DRINK-001", "X", price(-1), None, None)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
     }
 
@@ -742,7 +817,9 @@ mod tests {
     fn update_product_with_category() {
         let conn = fresh();
         seed_everything(&conn);
-        let updated = store(&conn).update_product("DRINK-001", "Latte", price(400), Some("cat-food"), None).unwrap();
+        let updated = store(&conn)
+            .update_product("DRINK-001", "Latte", price(400), Some("cat-food"), None)
+            .unwrap();
         assert_eq!(updated.category_id.as_deref(), Some("cat-food"));
     }
 
@@ -784,7 +861,9 @@ mod tests {
     #[test]
     fn create_category() {
         let conn = fresh();
-        let cat = store(&conn).create_category("cat-tools", "Tools", "#10b981").unwrap();
+        let cat = store(&conn)
+            .create_category("cat-tools", "Tools", "#10b981")
+            .unwrap();
         assert_eq!(cat.id, "cat-tools");
         assert_eq!(cat.name, "Tools");
         assert_eq!(cat.colour, "#10b981");
@@ -793,22 +872,30 @@ mod tests {
     #[test]
     fn create_category_duplicate_name() {
         let conn = fresh();
-        store(&conn).create_category("cat-1", "Drinks", "#000").unwrap();
-        let err = store(&conn).create_category("cat-2", "Drinks", "#fff").unwrap_err();
+        store(&conn)
+            .create_category("cat-1", "Drinks", "#000")
+            .unwrap();
+        let err = store(&conn)
+            .create_category("cat-2", "Drinks", "#fff")
+            .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { .. }));
     }
 
     #[test]
     fn create_category_empty_name() {
         let conn = fresh();
-        let err = store(&conn).create_category("cat-1", "   ", "#000").unwrap_err();
+        let err = store(&conn)
+            .create_category("cat-1", "   ", "#000")
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
 
     #[test]
     fn delete_category_removes_row() {
         let conn = fresh();
-        store(&conn).create_category("cat-orphan", "Orphan", "#000").unwrap();
+        store(&conn)
+            .create_category("cat-orphan", "Orphan", "#000")
+            .unwrap();
         store(&conn).delete_category("cat-orphan").unwrap();
         let cat = store(&conn).get_category("cat-orphan").unwrap();
         assert!(cat.is_none());
@@ -860,7 +947,10 @@ mod tests {
     fn lookup_product_by_barcode_found() {
         let conn = fresh();
         seed_everything(&conn);
-        let p = store(&conn).lookup_product_with_details_by_barcode("5901234123457").unwrap().unwrap();
+        let p = store(&conn)
+            .lookup_product_with_details_by_barcode("5901234123457")
+            .unwrap()
+            .unwrap();
         assert_eq!(p.product.sku.as_str(), "FOOD-001");
         assert_eq!(p.product.name, "Bagel");
         assert_eq!(p.stock_qty, Some(12));
@@ -870,7 +960,9 @@ mod tests {
     fn lookup_product_by_barcode_not_found() {
         let conn = fresh();
         seed_everything(&conn);
-        let p = store(&conn).lookup_product_with_details_by_barcode("0000000000000").unwrap();
+        let p = store(&conn)
+            .lookup_product_with_details_by_barcode("0000000000000")
+            .unwrap();
         assert!(p.is_none());
     }
 
@@ -878,7 +970,9 @@ mod tests {
     fn lookup_product_by_barcode_empty_string() {
         let conn = fresh();
         seed_everything(&conn);
-        let p = store(&conn).lookup_product_with_details_by_barcode("").unwrap();
+        let p = store(&conn)
+            .lookup_product_with_details_by_barcode("")
+            .unwrap();
         assert!(p.is_none(), "empty barcode should return None");
     }
 
@@ -886,7 +980,9 @@ mod tests {
     fn lookup_product_by_barcode_whitespace() {
         let conn = fresh();
         seed_everything(&conn);
-        let p = store(&conn).lookup_product_with_details_by_barcode("   ").unwrap();
+        let p = store(&conn)
+            .lookup_product_with_details_by_barcode("   ")
+            .unwrap();
         assert!(p.is_none(), "whitespace-only barcode should return None");
     }
 
@@ -894,7 +990,10 @@ mod tests {
     fn get_product_by_barcode_found() {
         let conn = fresh();
         seed_everything(&conn);
-        let p = store(&conn).get_product_by_barcode("5901234123457").unwrap().unwrap();
+        let p = store(&conn)
+            .get_product_by_barcode("5901234123457")
+            .unwrap()
+            .unwrap();
         assert_eq!(p.sku.as_str(), "FOOD-001");
     }
 
@@ -902,7 +1001,9 @@ mod tests {
     fn get_product_by_barcode_not_found() {
         let conn = fresh();
         seed_everything(&conn);
-        let p = store(&conn).get_product_by_barcode("0000000000000").unwrap();
+        let p = store(&conn)
+            .get_product_by_barcode("0000000000000")
+            .unwrap();
         assert!(p.is_none());
     }
 
@@ -917,7 +1018,10 @@ mod tests {
     fn get_product_by_barcode_trims_input() {
         let conn = fresh();
         seed_everything(&conn);
-        let p = store(&conn).get_product_by_barcode("  5901234123457  ").unwrap().unwrap();
+        let p = store(&conn)
+            .get_product_by_barcode("  5901234123457  ")
+            .unwrap()
+            .unwrap();
         assert_eq!(p.sku.as_str(), "FOOD-001");
     }
 
@@ -935,7 +1039,10 @@ mod tests {
     fn get_stock_for_existing_product() {
         let conn = fresh();
         seed_everything(&conn);
-        let id = store(&conn).product_id_by_sku("DRINK-001").unwrap().unwrap();
+        let id = store(&conn)
+            .product_id_by_sku("DRINK-001")
+            .unwrap()
+            .unwrap();
         let qty = store(&conn).get_stock(&id).unwrap();
         assert_eq!(qty, 50);
     }
@@ -944,7 +1051,10 @@ mod tests {
     fn get_stock_for_unstocked_product() {
         let conn = fresh();
         seed_everything(&conn);
-        let id = store(&conn).product_id_by_sku("DRINK-002").unwrap().unwrap();
+        let id = store(&conn)
+            .product_id_by_sku("DRINK-002")
+            .unwrap()
+            .unwrap();
         let qty = store(&conn).get_stock(&id).unwrap();
         assert_eq!(qty, 0, "unstocked product should return 0");
     }

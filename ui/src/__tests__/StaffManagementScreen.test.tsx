@@ -19,6 +19,7 @@ const SAMPLE_STAFF = [
 ];
 
 const { invokeMock } = vi.hoisted(() => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invokeMock: vi.fn() as any,
 }));
 

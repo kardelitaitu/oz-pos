@@ -17,9 +17,7 @@ import {
   createCashPayout,
   type ShiftDto,
   type ShiftReportDto,
-  type CashPayoutDto,
-  type ShiftPaymentBreakdownDto,
-  type ShiftSalesByHourDto,
+
 } from '@/api/shifts';
 import './ShiftManagementScreen.css';
 
@@ -167,7 +165,7 @@ export default function ShiftManagementScreen() {
 
   // ── Reconciliation helper ─────────────────────────────────────────
 
-  const reconciliationBreakdown = (shift: ShiftDto) => {
+  const _reconciliationBreakdown = (shift: ShiftDto) => {
     const opening = shift.openingBalanceMinor;
     const cashSales = shift.totalCashMinor;
     const payouts = shift.totalPayoutsMinor;

@@ -327,7 +327,7 @@ export default function InventoryAdjustmentScreen() {
           </div>
 
           {/* Quantity */}
-          <label className="inv-adjust-field" htmlFor="inv-field-qty">
+          <label className="inv-adjust-field" htmlFor="inv-field-qty" aria-label="Quantity">
             <span className="inv-adjust-label">
               <Localized id="inv-qty-label">
                 <span>Quantity</span>
@@ -380,7 +380,7 @@ export default function InventoryAdjustmentScreen() {
           </label>
 
           {reason === 'other' && (
-            <label className="inv-adjust-field" htmlFor="inv-field-custom-reason">
+            <label className="inv-adjust-field" htmlFor="inv-field-custom-reason" aria-label="Describe the reason">
               <span className="inv-adjust-label">
                 <Localized id="inv-reason-custom-label">
                   <span>Describe the reason</span>

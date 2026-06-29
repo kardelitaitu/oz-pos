@@ -4,7 +4,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
-use oz_core::{Store, migrations, Role, User};
+use oz_core::{Role, Store, User, migrations};
 use rusqlite::Connection;
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -49,12 +49,25 @@ fn role_permissions_json_roundtrip() {
     let s = store(&conn);
 
     let permissions = r#"["sales:process","sales:void","products:crud","products:view","inventory:adjust","reports:view"]"#;
-    let r = s.create_role("role-supervisor", "supervisor", "Supervisor access", permissions).unwrap();
-    assert_eq!(r.permissions, permissions, "permissions JSON should roundtrip");
+    let r = s
+        .create_role(
+            "role-supervisor",
+            "supervisor",
+            "Supervisor access",
+            permissions,
+        )
+        .unwrap();
+    assert_eq!(
+        r.permissions, permissions,
+        "permissions JSON should roundtrip"
+    );
 
     // Reload from DB.
     let loaded = s.get_role("role-supervisor").unwrap().unwrap();
-    assert_eq!(loaded.permissions, permissions, "permissions should persist through DB roundtrip");
+    assert_eq!(
+        loaded.permissions, permissions,
+        "permissions should persist through DB roundtrip"
+    );
 
     // Verify it's valid JSON.
     let parsed: Vec<String> = serde_json::from_str(&loaded.permissions).unwrap();
@@ -71,7 +84,9 @@ fn role_with_many_permissions() {
     // Create a role with 20 permission strings.
     let perms: Vec<String> = (0..20).map(|i| format!("module:{i}:action")).collect();
     let permissions = serde_json::to_string(&perms).unwrap();
-    let r = s.create_role("role-verbose", "verbose", "Many permissions", &permissions).unwrap();
+    let r = s
+        .create_role("role-verbose", "verbose", "Many permissions", &permissions)
+        .unwrap();
 
     let loaded = s.get_role(&r.id).unwrap().unwrap();
     let parsed: Vec<String> = serde_json::from_str(&loaded.permissions).unwrap();
@@ -85,7 +100,14 @@ fn role_with_single_permission() {
     let conn = setup();
     let s = store(&conn);
 
-    let r = s.create_role("role-minimal", "minimal", "Single permission", r#"["sales:view"]"#).unwrap();
+    let r = s
+        .create_role(
+            "role-minimal",
+            "minimal",
+            "Single permission",
+            r#"["sales:view"]"#,
+        )
+        .unwrap();
     let loaded = s.get_role(&r.id).unwrap().unwrap();
     assert_eq!(loaded.permissions, r#"["sales:view"]"#);
 }
@@ -103,11 +125,13 @@ fn delete_role_with_active_users_rejected_by_fk() {
     assert!(result.is_err(), "should not delete role with active users");
 
     // Verify the role still exists.
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM roles WHERE id = 'role-cashier'",
-        [],
-        |r| r.get(0),
-    ).unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM roles WHERE id = 'role-cashier'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
     assert_eq!(count, 1, "role-cashier should still exist");
 }
 
@@ -123,7 +147,9 @@ fn delete_role_without_users_succeeds() {
     ).unwrap();
 
     // Delete the unassigned role.
-    let rows = conn.execute("DELETE FROM roles WHERE id = 'role-viewer'", []).unwrap();
+    let rows = conn
+        .execute("DELETE FROM roles WHERE id = 'role-viewer'", [])
+        .unwrap();
     assert_eq!(rows, 1, "should delete role with no users");
 
     let loaded = store(&conn).get_role("role-viewer").unwrap();
@@ -152,12 +178,14 @@ fn role_with_unicode_characters() {
     let conn = setup();
     let s = store(&conn);
 
-    let r = s.create_role(
-        "role-i18n",
-        "Cajero",       // Spanish for "cashier"
-        "Usuario con permisos limitados — 限定的なアクセス",  // mixed unicode
-        r#"["sales:process"]"#,
-    ).unwrap();
+    let r = s
+        .create_role(
+            "role-i18n",
+            "Cajero",                                            // Spanish for "cashier"
+            "Usuario con permisos limitados — 限定的なアクセス", // mixed unicode
+            r#"["sales:process"]"#,
+        )
+        .unwrap();
     assert_eq!(r.name, "Cajero");
 
     let loaded = s.get_role(&r.id).unwrap().unwrap();
@@ -172,14 +200,33 @@ fn role_created_at_set_on_creation() {
     let conn = setup();
     let s = store(&conn);
 
-    let r = s.create_role("role-ts-test", "timestamped", "Testing timestamps", r#"["test"]"#).unwrap();
+    let r = s
+        .create_role(
+            "role-ts-test",
+            "timestamped",
+            "Testing timestamps",
+            r#"["test"]"#,
+        )
+        .unwrap();
     assert!(!r.created_at.is_empty(), "created_at should be populated");
-    assert!(r.created_at.contains('T'), "created_at should be ISO-8601: {}", r.created_at);
-    assert!(r.created_at.ends_with('Z'), "created_at should be UTC: {}", r.created_at);
+    assert!(
+        r.created_at.contains('T'),
+        "created_at should be ISO-8601: {}",
+        r.created_at
+    );
+    assert!(
+        r.created_at.ends_with('Z'),
+        "created_at should be UTC: {}",
+        r.created_at
+    );
 
     // Verify it's valid RFC-3339.
     let parsed = chrono::DateTime::parse_from_rfc3339(&r.created_at);
-    assert!(parsed.is_ok(), "created_at should be valid RFC-3339: {}", r.created_at);
+    assert!(
+        parsed.is_ok(),
+        "created_at should be valid RFC-3339: {}",
+        r.created_at
+    );
 }
 
 #[test]
@@ -213,13 +260,27 @@ fn user_created_at_is_iso8601() {
     seed_roles(&conn);
     let s = store(&conn);
 
-    let u = s.create_user("ts-user", "hash", "Timestamp User", "role-cashier").unwrap();
+    let u = s
+        .create_user("ts-user", "hash", "Timestamp User", "role-cashier")
+        .unwrap();
     assert!(!u.created_at.is_empty(), "created_at should be populated");
-    assert!(u.created_at.contains('T'), "created_at should be ISO-8601: {}", u.created_at);
-    assert!(u.created_at.ends_with('Z'), "created_at should be UTC: {}", u.created_at);
+    assert!(
+        u.created_at.contains('T'),
+        "created_at should be ISO-8601: {}",
+        u.created_at
+    );
+    assert!(
+        u.created_at.ends_with('Z'),
+        "created_at should be UTC: {}",
+        u.created_at
+    );
 
     let parsed = chrono::DateTime::parse_from_rfc3339(&u.created_at);
-    assert!(parsed.is_ok(), "created_at should be valid RFC-3339: {}", u.created_at);
+    assert!(
+        parsed.is_ok(),
+        "created_at should be valid RFC-3339: {}",
+        u.created_at
+    );
 }
 
 #[test]
@@ -228,10 +289,23 @@ fn user_updated_at_increases_on_update() {
     seed_users(&conn);
     let s = store(&conn);
 
-    let updated = s.update_user("user-1", "alice", "Alice Updated", "role-cashier", true).unwrap();
-    assert!(!updated.updated_at.is_empty(), "updated_at should be set after update");
-    assert!(updated.updated_at.contains('T'), "updated_at should be ISO-8601: {}", updated.updated_at);
-    assert!(updated.updated_at.ends_with('Z'), "updated_at should be UTC: {}", updated.updated_at);
+    let updated = s
+        .update_user("user-1", "alice", "Alice Updated", "role-cashier", true)
+        .unwrap();
+    assert!(
+        !updated.updated_at.is_empty(),
+        "updated_at should be set after update"
+    );
+    assert!(
+        updated.updated_at.contains('T'),
+        "updated_at should be ISO-8601: {}",
+        updated.updated_at
+    );
+    assert!(
+        updated.updated_at.ends_with('Z'),
+        "updated_at should be UTC: {}",
+        updated.updated_at
+    );
 
     // The seed data has updated_at = 2025-01-01...; the update should set a newer timestamp.
     assert!(
@@ -249,7 +323,9 @@ fn user_deactivate_and_reactivate() {
     let s = store(&conn);
 
     // Deactivate an active user.
-    let deactivated = s.update_user("user-1", "alice", "Alice", "role-cashier", false).unwrap();
+    let deactivated = s
+        .update_user("user-1", "alice", "Alice", "role-cashier", false)
+        .unwrap();
     assert!(!deactivated.is_active, "user should be deactivated");
 
     // Verify via get.
@@ -257,7 +333,9 @@ fn user_deactivate_and_reactivate() {
     assert!(!loaded.is_active, "user should be inactive in DB");
 
     // Reactivate the same user.
-    let reactivated = s.update_user("user-1", "alice", "Alice", "role-cashier", true).unwrap();
+    let reactivated = s
+        .update_user("user-1", "alice", "Alice", "role-cashier", true)
+        .unwrap();
     assert!(reactivated.is_active, "user should be reactivated");
 
     // Verify via get.
@@ -272,7 +350,9 @@ fn deactivate_already_inactive_user() {
     let s = store(&conn);
 
     // user-3 (Carol) is already inactive.
-    let updated = s.update_user("user-3", "carol", "Carol", "role-cashier", false).unwrap();
+    let updated = s
+        .update_user("user-3", "carol", "Carol", "role-cashier", false)
+        .unwrap();
     assert!(!updated.is_active, "user should remain inactive");
 }
 
@@ -283,7 +363,9 @@ fn reactivate_deactivated_user() {
     let s = store(&conn);
 
     // user-3 (Carol) starts inactive. Reactivate her.
-    let reactivated = s.update_user("user-3", "carol", "Carol", "role-cashier", true).unwrap();
+    let reactivated = s
+        .update_user("user-3", "carol", "Carol", "role-cashier", true)
+        .unwrap();
     assert!(reactivated.is_active, "user should be reactivated");
 }
 
@@ -298,7 +380,10 @@ fn create_user_with_nonexistent_role_rejected_by_fk() {
     // After seed_roles, there are roles but none named "role-nonexistent".
     // create_user catches FK violations as CoreError::Conflict.
     let result = s.create_user("orphan", "hash", "Orphan User", "role-nonexistent");
-    assert!(result.is_err(), "creating user with non-existent role should fail");
+    assert!(
+        result.is_err(),
+        "creating user with non-existent role should fail"
+    );
 }
 
 // ── User: Role reassignment ──────────────────────────────────────────
@@ -310,8 +395,13 @@ fn user_role_reassignment() {
     let s = store(&conn);
 
     // Alice (user-1) is cashier. Promote her to owner.
-    let updated = s.update_user("user-1", "alice", "Alice", "role-owner", true).unwrap();
-    assert_eq!(updated.role_id, "role-owner", "role should be updated to owner");
+    let updated = s
+        .update_user("user-1", "alice", "Alice", "role-owner", true)
+        .unwrap();
+    assert_eq!(
+        updated.role_id, "role-owner",
+        "role should be updated to owner"
+    );
 
     // Verify via get.
     let loaded = s.get_user("user-1").unwrap().unwrap();
@@ -324,8 +414,13 @@ fn reassign_to_same_role_is_idempotent() {
     seed_users(&conn);
     let s = store(&conn);
 
-    let updated = s.update_user("user-1", "alice", "Alice", "role-cashier", true).unwrap();
-    assert_eq!(updated.role_id, "role-cashier", "same role should be preserved");
+    let updated = s
+        .update_user("user-1", "alice", "Alice", "role-cashier", true)
+        .unwrap();
+    assert_eq!(
+        updated.role_id, "role-cashier",
+        "same role should be preserved"
+    );
 }
 
 // ── User: Listing with active/inactive ────────────────────────────────
@@ -365,13 +460,23 @@ fn multiple_users_with_same_role() {
     seed_roles(&conn);
     let s = store(&conn);
 
-    s.create_user("u1", "hash1", "User One", "role-cashier").unwrap();
-    s.create_user("u2", "hash2", "User Two", "role-cashier").unwrap();
-    s.create_user("u3", "hash3", "User Three", "role-cashier").unwrap();
+    s.create_user("u1", "hash1", "User One", "role-cashier")
+        .unwrap();
+    s.create_user("u2", "hash2", "User Two", "role-cashier")
+        .unwrap();
+    s.create_user("u3", "hash3", "User Three", "role-cashier")
+        .unwrap();
 
     let users = s.list_users().unwrap();
-    let cashiers: Vec<&User> = users.iter().filter(|u| u.role_id == "role-cashier").collect();
-    assert_eq!(cashiers.len(), 3, "all three users should have role-cashier");
+    let cashiers: Vec<&User> = users
+        .iter()
+        .filter(|u| u.role_id == "role-cashier")
+        .collect();
+    assert_eq!(
+        cashiers.len(),
+        3,
+        "all three users should have role-cashier"
+    );
 }
 
 // ── User: Delete does not affect role ─────────────────────────────────
@@ -387,12 +492,19 @@ fn delete_user_does_not_affect_role() {
 
     // The role should still exist.
     let role = s.get_role("role-cashier").unwrap().unwrap();
-    assert_eq!(role.name, "cashier", "role should still exist after user deletion");
+    assert_eq!(
+        role.name, "cashier",
+        "role should still exist after user deletion"
+    );
 
     // Other users with the same role should remain.
     let remaining = s.list_users().unwrap();
     assert_eq!(remaining.len(), 2);
-    assert!(remaining.iter().all(|u| u.role_id == "role-owner" || u.role_id == "role-cashier"));
+    assert!(
+        remaining
+            .iter()
+            .all(|u| u.role_id == "role-owner" || u.role_id == "role-cashier")
+    );
 }
 
 // ── User: Special characters ──────────────────────────────────────────
@@ -403,12 +515,14 @@ fn user_with_unicode_display_name() {
     seed_roles(&conn);
     let s = store(&conn);
 
-    let u = s.create_user(
-        "i18n-user",
-        "hash",
-        "José María — 佐藤",   // mixed Latin-1 supplement + CJK
-        "role-cashier",
-    ).unwrap();
+    let u = s
+        .create_user(
+            "i18n-user",
+            "hash",
+            "José María — 佐藤", // mixed Latin-1 supplement + CJK
+            "role-cashier",
+        )
+        .unwrap();
     assert_eq!(u.display_name, "José María — 佐藤");
 
     let loaded = s.get_user(&u.id).unwrap().unwrap();
@@ -421,7 +535,9 @@ fn user_username_with_leading_trailing_spaces_is_trimmed() {
     seed_roles(&conn);
     let s = store(&conn);
 
-    let u = s.create_user("  spaced-user  ", "hash", "Spaced User", "role-cashier").unwrap();
+    let u = s
+        .create_user("  spaced-user  ", "hash", "Spaced User", "role-cashier")
+        .unwrap();
     assert_eq!(u.username, "spaced-user", "username should be trimmed");
 }
 
@@ -438,10 +554,14 @@ fn update_pin_hash_only_via_raw_sql() {
     conn.execute(
         "UPDATE users SET pin_hash = 'new_hash_456' WHERE id = 'user-1'",
         [],
-    ).unwrap();
+    )
+    .unwrap();
 
     let loaded = s.get_user("user-1").unwrap().unwrap();
-    assert_eq!(loaded.pin_hash, "new_hash_456", "pin_hash should be updated");
+    assert_eq!(
+        loaded.pin_hash, "new_hash_456",
+        "pin_hash should be updated"
+    );
 
     // Verify other fields unchanged.
     assert_eq!(loaded.username, "alice");

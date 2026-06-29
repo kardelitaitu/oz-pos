@@ -3,7 +3,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
-use oz_core::{Store, migrations, Money, Currency, Refund, RefundLine};
+use oz_core::{Currency, Money, Refund, RefundLine, Store, migrations};
 use rusqlite::Connection;
 
 // ── Shared helpers ────────────────────────────────────────────────────
@@ -24,7 +24,10 @@ fn usd() -> Currency {
 }
 
 fn price(minor: i64) -> Money {
-    Money { minor_units: minor, currency: usd() }
+    Money {
+        minor_units: minor,
+        currency: usd(),
+    }
 }
 
 // Seeds a completed sale with two line items for refund testing.
@@ -64,9 +67,28 @@ fn full_refund_of_completed_sale() {
 
     // Refund all lines of the sale.
     // SKUs must match seed_sale's dynamic SKU format: {sale_id}-{name}.
-    let line1 = RefundLine::new("fr-sale-1-sl-1", "fr-sale-1-COFFEE", 2, price(350), price(700));
-    let line2 = RefundLine::new("fr-sale-1-sl-2", "fr-sale-1-BAGEL", 1, price(450), price(450));
-    let refund = Refund::new("fr-sale-1", price(1150), "full refund", "", "user-1", vec![line1, line2]);
+    let line1 = RefundLine::new(
+        "fr-sale-1-sl-1",
+        "fr-sale-1-COFFEE",
+        2,
+        price(350),
+        price(700),
+    );
+    let line2 = RefundLine::new(
+        "fr-sale-1-sl-2",
+        "fr-sale-1-BAGEL",
+        1,
+        price(450),
+        price(450),
+    );
+    let refund = Refund::new(
+        "fr-sale-1",
+        price(1150),
+        "full refund",
+        "",
+        "user-1",
+        vec![line1, line2],
+    );
 
     s.create_refund(&refund).unwrap();
 
@@ -82,10 +104,22 @@ fn full_refund_of_completed_sale() {
         [],
         |row| row.get(0),
     ).unwrap();
-    assert!(details_json.contains("\"total_minor\":1150"), "audit log should contain the refund total");
-    assert!(details_json.contains("\"line_count\":2"), "audit log should contain line count");
-    assert!(details_json.contains("\"reason\":\"full refund\""), "audit log should contain reason");
-    assert!(details_json.contains(&format!("\"refund_id\":\"{}\"", refund.id)), "audit log should contain refund_id");
+    assert!(
+        details_json.contains("\"total_minor\":1150"),
+        "audit log should contain the refund total"
+    );
+    assert!(
+        details_json.contains("\"line_count\":2"),
+        "audit log should contain line count"
+    );
+    assert!(
+        details_json.contains("\"reason\":\"full refund\""),
+        "audit log should contain reason"
+    );
+    assert!(
+        details_json.contains(&format!("\"refund_id\":\"{}\"", refund.id)),
+        "audit log should contain refund_id"
+    );
 }
 
 #[test]
@@ -95,7 +129,14 @@ fn refund_zero_amount() {
     let s = store(&conn);
 
     // Zero-amount refund (e.g., courtesy adjustment).
-    let refund = Refund::new("zero-sale", price(0), "courtesy", "no charge", "user-1", vec![]);
+    let refund = Refund::new(
+        "zero-sale",
+        price(0),
+        "courtesy",
+        "no charge",
+        "user-1",
+        vec![],
+    );
     s.create_refund(&refund).unwrap();
 
     let refunds = s.list_refunds_for_sale("zero-sale").unwrap();
@@ -121,16 +162,29 @@ fn refund_in_eur() {
 
     let s = store(&conn);
     let eur: Currency = "EUR".parse().unwrap();
-    let eur_money = Money { minor_units: 600, currency: eur };
+    let eur_money = Money {
+        minor_units: 600,
+        currency: eur,
+    };
 
     let line = RefundLine::new("eur-sl-1", "COFFEE-EUR", 2, eur_money, eur_money);
-    let refund = Refund::new("eur-sale", eur_money, "currency test", "", "user-1", vec![line]);
+    let refund = Refund::new(
+        "eur-sale",
+        eur_money,
+        "currency test",
+        "",
+        "user-1",
+        vec![line],
+    );
     s.create_refund(&refund).unwrap();
 
     let refunds = s.list_refunds_for_sale("eur-sale").unwrap();
     assert_eq!(refunds.len(), 1);
     assert_eq!(refunds[0].total.minor_units, 600);
-    assert_eq!(std::str::from_utf8(&refunds[0].total.currency.0).unwrap(), "EUR");
+    assert_eq!(
+        std::str::from_utf8(&refunds[0].total.currency.0).unwrap(),
+        "EUR"
+    );
 }
 
 #[test]
@@ -143,11 +197,27 @@ fn refunds_across_multiple_sales() {
     // Refund first sale.
     // SKUs must match seed_sale's dynamic format: {sale_id}-{name}.
     let line1 = RefundLine::new("ms-1-sl-1", "ms-1-COFFEE", 1, price(350), price(350));
-    s.create_refund(&Refund::new("ms-1", price(350), "partial-1", "", "user-1", vec![line1])).unwrap();
+    s.create_refund(&Refund::new(
+        "ms-1",
+        price(350),
+        "partial-1",
+        "",
+        "user-1",
+        vec![line1],
+    ))
+    .unwrap();
 
     // Refund second sale.
     let line2 = RefundLine::new("ms-2-sl-1", "ms-2-COFFEE", 2, price(350), price(700));
-    s.create_refund(&Refund::new("ms-2", price(700), "partial-2", "", "user-1", vec![line2])).unwrap();
+    s.create_refund(&Refund::new(
+        "ms-2",
+        price(700),
+        "partial-2",
+        "",
+        "user-1",
+        vec![line2],
+    ))
+    .unwrap();
 
     // Verify each sale has the correct refunds.
     let refunds1 = s.list_refunds_for_sale("ms-1").unwrap();
@@ -159,11 +229,13 @@ fn refunds_across_multiple_sales() {
     assert_eq!(refunds2[0].total.minor_units, 700);
 
     // Verify audit logs for both sales.
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM audit_log WHERE action = 'sale.refund'",
-        [],
-        |r| r.get(0),
-    ).unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'sale.refund'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
     assert_eq!(count, 2);
 }
 
@@ -176,10 +248,22 @@ fn total_refunded_aggregates_correctly() {
     // Create three partial refunds.
     // SKU must match seed_sale's dynamic format: {sale_id}-{name}.
     for i in 0..3 {
-        let line = RefundLine::new("agg-sale-sl-1", "agg-sale-COFFEE", 1, price(350), price(350));
+        let line = RefundLine::new(
+            "agg-sale-sl-1",
+            "agg-sale-COFFEE",
+            1,
+            price(350),
+            price(350),
+        );
         s.create_refund(&Refund::new(
-            "agg-sale", price(350), &format!("partial-{i}"), "", "user-1", vec![line],
-        )).unwrap();
+            "agg-sale",
+            price(350),
+            &format!("partial-{i}"),
+            "",
+            "user-1",
+            vec![line],
+        ))
+        .unwrap();
     }
 
     let total = s.total_refunded_for_sale("agg-sale").unwrap();
@@ -196,12 +280,28 @@ fn refund_timestamps_are_chronological() {
     // Create refunds with small delays to ensure different timestamps.
     // SKU must match seed_sale's dynamic format: {sale_id}-{name}.
     let line1 = RefundLine::new("ts-sale-sl-1", "ts-sale-COFFEE", 1, price(350), price(350));
-    s.create_refund(&Refund::new("ts-sale", price(350), "first", "", "user-1", vec![line1])).unwrap();
+    s.create_refund(&Refund::new(
+        "ts-sale",
+        price(350),
+        "first",
+        "",
+        "user-1",
+        vec![line1],
+    ))
+    .unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(10));
 
     let line2 = RefundLine::new("ts-sale-sl-1", "ts-sale-COFFEE", 1, price(350), price(350));
-    s.create_refund(&Refund::new("ts-sale", price(350), "second", "", "user-1", vec![line2])).unwrap();
+    s.create_refund(&Refund::new(
+        "ts-sale",
+        price(350),
+        "second",
+        "",
+        "user-1",
+        vec![line2],
+    ))
+    .unwrap();
 
     let refunds = s.list_refunds_for_sale("ts-sale").unwrap();
     assert_eq!(refunds.len(), 2);
@@ -221,8 +321,21 @@ fn refund_line_total_matches_unit_price_times_qty() {
     let s = store(&conn);
 
     // SKU must match seed_sale's dynamic format: {sale_id}-{name}.
-    let line = RefundLine::new("linecheck-sl-1", "linecheck-COFFEE", 3, price(350), price(1050));
-    let refund = Refund::new("linecheck", price(1050), "qty test", "", "user-1", vec![line]);
+    let line = RefundLine::new(
+        "linecheck-sl-1",
+        "linecheck-COFFEE",
+        3,
+        price(350),
+        price(1050),
+    );
+    let refund = Refund::new(
+        "linecheck",
+        price(1050),
+        "qty test",
+        "",
+        "user-1",
+        vec![line],
+    );
     s.create_refund(&refund).unwrap();
 
     let refunds = s.list_refunds_for_sale("linecheck").unwrap();
@@ -238,23 +351,44 @@ fn audit_log_details_for_refund_has_all_fields() {
     let s = store(&conn);
 
     // SKU must match seed_sale's dynamic format: {sale_id}-{name}.
-    let line = RefundLine::new("audit-detail-sl-1", "audit-detail-COFFEE", 2, price(350), price(700));
-    let refund = Refund::new("audit-detail", price(700), "damaged goods", "customer dropped item", "cashier-5", vec![line]);
+    let line = RefundLine::new(
+        "audit-detail-sl-1",
+        "audit-detail-COFFEE",
+        2,
+        price(350),
+        price(700),
+    );
+    let refund = Refund::new(
+        "audit-detail",
+        price(700),
+        "damaged goods",
+        "customer dropped item",
+        "cashier-5",
+        vec![line],
+    );
     s.create_refund(&refund).unwrap();
 
-    let details: String = conn.query_row(
-        "SELECT details FROM audit_log WHERE target_id = 'audit-detail'",
-        [],
-        |r| r.get(0),
-    ).unwrap();
+    let details: String = conn
+        .query_row(
+            "SELECT details FROM audit_log WHERE target_id = 'audit-detail'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
 
     // All expected fields present.
     assert!(details.contains("\"refund_id\""), "missing refund_id");
-    assert!(details.contains("\"reason\":\"damaged goods\""), "missing reason");
+    assert!(
+        details.contains("\"reason\":\"damaged goods\""),
+        "missing reason"
+    );
     assert!(details.contains("\"total_minor\":700"), "missing total");
     assert!(details.contains("\"currency\":\"USD\""), "missing currency");
     assert!(details.contains("\"line_count\":1"), "missing line_count");
-    assert!(details.contains(&format!("\"refund_id\":\"{}\"", refund.id)), "refund_id should match");
+    assert!(
+        details.contains(&format!("\"refund_id\":\"{}\"", refund.id)),
+        "refund_id should match"
+    );
 }
 
 // ── Tax Integration Tests ─────────────────────────────────────────────
@@ -281,11 +415,17 @@ fn multiple_tax_rates_assigned_to_product() {
     let s = store(&conn);
 
     let vat = s.create_tax_rate("VAT 10%", 1000, false, false).unwrap();
-    let surcharge = s.create_tax_rate("Surcharge 5%", 500, false, false).unwrap();
+    let surcharge = s
+        .create_tax_rate("Surcharge 5%", 500, false, false)
+        .unwrap();
     let service = s.create_tax_rate("Service 2%", 200, false, false).unwrap();
 
     // Assign all three to the product.
-    s.set_product_tax_rates("COMPOUND", &[vat.id.clone(), surcharge.id.clone(), service.id.clone()]).unwrap();
+    s.set_product_tax_rates(
+        "COMPOUND",
+        &[vat.id.clone(), surcharge.id.clone(), service.id.clone()],
+    )
+    .unwrap();
 
     let ids = s.get_product_tax_rates("COMPOUND").unwrap();
     assert_eq!(ids.len(), 3, "all three rates should be assigned");
@@ -298,12 +438,14 @@ fn multiple_tax_rates_assigned_to_product() {
 fn multiple_tax_rates_assigned_to_category() {
     let conn = setup();
     let s = store(&conn);
-    s.create_category("cat-compound", "Compound Cat", "#fff").unwrap();
+    s.create_category("cat-compound", "Compound Cat", "#fff")
+        .unwrap();
 
     let r1 = s.create_tax_rate("Rate A", 800, false, false).unwrap();
     let r2 = s.create_tax_rate("Rate B", 1200, false, false).unwrap();
 
-    s.set_category_tax_rates("cat-compound", &[r1.id.clone(), r2.id.clone()]).unwrap();
+    s.set_category_tax_rates("cat-compound", &[r1.id.clone(), r2.id.clone()])
+        .unwrap();
 
     let ids = s.get_category_tax_rates("cat-compound").unwrap();
     assert_eq!(ids.len(), 2);
@@ -332,7 +474,8 @@ fn clearing_category_tax_rates_removes_all() {
     s.create_category("cat-clear", "Clear Cat", "#fff").unwrap();
 
     let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();
-    s.set_category_tax_rates("cat-clear", &[r1.id.clone()]).unwrap();
+    s.set_category_tax_rates("cat-clear", &[r1.id.clone()])
+        .unwrap();
     assert_eq!(s.get_category_tax_rates("cat-clear").unwrap().len(), 1);
 
     s.set_category_tax_rates("cat-clear", &[]).unwrap();
@@ -347,17 +490,31 @@ fn product_and_category_tax_assignments_are_independent() {
     let s = store(&conn);
     s.create_category("cat-indep", "Indep Cat", "#fff").unwrap();
 
-    let prod_rate = s.create_tax_rate("Product Rate", 1000, false, false).unwrap();
-    let cat_rate = s.create_tax_rate("Category Rate", 500, false, false).unwrap();
+    let prod_rate = s
+        .create_tax_rate("Product Rate", 1000, false, false)
+        .unwrap();
+    let cat_rate = s
+        .create_tax_rate("Category Rate", 500, false, false)
+        .unwrap();
 
-    s.set_product_tax_rates("INDEP", &[prod_rate.id.clone()]).unwrap();
-    s.set_category_tax_rates("cat-indep", &[cat_rate.id.clone()]).unwrap();
+    s.set_product_tax_rates("INDEP", &[prod_rate.id.clone()])
+        .unwrap();
+    s.set_category_tax_rates("cat-indep", &[cat_rate.id.clone()])
+        .unwrap();
 
     let prod_ids = s.get_product_tax_rates("INDEP").unwrap();
     let cat_ids = s.get_category_tax_rates("cat-indep").unwrap();
 
-    assert_eq!(prod_ids, vec![prod_rate.id], "product should only have product rate");
-    assert_eq!(cat_ids, vec![cat_rate.id], "category should only have category rate");
+    assert_eq!(
+        prod_ids,
+        vec![prod_rate.id],
+        "product should only have product rate"
+    );
+    assert_eq!(
+        cat_ids,
+        vec![cat_rate.id],
+        "category should only have category rate"
+    );
 }
 
 #[test]
@@ -369,10 +526,15 @@ fn update_tax_rate_preserves_created_at() {
 
     // Small delay so updated_at differs.
     std::thread::sleep(std::time::Duration::from_millis(2));
-    let updated = s.update_tax_rate(&created.id, "Updated", 600, true, false).unwrap();
+    let updated = s
+        .update_tax_rate(&created.id, "Updated", 600, true, false)
+        .unwrap();
 
     // update_tax_rate returns created_at: String::new() and updated_at set to now.
-    assert!(!updated.updated_at.is_empty(), "updated_at should be set after update");
+    assert!(
+        !updated.updated_at.is_empty(),
+        "updated_at should be set after update"
+    );
 }
 
 #[test]
@@ -381,10 +543,13 @@ fn update_tax_rate_without_default_does_not_clear_other_defaults() {
     let s = store(&conn);
 
     let r1 = s.create_tax_rate("Default", 500, true, false).unwrap();
-    let r2 = s.create_tax_rate("Non-Default", 1000, false, false).unwrap();
+    let r2 = s
+        .create_tax_rate("Non-Default", 1000, false, false)
+        .unwrap();
 
     // Update r2 without changing is_default — should NOT clear r1's default.
-    s.update_tax_rate(&r2.id, "Still Non-Default", 1000, false, false).unwrap();
+    s.update_tax_rate(&r2.id, "Still Non-Default", 1000, false, false)
+        .unwrap();
 
     let r1_after = s.get_tax_rate(&r1.id).unwrap().unwrap();
     assert!(r1_after.is_default, "original default should remain");
@@ -396,10 +561,13 @@ fn update_tax_rate_with_default_clears_previous_default() {
     let s = store(&conn);
 
     let r1 = s.create_tax_rate("Default", 500, true, false).unwrap();
-    let r2 = s.create_tax_rate("New Default", 1000, false, false).unwrap();
+    let r2 = s
+        .create_tax_rate("New Default", 1000, false, false)
+        .unwrap();
 
     // Update r2 to be default — should clear r1's default.
-    s.update_tax_rate(&r2.id, "New Default", 1000, true, false).unwrap();
+    s.update_tax_rate(&r2.id, "New Default", 1000, true, false)
+        .unwrap();
 
     let r1_after = s.get_tax_rate(&r1.id).unwrap().unwrap();
     let r2_after = s.get_tax_rate(&r2.id).unwrap().unwrap();
@@ -417,7 +585,10 @@ fn create_tax_rate_with_default_clears_previous_default() {
 
     let first_loaded = s.get_tax_rate(&first.id).unwrap().unwrap();
     let second_loaded = s.get_tax_rate(&second.id).unwrap().unwrap();
-    assert!(!first_loaded.is_default, "first should no longer be default");
+    assert!(
+        !first_loaded.is_default,
+        "first should no longer be default"
+    );
     assert!(second_loaded.is_default, "second should be default");
 }
 
@@ -426,15 +597,22 @@ fn tax_rate_with_inclusive_flag_roundtrips() {
     let conn = setup();
     let s = store(&conn);
 
-    let created = s.create_tax_rate("Inclusive Tax", 800, false, true).unwrap();
+    let created = s
+        .create_tax_rate("Inclusive Tax", 800, false, true)
+        .unwrap();
     assert!(created.is_inclusive);
     assert!(!created.is_default);
 
     let loaded = s.get_tax_rate(&created.id).unwrap().unwrap();
-    assert!(loaded.is_inclusive, "inclusive flag should persist through DB roundtrip");
+    assert!(
+        loaded.is_inclusive,
+        "inclusive flag should persist through DB roundtrip"
+    );
 
     // Update to exclusive.
-    let updated = s.update_tax_rate(&created.id, "Inclusive Tax", 800, false, false).unwrap();
+    let updated = s
+        .update_tax_rate(&created.id, "Inclusive Tax", 800, false, false)
+        .unwrap();
     assert!(!updated.is_inclusive, "inclusive flag should be updated");
 }
 
@@ -444,8 +622,11 @@ fn delete_tax_rate_with_product_assignments() {
     seed_product(&conn, "TAX-DEL");
     let s = store(&conn);
 
-    let rate = s.create_tax_rate("To Be Deleted", 500, false, false).unwrap();
-    s.set_product_tax_rates("TAX-DEL", &[rate.id.clone()]).unwrap();
+    let rate = s
+        .create_tax_rate("To Be Deleted", 500, false, false)
+        .unwrap();
+    s.set_product_tax_rates("TAX-DEL", &[rate.id.clone()])
+        .unwrap();
     assert_eq!(s.get_product_tax_rates("TAX-DEL").unwrap().len(), 1);
 
     // Delete the tax rate.
@@ -470,8 +651,21 @@ fn refund_exceeding_sale_total_succeeds() {
     let s = store(&conn);
 
     // SKU must match seed_sale's dynamic format: {sale_id}-{name}.
-    let line = RefundLine::new("exceed-sale-sl-1", "exceed-sale-COFFEE", 10, price(350), price(3500));
-    let refund = Refund::new("exceed-sale", price(3500), "over refund", "exceeds total", "user-1", vec![line]);
+    let line = RefundLine::new(
+        "exceed-sale-sl-1",
+        "exceed-sale-COFFEE",
+        10,
+        price(350),
+        price(3500),
+    );
+    let refund = Refund::new(
+        "exceed-sale",
+        price(3500),
+        "over refund",
+        "exceeds total",
+        "user-1",
+        vec![line],
+    );
     s.create_refund(&refund).unwrap();
 
     let refunds = s.list_refunds_for_sale("exceed-sale").unwrap();

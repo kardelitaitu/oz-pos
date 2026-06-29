@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::db::Store;
 use oz_core::Customer;
+use oz_core::db::Store;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -42,9 +42,7 @@ impl From<Customer> for CustomerDto {
 // ── List customers ──────────────────────────────────────────────────
 
 #[command]
-pub async fn list_customers(
-    state: State<'_, AppState>,
-) -> Result<Vec<CustomerDto>, AppError> {
+pub async fn list_customers(state: State<'_, AppState>) -> Result<Vec<CustomerDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let customers = store.list_customers()?;
@@ -88,7 +86,12 @@ pub async fn create_customer(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let customer = store.create_customer(name, args.email.as_deref(), args.phone.as_deref(), args.notes.as_deref())?;
+    let customer = store.create_customer(
+        name,
+        args.email.as_deref(),
+        args.phone.as_deref(),
+        args.notes.as_deref(),
+    )?;
     drop(db);
     Ok(CustomerDto::from(customer))
 }
@@ -116,7 +119,13 @@ pub async fn update_customer(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let customer = store.update_customer(&args.id, name, args.email.as_deref(), args.phone.as_deref(), args.notes.as_deref())?;
+    let customer = store.update_customer(
+        &args.id,
+        name,
+        args.email.as_deref(),
+        args.phone.as_deref(),
+        args.notes.as_deref(),
+    )?;
     drop(db);
     Ok(CustomerDto::from(customer))
 }
@@ -124,10 +133,7 @@ pub async fn update_customer(
 // ── Delete customer ─────────────────────────────────────────────────
 
 #[command]
-pub async fn delete_customer(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn delete_customer(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     store.delete_customer(&id)?;

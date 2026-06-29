@@ -21,7 +21,7 @@ use tokio::task::spawn_blocking;
 
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
-use crate::transport::usb::{open_device, UsbDeviceInfo};
+use crate::transport::usb::{UsbDeviceInfo, open_device};
 use crate::types::{Barcode, DeviceInfo};
 
 // ---------------------------------------------------------------------------
@@ -71,7 +71,7 @@ const HID_KEY_TABLE: [Option<(char, char)>; 256] = {
     t[0x26] = Some(('9', '('));
     t[0x27] = Some(('0', ')'));
     t[0x28] = Some(('\n', '\n')); // Enter — barcode terminator
-    t[0x2C] = Some((' ', ' '));   // Space
+    t[0x2C] = Some((' ', ' ')); // Space
     t[0x2D] = Some(('-', '_'));
     t[0x2E] = Some(('=', '+'));
     t[0x2F] = Some(('[', '{'));
@@ -126,11 +126,7 @@ impl UsbHidBarcodeScanner {
     /// Returns `Ok(None)` if the device is not a recognised scanner (this
     /// is not an error — the caller should try other candidates).
     pub fn try_new(info: UsbDeviceInfo) -> Self {
-        let device_info = DeviceInfo::new(
-            &info.manufacturer,
-            &info.product,
-            &info.serial,
-        );
+        let device_info = DeviceInfo::new(&info.manufacturer, &info.product, &info.serial);
 
         Self {
             handle: Arc::new(Mutex::new(None)),

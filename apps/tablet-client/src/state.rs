@@ -27,7 +27,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
 
-use oz_core::{migrations, Cart, CartId};
+use oz_core::{Cart, CartId, migrations};
 use oz_hal::DriverRegistry;
 use platform_kernel::Kernel;
 

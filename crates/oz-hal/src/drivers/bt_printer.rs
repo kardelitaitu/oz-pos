@@ -32,11 +32,7 @@ pub struct BtReceiptPrinter {
 
 impl BtReceiptPrinter {
     /// Create a new BT printer at the given serial port and baud rate.
-    pub fn new(
-        port_name: impl Into<String>,
-        baud_rate: u32,
-        info: DeviceInfo,
-    ) -> Self {
+    pub fn new(port_name: impl Into<String>, baud_rate: u32, info: DeviceInfo) -> Self {
         Self {
             port_name: port_name.into(),
             baud_rate,
@@ -77,8 +73,7 @@ impl BtReceiptPrinter {
                 .ok_or(HalError::NotFound("not connected".into()))?;
 
             use std::io::Write;
-            port.write_all(&data_owned)
-                .map_err(HalError::Io)?;
+            port.write_all(&data_owned).map_err(HalError::Io)?;
             port.flush().map_err(HalError::Io)?;
             Ok(())
         })

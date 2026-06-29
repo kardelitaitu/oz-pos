@@ -8,8 +8,8 @@
 pub mod audit;
 pub mod auth;
 pub mod categories;
-pub mod customers;
 pub mod currencies;
+pub mod customers;
 pub mod exchange_rates;
 pub mod features;
 pub mod hardware;

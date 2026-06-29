@@ -34,5 +34,3 @@ pub trait ReceiptPrinter: Send + Sync {
     /// Device identity, used in logs and the setup wizard.
     fn device_info(&self) -> DeviceInfo;
 }
-
-

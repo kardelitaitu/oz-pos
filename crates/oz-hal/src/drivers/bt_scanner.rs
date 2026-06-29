@@ -23,7 +23,7 @@ use tokio::task::spawn_blocking;
 
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
-use crate::transport::serial::{open_port, SerialPortInfo};
+use crate::transport::serial::{SerialPortInfo, open_port};
 use crate::types::{Barcode, DeviceInfo};
 
 /// Default baud rate for Bluetooth SPP barcode scanners.
@@ -47,11 +47,7 @@ impl BtBarcodeScanner {
     /// `info` should come from [`probe_bluetooth()`](crate::transport::serial::probe_bluetooth)
     /// or from user configuration.
     pub fn new(info: SerialPortInfo, baud_rate: u32) -> Self {
-        let device_info = DeviceInfo::new(
-            "Bluetooth",
-            &info.description,
-            &info.port_name,
-        );
+        let device_info = DeviceInfo::new("Bluetooth", &info.description, &info.port_name);
 
         Self {
             port_name: info.port_name,
@@ -93,16 +89,18 @@ impl BarcodeScanner for BtBarcodeScanner {
             }));
         }
 
-        let mut port = open_port(&self.port_name, self.baud_rate)
-            .map_err(|e| HalError::Bluetooth(format!(
-                "failed to open BT SPP port {}: {e}", self.port_name
-            )))?;
+        let mut port = open_port(&self.port_name, self.baud_rate).map_err(|e| {
+            HalError::Bluetooth(format!(
+                "failed to open BT SPP port {}: {e}",
+                self.port_name
+            ))
+        })?;
 
         // Set read timeout so poll() doesn't block forever.
         port.set_timeout(std::time::Duration::from_millis(500))
-            .map_err(|e| HalError::Bluetooth(format!(
-                "BT set_timeout on {}: {e}", self.port_name
-            )))?;
+            .map_err(|e| {
+                HalError::Bluetooth(format!("BT set_timeout on {}: {e}", self.port_name))
+            })?;
 
         *guard = Some(port);
 

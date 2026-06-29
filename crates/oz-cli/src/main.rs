@@ -19,7 +19,7 @@ use clap::{Args, CommandFactory, Parser, Subcommand};
 use rusqlite::Connection;
 
 use oz_core::db::Store;
-use oz_core::{CoreError, Currency, FeatureRegistry, Money, Settings, SaleStatus};
+use oz_core::{CoreError, Currency, FeatureRegistry, Money, SaleStatus, Settings};
 
 // ── CLI structure ─────────────────────────────────────────────────────
 
@@ -299,7 +299,7 @@ enum ProductAction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::{params, Connection};
+    use rusqlite::{Connection, params};
 
     fn setup_in_memory_db() -> Connection {
         let mut conn = Connection::open_in_memory().unwrap();
@@ -461,10 +461,15 @@ mod tests {
     fn run_product_create_and_list() {
         let conn = setup_in_memory_db();
         let currency = Currency::from_str("USD").unwrap();
-        let money = Money { minor_units: 1500, currency };
+        let money = Money {
+            minor_units: 1500,
+            currency,
+        };
 
         let store = make_store(&conn);
-        store.create_product("SKU-001", "Test Product", money, None, None, 10).unwrap();
+        store
+            .create_product("SKU-001", "Test Product", money, None, None, 10)
+            .unwrap();
 
         // List should include it
         let products = store.list_products().unwrap();
@@ -477,8 +482,13 @@ mod tests {
         let conn = setup_in_memory_db();
         let store = make_store(&conn);
         let currency = Currency::from_str("USD").unwrap();
-        let money = Money { minor_units: 2500, currency };
-        store.create_product("SKU-002", "Widget", money, None, None, 5).unwrap();
+        let money = Money {
+            minor_units: 2500,
+            currency,
+        };
+        store
+            .create_product("SKU-002", "Widget", money, None, None, 5)
+            .unwrap();
 
         let result = run_product_get(&store, "SKU-002");
         assert!(result.is_ok());
@@ -489,8 +499,13 @@ mod tests {
         let conn = setup_in_memory_db();
         let store = make_store(&conn);
         let currency = Currency::from_str("USD").unwrap();
-        let money = Money { minor_units: 100, currency };
-        store.create_product("TO-DEL", "Delete Me", money, None, None, 0).unwrap();
+        let money = Money {
+            minor_units: 100,
+            currency,
+        };
+        store
+            .create_product("TO-DEL", "Delete Me", money, None, None, 0)
+            .unwrap();
         run_product_delete(&store, "TO-DEL").unwrap();
         let prod = store.get_product("TO-DEL").unwrap();
         assert!(prod.is_none());
@@ -503,8 +518,13 @@ mod tests {
         let conn = setup_in_memory_db();
         let store = make_store(&conn);
         let currency = Currency::from_str("USD").unwrap();
-        let money = Money { minor_units: 500, currency };
-        store.create_product("INV-001", "Stocked Item", money, None, None, 42).unwrap();
+        let money = Money {
+            minor_units: 500,
+            currency,
+        };
+        store
+            .create_product("INV-001", "Stocked Item", money, None, None, 42)
+            .unwrap();
 
         let result = run_inventory_get(&store, "INV-001");
         assert!(result.is_ok());
@@ -523,8 +543,13 @@ mod tests {
         let conn = setup_in_memory_db();
         let store = make_store(&conn);
         let currency = Currency::from_str("USD").unwrap();
-        let money = Money { minor_units: 500, currency };
-        store.create_product("ADJ-001", "Adjustable", money, None, None, 10).unwrap();
+        let money = Money {
+            minor_units: 500,
+            currency,
+        };
+        store
+            .create_product("ADJ-001", "Adjustable", money, None, None, 10)
+            .unwrap();
 
         run_inventory_adjust(&store, "ADJ-001", 5).unwrap();
         let prod = store.get_product("ADJ-001").unwrap().unwrap();
@@ -536,8 +561,13 @@ mod tests {
         let conn = setup_in_memory_db();
         let store = make_store(&conn);
         let currency = Currency::from_str("USD").unwrap();
-        let money = Money { minor_units: 500, currency };
-        store.create_product("ADJ-002", "Sellable", money, None, None, 10).unwrap();
+        let money = Money {
+            minor_units: 500,
+            currency,
+        };
+        store
+            .create_product("ADJ-002", "Sellable", money, None, None, 10)
+            .unwrap();
 
         run_inventory_adjust(&store, "ADJ-002", -3).unwrap();
         let prod = store.get_product("ADJ-002").unwrap().unwrap();
@@ -551,10 +581,8 @@ mod tests {
         let conn = setup_in_memory_db();
         let store = make_store(&conn);
         // SaleUpdateStatus error path exits; we check the store method directly
-        let result = store.update_sale_status(
-            "00000000-0000-0000-0000-000000000000",
-            SaleStatus::Active,
-        );
+        let result =
+            store.update_sale_status("00000000-0000-0000-0000-000000000000", SaleStatus::Active);
         assert!(matches!(result, Err(CoreError::NotFound { .. })));
     }
 
@@ -614,10 +642,14 @@ mod tests {
 
     #[test]
     fn cli_parse_product_create() {
-        let cli = Cli::try_parse_from(["oz", "product", "create", "SKU-1", "Widget", "999"]).unwrap();
+        let cli =
+            Cli::try_parse_from(["oz", "product", "create", "SKU-1", "Widget", "999"]).unwrap();
         match cli.command {
             Some(Command::Product(ProductArgs {
-                action: ProductAction::Create { sku, name, price, .. },
+                action:
+                    ProductAction::Create {
+                        sku, name, price, ..
+                    },
             })) => {
                 assert_eq!(sku, "SKU-1");
                 assert_eq!(name, "Widget");
@@ -731,13 +763,13 @@ mod tests {
 
     #[test]
     fn cli_parse_export_ozpkg() {
-        let cli = Cli::try_parse_from([
-            "oz", "export-ozpkg",
-            "-o", "data.ozpkg",
-            "-p", "secret123",
-        ]).unwrap();
+        let cli =
+            Cli::try_parse_from(["oz", "export-ozpkg", "-o", "data.ozpkg", "-p", "secret123"])
+                .unwrap();
         match cli.command {
-            Some(Command::ExportOzpkg { output, password, .. }) => {
+            Some(Command::ExportOzpkg {
+                output, password, ..
+            }) => {
                 assert_eq!(output, "data.ozpkg");
                 assert_eq!(password, "secret123");
             }
@@ -748,13 +780,21 @@ mod tests {
     #[test]
     fn cli_parse_import_ozpkg() {
         let cli = Cli::try_parse_from([
-            "oz", "import-ozpkg",
-            "-i", "data.ozpkg",
-            "-p", "secret123",
+            "oz",
+            "import-ozpkg",
+            "-i",
+            "data.ozpkg",
+            "-p",
+            "secret123",
             "--dry-run",
-        ]).unwrap();
+        ])
+        .unwrap();
         match cli.command {
-            Some(Command::ImportOzpkg { input, password, dry_run }) => {
+            Some(Command::ImportOzpkg {
+                input,
+                password,
+                dry_run,
+            }) => {
                 assert_eq!(input, "data.ozpkg");
                 assert_eq!(password, "secret123");
                 assert!(dry_run);
@@ -799,7 +839,9 @@ mod tests {
     fn run_init_db_simple_retail() {
         let mut conn = Connection::open_in_memory().unwrap();
         oz_core::migrations::run(&mut conn).unwrap();
-        let args = InitDbArgs { preset: "simple-retail".into() };
+        let args = InitDbArgs {
+            preset: "simple-retail".into(),
+        };
         let result = run_init_db(&conn, &args);
         assert!(result.is_ok());
         // Verify stuff was seeded
@@ -811,7 +853,9 @@ mod tests {
     fn run_init_db_unknown_preset_falls_back_to_custom() {
         let mut conn = Connection::open_in_memory().unwrap();
         oz_core::migrations::run(&mut conn).unwrap();
-        let args = InitDbArgs { preset: "unknown-preset".into() };
+        let args = InitDbArgs {
+            preset: "unknown-preset".into(),
+        };
         let result = run_init_db(&conn, &args);
         assert!(result.is_ok());
     }
@@ -820,7 +864,9 @@ mod tests {
     fn run_init_db_full_store() {
         let mut conn = Connection::open_in_memory().unwrap();
         oz_core::migrations::run(&mut conn).unwrap();
-        let args = InitDbArgs { preset: "full-store".into() };
+        let args = InitDbArgs {
+            preset: "full-store".into(),
+        };
         let result = run_init_db(&conn, &args);
         assert!(result.is_ok());
     }
@@ -848,9 +894,8 @@ mod tests {
 
     #[test]
     fn cli_parse_sale_update_status() {
-        let cli = Cli::try_parse_from([
-            "oz", "sale", "update-status", "some-id", "completed",
-        ]).unwrap();
+        let cli =
+            Cli::try_parse_from(["oz", "sale", "update-status", "some-id", "completed"]).unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::Sale(SaleArgs {
@@ -863,8 +908,14 @@ mod tests {
     #[test]
     fn cli_parse_category_create() {
         let cli = Cli::try_parse_from([
-            "oz", "category", "create", "cat-drinks", "Beverages", "#06b6d4",
-        ]).unwrap();
+            "oz",
+            "category",
+            "create",
+            "cat-drinks",
+            "Beverages",
+            "#06b6d4",
+        ])
+        .unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::Category(CategoryArgs {
@@ -877,8 +928,15 @@ mod tests {
     #[test]
     fn cli_parse_user_create() {
         let cli = Cli::try_parse_from([
-            "oz", "user", "create", "jdoe", "hash123", "John Doe", "role-cashier",
-        ]).unwrap();
+            "oz",
+            "user",
+            "create",
+            "jdoe",
+            "hash123",
+            "John Doe",
+            "role-cashier",
+        ])
+        .unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::User(UserArgs {
@@ -891,8 +949,14 @@ mod tests {
     #[test]
     fn cli_parse_customer_create() {
         let cli = Cli::try_parse_from([
-            "oz", "customer", "create", "Alice", "--email", "alice@test.com",
-        ]).unwrap();
+            "oz",
+            "customer",
+            "create",
+            "Alice",
+            "--email",
+            "alice@test.com",
+        ])
+        .unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::Customer(CustomerArgs {
@@ -904,9 +968,7 @@ mod tests {
 
     #[test]
     fn cli_parse_inventory_adjust() {
-        let cli = Cli::try_parse_from([
-            "oz", "inventory", "adjust", "SKU-001", "+5",
-        ]).unwrap();
+        let cli = Cli::try_parse_from(["oz", "inventory", "adjust", "SKU-001", "+5"]).unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::Inventory(InventoryArgs {
@@ -928,11 +990,23 @@ mod tests {
     #[test]
     fn cli_parse_export_with_types_and_password() {
         let cli = Cli::try_parse_from([
-            "oz", "export-ozpkg", "-o", "backup.ozpkg", "-p", "secret",
-            "-t", "products,customers",
-        ]).unwrap();
+            "oz",
+            "export-ozpkg",
+            "-o",
+            "backup.ozpkg",
+            "-p",
+            "secret",
+            "-t",
+            "products,customers",
+        ])
+        .unwrap();
         match cli.command {
-            Some(Command::ExportOzpkg { output, password, types, .. }) => {
+            Some(Command::ExportOzpkg {
+                output,
+                password,
+                types,
+                ..
+            }) => {
                 assert_eq!(output, "backup.ozpkg");
                 assert_eq!(password, "secret");
                 assert_eq!(types, "products,customers");
@@ -960,12 +1034,16 @@ fn main() -> Result<()> {
         Some(Command::Customer(args)) => run_customer(&conn, args),
         Some(Command::User(args)) => run_user(&conn, args),
         Some(Command::Restore { input }) => run_restore(conn, &input),
-        Some(Command::ExportOzpkg { output, types, password }) => {
-            run_export_ozpkg(&conn, &output, &types, &password)
-        }
-        Some(Command::ImportOzpkg { input, password, dry_run }) => {
-            run_import_ozpkg(&conn, &input, &password, dry_run)
-        }
+        Some(Command::ExportOzpkg {
+            output,
+            types,
+            password,
+        }) => run_export_ozpkg(&conn, &output, &types, &password),
+        Some(Command::ImportOzpkg {
+            input,
+            password,
+            dry_run,
+        }) => run_import_ozpkg(&conn, &input, &password, dry_run),
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;
@@ -978,8 +1056,7 @@ fn main() -> Result<()> {
 // ── DB helpers ────────────────────────────────────────────────────────
 
 fn open_db(path: &str) -> Result<Connection> {
-    let conn =
-        Connection::open(path).with_context(|| format!("opening database at {path}"))?;
+    let conn = Connection::open(path).with_context(|| format!("opening database at {path}"))?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .context("enabling foreign_keys")?;
     conn.pragma_update(None, "journal_mode", "WAL")
@@ -1262,9 +1339,7 @@ fn run_inventory_adjust(store: &Store<'_>, sku: &str, delta: i64) -> Result<()> 
     match store.adjust_stock(sku, delta) {
         Ok(new_qty) => {
             let verb = if delta >= 0 { "restocked" } else { "sold" };
-            println!(
-                "Stock {verb} for {sku} (delta: {delta:+}) — new qty: {new_qty}"
-            );
+            println!("Stock {verb} for {sku} (delta: {delta:+}) — new qty: {new_qty}");
         }
         Err(CoreError::NotFound { .. }) => {
             eprintln!("Product not found: {sku}");
@@ -1303,8 +1378,14 @@ fn run_sale_list(store: &Store<'_>) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<40} {:>10} {:>6}  {:>10}  Date", "ID", "Total", "Items", "Status");
-    println!("{:-<40} {:->10} {:->6}  {:->10}  {:-<4}", "", "", "", "", "");
+    println!(
+        "{:<40} {:>10} {:>6}  {:>10}  Date",
+        "ID", "Total", "Items", "Status"
+    );
+    println!(
+        "{:-<40} {:->10} {:->6}  {:->10}  {:-<4}",
+        "", "", "", "", ""
+    );
 
     for s in &sales {
         let total_str = format!(
@@ -1320,8 +1401,15 @@ fn run_sale_list(store: &Store<'_>) -> Result<()> {
         };
         // Show only date portion of ISO-8601 timestamp.
         let date_str = s.created_at.as_str();
-        let date_str = if date_str.len() > 10 { &date_str[..10] } else { date_str };
-        println!("{:<40} {:>10} {:>6}  {:>10}  {}", s.id, total_str, s.line_count, status_str, date_str);
+        let date_str = if date_str.len() > 10 {
+            &date_str[..10]
+        } else {
+            date_str
+        };
+        println!(
+            "{:<40} {:>10} {:>6}  {:>10}  {}",
+            s.id, total_str, s.line_count, status_str, date_str
+        );
     }
 
     Ok(())
@@ -1331,8 +1419,8 @@ fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<()> {
     match store.get_sale(id).context("looking up sale")? {
         Some(sale) => {
             if format == "json" {
-                let json = serde_json::to_string_pretty(&sale)
-                    .context("serializing sale to JSON")?;
+                let json =
+                    serde_json::to_string_pretty(&sale).context("serializing sale to JSON")?;
                 println!("{json}");
             } else {
                 let total_str = format!(
@@ -1345,7 +1433,10 @@ fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<()> {
                 println!("Status:       {:?}", sale.status);
                 println!("Total:        {}", total_str);
                 println!("Line count:   {}", sale.line_count);
-                println!("Currency:     {}", std::str::from_utf8(&sale.currency.0).unwrap_or("???"));
+                println!(
+                    "Currency:     {}",
+                    std::str::from_utf8(&sale.currency.0).unwrap_or("???")
+                );
                 println!("Created:      {}", sale.created_at);
                 println!("Updated:      {}", sale.updated_at);
 
@@ -1359,7 +1450,10 @@ fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<()> {
                             line.unit_price.minor_units / 100,
                             line.unit_price.minor_units.abs() % 100,
                         );
-                        println!("{:<4} {:<24} {:>6} {:>10}", line.line_position, line.sku, line.qty, unit_str);
+                        println!(
+                            "{:<4} {:<24} {:>6} {:>10}",
+                            line.line_position, line.sku, line.qty, unit_str
+                        );
                     }
                 }
             }
@@ -1412,9 +1506,18 @@ fn run_customer(conn: &Connection, args: CustomerArgs) -> Result<()> {
     match args.action {
         CustomerAction::List => run_customer_list(&store),
         CustomerAction::Get { id } => run_customer_get(&store, &id),
-        CustomerAction::Create { name, email, phone, notes } => {
-            run_customer_create(&store, &name, email.as_deref(), phone.as_deref(), notes.as_deref())
-        }
+        CustomerAction::Create {
+            name,
+            email,
+            phone,
+            notes,
+        } => run_customer_create(
+            &store,
+            &name,
+            email.as_deref(),
+            phone.as_deref(),
+            notes.as_deref(),
+        ),
     }
 }
 
@@ -1426,7 +1529,10 @@ fn run_customer_list(store: &Store<'_>) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<40} {:<24} {:<30} {:<16}", "ID", "Name", "Email", "Phone");
+    println!(
+        "{:<40} {:<24} {:<30} {:<16}",
+        "ID", "Name", "Email", "Phone"
+    );
     println!("{:-<40} {:-<24} {:-<30} {:-<16}", "", "", "", "");
 
     for c in &customers {
@@ -1506,12 +1612,18 @@ fn run_user_list(store: &Store<'_>) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<40} {:<16} {:<24} {:<12} Active", "ID", "Username", "Display Name", "Role");
+    println!(
+        "{:<40} {:<16} {:<24} {:<12} Active",
+        "ID", "Username", "Display Name", "Role"
+    );
     println!("{:-<40} {:-<16} {:-<24} {:-<12} {:-}", "", "", "", "", "");
 
     for u in &users {
         let active = if u.is_active { "yes" } else { "no" };
-        println!("{:<40} {:<16} {:<24} {:<12} {}", u.id, u.username, u.display_name, u.role_id, active);
+        println!(
+            "{:<40} {:<16} {:<24} {:<12} {}",
+            u.id, u.username, u.display_name, u.role_id, active
+        );
     }
 
     Ok(())
@@ -1680,7 +1792,11 @@ fn run_product_create(
 
     match store.create_product(sku, name, money, None, None, 0) {
         Ok(product) => {
-            println!("Created product: {} ({})", product.name, product.sku.as_str());
+            println!(
+                "Created product: {} ({})",
+                product.name,
+                product.sku.as_str()
+            );
         }
         Err(CoreError::Validation { message, .. }) => {
             eprintln!("Validation error: {message}");
@@ -1722,7 +1838,11 @@ fn run_product_update(
 
     match store.update_product(sku, name, money, cat, bar) {
         Ok(product) => {
-            println!("Updated product: {} ({})", product.name, product.sku.as_str());
+            println!(
+                "Updated product: {} ({})",
+                product.name,
+                product.sku.as_str()
+            );
         }
         Err(CoreError::NotFound { .. }) => {
             eprintln!("Product not found: {sku}");
@@ -1766,7 +1886,10 @@ fn run_restore(conn: Connection, input: &str) -> Result<()> {
     eprintln!("restoring from {input}...");
 
     // Close the existing connection, then copy the backup over.
-    let db_path = conn.path().map(|p| p.to_owned()).unwrap_or_else(|| "oz-pos.db".into());
+    let db_path = conn
+        .path()
+        .map(|p| p.to_owned())
+        .unwrap_or_else(|| "oz-pos.db".into());
     drop(conn);
 
     std::fs::copy(input, &db_path)
@@ -1779,8 +1902,13 @@ fn run_restore(conn: Connection, input: &str) -> Result<()> {
 // ── Export .ozpkg ─────────────────────────────────────────────────────
 
 /// Export store data to an encrypted .ozpkg file.
-fn run_export_ozpkg(conn: &Connection, output: &str, types_str: &str, password: &str) -> Result<()> {
-    use oz_core::ozpkg::{export_ozpkg, OzpkgPayload};
+fn run_export_ozpkg(
+    conn: &Connection,
+    output: &str,
+    types_str: &str,
+    password: &str,
+) -> Result<()> {
+    use oz_core::ozpkg::{OzpkgPayload, export_ozpkg};
 
     let store = Store::new(conn);
 
@@ -1789,7 +1917,10 @@ fn run_export_ozpkg(conn: &Connection, output: &str, types_str: &str, password: 
     let requested: Vec<String> = if all_types {
         vec![]
     } else {
-        types_str.split(',').map(|s| s.trim().to_lowercase()).collect()
+        types_str
+            .split(',')
+            .map(|s| s.trim().to_lowercase())
+            .collect()
     };
 
     let wants = |name: &str| all_types || requested.iter().any(|r| r == name);
@@ -1870,12 +2001,24 @@ fn run_export_ozpkg(conn: &Connection, output: &str, types_str: &str, password: 
 
     // Build data_types list.
     let mut data_types: Vec<String> = Vec::new();
-    if wants("products") { data_types.push("products".into()); }
-    if wants("categories") { data_types.push("categories".into()); }
-    if wants("sales") { data_types.push("sales".into()); }
-    if wants("customers") { data_types.push("customers".into()); }
-    if wants("users") { data_types.push("users".into()); }
-    if wants("settings") { data_types.push("settings".into()); }
+    if wants("products") {
+        data_types.push("products".into());
+    }
+    if wants("categories") {
+        data_types.push("categories".into());
+    }
+    if wants("sales") {
+        data_types.push("sales".into());
+    }
+    if wants("customers") {
+        data_types.push("customers".into());
+    }
+    if wants("users") {
+        data_types.push("users".into());
+    }
+    if wants("settings") {
+        data_types.push("settings".into());
+    }
 
     let payload = OzpkgPayload {
         products,
@@ -1886,14 +2029,22 @@ fn run_export_ozpkg(conn: &Connection, output: &str, types_str: &str, password: 
         settings,
     };
 
-    let store_name = store.get_store_name()?.unwrap_or_else(|| "OZ-POS Store".into());
+    let store_name = store
+        .get_store_name()?
+        .unwrap_or_else(|| "OZ-POS Store".into());
 
     eprintln!("  encrypting with Argon2id + AES-256-GCM...");
-    let ozpkg_bytes = export_ozpkg(password, &store_name, "0.0.1", data_types, features, &payload)
-        .context("encrypting export")?;
+    let ozpkg_bytes = export_ozpkg(
+        password,
+        &store_name,
+        "0.0.1",
+        data_types,
+        features,
+        &payload,
+    )
+    .context("encrypting export")?;
 
-    std::fs::write(output, &ozpkg_bytes)
-        .with_context(|| format!("writing {output}"))?;
+    std::fs::write(output, &ozpkg_bytes).with_context(|| format!("writing {output}"))?;
 
     eprintln!("exported to {output} ({} bytes)", ozpkg_bytes.len());
     Ok(())
@@ -1906,12 +2057,10 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
     use oz_core::ozpkg::import_ozpkg;
 
     eprintln!("reading {input}...");
-    let data = std::fs::read(input)
-        .with_context(|| format!("reading {input}"))?;
+    let data = std::fs::read(input).with_context(|| format!("reading {input}"))?;
 
     eprintln!("  decrypting...");
-    let (header, payload) = import_ozpkg(&data, password)
-        .context("decrypting import file")?;
+    let (header, payload) = import_ozpkg(&data, password).context("decrypting import file")?;
 
     // Show metadata.
     println!();
@@ -1951,9 +2100,17 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
     // ── Categories ──────────────────────────────────────────────
     for val in &payload.categories {
         if let Ok(cat) = serde_json::from_value::<oz_core::Category>(val.clone()) {
-            let colour = if cat.colour.is_empty() { "#6366f1" } else { &cat.colour };
+            let colour = if cat.colour.is_empty() {
+                "#6366f1"
+            } else {
+                &cat.colour
+            };
             let exists = tx
-                .query_row("SELECT 1 FROM categories WHERE id = ?1", rusqlite::params![cat.id], |_| Ok(()))
+                .query_row(
+                    "SELECT 1 FROM categories WHERE id = ?1",
+                    rusqlite::params![cat.id],
+                    |_| Ok(()),
+                )
                 .is_ok();
             if exists {
                 tx.execute(
@@ -1974,19 +2131,23 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
     for val in &payload.products {
         if let Ok(product) = serde_json::from_value::<oz_core::Product>(val.clone()) {
             let exists = tx
-                .query_row("SELECT 1 FROM products WHERE sku = ?1", rusqlite::params![product.sku.to_string()], |_| Ok(()))
+                .query_row(
+                    "SELECT 1 FROM products WHERE sku = ?1",
+                    rusqlite::params![product.sku.to_string()],
+                    |_| Ok(()),
+                )
                 .is_ok();
             if exists {
-                let cur_str = std::str::from_utf8(&product.price.currency.0)
-                    .expect("valid UTF-8 currency");
+                let cur_str =
+                    std::str::from_utf8(&product.price.currency.0).expect("valid UTF-8 currency");
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 tx.execute(
                     "UPDATE products SET name = ?1, price_minor = ?2, currency = ?3, category_id = ?4, barcode = ?5, updated_at = ?6 WHERE sku = ?7",
                     rusqlite::params![product.name, product.price.minor_units, cur_str, product.category_id, product.barcode, now, product.sku.to_string()],
                 )?;
             } else {
-                let cur_str = std::str::from_utf8(&product.price.currency.0)
-                    .expect("valid UTF-8 currency");
+                let cur_str =
+                    std::str::from_utf8(&product.price.currency.0).expect("valid UTF-8 currency");
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 tx.execute(
                     "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)
@@ -2003,7 +2164,11 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
         for val in sales {
             if let Ok(sale) = serde_json::from_value::<oz_core::Sale>(val.clone()) {
                 let exists = tx
-                    .query_row("SELECT 1 FROM sales WHERE id = ?1", rusqlite::params![sale.id], |_| Ok(()))
+                    .query_row(
+                        "SELECT 1 FROM sales WHERE id = ?1",
+                        rusqlite::params![sale.id],
+                        |_| Ok(()),
+                    )
                     .is_ok();
                 if !exists {
                     store.create_sale(&sale)?;
@@ -2019,7 +2184,11 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
             if let Ok(cust) = serde_json::from_value::<oz_core::Customer>(val.clone()) {
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 let exists = tx
-                    .query_row("SELECT 1 FROM customers WHERE id = ?1", rusqlite::params![cust.id], |_| Ok(()))
+                    .query_row(
+                        "SELECT 1 FROM customers WHERE id = ?1",
+                        rusqlite::params![cust.id],
+                        |_| Ok(()),
+                    )
                     .is_ok();
                 if exists {
                     tx.execute(
@@ -2044,7 +2213,11 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
             if let Ok(user) = serde_json::from_value::<oz_core::User>(val.clone()) {
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 let exists = tx
-                    .query_row("SELECT 1 FROM users WHERE id = ?1", rusqlite::params![user.id], |_| Ok(()))
+                    .query_row(
+                        "SELECT 1 FROM users WHERE id = ?1",
+                        rusqlite::params![user.id],
+                        |_| Ok(()),
+                    )
                     .is_ok();
                 if exists {
                     tx.execute(

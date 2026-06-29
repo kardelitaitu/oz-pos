@@ -51,7 +51,8 @@ pub struct TokenResponse {
 /// so the server starts in development without extra config. Production
 /// deployments MUST set `OZ_API_SECRET`.
 fn signing_secret() -> String {
-    std::env::var("OZ_API_SECRET").unwrap_or_else(|_| "oz-pos-dev-secret-change-in-production".into())
+    std::env::var("OZ_API_SECRET")
+        .unwrap_or_else(|_| "oz-pos-dev-secret-change-in-production".into())
 }
 
 /// Generate a new signed JWT with the given subject label.
@@ -91,8 +92,7 @@ pub fn validate_token(token_str: &str) -> Result<ApiTokenClaims, jsonwebtoken::e
     let decoding_key = DecodingKey::from_secret(secret.as_bytes());
     let mut validation = Validation::default();
     validation.validate_exp = true;
-    decode::<ApiTokenClaims>(token_str, &decoding_key, &validation)
-        .map(|data| data.claims)
+    decode::<ApiTokenClaims>(token_str, &decoding_key, &validation).map(|data| data.claims)
 }
 
 /// Axum middleware that rejects requests without a valid JWT.

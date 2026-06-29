@@ -8,7 +8,7 @@ import {
   listCategoryTaxRates,
   setCategoryTaxRates,
   type TaxRateDto,
-  type CategoryTaxRateRow,
+
 } from '@/api/tax';
 import { listCategories, type CategoryDto } from '@/api/products';
 import { Card } from '@/components/Card';
@@ -356,7 +356,7 @@ export default function TaxConfigurationScreen() {
             </div>
 
             <div className="tax-config-modal-body">
-              <label className="tax-config-field" htmlFor="tax-field-name">
+              <label className="tax-config-field" htmlFor="tax-field-name" aria-label="Tax Name">
                 <Localized id="tax-config-field-name">
                   <span className="tax-config-label">Tax Name</span>
                 </Localized>
@@ -476,9 +476,12 @@ export default function TaxConfigurationScreen() {
                       <label
                         key={r.id}
                         className={`tax-config-cat-rate-item ${checked ? 'tax-config-cat-rate-item--checked' : ''}`}
+                        htmlFor={"tax-cat-rate-" + r.id}
+                        aria-label={r.name}
                       >
                         <input
                           type="checkbox"
+                          id={"tax-cat-rate-" + r.id}
                           checked={checked}
                           onChange={() => toggleCatRate(r.id)}
                         />

@@ -43,19 +43,16 @@ impl ModuleManifest {
     /// Returns [`KernelError::ManifestParseError`] if the JSON is invalid
     /// or a required field is missing.
     pub fn from_json(json: &str) -> Result<Self, KernelError> {
-        serde_json::from_str::<ModuleManifest>(json).map_err(|e| {
-            KernelError::ManifestParseError {
-                module: "<unknown>".into(),
-                message: e.to_string(),
-            }
+        serde_json::from_str::<ModuleManifest>(json).map_err(|e| KernelError::ManifestParseError {
+            module: "<unknown>".into(),
+            message: e.to_string(),
         })
     }
 
     /// Serialize this manifest to a pretty-printed JSON string.
     pub fn to_json_pretty(&self) -> Result<String, KernelError> {
-        serde_json::to_string_pretty(self).map_err(|e| {
-            KernelError::Internal(format!("failed to serialize manifest: {e}"))
-        })
+        serde_json::to_string_pretty(self)
+            .map_err(|e| KernelError::Internal(format!("failed to serialize manifest: {e}")))
     }
 
     /// Validate that all required fields are present and well-formed.

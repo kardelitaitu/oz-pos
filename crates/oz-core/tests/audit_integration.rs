@@ -65,7 +65,14 @@ fn auto_generated_timestamps_are_iso8601() {
     let conn = setup();
     let s = store(&conn);
     for i in 0..10 {
-        let entry = AuditEntry::new(&format!("user-{i}"), "system.backup", None::<String>, None::<String>, None::<String>, "success");
+        let entry = AuditEntry::new(
+            &format!("user-{i}"),
+            "system.backup",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "success",
+        );
         s.log_audit(&entry).unwrap();
     }
 
@@ -73,12 +80,24 @@ fn auto_generated_timestamps_are_iso8601() {
     assert_eq!(entries.len(), 10);
     for entry in &entries {
         // ISO-8601 with milliseconds: "2026-06-29T12:34:56.789Z"
-        assert!(entry.created_at.contains('T'), "timestamp should contain T separator: {}", entry.created_at);
-        assert!(entry.created_at.ends_with('Z'), "timestamp should end with Z (UTC): {}", entry.created_at);
+        assert!(
+            entry.created_at.contains('T'),
+            "timestamp should contain T separator: {}",
+            entry.created_at
+        );
+        assert!(
+            entry.created_at.ends_with('Z'),
+            "timestamp should end with Z (UTC): {}",
+            entry.created_at
+        );
 
         // Verify parseable as RFC-3339.
         let parsed = chrono::DateTime::parse_from_rfc3339(&entry.created_at);
-        assert!(parsed.is_ok(), "timestamp should be valid RFC-3339: {}", entry.created_at);
+        assert!(
+            parsed.is_ok(),
+            "timestamp should be valid RFC-3339: {}",
+            entry.created_at
+        );
     }
 }
 
@@ -90,7 +109,14 @@ fn timestamps_are_unique_per_entry() {
     // (at least in milliseconds for most cases).
     let mut ids = Vec::new();
     for i in 0..5 {
-        let entry = AuditEntry::new(&format!("user-{i}"), "test.action", None::<String>, None::<String>, None::<String>, "ok");
+        let entry = AuditEntry::new(
+            &format!("user-{i}"),
+            "test.action",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "ok",
+        );
         let id = entry.id.clone();
         s.log_audit(&entry).unwrap();
         ids.push(id);
@@ -101,7 +127,11 @@ fn timestamps_are_unique_per_entry() {
     // the same millisecond (chrono millisecond resolution).
     for entry in &entries {
         let parsed = chrono::DateTime::parse_from_rfc3339(&entry.created_at);
-        assert!(parsed.is_ok(), "timestamp should be valid RFC-3339: {}", entry.created_at);
+        assert!(
+            parsed.is_ok(),
+            "timestamp should be valid RFC-3339: {}",
+            entry.created_at
+        );
     }
     // At minimum, the earliest and latest timestamps should differ (likely).
     let min_ts = entries.iter().map(|e| e.created_at.as_str()).min().unwrap();
@@ -159,7 +189,7 @@ fn entries_with_same_timestamp_retain_insert_order() {
     let entries = s.list_audit_entries(100, 0).unwrap();
     assert_eq!(entries.len(), 3);
     // When timestamps tie, insertion order (rowid order) determines the result.
-    // All timestamps are identical, so the DB will return them in rowid order (insertion order DESC with no index? 
+    // All timestamps are identical, so the DB will return them in rowid order (insertion order DESC with no index?
     // Actually, ORDER BY created_at DESC will order by timestamp first; ties may be in any order.
     // Just verify all three are present and have the right timestamp.
     let actions: Vec<&str> = entries.iter().map(|e| e.action.as_str()).collect();
@@ -187,7 +217,8 @@ fn entries_across_different_days_ordered_correctly() {
     ];
 
     for (i, ts) in days.iter().enumerate() {
-        let entry = entry_with_timestamp("u1", &format!("day_test.{i}"), None, None, None, "ok", ts);
+        let entry =
+            entry_with_timestamp("u1", &format!("day_test.{i}"), None, None, None, "ok", ts);
         insert_direct(&conn, &entry);
     }
 
@@ -196,12 +227,12 @@ fn entries_across_different_days_ordered_correctly() {
 
     // Verify DESC ordering: newest first.
     let expected = [
-        "2026-02-01T00:00:00.000Z",     // feb
-        "2026-01-15T12:00:00.000Z",     // mid-jan
-        "2026-01-02T00:00:01.000Z",     // jan 2
-        "2026-01-01T23:59:59.000Z",     // jan 1 late
-        "2026-01-01T10:00:00.000Z",     // jan 1 early
-        "2025-12-31T23:59:59.000Z",     // dec 31 previous year
+        "2026-02-01T00:00:00.000Z", // feb
+        "2026-01-15T12:00:00.000Z", // mid-jan
+        "2026-01-02T00:00:01.000Z", // jan 2
+        "2026-01-01T23:59:59.000Z", // jan 1 late
+        "2026-01-01T10:00:00.000Z", // jan 1 early
+        "2025-12-31T23:59:59.000Z", // dec 31 previous year
     ];
 
     for (i, (entry, exp)) in entries.iter().zip(expected.iter()).enumerate() {
@@ -251,7 +282,14 @@ fn pagination_large_offsets_return_empty() {
     let s = store(&conn);
 
     for i in 0..5 {
-        let entry = AuditEntry::new(&format!("u{i}"), "paginate.test", None::<String>, None::<String>, None::<String>, "ok");
+        let entry = AuditEntry::new(
+            &format!("u{i}"),
+            "paginate.test",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "ok",
+        );
         s.log_audit(&entry).unwrap();
     }
 
@@ -287,7 +325,10 @@ fn pagination_consistent_across_calls() {
         assert_eq!(entries.len(), 5, "page {page} should have 5 entries");
         for (j, entry) in entries.iter().enumerate() {
             let global_idx = (page * 5 + j as i64) as usize;
-            assert_eq!(entry.id, all[global_idx].id, "entry mismatch at page {page} index {j}");
+            assert_eq!(
+                entry.id, all[global_idx].id,
+                "entry mismatch at page {page} index {j}"
+            );
         }
     }
 }
@@ -305,29 +346,47 @@ fn query_entries_by_date_range() {
     let day2 = "2026-01-11T08:00:00.000Z";
     let day3 = "2026-01-12T23:59:59.000Z";
 
-    insert_direct(&conn, &entry_with_timestamp("u1", "day1.a", None, None, None, "ok", day1));
-    insert_direct(&conn, &entry_with_timestamp("u1", "day1.b", None, None, None, "ok", day1b));
-    insert_direct(&conn, &entry_with_timestamp("u1", "day2", None, None, None, "ok", day2));
-    insert_direct(&conn, &entry_with_timestamp("u1", "day3", None, None, None, "ok", day3));
+    insert_direct(
+        &conn,
+        &entry_with_timestamp("u1", "day1.a", None, None, None, "ok", day1),
+    );
+    insert_direct(
+        &conn,
+        &entry_with_timestamp("u1", "day1.b", None, None, None, "ok", day1b),
+    );
+    insert_direct(
+        &conn,
+        &entry_with_timestamp("u1", "day2", None, None, None, "ok", day2),
+    );
+    insert_direct(
+        &conn,
+        &entry_with_timestamp("u1", "day3", None, None, None, "ok", day3),
+    );
 
     // Use the underlying connection directly to query by date.
-    let mut stmt = conn.prepare(
-        "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
-         FROM audit_log WHERE date(created_at) = '2026-01-10' ORDER BY created_at ASC"
-    ).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
+         FROM audit_log WHERE date(created_at) = '2026-01-10' ORDER BY created_at ASC",
+        )
+        .unwrap();
 
-    let rows: Vec<AuditEntry> = stmt.query_map([], |row| {
-        Ok(AuditEntry {
-            id: row.get("id")?,
-            user_id: row.get("user_id")?,
-            action: row.get("action")?,
-            target_type: row.get("target_type")?,
-            target_id: row.get("target_id")?,
-            details: row.get("details")?,
-            outcome: row.get("outcome")?,
-            created_at: row.get("created_at")?,
+    let rows: Vec<AuditEntry> = stmt
+        .query_map([], |row| {
+            Ok(AuditEntry {
+                id: row.get("id")?,
+                user_id: row.get("user_id")?,
+                action: row.get("action")?,
+                target_type: row.get("target_type")?,
+                target_id: row.get("target_id")?,
+                details: row.get("details")?,
+                outcome: row.get("outcome")?,
+                created_at: row.get("created_at")?,
+            })
         })
-    }).unwrap().map(|r| r.unwrap()).collect();
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
 
     assert_eq!(rows.len(), 2, "should find 2 entries on 2026-01-10");
     assert_eq!(rows[0].action, "day1.a", "chronological order within day");
@@ -340,29 +399,46 @@ fn query_entries_filtered_by_action() {
     let s = store(&conn);
 
     for i in 0..5 {
-        let action = if i % 2 == 0 { "sale.create" } else { "sale.void" };
-        let entry = AuditEntry::new("u1", action, Some("sale"), Some(&format!("sale-{i}")), None::<String>, "success");
+        let action = if i % 2 == 0 {
+            "sale.create"
+        } else {
+            "sale.void"
+        };
+        let entry = AuditEntry::new(
+            "u1",
+            action,
+            Some("sale"),
+            Some(&format!("sale-{i}")),
+            None::<String>,
+            "success",
+        );
         s.log_audit(&entry).unwrap();
     }
 
     // Query with raw SQL to filter by action.
-    let mut stmt = conn.prepare(
-        "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
-         FROM audit_log WHERE action = 'sale.void' ORDER BY created_at ASC"
-    ).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
+         FROM audit_log WHERE action = 'sale.void' ORDER BY created_at ASC",
+        )
+        .unwrap();
 
-    let rows: Vec<AuditEntry> = stmt.query_map([], |row| {
-        Ok(AuditEntry {
-            id: row.get("id")?,
-            user_id: row.get("user_id")?,
-            action: row.get("action")?,
-            target_type: row.get("target_type")?,
-            target_id: row.get("target_id")?,
-            details: row.get("details")?,
-            outcome: row.get("outcome")?,
-            created_at: row.get("created_at")?,
+    let rows: Vec<AuditEntry> = stmt
+        .query_map([], |row| {
+            Ok(AuditEntry {
+                id: row.get("id")?,
+                user_id: row.get("user_id")?,
+                action: row.get("action")?,
+                target_type: row.get("target_type")?,
+                target_id: row.get("target_id")?,
+                details: row.get("details")?,
+                outcome: row.get("outcome")?,
+                created_at: row.get("created_at")?,
+            })
         })
-    }).unwrap().map(|r| r.unwrap()).collect();
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
 
     assert_eq!(rows.len(), 2, "should find 2 void actions");
     for row in &rows {
@@ -376,28 +452,48 @@ fn query_entries_by_outcome() {
     let conn = setup();
     let s = store(&conn);
 
-    let success = AuditEntry::new("u1", "login", None::<String>, None::<String>, None::<String>, "success");
-    let failure = AuditEntry::new("u1", "login", None::<String>, None::<String>, Some("{\"reason\":\"bad pin\"}"), "failure");
+    let success = AuditEntry::new(
+        "u1",
+        "login",
+        None::<String>,
+        None::<String>,
+        None::<String>,
+        "success",
+    );
+    let failure = AuditEntry::new(
+        "u1",
+        "login",
+        None::<String>,
+        None::<String>,
+        Some("{\"reason\":\"bad pin\"}"),
+        "failure",
+    );
     s.log_audit(&success).unwrap();
     s.log_audit(&failure).unwrap();
 
-    let mut stmt = conn.prepare(
-        "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
-         FROM audit_log WHERE outcome = 'failure'"
-    ).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
+         FROM audit_log WHERE outcome = 'failure'",
+        )
+        .unwrap();
 
-    let rows: Vec<AuditEntry> = stmt.query_map([], |row| {
-        Ok(AuditEntry {
-            id: row.get("id")?,
-            user_id: row.get("user_id")?,
-            action: row.get("action")?,
-            target_type: row.get("target_type")?,
-            target_id: row.get("target_id")?,
-            details: row.get("details")?,
-            outcome: row.get("outcome")?,
-            created_at: row.get("created_at")?,
+    let rows: Vec<AuditEntry> = stmt
+        .query_map([], |row| {
+            Ok(AuditEntry {
+                id: row.get("id")?,
+                user_id: row.get("user_id")?,
+                action: row.get("action")?,
+                target_type: row.get("target_type")?,
+                target_id: row.get("target_id")?,
+                details: row.get("details")?,
+                outcome: row.get("outcome")?,
+                created_at: row.get("created_at")?,
+            })
         })
-    }).unwrap().map(|r| r.unwrap()).collect();
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].outcome, "failure");
@@ -411,7 +507,14 @@ fn update_audit_entry_trigger_rejects_update() {
     let conn = setup();
     let s = store(&conn);
 
-    let entry = AuditEntry::new("u1", "original", None::<String>, None::<String>, None::<String>, "success");
+    let entry = AuditEntry::new(
+        "u1",
+        "original",
+        None::<String>,
+        None::<String>,
+        None::<String>,
+        "success",
+    );
     let id = entry.id.clone();
     s.log_audit(&entry).unwrap();
 
@@ -420,10 +523,16 @@ fn update_audit_entry_trigger_rejects_update() {
         "UPDATE audit_log SET action = 'hacked' WHERE id = ?1",
         rusqlite::params![id],
     );
-    assert!(result.is_err(), "UPDATE on audit_log should be rejected by trigger");
+    assert!(
+        result.is_err(),
+        "UPDATE on audit_log should be rejected by trigger"
+    );
     if let Err(e) = result {
         let msg = e.to_string();
-        assert!(msg.contains("immutable"), "error should mention immutability: {msg}");
+        assert!(
+            msg.contains("immutable"),
+            "error should mention immutability: {msg}"
+        );
     }
 
     // Entry remains unchanged.
@@ -437,19 +546,29 @@ fn delete_audit_entry_trigger_rejects_delete() {
     let conn = setup();
     let s = store(&conn);
 
-    let entry = AuditEntry::new("u1", "to_delete_test", None::<String>, None::<String>, None::<String>, "success");
+    let entry = AuditEntry::new(
+        "u1",
+        "to_delete_test",
+        None::<String>,
+        None::<String>,
+        None::<String>,
+        "success",
+    );
     let id = entry.id.clone();
     s.log_audit(&entry).unwrap();
 
     // DELETE via raw SQL is now blocked by the audit_log_immutable_delete trigger.
-    let result = conn.execute(
-        "DELETE FROM audit_log WHERE id = ?1",
-        rusqlite::params![id],
+    let result = conn.execute("DELETE FROM audit_log WHERE id = ?1", rusqlite::params![id]);
+    assert!(
+        result.is_err(),
+        "DELETE on audit_log should be rejected by trigger"
     );
-    assert!(result.is_err(), "DELETE on audit_log should be rejected by trigger");
     if let Err(e) = result {
         let msg = e.to_string();
-        assert!(msg.contains("immutable"), "error should mention immutability: {msg}");
+        assert!(
+            msg.contains("immutable"),
+            "error should mention immutability: {msg}"
+        );
     }
 
     // Entry remains in place.
@@ -467,7 +586,8 @@ fn bulk_insert_and_retrieve() {
     // Insert 100 audit entries with sequential timestamps.
     for i in 0..100 {
         let ts = format!("2026-01-01T{:02}:{:02}:00.000Z", i / 60, i % 60);
-        let entry = entry_with_timestamp("u1", &format!("bulk.{i}"), None, None, None, "success", &ts);
+        let entry =
+            entry_with_timestamp("u1", &format!("bulk.{i}"), None, None, None, "success", &ts);
         insert_direct(&conn, &entry);
     }
 
@@ -479,8 +599,10 @@ fn bulk_insert_and_retrieve() {
         assert!(
             window[0].created_at >= window[1].created_at,
             "entry {} (ts={}) should be after {} (ts={})",
-            window[0].action, window[0].created_at,
-            window[1].action, window[1].created_at,
+            window[0].action,
+            window[0].created_at,
+            window[1].action,
+            window[1].created_at,
         );
     }
 }
@@ -492,7 +614,12 @@ fn bulk_pagination_all_pages() {
 
     // Insert 1000 entries.
     for i in 0..1000 {
-        let ts = format!("2026-06-01T{:02}:{:02}:{:02}.000Z", i / 3600, (i / 60) % 60, i % 60);
+        let ts = format!(
+            "2026-06-01T{:02}:{:02}:{:02}.000Z",
+            i / 3600,
+            (i / 60) % 60,
+            i % 60
+        );
         let entry = entry_with_timestamp("u1", &format!("bulk.{i}"), None, None, None, "ok", &ts);
         insert_direct(&conn, &entry);
     }
@@ -506,7 +633,11 @@ fn bulk_pagination_all_pages() {
     let mut total_from_pages = 0;
     for page in 0..20 {
         let entries = s.list_audit_entries(page_size, page * page_size).unwrap();
-        assert_eq!(entries.len(), 50, "page {page} should have {page_size} entries");
+        assert_eq!(
+            entries.len(),
+            50,
+            "page {page} should have {page_size} entries"
+        );
         total_from_pages += entries.len();
 
         // Verify entries are in DESC order within each page.

@@ -135,39 +135,42 @@ export default function SettingsPage() {
         header={<Localized id="settings-section-store"><h2 className="settings-section-title">Store</h2></Localized>}
       >
         <div className="settings-form">
-          <label className="settings-field">
+          <label className="settings-field" htmlFor="settings-field-store-name" aria-label="Store name">
             <Localized id="settings-field-store-name">
               <span className="settings-label">Store name</span>
             </Localized>
             <input
               className="settings-input"
               type="text"
+              id="settings-field-store-name"
               placeholder="OZ-POS Store"
               value={store.name}
               onChange={(e) => setStore({ ...store, name: e.target.value })}
             />
           </label>
 
-          <label className="settings-field">
+          <label className="settings-field" htmlFor="settings-field-address" aria-label="Address">
             <Localized id="settings-field-address">
               <span className="settings-label">Address</span>
             </Localized>
             <input
               className="settings-input"
               type="text"
+              id="settings-field-address"
               placeholder="123 Main Street"
               value={store.address}
               onChange={(e) => setStore({ ...store, address: e.target.value })}
             />
           </label>
 
-          <label className="settings-field">
+          <label className="settings-field" htmlFor="settings-field-tax-id" aria-label="Tax / VAT ID">
             <Localized id="settings-field-tax-id">
               <span className="settings-label">Tax / VAT ID</span>
             </Localized>
             <input
               className="settings-input"
               type="text"
+              id="settings-field-tax-id"
               placeholder="12-3456789"
               value={store.taxId}
               onChange={(e) => setStore({ ...store, taxId: e.target.value })}
@@ -182,12 +185,13 @@ export default function SettingsPage() {
         header={<Localized id="settings-section-currency"><h2 className="settings-section-title">Currency</h2></Localized>}
       >
         <div className="settings-form">
-          <label className="settings-field">
+          <label className="settings-field" htmlFor="settings-field-default-currency" aria-label="Default currency">
             <Localized id="settings-field-default-currency">
               <span className="settings-label">Default currency</span>
             </Localized>
             <select
               className="settings-select"
+              id="settings-field-default-currency"
               value={defaultCurrency}
               onChange={(e) => setDefaultCurrencyState(e.target.value)}
             >
@@ -208,9 +212,10 @@ export default function SettingsPage() {
       >
         <div className="settings-form">
           {/* Show currency */}
-          <label className="settings-toggle">
+          <label className="settings-toggle" htmlFor="settings-toggle-show-currency" aria-label="Show currency symbol on amounts">
             <input
               type="checkbox"
+              id="settings-toggle-show-currency"
               checked={receipt.showCurrency}
               onChange={(e) => setReceipt({ ...receipt, showCurrency: e.target.checked })}
             />
@@ -220,12 +225,13 @@ export default function SettingsPage() {
           </label>
 
           {/* Decimal separator */}
-          <label className="settings-field">
+          <label className="settings-field" htmlFor="settings-field-decimal-separator" aria-label="Decimal separator">
             <Localized id="settings-field-decimal-separator">
               <span className="settings-label">Decimal separator</span>
             </Localized>
             <select
               className="settings-select"
+              id="settings-field-decimal-separator"
               value={receipt.decimalSeparator}
               onChange={(e) => setReceipt({ ...receipt, decimalSeparator: e.target.value })}
             >
@@ -236,9 +242,10 @@ export default function SettingsPage() {
           </label>
 
           {/* Show tax */}
-          <label className="settings-toggle">
+          <label className="settings-toggle" htmlFor="settings-toggle-show-tax" aria-label="Show tax line on receipts">
             <input
               type="checkbox"
+              id="settings-toggle-show-tax"
               checked={receipt.showTax}
               onChange={(e) => setReceipt({ ...receipt, showTax: e.target.checked })}
             />
@@ -248,12 +255,13 @@ export default function SettingsPage() {
           </label>
 
           {/* Paper width */}
-          <label className="settings-field">
+          <label className="settings-field" htmlFor="settings-field-paper-width" aria-label="Paper width">
             <Localized id="settings-field-paper-width">
               <span className="settings-label">Paper width</span>
             </Localized>
             <select
               className="settings-select"
+              id="settings-field-paper-width"
               value={receipt.paperWidth}
               onChange={(e) => setReceipt({ ...receipt, paperWidth: e.target.value })}
             >
@@ -263,13 +271,14 @@ export default function SettingsPage() {
           </label>
 
           {/* Footer */}
-          <label className="settings-field">
+          <label className="settings-field" htmlFor="settings-field-receipt-footer" aria-label="Receipt footer">
             <Localized id="settings-field-footer">
               <span className="settings-label">Receipt footer</span>
             </Localized>
             <input
               className="settings-input"
               type="text"
+              id="settings-field-receipt-footer"
               placeholder="Thank you for shopping!"
               value={receipt.footer}
               onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })}
@@ -303,35 +312,38 @@ export default function SettingsPage() {
                 <span>Sync is not configured. Enter a server URL and enable sync.</span>
               </Localized>
             </p>
-            <label className="settings-field">
+            <label className="settings-field" htmlFor="settings-field-server-url" aria-label="Server URL">
               <Localized id="settings-sync-server-url">
                 <span className="settings-label">Server URL</span>
               </Localized>
               <input
                 className="settings-input"
                 type="url"
+                id="settings-field-server-url"
                 placeholder="https://api.example.com"
                 value={syncServerUrl}
                 onChange={(e) => setSyncServerUrl(e.target.value)}
               />
             </label>
 
-            <label className="settings-field">
+            <label className="settings-field" htmlFor="settings-field-api-key" aria-label="API Key">
               <Localized id="settings-sync-api-key">
                 <span className="settings-label">API Key</span>
               </Localized>
               <input
                 className="settings-input"
                 type="password"
+                id="settings-field-api-key"
                 placeholder="Enter API key"
                 value={syncApiKey}
                 onChange={(e) => setSyncApiKey(e.target.value)}
               />
             </label>
 
-            <label className="settings-toggle">
+            <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled" aria-label="Enable Cloud Sync">
               <input
                 type="checkbox"
+                id="settings-toggle-sync-enabled"
                 checked={sync.enabled}
                 onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
               />
@@ -342,35 +354,38 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="settings-form">
-            <label className="settings-field">
+            <label className="settings-field" htmlFor="settings-field-server-url" aria-label="Server URL">
               <Localized id="settings-sync-server-url">
                 <span className="settings-label">Server URL</span>
               </Localized>
               <input
                 className="settings-input"
                 type="url"
+                id="settings-field-server-url"
                 placeholder="https://api.example.com"
                 value={syncServerUrl}
                 onChange={(e) => setSyncServerUrl(e.target.value)}
               />
             </label>
 
-            <label className="settings-field">
+            <label className="settings-field" htmlFor="settings-field-api-key" aria-label="API Key">
               <Localized id="settings-sync-api-key">
                 <span className="settings-label">API Key</span>
               </Localized>
               <input
                 className="settings-input"
                 type="password"
+                id="settings-field-api-key"
                 placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
                 value={syncApiKey}
                 onChange={(e) => setSyncApiKey(e.target.value)}
               />
             </label>
 
-            <label className="settings-toggle">
+            <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled" aria-label="Enable Cloud Sync">
               <input
                 type="checkbox"
+                id="settings-toggle-sync-enabled"
                 checked={sync.enabled}
                 onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
               />

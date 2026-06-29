@@ -6,7 +6,7 @@
 //! (which wraps `platform_core::settings::Settings`) and the Store API
 //! against an in-memory SQLite database.
 
-use oz_core::{Store, Settings, migrations, FeatureRegistry, Feature};
+use oz_core::{Feature, FeatureRegistry, Settings, Store, migrations};
 use rusqlite::Connection;
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -45,7 +45,10 @@ fn set_store_name_overwrites() {
     let conn = setup();
     Settings::set_store_name(&conn, "Old Name").unwrap();
     Settings::set_store_name(&conn, "New Name").unwrap();
-    assert_eq!(Settings::get_store_name(&conn).unwrap(), Some("New Name".into()));
+    assert_eq!(
+        Settings::get_store_name(&conn).unwrap(),
+        Some("New Name".into())
+    );
 }
 
 #[test]
@@ -107,13 +110,22 @@ fn all_typed_settings_roundtrip() {
     Settings::set_store_tax_id(&conn, "TAX-999").unwrap();
     Settings::set_default_currency(&conn, "GBP").unwrap();
 
-    assert_eq!(Settings::get_store_name(&conn).unwrap(), Some("My Store".into()));
+    assert_eq!(
+        Settings::get_store_name(&conn).unwrap(),
+        Some("My Store".into())
+    );
     assert_eq!(
         Settings::get_store_address(&conn).unwrap(),
         Some("456 Oak Ave".into())
     );
-    assert_eq!(Settings::get_store_tax_id(&conn).unwrap(), Some("TAX-999".into()));
-    assert_eq!(Settings::get_default_currency(&conn).unwrap(), Some("GBP".into()));
+    assert_eq!(
+        Settings::get_store_tax_id(&conn).unwrap(),
+        Some("TAX-999".into())
+    );
+    assert_eq!(
+        Settings::get_default_currency(&conn).unwrap(),
+        Some("GBP".into())
+    );
 }
 
 // ── Receipt display settings ─────────────────────────────────────────
@@ -137,21 +149,33 @@ fn receipt_show_currency_true_then_false() {
 #[test]
 fn receipt_decimal_separator_default_dot() {
     let conn = setup();
-    assert_eq!(Settings::get_receipt_decimal_separator(&conn).unwrap(), "dot");
+    assert_eq!(
+        Settings::get_receipt_decimal_separator(&conn).unwrap(),
+        "dot"
+    );
 }
 
 #[test]
 fn receipt_decimal_separator_roundtrip() {
     let conn = setup();
     Settings::set_receipt_decimal_separator(&conn, "comma").unwrap();
-    assert_eq!(Settings::get_receipt_decimal_separator(&conn).unwrap(), "comma");
+    assert_eq!(
+        Settings::get_receipt_decimal_separator(&conn).unwrap(),
+        "comma"
+    );
 
     Settings::set_receipt_decimal_separator(&conn, "none").unwrap();
-    assert_eq!(Settings::get_receipt_decimal_separator(&conn).unwrap(), "none");
+    assert_eq!(
+        Settings::get_receipt_decimal_separator(&conn).unwrap(),
+        "none"
+    );
 
     // Back to dot.
     Settings::set_receipt_decimal_separator(&conn, "dot").unwrap();
-    assert_eq!(Settings::get_receipt_decimal_separator(&conn).unwrap(), "dot");
+    assert_eq!(
+        Settings::get_receipt_decimal_separator(&conn).unwrap(),
+        "dot"
+    );
 }
 
 #[test]
@@ -195,7 +219,10 @@ fn receipt_footer_roundtrip() {
 #[test]
 fn receipt_paper_width_default_standard() {
     let conn = setup();
-    assert_eq!(Settings::get_receipt_paper_width(&conn).unwrap(), "standard");
+    assert_eq!(
+        Settings::get_receipt_paper_width(&conn).unwrap(),
+        "standard"
+    );
 }
 
 #[test]
@@ -266,14 +293,23 @@ fn sync_settings_independent_of_store_settings() {
     Settings::set_default_currency(&conn, "USD").unwrap();
     Settings::set_sync_api_key(&conn, "sk-123").unwrap();
 
-    assert_eq!(Settings::get_store_name(&conn).unwrap(), Some("My Store".into()));
+    assert_eq!(
+        Settings::get_store_name(&conn).unwrap(),
+        Some("My Store".into())
+    );
     assert_eq!(
         Settings::get_sync_server_url(&conn).unwrap(),
         Some("https://sync.example.com".into())
     );
     assert!(Settings::is_sync_enabled(&conn).unwrap());
-    assert_eq!(Settings::get_default_currency(&conn).unwrap(), Some("USD".into()));
-    assert_eq!(Settings::get_sync_api_key(&conn).unwrap(), Some("sk-123".into()));
+    assert_eq!(
+        Settings::get_default_currency(&conn).unwrap(),
+        Some("USD".into())
+    );
+    assert_eq!(
+        Settings::get_sync_api_key(&conn).unwrap(),
+        Some("sk-123".into())
+    );
 }
 
 // ── Feature flags via Settings ───────────────────────────────────────
@@ -305,7 +341,10 @@ fn save_features_replaces_previous() {
     Settings::save_features(&conn, &full).unwrap();
 
     let loaded = Settings::load_features(&conn).unwrap();
-    assert_eq!(loaded, full, "full store features should replace simple retail");
+    assert_eq!(
+        loaded, full,
+        "full store features should replace simple retail"
+    );
 }
 
 #[test]
@@ -434,8 +473,14 @@ fn set_batch_inserts_and_overwrites() {
     ];
     Settings::set_batch(&conn, &rows).unwrap();
 
-    assert_eq!(Settings::get(&conn, "key.a").unwrap(), Some("value-a".into()));
-    assert_eq!(Settings::get(&conn, "key.b").unwrap(), Some("value-b".into()));
+    assert_eq!(
+        Settings::get(&conn, "key.a").unwrap(),
+        Some("value-a".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key.b").unwrap(),
+        Some("value-b".into())
+    );
 
     // Overwrite one key and add a new one.
     let rows2: Vec<(String, String)> = vec![
@@ -444,9 +489,18 @@ fn set_batch_inserts_and_overwrites() {
     ];
     Settings::set_batch(&conn, &rows2).unwrap();
 
-    assert_eq!(Settings::get(&conn, "key.a").unwrap(), Some("updated-a".into()));
-    assert_eq!(Settings::get(&conn, "key.b").unwrap(), Some("value-b".into()));
-    assert_eq!(Settings::get(&conn, "key.c").unwrap(), Some("value-c".into()));
+    assert_eq!(
+        Settings::get(&conn, "key.a").unwrap(),
+        Some("updated-a".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key.b").unwrap(),
+        Some("value-b".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key.c").unwrap(),
+        Some("value-c".into())
+    );
 }
 
 #[test]
@@ -485,9 +539,18 @@ fn set_batch_large_number_of_settings() {
     assert_eq!(all.len(), 100, "all 100 settings should be stored");
 
     // Verify a few values.
-    assert_eq!(Settings::get(&conn, "key.0").unwrap(), Some("value.0".into()));
-    assert_eq!(Settings::get(&conn, "key.50").unwrap(), Some("value.50".into()));
-    assert_eq!(Settings::get(&conn, "key.99").unwrap(), Some("value.99".into()));
+    assert_eq!(
+        Settings::get(&conn, "key.0").unwrap(),
+        Some("value.0".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key.50").unwrap(),
+        Some("value.50".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key.99").unwrap(),
+        Some("value.99".into())
+    );
 }
 
 // ── Large / edge-case values ─────────────────────────────────────────
@@ -517,10 +580,7 @@ fn unicode_value_roundtrip() {
 fn empty_value_roundtrip() {
     let conn = setup();
     Settings::set(&conn, "empty.val", "").unwrap();
-    assert_eq!(
-        Settings::get(&conn, "empty.val").unwrap(),
-        Some("".into())
-    );
+    assert_eq!(Settings::get(&conn, "empty.val").unwrap(), Some("".into()));
 }
 
 #[test]
@@ -531,10 +591,22 @@ fn key_with_special_characters() {
     Settings::set(&conn, "key-with-dashes", "dashes").unwrap();
     Settings::set(&conn, "key/with/slashes", "slashes").unwrap();
 
-    assert_eq!(Settings::get(&conn, "key.with.dots").unwrap(), Some("dots".into()));
-    assert_eq!(Settings::get(&conn, "key_with_underscores").unwrap(), Some("underscores".into()));
-    assert_eq!(Settings::get(&conn, "key-with-dashes").unwrap(), Some("dashes".into()));
-    assert_eq!(Settings::get(&conn, "key/with/slashes").unwrap(), Some("slashes".into()));
+    assert_eq!(
+        Settings::get(&conn, "key.with.dots").unwrap(),
+        Some("dots".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key_with_underscores").unwrap(),
+        Some("underscores".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key-with-dashes").unwrap(),
+        Some("dashes".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "key/with/slashes").unwrap(),
+        Some("slashes".into())
+    );
 }
 
 // ── Remove operations ────────────────────────────────────────────────
@@ -584,7 +656,10 @@ fn overwrite_typed_setting_with_same_value() {
     let conn = setup();
     Settings::set_store_name(&conn, "Store").unwrap();
     Settings::set_store_name(&conn, "Store").unwrap();
-    assert_eq!(Settings::get_store_name(&conn).unwrap(), Some("Store".into()));
+    assert_eq!(
+        Settings::get_store_name(&conn).unwrap(),
+        Some("Store".into())
+    );
 }
 
 // ── Store delegation (via Store API) ─────────────────────────────────

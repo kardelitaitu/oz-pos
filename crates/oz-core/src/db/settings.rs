@@ -1,7 +1,7 @@
 //! Settings delegation — store settings, currencies, exchange rates.
 
-use crate::error::CoreError;
 use crate::Settings;
+use crate::error::CoreError;
 
 use super::Store;
 
@@ -73,9 +73,9 @@ impl Store<'_> {
 
     /// List all currencies from the ISO-4217 table.
     pub fn list_currencies(&self) -> Result<Vec<(String, String, u32, String)>, CoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code")?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -85,15 +85,19 @@ impl Store<'_> {
             ))
         })?;
         let mut out = Vec::new();
-        for r in rows { out.push(r?); }
+        for r in rows {
+            out.push(r?);
+        }
         Ok(out)
     }
 
     /// List all exchange rates.
-    pub fn list_exchange_rates(&self) -> Result<Vec<crate::exchange_rate::ExchangeRateRow>, CoreError> {
+    pub fn list_exchange_rates(
+        &self,
+    ) -> Result<Vec<crate::exchange_rate::ExchangeRateRow>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, from_currency, to_currency, rate, source, effective_date, created_at
-             FROM exchange_rates ORDER BY from_currency, to_currency"
+             FROM exchange_rates ORDER BY from_currency, to_currency",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(crate::exchange_rate::ExchangeRateRow {
@@ -107,13 +111,20 @@ impl Store<'_> {
             })
         })?;
         let mut out = Vec::new();
-        for r in rows { out.push(r?); }
+        for r in rows {
+            out.push(r?);
+        }
         Ok(out)
     }
 
     /// Create a new exchange rate entry.
     pub fn create_exchange_rate(
-        &self, from_currency: &str, to_currency: &str, rate: f64, source: &str, effective_date: &str,
+        &self,
+        from_currency: &str,
+        to_currency: &str,
+        rate: f64,
+        source: &str,
+        effective_date: &str,
     ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
         let id = uuid::Uuid::new_v4().to_string();
         self.conn.execute(
@@ -125,8 +136,13 @@ impl Store<'_> {
         )?;
         let row = stmt.query_row(rusqlite::params![id], |row| {
             Ok(crate::exchange_rate::ExchangeRateRow {
-                id: row.get(0)?, from_currency: row.get(1)?, to_currency: row.get(2)?,
-                rate: row.get(3)?, source: row.get(4)?, effective_date: row.get(5)?, created_at: row.get(6)?,
+                id: row.get(0)?,
+                from_currency: row.get(1)?,
+                to_currency: row.get(2)?,
+                rate: row.get(3)?,
+                source: row.get(4)?,
+                effective_date: row.get(5)?,
+                created_at: row.get(6)?,
             })
         })?;
         Ok(row)
@@ -134,9 +150,15 @@ impl Store<'_> {
 
     /// Delete an exchange rate by ID.
     pub fn delete_exchange_rate(&self, id: &str) -> Result<(), CoreError> {
-        let affected = self.conn.execute("DELETE FROM exchange_rates WHERE id = ?1", rusqlite::params![id])?;
+        let affected = self.conn.execute(
+            "DELETE FROM exchange_rates WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "exchange_rate", id: id.to_string() });
+            return Err(CoreError::NotFound {
+                entity: "exchange_rate",
+                id: id.to_string(),
+            });
         }
         Ok(())
     }
@@ -166,7 +188,10 @@ mod tests {
     }
 
     fn price(minor: i64) -> crate::Money {
-        crate::Money { minor_units: minor, currency: usd() }
+        crate::Money {
+            minor_units: minor,
+            currency: usd(),
+        }
     }
 
     #[test]
@@ -210,9 +235,13 @@ mod tests {
     fn store_conn_returns_underlying_connection() {
         let conn = fresh();
         let s = store(&conn);
-        let p = s.create_product("T1", "Test", price(1), None, None, 0).unwrap();
+        let p = s
+            .create_product("T1", "Test", price(1), None, None, 0)
+            .unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM products WHERE sku = 'T1'", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM products WHERE sku = 'T1'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(count, 1);
         drop(p);
@@ -224,7 +253,8 @@ mod tests {
         // seed some data
         conn.execute_batch(
             "INSERT INTO categories (id, name, colour) VALUES ('cat-test', 'Test', '#000')",
-        ).unwrap();
+        )
+        .unwrap();
         let s = store(&conn);
 
         let tmp = std::env::temp_dir().join("oz-test-backup.db");
@@ -269,7 +299,14 @@ mod tests {
 
     // ── Exchange Rates ─────────────────────────────────────────────────
 
-    fn seed_currency(conn: &Connection, code: &str, numeric_code: &str, name: &str, exp: i32, sym: &str) {
+    fn seed_currency(
+        conn: &Connection,
+        code: &str,
+        numeric_code: &str,
+        name: &str,
+        exp: i32,
+        sym: &str,
+    ) {
         conn.execute(
             "INSERT OR IGNORE INTO currencies (code, numeric_code, name, minor_exponent, symbol) VALUES (?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![code, numeric_code, name, exp, sym],
@@ -291,8 +328,10 @@ mod tests {
         seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
         seed_currency(&conn, "JPY", "392", "Japanese Yen", 0, "\u{a5}");
         let s = store(&conn);
-        s.create_exchange_rate("USD", "EUR", 0.92, "ecb", "2026-06-28").unwrap();
-        s.create_exchange_rate("USD", "JPY", 149.50, "ecb", "2026-06-28").unwrap();
+        s.create_exchange_rate("USD", "EUR", 0.92, "ecb", "2026-06-28")
+            .unwrap();
+        s.create_exchange_rate("USD", "JPY", 149.50, "ecb", "2026-06-28")
+            .unwrap();
 
         let rates = s.list_exchange_rates().unwrap();
         assert_eq!(rates.len(), 2);
@@ -306,7 +345,9 @@ mod tests {
         seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
         seed_currency(&conn, "GBP", "826", "Pound", 2, "\u{a3}");
         let s = store(&conn);
-        let row = s.create_exchange_rate("EUR", "GBP", 0.86, "ecb", "2026-06-28").unwrap();
+        let row = s
+            .create_exchange_rate("EUR", "GBP", 0.86, "ecb", "2026-06-28")
+            .unwrap();
         assert_eq!(row.from_currency, "EUR");
         assert_eq!(row.to_currency, "GBP");
         assert!((row.rate - 0.86).abs() < 0.001);
@@ -318,7 +359,9 @@ mod tests {
         seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
         seed_currency(&conn, "CAD", "124", "Canadian Dollar", 2, "CA$");
         let s = store(&conn);
-        let row = s.create_exchange_rate("USD", "CAD", 1.36, "manual", "2026-06-28").unwrap();
+        let row = s
+            .create_exchange_rate("USD", "CAD", 1.36, "manual", "2026-06-28")
+            .unwrap();
         s.delete_exchange_rate(&row.id).unwrap();
         let rates = s.list_exchange_rates().unwrap();
         assert!(rates.is_empty());

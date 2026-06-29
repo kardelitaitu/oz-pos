@@ -114,10 +114,7 @@ impl SyncTransport {
     /// Pull updates from the server since the given timestamp.
     ///
     /// Pass `None` to pull all available data (initial sync).
-    pub async fn pull_updates(
-        &self,
-        since: Option<&str>,
-    ) -> Result<PullResponse, SyncError> {
+    pub async fn pull_updates(&self, since: Option<&str>) -> Result<PullResponse, SyncError> {
         let url = format!("{}/api/sync/pull", self.base_url);
         let request = PullRequest {
             since: since.map(|s| s.to_owned()),

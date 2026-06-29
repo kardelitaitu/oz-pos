@@ -9,8 +9,8 @@ use tauri::{Emitter, State, command};
 use tokio::sync::oneshot;
 
 use oz_core::{Currency, Money, Settings};
-use oz_hal::drivers::receipt;
 use oz_hal::BarcodeScanner;
+use oz_hal::drivers::receipt;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -226,7 +226,10 @@ pub async fn print_sales_receipt(
         .map_err(|e| AppError::Hardware(e.to_string()))?;
 
     if let Some(ref app) = state.app {
-        let _ = app.emit("receipt:printed", serde_json::json!({ "lines": line_count }));
+        let _ = app.emit(
+            "receipt:printed",
+            serde_json::json!({ "lines": line_count }),
+        );
     }
 
     Ok(PrintSalesReceiptResult { printed: true })
@@ -241,9 +244,7 @@ pub struct ScannerInfo {
 
 /// List all registered barcode scanners.
 #[command]
-pub async fn list_scanners(
-    state: State<'_, AppState>,
-) -> Result<Vec<ScannerInfo>, AppError> {
+pub async fn list_scanners(state: State<'_, AppState>) -> Result<Vec<ScannerInfo>, AppError> {
     let ids = state.registry.scanner_ids().await;
     Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
 }
@@ -255,10 +256,7 @@ pub async fn list_scanners(
 /// `start_scanner` while a scanner is already running stops the
 /// previous one first.
 #[command]
-pub async fn start_scanner(
-    scanner_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn start_scanner(scanner_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     // Stop any existing scanner first.
     {
         let mut cancel = state.scanner_cancel.lock().await;
@@ -286,7 +284,10 @@ pub async fn start_scanner(
             Ok(s) => s,
             Err(e) => {
                 tracing::error!(scanner = %scanner_id, error = %e, "scanner connect failed");
-                let _ = app.emit("barcode:error", serde_json::json!({ "error": e.to_string() }));
+                let _ = app.emit(
+                    "barcode:error",
+                    serde_json::json!({ "error": e.to_string() }),
+                );
                 return;
             }
         };

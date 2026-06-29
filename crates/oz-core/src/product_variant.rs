@@ -1,7 +1,7 @@
 //! Product variant domain type — size/colour/flavour per parent product.
 
-use serde::{Deserialize, Serialize};
 use crate::Money;
+use serde::{Deserialize, Serialize};
 
 /// A product variant linked to a parent product via `parent_sku`.
 ///
@@ -37,7 +37,11 @@ impl ProductVariant {
     /// Generates a fresh UUID for `id`. Optional fields (`price`, `barcode`)
     /// default to `None`. `sort_order` defaults to `0` and `is_active` to `true`.
     /// Timestamps are empty strings (the database layer fills them in).
-    pub fn new(parent_sku: impl Into<String>, name: impl Into<String>, sku: impl Into<String>) -> Self {
+    pub fn new(
+        parent_sku: impl Into<String>,
+        name: impl Into<String>,
+        sku: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             parent_sku: parent_sku.into(),

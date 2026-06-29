@@ -27,7 +27,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
 
-use oz_core::{migrations, Cart, CartId};
+use oz_core::{Cart, CartId, migrations};
 use oz_hal::DriverRegistry;
 use platform_kernel::Kernel;
 
@@ -136,14 +136,9 @@ impl AppState {
 /// Called once on first startup after migrations run. Subsequent
 /// launches find the existing row and skip the insert.
 fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM store_profiles",
-        [],
-        |r| r.get(0),
-    )?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM store_profiles", [], |r| r.get(0))?;
     if count == 0 {
-        let now = chrono::Utc::now()
-            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         conn.execute(
             "INSERT INTO store_profiles (id, name, address, tax_id, currency, timezone, is_primary, created_at, updated_at)
              VALUES ('default', 'Main Store', '', '', 'USD', 'UTC', 1, ?1, ?1)",

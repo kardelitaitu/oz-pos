@@ -4,10 +4,10 @@
 //! have a single payment (the legacy `payment_method` column), but split
 //! payments produce multiple rows in `payments`.
 
+use crate::Store;
 use crate::error::CoreError;
 use crate::money::{Currency, Money};
 use crate::payment::{Payment, PaymentSplitArg};
-use crate::Store;
 use rusqlite::params;
 
 impl Store<'_> {
@@ -26,15 +26,21 @@ impl Store<'_> {
         let mut payments = Vec::with_capacity(splits.len());
         let tx = self.conn.unchecked_transaction()?;
 
-        let cur_str = std::str::from_utf8(&currency.0)
-            .expect("currency bytes are valid UTF-8");
+        let cur_str = std::str::from_utf8(&currency.0).expect("currency bytes are valid UTF-8");
 
         for split in splits {
             let id = uuid::Uuid::new_v4().to_string();
             tx.execute(
                 "INSERT INTO payments (id, sale_id, method, amount_minor, currency, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![id, sale_id, split.method, split.amount_minor, cur_str, created_at],
+                params![
+                    id,
+                    sale_id,
+                    split.method,
+                    split.amount_minor,
+                    cur_str,
+                    created_at
+                ],
             )?;
             payments.push(Payment {
                 id,
@@ -105,7 +111,8 @@ mod tests {
                      ?3, ?3,
                      ?2, 0)",
             params![id, total_minor, now],
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
@@ -118,12 +125,20 @@ mod tests {
         insert_sale(&conn, &sale_id, 1000, now);
 
         let splits = vec![
-            PaymentSplitArg { method: "cash".into(), amount_minor: 600 },
-            PaymentSplitArg { method: "card".into(), amount_minor: 400 },
+            PaymentSplitArg {
+                method: "cash".into(),
+                amount_minor: 600,
+            },
+            PaymentSplitArg {
+                method: "card".into(),
+                amount_minor: 400,
+            },
         ];
 
         let currency: Currency = "USD".parse().unwrap();
-        let payments = store.create_payments(&sale_id, &splits, &currency, now).unwrap();
+        let payments = store
+            .create_payments(&sale_id, &splits, &currency, now)
+            .unwrap();
         assert_eq!(payments.len(), 2);
         assert_eq!(payments[0].method, "cash");
         assert_eq!(payments[0].amount.minor_units, 600);
@@ -144,7 +159,9 @@ mod tests {
         insert_sale(&conn, &sale_id, 0, now);
 
         let currency: Currency = "USD".parse().unwrap();
-        let payments = store.create_payments(&sale_id, &[], &currency, now).unwrap();
+        let payments = store
+            .create_payments(&sale_id, &[], &currency, now)
+            .unwrap();
         assert!(payments.is_empty());
     }
 }

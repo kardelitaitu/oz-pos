@@ -101,7 +101,10 @@ mod tests {
 
     #[test]
     fn payment_method_label_other() {
-        assert_eq!(PaymentMethod::Other("Gift Card".into()).label(), "Gift Card");
+        assert_eq!(
+            PaymentMethod::Other("Gift Card".into()).label(),
+            "Gift Card"
+        );
     }
 
     #[test]

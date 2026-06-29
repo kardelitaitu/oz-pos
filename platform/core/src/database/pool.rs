@@ -69,9 +69,7 @@ mod tests {
     fn pool_open_and_conn() {
         let pool = Pool::open_in_memory().unwrap();
         let conn = pool.conn().unwrap();
-        let result: i64 = conn
-            .query_row("SELECT 42", [], |row| row.get(0))
-            .unwrap();
+        let result: i64 = conn.query_row("SELECT 42", [], |row| row.get(0)).unwrap();
         assert_eq!(result, 42);
     }
 
@@ -179,9 +177,7 @@ mod tests {
 
         // After dropping, pool2 can acquire.
         let conn = pool2.conn().unwrap();
-        let val: i64 = conn
-            .query_row("SELECT 99", [], |row| row.get(0))
-            .unwrap();
+        let val: i64 = conn.query_row("SELECT 99", [], |row| row.get(0)).unwrap();
         assert_eq!(val, 99);
     }
 }

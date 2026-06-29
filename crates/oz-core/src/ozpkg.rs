@@ -39,7 +39,7 @@ const FORMAT_VERSION: u32 = 1;
 const HEADER_LEN: usize = 512;
 
 /// Argon2id parameters (tuned for < 1s on modern hardware).
-const ARGON_MEMORY: u32 = 19456;    // 19 MB
+const ARGON_MEMORY: u32 = 19456; // 19 MB
 const ARGON_ITERATIONS: u32 = 2;
 const ARGON_PARALLELISM: u32 = 1;
 
@@ -128,15 +128,20 @@ pub fn export_ozpkg(
     Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
-        argon2::Params::new(ARGON_MEMORY, ARGON_ITERATIONS, ARGON_PARALLELISM, Some(KEY_LEN))
-            .map_err(|e| CoreError::Internal(format!("Argon2 params: {e}")))?,
+        argon2::Params::new(
+            ARGON_MEMORY,
+            ARGON_ITERATIONS,
+            ARGON_PARALLELISM,
+            Some(KEY_LEN),
+        )
+        .map_err(|e| CoreError::Internal(format!("Argon2 params: {e}")))?,
     )
     .hash_password_into(password.as_bytes(), &salt, &mut key)
     .map_err(|e| CoreError::Internal(format!("Argon2 key derivation: {e}")))?;
 
     // 3. Serialize payload to JSON.
-    let payload_json =
-        serde_json::to_vec(payload).map_err(|e| CoreError::Internal(format!("JSON serialize: {e}")))?;
+    let payload_json = serde_json::to_vec(payload)
+        .map_err(|e| CoreError::Internal(format!("JSON serialize: {e}")))?;
 
     // 4. Compress with zstd.
     let compressed = zstd::encode_all(std::io::Cursor::new(&payload_json), 3)
@@ -162,8 +167,8 @@ pub fn export_ozpkg(
         features,
     };
 
-    let header_json =
-        serde_json::to_vec(&header).map_err(|e| CoreError::Internal(format!("header JSON: {e}")))?;
+    let header_json = serde_json::to_vec(&header)
+        .map_err(|e| CoreError::Internal(format!("header JSON: {e}")))?;
 
     // Pad header to HEADER_LEN bytes.
     let mut header_padded = vec![b' '; HEADER_LEN];
@@ -185,10 +190,7 @@ pub fn export_ozpkg(
 ///
 /// Returns `CoreError::Internal` if decryption fails (wrong password or
 /// corrupt data).
-pub fn import_ozpkg(
-    data: &[u8],
-    password: &str,
-) -> Result<(OzpkgHeader, OzpkgPayload), CoreError> {
+pub fn import_ozpkg(data: &[u8], password: &str) -> Result<(OzpkgHeader, OzpkgPayload), CoreError> {
     if data.len() < HEADER_LEN {
         return Err(CoreError::Internal("file too short: missing header".into()));
     }
@@ -226,8 +228,13 @@ pub fn import_ozpkg(
     Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
-        argon2::Params::new(ARGON_MEMORY, ARGON_ITERATIONS, ARGON_PARALLELISM, Some(KEY_LEN))
-            .map_err(|e| CoreError::Internal(format!("Argon2 params: {e}")))?,
+        argon2::Params::new(
+            ARGON_MEMORY,
+            ARGON_ITERATIONS,
+            ARGON_PARALLELISM,
+            Some(KEY_LEN),
+        )
+        .map_err(|e| CoreError::Internal(format!("Argon2 params: {e}")))?,
     )
     .hash_password_into(password.as_bytes(), &salt, &mut key)
     .map_err(|e| CoreError::Internal(format!("Argon2 key derivation: {e}")))?;
@@ -236,9 +243,9 @@ pub fn import_ozpkg(
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|e| CoreError::Internal(format!("AES-GCM init: {e}")))?;
     let nonce = Nonce::from_slice(&nonce_bytes);
-    let compressed = cipher
-        .decrypt(nonce, &data[HEADER_LEN..])
-        .map_err(|_| CoreError::Internal("decryption failed: wrong password or corrupt data".into()))?;
+    let compressed = cipher.decrypt(nonce, &data[HEADER_LEN..]).map_err(|_| {
+        CoreError::Internal("decryption failed: wrong password or corrupt data".into())
+    })?;
 
     // 5. Decompress with zstd.
     let decompressed = zstd::decode_all(std::io::Cursor::new(&compressed))
@@ -294,16 +301,12 @@ mod tests {
     #[test]
     fn roundtrip_with_data() {
         let payload = OzpkgPayload {
-            products: vec![
-                serde_json::json!({"sku": "LATTE", "name": "Latte", "price": 450}),
-            ],
+            products: vec![serde_json::json!({"sku": "LATTE", "name": "Latte", "price": 450})],
             categories: vec![
                 serde_json::json!({"id": "cat-drinks", "name": "Drinks", "colour": "#06b6d4"}),
             ],
             sales: Some(vec![]),
-            customers: Some(vec![
-                serde_json::json!({"id": "cust-1", "name": "Alice"}),
-            ]),
+            customers: Some(vec![serde_json::json!({"id": "cust-1", "name": "Alice"})]),
             users: None,
             settings: Some(vec![
                 serde_json::json!({"key": "store.name", "value": "My Store"}),
@@ -351,7 +354,10 @@ mod tests {
         .unwrap();
 
         let result = import_ozpkg(&exported, "wrong-password");
-        assert!(result.is_err(), "decryption should fail with wrong password");
+        assert!(
+            result.is_err(),
+            "decryption should fail with wrong password"
+        );
     }
 
     #[test]
@@ -380,7 +386,10 @@ mod tests {
         exported[last] ^= 0x01;
 
         let result = import_ozpkg(&exported, "password");
-        assert!(result.is_err(), "decryption should fail with corrupted data");
+        assert!(
+            result.is_err(),
+            "decryption should fail with corrupted data"
+        );
     }
 
     #[test]
@@ -394,18 +403,14 @@ mod tests {
             settings: None,
         };
 
-        let exported = export_ozpkg(
-            "",
-            "Store",
-            "0.0.1",
-            vec![],
-            HashMap::new(),
-            &payload,
-        )
-        .unwrap();
+        let exported =
+            export_ozpkg("", "Store", "0.0.1", vec![], HashMap::new(), &payload).unwrap();
 
         let result = import_ozpkg(&exported, "");
-        assert!(result.is_ok(), "empty password should work (though not recommended)");
+        assert!(
+            result.is_ok(),
+            "empty password should work (though not recommended)"
+        );
     }
 
     #[test]

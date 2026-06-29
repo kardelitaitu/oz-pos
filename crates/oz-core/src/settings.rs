@@ -44,10 +44,7 @@ impl Settings {
     }
 
     /// Write multiple settings inside a single transaction.
-    pub fn set_batch(
-        conn: &Connection,
-        rows: &[(String, String)],
-    ) -> Result<(), CoreError> {
+    pub fn set_batch(conn: &Connection, rows: &[(String, String)]) -> Result<(), CoreError> {
         Ok(platform_core::settings::Settings::set_batch(conn, rows)?)
     }
 
@@ -58,7 +55,9 @@ impl Settings {
 
     /// Set the store display name.
     pub fn set_store_name(conn: &Connection, name: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_store_name(conn, name)?)
+        Ok(platform_core::settings::Settings::set_store_name(
+            conn, name,
+        )?)
     }
 
     /// Get the store address (printed on receipts).
@@ -68,7 +67,9 @@ impl Settings {
 
     /// Set the store address.
     pub fn set_store_address(conn: &Connection, addr: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_store_address(conn, addr)?)
+        Ok(platform_core::settings::Settings::set_store_address(
+            conn, addr,
+        )?)
     }
 
     /// Get the store tax / VAT registration number.
@@ -78,17 +79,23 @@ impl Settings {
 
     /// Set the store tax / VAT registration number.
     pub fn set_store_tax_id(conn: &Connection, id: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_store_tax_id(conn, id)?)
+        Ok(platform_core::settings::Settings::set_store_tax_id(
+            conn, id,
+        )?)
     }
 
     /// Get the default currency code (ISO-4217).
     pub fn get_default_currency(conn: &Connection) -> Result<Option<String>, CoreError> {
-        Ok(platform_core::settings::Settings::get_default_currency(conn)?)
+        Ok(platform_core::settings::Settings::get_default_currency(
+            conn,
+        )?)
     }
 
     /// Set the default currency code.
     pub fn set_default_currency(conn: &Connection, code: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_default_currency(conn, code)?)
+        Ok(platform_core::settings::Settings::set_default_currency(
+            conn, code,
+        )?)
     }
 
     /// Whether to show the currency symbol prefix on receipt amounts.
@@ -107,21 +114,22 @@ impl Settings {
     }
 
     /// Set the decimal separator style.
-    pub fn set_receipt_decimal_separator(
-        conn: &Connection,
-        val: &str,
-    ) -> Result<(), CoreError> {
+    pub fn set_receipt_decimal_separator(conn: &Connection, val: &str) -> Result<(), CoreError> {
         Ok(platform_core::settings::Settings::set_receipt_decimal_separator(conn, val)?)
     }
 
     /// Whether to show the tax line on receipts.
     pub fn get_receipt_show_tax(conn: &Connection) -> Result<bool, CoreError> {
-        Ok(platform_core::settings::Settings::get_receipt_show_tax(conn)?)
+        Ok(platform_core::settings::Settings::get_receipt_show_tax(
+            conn,
+        )?)
     }
 
     /// Set whether to show the tax line.
     pub fn set_receipt_show_tax(conn: &Connection, on: bool) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_receipt_show_tax(conn, on)?)
+        Ok(platform_core::settings::Settings::set_receipt_show_tax(
+            conn, on,
+        )?)
     }
 
     /// Get the receipt footer text (empty = no footer).
@@ -131,27 +139,37 @@ impl Settings {
 
     /// Set the receipt footer text.
     pub fn set_receipt_footer(conn: &Connection, text: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_receipt_footer(conn, text)?)
+        Ok(platform_core::settings::Settings::set_receipt_footer(
+            conn, text,
+        )?)
     }
 
     /// Paper width: `"standard"` (80 mm) or `"narrow"` (58 mm).
     pub fn get_receipt_paper_width(conn: &Connection) -> Result<String, CoreError> {
-        Ok(platform_core::settings::Settings::get_receipt_paper_width(conn)?)
+        Ok(platform_core::settings::Settings::get_receipt_paper_width(
+            conn,
+        )?)
     }
 
     /// Set the paper width.
     pub fn set_receipt_paper_width(conn: &Connection, val: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_receipt_paper_width(conn, val)?)
+        Ok(platform_core::settings::Settings::set_receipt_paper_width(
+            conn, val,
+        )?)
     }
 
     /// Get the configured sync server URL.
     pub fn get_sync_server_url(conn: &Connection) -> Result<Option<String>, CoreError> {
-        Ok(platform_core::settings::Settings::get_sync_server_url(conn)?)
+        Ok(platform_core::settings::Settings::get_sync_server_url(
+            conn,
+        )?)
     }
 
     /// Set the sync server URL.
     pub fn set_sync_server_url(conn: &Connection, url: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_sync_server_url(conn, url)?)
+        Ok(platform_core::settings::Settings::set_sync_server_url(
+            conn, url,
+        )?)
     }
 
     /// Get the sync API key.
@@ -161,7 +179,9 @@ impl Settings {
 
     /// Set the sync API key.
     pub fn set_sync_api_key(conn: &Connection, key: &str) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_sync_api_key(conn, key)?)
+        Ok(platform_core::settings::Settings::set_sync_api_key(
+            conn, key,
+        )?)
     }
 
     /// Check if sync is enabled.
@@ -171,7 +191,9 @@ impl Settings {
 
     /// Enable or disable sync.
     pub fn set_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), CoreError> {
-        Ok(platform_core::settings::Settings::set_sync_enabled(conn, enabled)?)
+        Ok(platform_core::settings::Settings::set_sync_enabled(
+            conn, enabled,
+        )?)
     }
 }
 
@@ -189,10 +211,7 @@ impl Settings {
     /// Writes all feature rows in a single transaction. Old feature rows
     /// that are no longer enabled are **not** pruned — call
     /// [`Settings::prune_stale_features`] to clean them up.
-    pub fn save_features(
-        conn: &Connection,
-        reg: &FeatureRegistry,
-    ) -> Result<(), CoreError> {
+    pub fn save_features(conn: &Connection, reg: &FeatureRegistry) -> Result<(), CoreError> {
         let rows = reg.to_settings_rows();
         Self::set_batch(conn, &rows)
     }
@@ -204,11 +223,8 @@ impl Settings {
         conn: &Connection,
         reg: &FeatureRegistry,
     ) -> Result<usize, CoreError> {
-        let enabled_keys: std::collections::HashSet<String> = reg
-            .to_settings_rows()
-            .into_iter()
-            .map(|(k, _)| k)
-            .collect();
+        let enabled_keys: std::collections::HashSet<String> =
+            reg.to_settings_rows().into_iter().map(|(k, _)| k).collect();
 
         let all_features = Self::load_all(conn)?
             .into_iter()
@@ -248,7 +264,10 @@ mod tests {
     fn set_and_get_roundtrip() {
         let conn = fresh();
         Settings::set(&conn, "test.key", "hello").unwrap();
-        assert_eq!(Settings::get(&conn, "test.key").unwrap(), Some("hello".into()));
+        assert_eq!(
+            Settings::get(&conn, "test.key").unwrap(),
+            Some("hello".into())
+        );
     }
 
     #[test]
@@ -278,10 +297,7 @@ mod tests {
     #[test]
     fn set_batch_inserts_multiple() {
         let conn = fresh();
-        let rows: Vec<(String, String)> = vec![
-            ("a".into(), "1".into()),
-            ("b".into(), "2".into()),
-        ];
+        let rows: Vec<(String, String)> = vec![("a".into(), "1".into()), ("b".into(), "2".into())];
         Settings::set_batch(&conn, &rows).unwrap();
         assert_eq!(Settings::get(&conn, "a").unwrap(), Some("1".into()));
         assert_eq!(Settings::get(&conn, "b").unwrap(), Some("2".into()));

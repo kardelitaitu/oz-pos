@@ -5,7 +5,7 @@
 //! The front-end uses this to populate the product grid.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::{Money, Store};
 
@@ -136,7 +136,9 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
                 barcode: pwd.product.barcode,
                 in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
                 stock_qty: pwd.stock_qty,
-                tax_rate_ids: store.get_product_tax_rates(pwd.product.sku.as_str()).unwrap_or_default(),
+                tax_rate_ids: store
+                    .get_product_tax_rates(pwd.product.sku.as_str())
+                    .unwrap_or_default(),
             }
         })
         .collect();
@@ -162,7 +164,9 @@ pub async fn lookup_by_barcode(
     let store = Store::new(&db);
     let pwd = store.lookup_product_with_details_by_barcode(&barcode)?;
     let tax_rate_ids = match pwd {
-        Some(ref p) => store.get_product_tax_rates(p.product.sku.as_str()).unwrap_or_default(),
+        Some(ref p) => store
+            .get_product_tax_rates(p.product.sku.as_str())
+            .unwrap_or_default(),
         None => vec![],
     };
     drop(db);

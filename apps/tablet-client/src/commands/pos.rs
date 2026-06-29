@@ -11,9 +11,9 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::{Cart, CartId, LineId, Money, SaleStatus, Sku};
 use oz_core::db::Store;
 use oz_core::events::{SaleCompleted, SaleCompletedLine};
+use oz_core::{Cart, CartId, LineId, Money, SaleStatus, Sku};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -73,7 +73,11 @@ pub async fn start_sale(
     args: StartSaleArgs,
     state: State<'_, AppState>,
 ) -> Result<StartSaleResult, AppError> {
-    let currency_str = if args.currency.is_empty() { "USD" } else { &args.currency };
+    let currency_str = if args.currency.is_empty() {
+        "USD"
+    } else {
+        &args.currency
+    };
     let currency: oz_core::Currency = currency_str
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency_str}")))?;
@@ -112,7 +116,10 @@ pub async fn add_line(
         cart.currency()
     };
 
-    let unit_price = Money { minor_units: args.unit_price_minor, currency };
+    let unit_price = Money {
+        minor_units: args.unit_price_minor,
+        currency,
+    };
     let line = oz_core::CartLine::new(args.sku.clone(), args.qty, unit_price);
     let line_id = line.id;
     let line_total = line.total();
@@ -123,7 +130,10 @@ pub async fn add_line(
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
     cart.add_line(line)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
-    Ok(AddLineResult { line_id, line_total })
+    Ok(AddLineResult {
+        line_id,
+        line_total,
+    })
 }
 
 // ── Complete Sale ────────────────────────────────────────────────────
@@ -158,9 +168,8 @@ pub async fn complete_sale(
 
     let line_count = cart.line_count();
 
-    let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(args.user_id)).ok_or_else(|| {
-        AppError::Invalid("cart total overflowed i64".into())
-    })?;
+    let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(args.user_id))
+        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
     sale.payment_method = Some(args.payment_method);
     sale.tendered_minor = args.tendered_minor;
 
@@ -242,7 +251,13 @@ pub async fn hold_cart(
 ) -> Result<HoldCartResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let id = store.hold_cart(&args.label, &args.cart_data, args.item_count, args.total_minor, &args.currency)?;
+    let id = store.hold_cart(
+        &args.label,
+        &args.cart_data,
+        args.item_count,
+        args.total_minor,
+        &args.currency,
+    )?;
     drop(db);
     tracing::info!(held_cart_id = %id, label = %args.label, "cart held");
     Ok(HoldCartResult { id })
@@ -275,10 +290,7 @@ pub async fn get_held_cart(
 
 /// Delete a held cart by id.
 #[command]
-pub async fn delete_held_cart(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     store.delete_held_cart(&id)?;
@@ -292,15 +304,18 @@ pub async fn delete_held_cart(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oz_core::Currency;
     use oz_core::CartLine;
+    use oz_core::Currency;
 
     fn usd() -> Currency {
         "USD".parse().unwrap()
     }
 
     fn price(minor: i64) -> Money {
-        Money { minor_units: minor, currency: usd() }
+        Money {
+            minor_units: minor,
+            currency: usd(),
+        }
     }
 
     #[test]

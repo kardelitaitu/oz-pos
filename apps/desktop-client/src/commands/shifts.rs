@@ -3,7 +3,7 @@
 //! Open/close cashier shifts with cash balance reconciliation.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::db::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 use oz_core::{CashPayout, Shift, Store};
@@ -85,7 +85,11 @@ pub async fn open_shift(
 ) -> Result<ShiftDto, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let shift = store.open_shift(&args.user_id, args.terminal_id.as_deref(), args.opening_balance_minor)?;
+    let shift = store.open_shift(
+        &args.user_id,
+        args.terminal_id.as_deref(),
+        args.opening_balance_minor,
+    )?;
     drop(db);
 
     tracing::info!(id = %shift.id, user_id = %shift.user_id, "shift opened");
@@ -133,9 +137,7 @@ pub async fn get_active_shift(
 
 /// List all shifts, most recent first.
 #[command]
-pub async fn list_shifts(
-    state: State<'_, AppState>,
-) -> Result<Vec<ShiftDto>, AppError> {
+pub async fn list_shifts(state: State<'_, AppState>) -> Result<Vec<ShiftDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let shifts = store.list_shifts()?;
@@ -342,7 +344,9 @@ mod tests {
         let store = Store::new(&conn);
 
         let shift = store.open_shift("user-1", None, 100).unwrap();
-        let closed = store.close_shift(&shift.id, 200, Some("Good shift")).unwrap();
+        let closed = store
+            .close_shift(&shift.id, 200, Some("Good shift"))
+            .unwrap();
         let dto = ShiftDto::from(closed);
         assert_eq!(dto.status, "closed");
         assert!(dto.closed_at.is_some());
@@ -401,7 +405,9 @@ mod tests {
         assert!(matches!(err, oz_core::CoreError::Validation { field, .. } if field == "user_id"));
 
         let err = store.open_shift("user-1", None, -1).unwrap_err();
-        assert!(matches!(err, oz_core::CoreError::Validation { field, .. } if field == "opening_balance_minor"));
+        assert!(
+            matches!(err, oz_core::CoreError::Validation { field, .. } if field == "opening_balance_minor")
+        );
     }
 
     #[test]

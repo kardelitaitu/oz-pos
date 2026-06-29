@@ -4,7 +4,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
-use oz_core::{Store, migrations, OfflineQueueStatus};
+use oz_core::{OfflineQueueStatus, Store, migrations};
 use rusqlite::Connection;
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -126,7 +126,10 @@ fn mark_synced_updates_status_and_synced_at() {
     let item = all.into_iter().find(|i| i.id == "oq-1").unwrap();
     assert_eq!(item.status, OfflineQueueStatus::Synced);
     assert!(item.synced_at.is_some(), "synced_at should be populated");
-    assert!(item.synced_at.unwrap().contains('T'), "synced_at should be ISO-8601");
+    assert!(
+        item.synced_at.unwrap().contains('T'),
+        "synced_at should be ISO-8601"
+    );
 }
 
 #[test]
@@ -146,7 +149,9 @@ fn mark_synced_removes_from_pending() {
 fn mark_synced_not_found_returns_error() {
     let conn = setup();
     let err = store(&conn).mark_offline_synced("nonexistent").unwrap_err();
-    assert!(matches!(err, oz_core::CoreError::NotFound { entity, .. } if entity == "offline_queue"));
+    assert!(
+        matches!(err, oz_core::CoreError::NotFound { entity, .. } if entity == "offline_queue")
+    );
 }
 
 // ── Mark failed ──────────────────────────────────────────────────────
@@ -163,7 +168,10 @@ fn mark_failed_sets_status_and_error() {
     let item = all.into_iter().find(|i| i.id == "oq-1").unwrap();
     assert_eq!(item.status, OfflineQueueStatus::Failed);
     assert_eq!(item.last_error.as_deref(), Some("network error"));
-    assert_eq!(item.retry_count, 1, "retry_count should increment from 0 to 1");
+    assert_eq!(
+        item.retry_count, 1,
+        "retry_count should increment from 0 to 1"
+    );
 }
 
 #[test]
@@ -223,7 +231,9 @@ fn full_queue_lifecycle() {
     let s = store(&conn);
 
     // 1. Enqueue an item.
-    let item = s.enqueue_offline("complete_sale", r#"{"sale_id":"s-1"}"#).unwrap();
+    let item = s
+        .enqueue_offline("complete_sale", r#"{"sale_id":"s-1"}"#)
+        .unwrap();
     assert_eq!(s.pending_offline_count().unwrap(), 1);
 
     // 2. Mark as synced.
@@ -246,7 +256,9 @@ fn pending_then_failed_then_retry_lifecycle() {
     let s = store(&conn);
 
     // Enqueue.
-    let item = s.enqueue_offline("sale.create", r#"{"total":500}"#).unwrap();
+    let item = s
+        .enqueue_offline("sale.create", r#"{"total":500}"#)
+        .unwrap();
     assert_eq!(s.pending_offline_count().unwrap(), 1);
 
     // Fail.
@@ -254,7 +266,9 @@ fn pending_then_failed_then_retry_lifecycle() {
     assert_eq!(s.pending_offline_count().unwrap(), 0);
 
     // Re-enqueue (simulating retry).
-    let retry = s.enqueue_offline("sale.create", r#"{"total":500}"#).unwrap();
+    let retry = s
+        .enqueue_offline("sale.create", r#"{"total":500}"#)
+        .unwrap();
 
     // Mark as synced.
     s.mark_offline_synced(&retry.id).unwrap();
@@ -262,8 +276,14 @@ fn pending_then_failed_then_retry_lifecycle() {
     // Verify both items exist: one failed, one synced.
     let all = s.list_all_offline().unwrap();
     assert_eq!(all.len(), 2);
-    let failed_count = all.iter().filter(|i| i.status == OfflineQueueStatus::Failed).count();
-    let synced_count = all.iter().filter(|i| i.status == OfflineQueueStatus::Synced).count();
+    let failed_count = all
+        .iter()
+        .filter(|i| i.status == OfflineQueueStatus::Failed)
+        .count();
+    let synced_count = all
+        .iter()
+        .filter(|i| i.status == OfflineQueueStatus::Synced)
+        .count();
     assert_eq!(failed_count, 1);
     assert_eq!(synced_count, 1);
 }
@@ -308,9 +328,18 @@ fn delete_all_items_empties_queue() {
 
 #[test]
 fn status_from_stored_str() {
-    assert_eq!(OfflineQueueStatus::from_stored_str("pending"), Some(OfflineQueueStatus::Pending));
-    assert_eq!(OfflineQueueStatus::from_stored_str("synced"), Some(OfflineQueueStatus::Synced));
-    assert_eq!(OfflineQueueStatus::from_stored_str("failed"), Some(OfflineQueueStatus::Failed));
+    assert_eq!(
+        OfflineQueueStatus::from_stored_str("pending"),
+        Some(OfflineQueueStatus::Pending)
+    );
+    assert_eq!(
+        OfflineQueueStatus::from_stored_str("synced"),
+        Some(OfflineQueueStatus::Synced)
+    );
+    assert_eq!(
+        OfflineQueueStatus::from_stored_str("failed"),
+        Some(OfflineQueueStatus::Failed)
+    );
     assert_eq!(OfflineQueueStatus::from_stored_str("unknown"), None);
 }
 

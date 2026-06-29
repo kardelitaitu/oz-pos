@@ -163,7 +163,10 @@ impl ReceiptPrinter for MockReceiptPrinter {
         if let Some(err) = self.fail_with.lock().expect("poisoned").take() {
             return Err(err);
         }
-        self.printed_raw.lock().expect("poisoned").push(data.to_vec());
+        self.printed_raw
+            .lock()
+            .expect("poisoned")
+            .push(data.to_vec());
         Ok(())
     }
 

@@ -47,7 +47,7 @@ export default function SalesHistoryScreen() {
   const [printing, setPrinting] = useState(false);
   const [refundSaleId, setRefundSaleId] = useState<string | null>(null);
   const [refunds, setRefunds] = useState<RefundDto[]>([]);
-  const [refundsLoading, setRefundsLoading] = useState(false);
+  const [_refundsLoading, setRefundsLoading] = useState(false);
   const { session } = useAuth();
 
   // ── Filters ────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ export default function SalesHistoryScreen() {
     if (!detail) return;
     setPrinting(true);
     try {
-      const subtotalMinor = detail.lines.reduce((s, l) => s + l.total_minor, 0);
+      const _subtotalMinor = detail.lines.reduce((s, l) => s + l.total_minor, 0);
       await printSalesReceipt({
         date: detail.createdAt,
         receiptNumber: detail.id,
@@ -321,7 +321,7 @@ export default function SalesHistoryScreen() {
 
         {/* Status filter */}
         <div className="sales-history-filter-group">
-          <label className="sales-history-filter-label">Status</label>
+          <span className="sales-history-filter-label">Status</span>
           <div className="sales-history-filter-chips" role="radiogroup" aria-label="Filter by status">
             {STATUS_OPTIONS.map((opt) => (
               <button

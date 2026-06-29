@@ -110,7 +110,14 @@ mod tests {
 
     #[test]
     fn audit_entry_generates_uuid() {
-        let entry = AuditEntry::new("u1", "test", None::<String>, None::<String>, None::<String>, "success");
+        let entry = AuditEntry::new(
+            "u1",
+            "test",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "success",
+        );
         assert!(!entry.id.is_empty());
         assert_eq!(entry.id.len(), 36); // UUID v4 format
         assert_eq!(entry.id.chars().filter(|&c| c == '-').count(), 4);
@@ -118,7 +125,14 @@ mod tests {
 
     #[test]
     fn audit_entry_generates_iso8601_timestamp() {
-        let entry = AuditEntry::new("u1", "test", None::<String>, None::<String>, None::<String>, "success");
+        let entry = AuditEntry::new(
+            "u1",
+            "test",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "success",
+        );
         assert!(!entry.created_at.is_empty());
         assert!(entry.created_at.contains('T'), "expected ISO-8601 format");
         assert!(entry.created_at.ends_with('Z'), "expected UTC timezone");
@@ -148,7 +162,14 @@ mod tests {
 
     #[test]
     fn audit_entry_serde_json_field_names() {
-        let entry = AuditEntry::new("u1", "login", None::<String>, None::<String>, None::<String>, "success");
+        let entry = AuditEntry::new(
+            "u1",
+            "login",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "success",
+        );
         let json = serde_json::to_value(&entry).unwrap();
         assert_eq!(json["user_id"], "u1");
         assert_eq!(json["action"], "login");
@@ -159,32 +180,67 @@ mod tests {
 
     #[test]
     fn audit_entry_details_defaults_to_empty_json() {
-        let entry = AuditEntry::new("u1", "action", None::<String>, None::<String>, None::<String>, "ok");
+        let entry = AuditEntry::new(
+            "u1",
+            "action",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "ok",
+        );
         assert_eq!(entry.details, "{}");
     }
 
     #[test]
     fn audit_entry_details_custom_value() {
-        let entry = AuditEntry::new("u1", "action", None::<String>, None::<String>, Some("{\"key\":\"val\"}"), "ok");
+        let entry = AuditEntry::new(
+            "u1",
+            "action",
+            None::<String>,
+            None::<String>,
+            Some("{\"key\":\"val\"}"),
+            "ok",
+        );
         assert_eq!(entry.details, "{\"key\":\"val\"}");
     }
 
     #[test]
     fn audit_entry_empty_user_id() {
-        let entry = AuditEntry::new("", "system.backup", None::<String>, None::<String>, None::<String>, "success");
+        let entry = AuditEntry::new(
+            "",
+            "system.backup",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "success",
+        );
         assert_eq!(entry.user_id, "");
     }
 
     #[test]
     fn audit_entry_clone_eq() {
-        let a = AuditEntry::new("u1", "login", None::<String>, None::<String>, None::<String>, "success");
+        let a = AuditEntry::new(
+            "u1",
+            "login",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "success",
+        );
         let b = a.clone();
         assert_eq!(a, b);
     }
 
     #[test]
     fn audit_entry_debug_output() {
-        let entry = AuditEntry::new("u1", "test", None::<String>, None::<String>, None::<String>, "ok");
+        let entry = AuditEntry::new(
+            "u1",
+            "test",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "ok",
+        );
         let debug = format!("{:?}", entry);
         assert!(debug.contains("u1"));
         assert!(debug.contains("test"));

@@ -5,7 +5,7 @@
 
 use oz_core::StoreProfile;
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -106,8 +106,7 @@ pub async fn create_store_profile(
 ) -> Result<StoreProfileDto, AppError> {
     let conn = state.db.lock().await;
     let store = oz_core::Store::new(&conn);
-    let now = chrono::Utc::now()
-        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     let profile = StoreProfile {
         id: args.id,
@@ -157,10 +156,7 @@ pub async fn set_primary_store(
 
 /// Delete a non-primary store profile.
 #[command]
-pub async fn delete_store_profile(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn delete_store_profile(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let conn = state.db.lock().await;
     let store = oz_core::Store::new(&conn);
     store.delete_store_profile(&id)?;

@@ -1,7 +1,7 @@
 //! Exchange rate commands.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::db::Store;
 
@@ -65,9 +65,9 @@ pub async fn create_exchange_rate(
     }
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let date = args.effective_date.unwrap_or_else(|| {
-        chrono::Utc::now().format("%Y-%m-%d").to_string()
-    });
+    let date = args
+        .effective_date
+        .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
     let source = args.source.unwrap_or_else(|| "manual".to_string());
     let row = store.create_exchange_rate(
         &args.from_currency,
@@ -80,10 +80,7 @@ pub async fn create_exchange_rate(
 }
 
 #[command]
-pub async fn delete_exchange_rate(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn delete_exchange_rate(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     store.delete_exchange_rate(&id)?;

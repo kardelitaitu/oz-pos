@@ -55,10 +55,7 @@ pub async fn write_all(stream: &mut TcpStream, data: &[u8]) -> Result<(), HalErr
             }
         })?;
 
-    stream
-        .flush()
-        .await
-        .map_err(HalError::Io)?;
+    stream.flush().await.map_err(HalError::Io)?;
 
     Ok(())
 }
@@ -74,6 +71,8 @@ mod tests {
 
     #[test]
     fn connect_timeout_is_reasonable() {
-        const { assert!(CONNECT_TIMEOUT_SECS > 0 && CONNECT_TIMEOUT_SECS <= 30); }
+        const {
+            assert!(CONNECT_TIMEOUT_SECS > 0 && CONNECT_TIMEOUT_SECS <= 30);
+        }
     }
 }

@@ -6,11 +6,11 @@
 
 pub mod bt_printer;
 pub mod bt_scanner;
+pub mod drawer;
 pub mod escpos;
 pub mod mock;
-pub mod drawer;
-pub mod serial_display;
 pub mod receipt;
+pub mod serial_display;
 pub mod serial_scanner;
 pub mod tcp_printer;
 pub mod usb_printer;

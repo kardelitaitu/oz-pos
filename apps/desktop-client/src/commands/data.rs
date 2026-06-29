@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use oz_core::Settings;
 use oz_core::db::Store;
 use oz_core::ozpkg::{export_ozpkg, import_ozpkg};
-use oz_core::Settings;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -82,20 +82,15 @@ pub struct ImportDataResult {
 // ── Commands ──────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn get_backup_status(
-    state: State<'_, AppState>,
-) -> Result<BackupStatus, AppError> {
+pub async fn get_backup_status(state: State<'_, AppState>) -> Result<BackupStatus, AppError> {
     let db_path = state.db_path.display().to_string();
     let backup_path = default_backup_path(&state);
     let (last_backup, last_backup_size) = match std::fs::metadata(&backup_path) {
         Ok(meta) => {
-            let modified = meta
-                .modified()
-                .ok()
-                .map(|t| {
-                    let dt: chrono::DateTime<chrono::Local> = t.into();
-                    dt.format("%Y-%m-%d %H:%M:%S").to_string()
-                });
+            let modified = meta.modified().ok().map(|t| {
+                let dt: chrono::DateTime<chrono::Local> = t.into();
+                dt.format("%Y-%m-%d %H:%M:%S").to_string()
+            });
             let size = Some(human_size(meta.len()));
             (modified, size)
         }
@@ -109,16 +104,12 @@ pub async fn get_backup_status(
 }
 
 #[tauri::command]
-pub async fn create_backup(
-    state: State<'_, AppState>,
-) -> Result<BackupResult, AppError> {
+pub async fn create_backup(state: State<'_, AppState>) -> Result<BackupResult, AppError> {
     let output = default_backup_path(&state);
     let conn = state.db.lock().await;
     let store = Store::new(&conn);
     store.backup(&output)?;
-    let size_bytes = std::fs::metadata(&output)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size_bytes = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
     Ok(BackupResult {
         path: output,
         size_bytes,
@@ -206,12 +197,24 @@ pub async fn export_data(
     };
 
     let mut data_types: Vec<String> = Vec::new();
-    if wants("products") { data_types.push("products".into()); }
-    if wants("categories") { data_types.push("categories".into()); }
-    if wants("sales") { data_types.push("sales".into()); }
-    if wants("customers") { data_types.push("customers".into()); }
-    if wants("users") { data_types.push("users".into()); }
-    if wants("settings") { data_types.push("settings".into()); }
+    if wants("products") {
+        data_types.push("products".into());
+    }
+    if wants("categories") {
+        data_types.push("categories".into());
+    }
+    if wants("sales") {
+        data_types.push("sales".into());
+    }
+    if wants("customers") {
+        data_types.push("customers".into());
+    }
+    if wants("users") {
+        data_types.push("users".into());
+    }
+    if wants("settings") {
+        data_types.push("settings".into());
+    }
 
     let payload = OzpkgPayload {
         products,
@@ -259,9 +262,7 @@ pub async fn export_data(
 }
 
 #[tauri::command]
-pub async fn import_preview(
-    args: ImportPreviewArgs,
-) -> Result<ImportPreviewResult, AppError> {
+pub async fn import_preview(args: ImportPreviewArgs) -> Result<ImportPreviewResult, AppError> {
     let data = std::fs::read(&args.file_path)
         .map_err(|e| AppError::Internal(format!("reading file: {e}")))?;
     let (header, payload) = import_ozpkg(&data, &args.password)?;
@@ -333,7 +334,11 @@ pub async fn import_data(
     let mut categories_imported = 0;
     for val in &payload.categories {
         if let Ok(cat) = serde_json::from_value::<oz_core::Category>(val.clone()) {
-            let colour = if cat.colour.is_empty() { "#6366f1" } else { &cat.colour };
+            let colour = if cat.colour.is_empty() {
+                "#6366f1"
+            } else {
+                &cat.colour
+            };
             let exists = store
                 .conn()
                 .query_row(

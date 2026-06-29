@@ -3,8 +3,8 @@
 //! Wraps the Security framework (`Security.framework`) to store
 //! secrets in the user's default keychain.
 
-use crate::error::SecurityError;
 use crate::Keyring;
+use crate::error::SecurityError;
 use security_framework::passwords::{
     delete_generic_password, get_generic_password, set_generic_password,
 };
@@ -28,9 +28,7 @@ impl Keyring for MacOsKeychain {
         match get_generic_password("OZ-POS", name) {
             Ok(bytes) => {
                 let s = String::from_utf8(bytes).map_err(|e| {
-                    SecurityError::KeyUnavailable(format!(
-                        "keychain password not valid UTF-8: {e}"
-                    ))
+                    SecurityError::KeyUnavailable(format!("keychain password not valid UTF-8: {e}"))
                 })?;
                 Ok(Some(s))
             }
@@ -55,11 +53,8 @@ impl Keyring for MacOsKeychain {
     }
 
     fn set_secret(&self, name: &str, value: &str) -> Result<(), SecurityError> {
-        set_generic_password("OZ-POS", name, value).map_err(|e| {
-            SecurityError::KeyUnavailable(format!(
-                "set_generic_password failed: {e}"
-            ))
-        })
+        set_generic_password("OZ-POS", name, value)
+            .map_err(|e| SecurityError::KeyUnavailable(format!("set_generic_password failed: {e}")))
     }
 
     fn delete_secret(&self, name: &str) -> Result<bool, SecurityError> {
@@ -67,9 +62,7 @@ impl Keyring for MacOsKeychain {
             Ok(()) => Ok(true),
             Err(e) => {
                 let msg = format!("{e:?}");
-                if msg.contains("item not found")
-                    || msg.contains("-25300")
-                    || msg.contains("-128")
+                if msg.contains("item not found") || msg.contains("-25300") || msg.contains("-128")
                 {
                     return Ok(false);
                 }
@@ -107,9 +100,7 @@ mod tests {
     #[test]
     fn macos_delete_nonexistent_returns_false() {
         let k = test_keyring();
-        assert!(!k
-            .delete_secret("oz-pos-test-nonexistent-del-mac")
-            .unwrap());
+        assert!(!k.delete_secret("oz-pos-test-nonexistent-del-mac").unwrap());
     }
 
     #[test]

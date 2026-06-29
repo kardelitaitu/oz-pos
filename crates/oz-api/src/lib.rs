@@ -33,8 +33,7 @@ pub mod routes;
 use std::sync::Arc;
 
 use axum::{
-    Router,
-    middleware,
+    Router, middleware,
     routing::{get, patch, post},
 };
 use rusqlite::Connection;
@@ -76,13 +75,25 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/tokens", post(routes::tokens::create_token_handler));
 
     let protected = Router::new()
-        .route("/api/v1/products", get(routes::products::list_products).post(routes::products::create_product))
+        .route(
+            "/api/v1/products",
+            get(routes::products::list_products).post(routes::products::create_product),
+        )
         .route("/api/v1/products/{sku}", get(routes::products::get_product))
-        .route("/api/v1/products/{sku}/stock", patch(routes::products::patch_stock))
-        .route("/api/v1/categories", get(routes::categories::list_categories))
+        .route(
+            "/api/v1/products/{sku}/stock",
+            patch(routes::products::patch_stock),
+        )
+        .route(
+            "/api/v1/categories",
+            get(routes::categories::list_categories),
+        )
         .route("/api/v1/sales", post(routes::sales::create_sale))
         .route("/api/v1/sales/{id}", get(routes::sales::get_sale))
-        .route("/api/v1/sales/{id}/status", patch(routes::sales::update_sale_status))
+        .route(
+            "/api/v1/sales/{id}/status",
+            patch(routes::sales::update_sale_status),
+        )
         .layer(middleware::from_fn(auth::auth_middleware));
 
     Router::new()
@@ -100,14 +111,12 @@ pub fn router(state: AppState) -> Router {
 /// `tokio::task` if the caller needs to continue.
 pub async fn serve() {
     let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
-    let mut conn = Connection::open(&db_path)
-        .expect("failed to open API database");
+    let mut conn = Connection::open(&db_path).expect("failed to open API database");
     conn.pragma_update(None, "foreign_keys", "ON")
         .expect("enabling foreign_keys");
     conn.pragma_update(None, "journal_mode", "WAL")
         .expect("enabling WAL");
-    oz_core::migrations::run(&mut conn)
-        .expect("running migrations");
+    oz_core::migrations::run(&mut conn).expect("running migrations");
 
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
@@ -240,12 +249,18 @@ mod tests {
 
     #[tokio::test]
     async fn token_creation_returns_token_fields() {
-        let req = post_json("/api/v1/tokens", r#"{"label":"my-script","expiry_hours":8}"#);
+        let req = post_json(
+            "/api/v1/tokens",
+            r#"{"label":"my-script","expiry_hours":8}"#,
+        );
         let resp = test_app().oneshot(req).await.unwrap();
         let json = body_json(resp).await;
         let token = &json["token"];
         assert!(token["token"].is_string(), "token field should be a string");
-        assert!(token["expires_at"].is_string(), "expires_at should be a string");
+        assert!(
+            token["expires_at"].is_string(),
+            "expires_at should be a string"
+        );
         assert!(token["token_id"].is_string(), "token_id should be a string");
     }
 
@@ -492,7 +507,8 @@ mod tests {
     #[tokio::test]
     async fn create_product_returns_201() {
         let token = auth::create_token("test", Some(1));
-        let body = r#"{"sku":"NEW-001","name":"New Item","price":{"minor_units":199,"currency":"USD"}}"#;
+        let body =
+            r#"{"sku":"NEW-001","name":"New Item","price":{"minor_units":199,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
@@ -577,7 +593,8 @@ mod tests {
     #[tokio::test]
     async fn create_product_negative_price_returns_400() {
         let token = auth::create_token("test", Some(1));
-        let body = r#"{"sku":"SKU-OK","name":"Bad Price","price":{"minor_units":-1,"currency":"USD"}}"#;
+        let body =
+            r#"{"sku":"SKU-OK","name":"Bad Price","price":{"minor_units":-1,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
@@ -766,7 +783,8 @@ mod tests {
 
     #[tokio::test]
     async fn create_sale_requires_auth() {
-        let body = r#"{"lines": [{"sku":"X","qty":1,"unit_price":{"minor_units":100,"currency":"USD"}}]}"#;
+        let body =
+            r#"{"lines": [{"sku":"X","qty":1,"unit_price":{"minor_units":100,"currency":"USD"}}]}"#;
         let req = post_json("/api/v1/sales", body);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -828,7 +846,10 @@ mod tests {
         }"#;
         let create_req = auth_post_json("/api/v1/sales", &token.token, create_body);
         let create_resp = app.clone().oneshot(create_req).await.unwrap();
-        let sale_id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+        let sale_id = body_json(create_resp).await["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         // Transition to active.
         let patch_body = r#"{"status": "active"}"#;
@@ -854,14 +875,25 @@ mod tests {
         }"#;
         let create_req = auth_post_json("/api/v1/sales", &token.token, create_body);
         let create_resp = app.clone().oneshot(create_req).await.unwrap();
-        let sale_id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+        let sale_id = body_json(create_resp).await["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         // Active -> Completed.
-        let r1 = auth_patch_json(&format!("/api/v1/sales/{sale_id}/status"), &token.token, r#"{"status": "active"}"#);
+        let r1 = auth_patch_json(
+            &format!("/api/v1/sales/{sale_id}/status"),
+            &token.token,
+            r#"{"status": "active"}"#,
+        );
         let resp1 = app.clone().oneshot(r1).await.unwrap();
         assert_eq!(resp1.status(), StatusCode::OK);
 
-        let r2 = auth_patch_json(&format!("/api/v1/sales/{sale_id}/status"), &token.token, r#"{"status": "completed"}"#);
+        let r2 = auth_patch_json(
+            &format!("/api/v1/sales/{sale_id}/status"),
+            &token.token,
+            r#"{"status": "completed"}"#,
+        );
         let resp2 = app.clone().oneshot(r2).await.unwrap();
         assert_eq!(resp2.status(), StatusCode::OK);
         assert_eq!(body_json(resp2).await["status"], "completed");
@@ -877,10 +909,17 @@ mod tests {
         }"#;
         let create_req = auth_post_json("/api/v1/sales", &token.token, create_body);
         let create_resp = app.clone().oneshot(create_req).await.unwrap();
-        let sale_id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+        let sale_id = body_json(create_resp).await["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         // Pending -> Completed is invalid.
-        let req = auth_patch_json(&format!("/api/v1/sales/{sale_id}/status"), &token.token, r#"{"status": "completed"}"#);
+        let req = auth_patch_json(
+            &format!("/api/v1/sales/{sale_id}/status"),
+            &token.token,
+            r#"{"status": "completed"}"#,
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
@@ -888,7 +927,11 @@ mod tests {
     #[tokio::test]
     async fn update_sale_status_not_found_returns_404() {
         let token = auth::create_token("test", Some(1));
-        let req = auth_patch_json("/api/v1/sales/nope-999/status", &token.token, r#"{"status": "active"}"#);
+        let req = auth_patch_json(
+            "/api/v1/sales/nope-999/status",
+            &token.token,
+            r#"{"status": "active"}"#,
+        );
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
@@ -919,10 +962,7 @@ mod tests {
 
     #[tokio::test]
     async fn root_returns_401() {
-        let req = Request::builder()
-            .uri("/")
-            .body(Body::empty())
-            .unwrap();
+        let req = Request::builder().uri("/").body(Body::empty()).unwrap();
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }

@@ -31,7 +31,10 @@ mod tests {
     fn db_error_display() {
         let err = PlatformError::Db(rusqlite::Error::InvalidParameterName("x".into()));
         let msg = err.to_string();
-        assert!(msg.starts_with("database error:"), "expected db error prefix, got: {msg}");
+        assert!(
+            msg.starts_with("database error:"),
+            "expected db error prefix, got: {msg}"
+        );
     }
 
     #[test]

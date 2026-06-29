@@ -226,7 +226,10 @@ pub async fn print_sales_receipt(
         .map_err(|e| AppError::Hardware(e.to_string()))?;
 
     if let Some(ref app) = state.app {
-        let _ = app.emit("receipt:printed", serde_json::json!({ "lines": line_count }));
+        let _ = app.emit(
+            "receipt:printed",
+            serde_json::json!({ "lines": line_count }),
+        );
     }
 
     Ok(PrintSalesReceiptResult { printed: true })
@@ -241,9 +244,7 @@ pub struct ScannerInfo {
 
 /// List all registered barcode scanners.
 #[command]
-pub async fn list_scanners(
-    state: State<'_, AppState>,
-) -> Result<Vec<ScannerInfo>, AppError> {
+pub async fn list_scanners(state: State<'_, AppState>) -> Result<Vec<ScannerInfo>, AppError> {
     let ids = state.registry.scanner_ids().await;
     Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
 }
@@ -255,10 +256,7 @@ pub async fn list_scanners(
 /// `start_scanner` while a scanner is already running stops the
 /// previous one first.
 #[command]
-pub async fn start_scanner(
-    scanner_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn start_scanner(scanner_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     // Stop any existing scanner first.
     {
         let mut cancel = state.scanner_cancel.lock().await;
@@ -286,7 +284,10 @@ pub async fn start_scanner(
             Ok(s) => s,
             Err(e) => {
                 tracing::error!(scanner = %scanner_id, error = %e, "scanner connect failed");
-                let _ = app.emit("barcode:error", serde_json::json!({ "error": e.to_string() }));
+                let _ = app.emit(
+                    "barcode:error",
+                    serde_json::json!({ "error": e.to_string() }),
+                );
                 return;
             }
         };
@@ -343,9 +344,7 @@ pub async fn stop_scanner(state: State<'_, AppState>) -> Result<(), AppError> {
 
 /// List all registered customer displays.
 #[command]
-pub async fn list_displays(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, AppError> {
+pub async fn list_displays(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     Ok(state.registry.display_ids().await)
 }
 
@@ -366,28 +365,36 @@ pub async fn display_show(
         .registry
         .display(&args.display_id)
         .await
-        .ok_or_else(|| AppError::Invalid(format!("no display registered as '{}'", args.display_id)))?;
+        .ok_or_else(|| {
+            AppError::Invalid(format!("no display registered as '{}'", args.display_id))
+        })?;
     let content = DisplayContent {
         line1: args.line1,
         line2: args.line2,
     };
-    display.connect().await.map_err(|e| AppError::Hardware(e.to_string()))?;
-    display.show(&content).await.map_err(|e| AppError::Hardware(e.to_string()))?;
+    display
+        .connect()
+        .await
+        .map_err(|e| AppError::Hardware(e.to_string()))?;
+    display
+        .show(&content)
+        .await
+        .map_err(|e| AppError::Hardware(e.to_string()))?;
     Ok(())
 }
 
 /// Clear a customer-facing pole display.
 #[command]
-pub async fn display_clear(
-    display_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn display_clear(display_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let display = state
         .registry
         .display(&display_id)
         .await
         .ok_or_else(|| AppError::Invalid(format!("no display registered as '{display_id}'")))?;
-    display.clear().await.map_err(|e| AppError::Hardware(e.to_string()))?;
+    display
+        .clear()
+        .await
+        .map_err(|e| AppError::Hardware(e.to_string()))?;
     Ok(())
 }
 

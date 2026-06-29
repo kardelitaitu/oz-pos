@@ -118,7 +118,9 @@ impl Kernel {
 
         for &id in &order {
             let module = self.modules.get_mut(id).ok_or_else(|| {
-                KernelError::Internal(format!("module '{id}' not found after dependency resolution"))
+                KernelError::Internal(format!(
+                    "module '{id}' not found after dependency resolution"
+                ))
             })?;
             debug!(module = id, "loading module");
             module.on_load().map_err(|e| KernelError::LifecycleError {
@@ -289,7 +291,9 @@ impl Kernel {
             // Find every module that depends on `id` and decrement its
             // in_degree.
             for (&candidate, deps) in &graph {
-                if deps.contains(&id) && let Some(deg) = in_degree.get_mut(candidate) {
+                if deps.contains(&id)
+                    && let Some(deg) = in_degree.get_mut(candidate)
+                {
                     *deg = deg.saturating_sub(1);
                     if *deg == 0 {
                         queue.push_back(candidate);
@@ -304,9 +308,7 @@ impl Kernel {
                 .filter(|id| !sorted.contains(id))
                 .map(|s| (*s).to_string())
                 .collect();
-            return Err(KernelError::CircularDependency(
-                unresolved.join(", "),
-            ));
+            return Err(KernelError::CircularDependency(unresolved.join(", ")));
         }
 
         Ok(sorted)
@@ -532,7 +534,9 @@ mod tests {
     fn register_multiple_modules() {
         let mut kernel = Kernel::new();
         kernel.register(Box::new(TestModule::new("sales"))).unwrap();
-        kernel.register(Box::new(TestModule::new("inventory"))).unwrap();
+        kernel
+            .register(Box::new(TestModule::new("inventory")))
+            .unwrap();
         kernel.register(Box::new(TestModule::new("crm"))).unwrap();
         assert_eq!(kernel.module_count(), 3);
     }
@@ -567,7 +571,8 @@ mod tests {
     #[test]
     fn load_all_propagates_module_error() {
         let mut kernel = Kernel::new();
-        kernel.register(Box::new(TestModule::new("bad").with_fail_load()))
+        kernel
+            .register(Box::new(TestModule::new("bad").with_fail_load()))
             .unwrap();
         let result = kernel.load_all();
         assert!(result.is_err());
@@ -602,7 +607,8 @@ mod tests {
     #[test]
     fn start_all_propagates_module_error() {
         let mut kernel = Kernel::new();
-        kernel.register(Box::new(TestModule::new("bad").with_fail_start()))
+        kernel
+            .register(Box::new(TestModule::new("bad").with_fail_start()))
             .unwrap();
         let result = kernel.start_all();
         assert!(result.is_err());
@@ -647,7 +653,8 @@ mod tests {
     fn stop_all_continues_on_error() {
         let mut kernel = Kernel::new();
         kernel.register(Box::new(TestModule::new("ok"))).unwrap();
-        kernel.register(Box::new(TestModule::new("bad").with_fail_stop()))
+        kernel
+            .register(Box::new(TestModule::new("bad").with_fail_stop()))
             .unwrap();
         kernel.load_all().unwrap();
         let result = kernel.stop_all();
@@ -705,7 +712,9 @@ mod tests {
     fn resolve_all_modules_included() {
         let mut kernel = Kernel::new();
         kernel.register(Box::new(TestModule::new("sales"))).unwrap();
-        kernel.register(Box::new(TestModule::new("inventory"))).unwrap();
+        kernel
+            .register(Box::new(TestModule::new("inventory")))
+            .unwrap();
         kernel.register(Box::new(TestModule::new("crm"))).unwrap();
         let order = kernel.resolve_dependencies().unwrap();
         assert_eq!(order.len(), 3);

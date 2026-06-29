@@ -17,7 +17,7 @@ use crate::error::PlatformError;
 pub fn hash_pin(pin: &str) -> Result<String, PlatformError> {
     use argon2::{
         Argon2,
-        password_hash::{rand_core::OsRng, SaltString, PasswordHasher},
+        password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
     };
 
     let salt = SaltString::generate(&mut OsRng);
@@ -47,9 +47,7 @@ pub fn verify_pin(pin: &str, hash: &str) -> Result<bool, PlatformError> {
         .map_err(|e| PlatformError::Internal(format!("invalid password hash: {e}")))?;
 
     let argon2 = Argon2::default();
-    Ok(argon2
-        .verify_password(pin.as_bytes(), &parsed)
-        .is_ok())
+    Ok(argon2.verify_password(pin.as_bytes(), &parsed).is_ok())
 }
 
 /// Result of a successful staff login.

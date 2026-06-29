@@ -12,11 +12,11 @@ pub mod commands;
 pub mod error;
 pub mod state;
 
-use tauri::Manager;
-use oz_core::db::Store;
-use oz_core::sync_client::SyncConfig;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::db::Store;
+use oz_core::sync_client::SyncConfig;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,7 +41,8 @@ pub fn run() {
                         let store = Store::new(&db);
                         match SyncConfig::from_settings(&store) {
                             Ok(Some(config)) => {
-                                if let Err(e) = oz_core::sync_client::sync_pending(&store, &config) {
+                                if let Err(e) = oz_core::sync_client::sync_pending(&store, &config)
+                                {
                                     tracing::error!(error = %e, "sync cycle failed");
                                 }
                             }

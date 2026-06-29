@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::{State, command};
 
 use oz_core::Money;
-use oz_core::db::{Store, DailySummaryRow, SalesByHourRow};
+use oz_core::db::{DailySummaryRow, SalesByHourRow, Store};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -27,9 +27,7 @@ pub struct SaleListItem {
 }
 
 #[command]
-pub async fn list_sales(
-    state: State<'_, AppState>,
-) -> Result<Vec<SaleListItem>, AppError> {
+pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let sales = store.list_sales()?;
@@ -131,9 +129,7 @@ pub struct PaymentBreakdown {
 
 /// Fetch the full EOD (End-of-Day) report for today.
 #[command]
-pub async fn export_eod_report(
-    state: State<'_, AppState>,
-) -> Result<EodReport, AppError> {
+pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -146,22 +142,26 @@ pub async fn export_eod_report(
          FROM sales
          WHERE date(created_at) = date('now') AND status = 'completed'
          GROUP BY payment_method
-         ORDER BY tot DESC"
+         ORDER BY tot DESC",
     )?;
-    let payment_rows: Vec<PaymentBreakdown> = stmt.query_map([], |row| {
-        Ok(PaymentBreakdown {
-            method: row.get::<_, Option<String>>("payment_method")?.unwrap_or_else(|| "Unknown".into()),
-            count: row.get("cnt")?,
-            total: row.get("tot")?,
-        })
-    })?.collect::<Result<Vec<_>, _>>()?;
+    let payment_rows: Vec<PaymentBreakdown> = stmt
+        .query_map([], |row| {
+            Ok(PaymentBreakdown {
+                method: row
+                    .get::<_, Option<String>>("payment_method")?
+                    .unwrap_or_else(|| "Unknown".into()),
+                count: row.get("cnt")?,
+                total: row.get("tot")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
     drop(stmt);
 
     // Void stats.
     let mut void_stmt = db.prepare(
         "SELECT COUNT(*) AS cnt, COALESCE(SUM(total_minor), 0) AS tot
          FROM sales
-         WHERE date(created_at) = date('now') AND status = 'voided'"
+         WHERE date(created_at) = date('now') AND status = 'voided'",
     )?;
     let void_row: (i64, i64) = void_stmt.query_row([], |row| {
         Ok((row.get::<_, i64>("cnt")?, row.get::<_, i64>("tot")?))
@@ -172,7 +172,7 @@ pub async fn export_eod_report(
     let mut discount_stmt = db.prepare(
         "SELECT COUNT(*) AS cnt, COALESCE(SUM(total_minor), 0) AS tot
          FROM sales
-         WHERE date(created_at) = date('now') AND status = 'completed' AND discount_percent > 0"
+         WHERE date(created_at) = date('now') AND status = 'completed' AND discount_percent > 0",
     )?;
     let discount_row: (i64, i64) = discount_stmt.query_row([], |row| {
         Ok((row.get::<_, i64>("cnt")?, row.get::<_, i64>("tot")?))
@@ -181,7 +181,10 @@ pub async fn export_eod_report(
 
     let total_sales = daily.len() as i64;
     let total_revenue: i64 = daily.iter().map(|r| r.total_minor).sum();
-    let currency = daily.first().map(|r| r.currency.clone()).unwrap_or_else(|| "USD".into());
+    let currency = daily
+        .first()
+        .map(|r| r.currency.clone())
+        .unwrap_or_else(|| "USD".into());
 
     drop(db);
 

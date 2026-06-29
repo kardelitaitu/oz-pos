@@ -64,7 +64,10 @@ pub async fn set_receipt_settings(
 }
 
 /// Business logic for `set_receipt_settings` (extracted for testing).
-fn run_set_receipt_settings(conn: &rusqlite::Connection, args: &ReceiptSettingsDto) -> Result<(), AppError> {
+fn run_set_receipt_settings(
+    conn: &rusqlite::Connection,
+    args: &ReceiptSettingsDto,
+) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
 
     Settings::set_receipt_show_currency(&tx, args.show_currency)?;
@@ -91,9 +94,7 @@ pub struct StoreSettingsDto {
 // ── Get store settings ────────────────────────────────────────
 
 #[command]
-pub async fn get_store_settings(
-    state: State<'_, AppState>,
-) -> Result<StoreSettingsDto, AppError> {
+pub async fn get_store_settings(state: State<'_, AppState>) -> Result<StoreSettingsDto, AppError> {
     let conn = state.db.lock().await;
     run_get_store_settings(&conn)
 }
@@ -119,7 +120,10 @@ pub async fn set_store_settings(
 }
 
 /// Business logic for `set_store_settings` (extracted for testing).
-fn run_set_store_settings(conn: &rusqlite::Connection, args: &StoreSettingsDto) -> Result<(), AppError> {
+fn run_set_store_settings(
+    conn: &rusqlite::Connection,
+    args: &StoreSettingsDto,
+) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
 
     Settings::set_store_name(&tx, &args.name)?;

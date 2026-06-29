@@ -190,10 +190,7 @@ impl Sale {
     /// | Active    | Voided      |
     ///
     /// All other transitions return `Err(InvalidTransition)`.
-    pub fn transition_to(
-        &mut self,
-        to: SaleStatus,
-    ) -> Result<(), InvalidTransition> {
+    pub fn transition_to(&mut self, to: SaleStatus) -> Result<(), InvalidTransition> {
         let from = self.status;
         let valid = matches!(
             (from, to),

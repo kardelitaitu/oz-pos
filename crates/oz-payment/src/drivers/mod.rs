@@ -1,6 +1,7 @@
 //! Driver implementations for payment processors.
 //!
-//! Currently only the mock driver is available. Real integrations
-//! (Stripe, Square, EMV terminal) will be added in follow-ups.
+//! - `mock` — in-memory mock for testing and offline demo
+//! - `stripe` — live Stripe PaymentIntents integration
 
 pub mod mock;
+pub mod stripe;

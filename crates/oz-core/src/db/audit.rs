@@ -1,7 +1,7 @@
 //! Audit Log — append-only immutable entries.
 
-use crate::error::CoreError;
 use crate::AuditEntry;
+use crate::error::CoreError;
 
 use super::Store;
 
@@ -21,7 +21,11 @@ impl Store<'_> {
     }
 
     /// List audit log entries in reverse chronological order.
-    pub fn list_audit_entries(&self, limit: i64, offset: i64) -> Result<Vec<AuditEntry>, CoreError> {
+    pub fn list_audit_entries(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<AuditEntry>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
              FROM audit_log ORDER BY created_at DESC LIMIT ?1 OFFSET ?2",

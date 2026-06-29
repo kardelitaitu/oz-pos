@@ -4,7 +4,7 @@
 //! transactions that were created while the network was unavailable.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::{OfflineQueueItem, Store};
 
@@ -90,12 +90,16 @@ pub async fn enqueue_offline(
 
 /// List all pending (unsynced) offline queue items, oldest first.
 #[command]
-pub async fn list_pending_offline(state: State<'_, AppState>) -> Result<Vec<OfflineQueueItemDto>, AppError> {
+pub async fn list_pending_offline(
+    state: State<'_, AppState>,
+) -> Result<Vec<OfflineQueueItemDto>, AppError> {
     let db = state.db.lock().await;
     run_list_pending_offline(&db)
 }
 
-fn run_list_pending_offline(conn: &rusqlite::Connection) -> Result<Vec<OfflineQueueItemDto>, AppError> {
+fn run_list_pending_offline(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<OfflineQueueItemDto>, AppError> {
     let store = Store::new(conn);
     let items = store.list_pending_offline()?;
     let dtos: Vec<OfflineQueueItemDto> = items.into_iter().map(OfflineQueueItemDto::from).collect();
@@ -104,7 +108,9 @@ fn run_list_pending_offline(conn: &rusqlite::Connection) -> Result<Vec<OfflineQu
 
 /// List all offline queue items (most recent first).
 #[command]
-pub async fn list_all_offline(state: State<'_, AppState>) -> Result<Vec<OfflineQueueItemDto>, AppError> {
+pub async fn list_all_offline(
+    state: State<'_, AppState>,
+) -> Result<Vec<OfflineQueueItemDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let items = store.list_all_offline()?;
@@ -153,15 +159,16 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
     }
 
     drop(db);
-    Ok(SyncResult { synced_count, failed_count, total_count })
+    Ok(SyncResult {
+        synced_count,
+        failed_count,
+        total_count,
+    })
 }
 
 /// Delete a processed offline queue item.
 #[command]
-pub async fn delete_offline_item(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn delete_offline_item(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     if id.trim().is_empty() {
         return Err(AppError::Invalid("id must not be empty".into()));
     }
@@ -178,8 +185,8 @@ pub async fn delete_offline_item(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oz_core::migrations;
     use oz_core::OfflineQueueStatus;
+    use oz_core::migrations;
     use rusqlite::Connection;
 
     fn fresh_conn() -> Connection {
@@ -202,7 +209,9 @@ mod tests {
         let conn = fresh_conn();
         let store = Store::new(&conn);
 
-        let item = store.enqueue_offline("complete_sale", r#"{"sale_id":"abc"}"#).unwrap();
+        let item = store
+            .enqueue_offline("complete_sale", r#"{"sale_id":"abc"}"#)
+            .unwrap();
         assert_eq!(item.action, "complete_sale");
         assert_eq!(item.status, OfflineQueueStatus::Pending);
 
@@ -231,7 +240,9 @@ mod tests {
         let store = Store::new(&conn);
 
         let item = store.enqueue_offline("complete_sale", "{}").unwrap();
-        store.mark_offline_failed(&item.id, "network error").unwrap();
+        store
+            .mark_offline_failed(&item.id, "network error")
+            .unwrap();
 
         let failed = store.list_all_offline().unwrap();
         assert_eq!(failed[0].status, OfflineQueueStatus::Failed);
@@ -275,7 +286,9 @@ mod tests {
         let conn = fresh_conn();
         let store = Store::new(&conn);
 
-        store.enqueue_offline("complete_sale", r#"{"id":"1"}"#).unwrap();
+        store
+            .enqueue_offline("complete_sale", r#"{"id":"1"}"#)
+            .unwrap();
         store.enqueue_offline("void_sale", r#"{"id":"2"}"#).unwrap();
 
         let pending = store.list_pending_offline().unwrap();

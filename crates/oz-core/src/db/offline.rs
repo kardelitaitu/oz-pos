@@ -9,7 +9,11 @@ use super::Store;
 
 impl Store<'_> {
     /// Enqueue a transaction for later sync.
-    pub fn enqueue_offline(&self, action: &str, payload: &str) -> Result<OfflineQueueItem, CoreError> {
+    pub fn enqueue_offline(
+        &self,
+        action: &str,
+        payload: &str,
+    ) -> Result<OfflineQueueItem, CoreError> {
         let item = OfflineQueueItem::new(action, payload);
         self.conn.execute(
             "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at)
@@ -23,7 +27,7 @@ impl Store<'_> {
     pub fn list_pending_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
-             FROM offline_queue WHERE status = 'pending' ORDER BY created_at ASC"
+             FROM offline_queue WHERE status = 'pending' ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
         rows.map(|r| Ok(r?)).collect()
@@ -33,7 +37,7 @@ impl Store<'_> {
     pub fn list_all_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
-             FROM offline_queue ORDER BY created_at DESC"
+             FROM offline_queue ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
         rows.map(|r| Ok(r?)).collect()
@@ -46,7 +50,10 @@ impl Store<'_> {
             params![id],
         )?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "offline_queue", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "offline_queue",
+                id: id.to_owned(),
+            });
         }
         Ok(())
     }
@@ -62,14 +69,19 @@ impl Store<'_> {
 
     /// Get the count of pending offline items.
     pub fn pending_offline_count(&self) -> Result<i64, CoreError> {
-        self.conn.query_row(
-            "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'", [], |row| row.get(0),
-        ).map_err(Into::into)
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
     }
 
     /// Delete a processed offline queue item.
     pub fn delete_offline_item(&self, id: &str) -> Result<(), CoreError> {
-        self.conn.execute("DELETE FROM offline_queue WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM offline_queue WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -79,7 +91,8 @@ impl Store<'_> {
             id: row.get("id")?,
             action: row.get("action")?,
             payload: row.get("payload")?,
-            status: OfflineQueueStatus::from_stored_str(&status_str).unwrap_or(OfflineQueueStatus::Pending),
+            status: OfflineQueueStatus::from_stored_str(&status_str)
+                .unwrap_or(OfflineQueueStatus::Pending),
             retry_count: row.get("retry_count")?,
             last_error: row.get("last_error")?,
             created_at: row.get("created_at")?,

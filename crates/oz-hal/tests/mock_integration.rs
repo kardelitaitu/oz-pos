@@ -5,14 +5,12 @@
 
 use std::sync::Arc;
 
-use oz_hal::drivers::mock::{
-    MockBarcodeScanner, MockCashDrawer, MockReceiptPrinter,
-};
+use oz_hal::DriverRegistry;
+use oz_hal::drivers::mock::{MockBarcodeScanner, MockCashDrawer, MockReceiptPrinter};
 use oz_hal::traits::barcode::BarcodeScanner;
 use oz_hal::traits::cash_drawer::CashDrawer;
 use oz_hal::traits::printer::ReceiptPrinter;
 use oz_hal::types::{Barcode, DeviceInfo};
-use oz_hal::DriverRegistry;
 
 // ── Registry + mock registration ───────────────────────────────────────
 
@@ -21,7 +19,9 @@ async fn register_and_lookup_scanner() {
     let registry = DriverRegistry::new();
     let mock = Arc::new(MockBarcodeScanner::new());
 
-    registry.register_scanner("scanner:main", mock.clone()).await;
+    registry
+        .register_scanner("scanner:main", mock.clone())
+        .await;
     let found = registry.scanner("scanner:main").await;
     assert!(found.is_some(), "registered scanner should be found");
 }
@@ -31,7 +31,9 @@ async fn register_and_lookup_printer() {
     let registry = DriverRegistry::new();
     let mock = Arc::new(MockReceiptPrinter::new());
 
-    registry.register_printer("printer:main", mock.clone()).await;
+    registry
+        .register_printer("printer:main", mock.clone())
+        .await;
     let found = registry.printer("printer:main").await;
     assert!(found.is_some(), "registered printer should be found");
 }
@@ -41,7 +43,9 @@ async fn register_and_lookup_drawer() {
     let registry = DriverRegistry::new();
     let mock = Arc::new(MockCashDrawer::new());
 
-    registry.register_cash_drawer("drawer:main", mock.clone()).await;
+    registry
+        .register_cash_drawer("drawer:main", mock.clone())
+        .await;
     let found = registry.cash_drawer("drawer:main").await;
     assert!(found.is_some(), "registered drawer should be found");
 }
@@ -49,8 +53,12 @@ async fn register_and_lookup_drawer() {
 #[tokio::test]
 async fn register_overwrites_previous() {
     let registry = DriverRegistry::new();
-    let a = Arc::new(MockBarcodeScanner::with_info(DeviceInfo::new("a", "a", "a")));
-    let b = Arc::new(MockBarcodeScanner::with_info(DeviceInfo::new("b", "b", "b")));
+    let a = Arc::new(MockBarcodeScanner::with_info(DeviceInfo::new(
+        "a", "a", "a",
+    )));
+    let b = Arc::new(MockBarcodeScanner::with_info(DeviceInfo::new(
+        "b", "b", "b",
+    )));
 
     registry.register_scanner("same-id", a).await;
     registry.register_scanner("same-id", b.clone()).await;
@@ -123,17 +131,29 @@ async fn scan_tracks_call_counters() {
     let mut mock = MockBarcodeScanner::new();
     mock.push(Barcode::new("ABC"));
 
-    assert_eq!(mock.connect_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(
+        mock.connect_calls.load(std::sync::atomic::Ordering::SeqCst),
+        0
+    );
     mock.connect().await.unwrap();
-    assert_eq!(mock.connect_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        mock.connect_calls.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
 
     assert_eq!(mock.poll_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
     let _ = mock.poll(100).await;
     assert_eq!(mock.poll_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
-    assert_eq!(mock.cancel_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(
+        mock.cancel_calls.load(std::sync::atomic::Ordering::SeqCst),
+        0
+    );
     mock.cancel().await.unwrap();
-    assert_eq!(mock.cancel_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        mock.cancel_calls.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
 }
 
 #[tokio::test]
@@ -266,10 +286,7 @@ async fn scan_print_open_workflow() {
     assert_eq!(scan.code, "4901234567890");
 
     // 2. Generate receipt text from the scan
-    let receipt_body = format!(
-        "Store: Test\nItem: {}\nTotal: $5.00\nThank you!",
-        scan.code
-    );
+    let receipt_body = format!("Store: Test\nItem: {}\nTotal: $5.00\nThank you!", scan.code);
 
     // 3. Print the receipt
     let printer = MockReceiptPrinter::new();
@@ -280,12 +297,18 @@ async fn scan_print_open_workflow() {
     assert_eq!(captured.len(), 1);
     assert!(captured[0].contains("4901234567890"));
     assert!(captured[0].contains("$5.00"));
-    assert_eq!(printer.cut_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        printer.cut_calls.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
 
     // 4. Open the cash drawer
     let drawer = MockCashDrawer::new();
     drawer.open().await.unwrap();
-    assert_eq!(drawer.open_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        drawer.open_calls.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
 }
 
 // ── Registry-driven workflow ──────────────────────────────────────────
@@ -299,9 +322,15 @@ async fn full_workflow_through_registry() {
     let printer = Arc::new(MockReceiptPrinter::new());
     let drawer = Arc::new(MockCashDrawer::new());
 
-    registry.register_scanner("main-scanner", scanner.clone()).await;
-    registry.register_printer("main-printer", printer.clone()).await;
-    registry.register_cash_drawer("main-drawer", drawer.clone()).await;
+    registry
+        .register_scanner("main-scanner", scanner.clone())
+        .await;
+    registry
+        .register_printer("main-printer", printer.clone())
+        .await;
+    registry
+        .register_cash_drawer("main-drawer", drawer.clone())
+        .await;
 
     // Look up devices through registry
     let s = registry.scanner("main-scanner").await.unwrap();
@@ -319,9 +348,15 @@ async fn full_workflow_through_registry() {
     p.print_receipt("Receipt from registry").await.unwrap();
     p.cut().await.unwrap();
     assert_eq!(printer.printed.lock().unwrap().len(), 1);
-    assert_eq!(printer.cut_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        printer.cut_calls.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
 
     // Open drawer via registry
     d.open().await.unwrap();
-    assert_eq!(drawer.open_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        drawer.open_calls.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
 }

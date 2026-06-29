@@ -98,12 +98,24 @@ impl LuaRuntime {
         {
             let globals = lua.globals();
             let remove = &[
-                "os", "io", "loadfile", "dofile", "require", "package",
-                "debug", "rawget", "rawset", "rawequal", "rawlen",
-                "collectgarbage", "module", "load",
+                "os",
+                "io",
+                "loadfile",
+                "dofile",
+                "require",
+                "package",
+                "debug",
+                "rawget",
+                "rawset",
+                "rawequal",
+                "rawlen",
+                "collectgarbage",
+                "module",
+                "load",
             ];
             for name in remove {
-                globals.set(*name, rlua::Value::Nil)
+                globals
+                    .set(*name, rlua::Value::Nil)
                     .map_err(|e| LuaError::Init(e.to_string()))?;
             }
         }
@@ -155,7 +167,10 @@ impl LuaRuntime {
     /// Call the Lua `apply_discount(lines)` hook.
     ///
     /// Returns `Ok(None)` when no script defined the hook.
-    pub fn apply_discount(&self, lines: &[CartLineData]) -> Result<Option<DiscountResult>, LuaError> {
+    pub fn apply_discount(
+        &self,
+        lines: &[CartLineData],
+    ) -> Result<Option<DiscountResult>, LuaError> {
         let hook: rlua::Function = {
             let globals = self.lua.globals();
             match globals.get("apply_discount") {
@@ -164,7 +179,8 @@ impl LuaRuntime {
             }
         };
         let table = build_lines_table(&self.lua, lines)?;
-        let result: rlua::Value = hook.call(table)
+        let result: rlua::Value = hook
+            .call(table)
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_discount_result(result))
     }
@@ -186,7 +202,8 @@ impl LuaRuntime {
                 Err(_) => return Ok(None),
             }
         };
-        let result: rlua::Value = hook.call((sku, qty, unit_price_minor, currency))
+        let result: rlua::Value = hook
+            .call((sku, qty, unit_price_minor, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_tax_override(result))
     }
@@ -208,13 +225,14 @@ impl LuaRuntime {
             }
         };
         let table = build_lines_table(&self.lua, lines)?;
-        let result: rlua::Value = hook.call((table, total_minor, currency))
+        let result: rlua::Value = hook
+            .call((table, total_minor, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         let mut errors = Vec::new();
         if let rlua::Value::Table(tbl) = &result {
             for pair in tbl.clone().pairs() {
-                let (_, val): (rlua::Value, String) = pair
-                    .map_err(|e| LuaError::Script(e.to_string()))?;
+                let (_, val): (rlua::Value, String) =
+                    pair.map_err(|e| LuaError::Script(e.to_string()))?;
                 errors.push(val);
             }
         }
@@ -240,7 +258,10 @@ fn parse_tax_override(val: rlua::Value) -> Option<TaxOverride> {
         rlua::Value::Table(tbl) => {
             let rate_bps: i64 = tbl.get("rate_bps").ok()?;
             let is_inclusive: bool = tbl.get("is_inclusive").unwrap_or(false);
-            Some(TaxOverride { rate_bps, is_inclusive })
+            Some(TaxOverride {
+                rate_bps,
+                is_inclusive,
+            })
         }
         _ => None,
     }
@@ -249,15 +270,28 @@ fn parse_tax_override(val: rlua::Value) -> Option<TaxOverride> {
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 /// Build an rlua table from CartLineData.
-fn build_lines_table<'lua>(lua: &'lua rlua::Lua, lines: &[CartLineData]) -> Result<rlua::Table<'lua>, LuaError> {
-    let table = lua.create_table().map_err(|e| LuaError::Script(e.to_string()))?;
+fn build_lines_table<'lua>(
+    lua: &'lua rlua::Lua,
+    lines: &[CartLineData],
+) -> Result<rlua::Table<'lua>, LuaError> {
+    let table = lua
+        .create_table()
+        .map_err(|e| LuaError::Script(e.to_string()))?;
     for (i, line) in lines.iter().enumerate() {
-        let row = lua.create_table().map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("sku", line.sku.as_str()).map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("qty", line.qty).map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("unit_price_minor", line.unit_price_minor).map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("currency", line.currency.as_str()).map_err(|e| LuaError::Script(e.to_string()))?;
-        table.set(i + 1, row).map_err(|e| LuaError::Script(e.to_string()))?;
+        let row = lua
+            .create_table()
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        row.set("sku", line.sku.as_str())
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        row.set("qty", line.qty)
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        row.set("unit_price_minor", line.unit_price_minor)
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        row.set("currency", line.currency.as_str())
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        table
+            .set(i + 1, row)
+            .map_err(|e| LuaError::Script(e.to_string()))?;
     }
     Ok(table)
 }
@@ -295,17 +329,24 @@ mod tests {
         let io: rlua::Value = globals.get("io").unwrap();
         assert!(matches!(io, rlua::Value::Nil), "io should be removed");
         let loadfile: rlua::Value = globals.get("loadfile").unwrap();
-        assert!(matches!(loadfile, rlua::Value::Nil), "loadfile should be removed");
+        assert!(
+            matches!(loadfile, rlua::Value::Nil),
+            "loadfile should be removed"
+        );
         let math: rlua::Value = globals.get("math").unwrap();
         assert!(matches!(math, rlua::Value::Table(_)), "math should exist");
         let string: rlua::Value = globals.get("string").unwrap();
-        assert!(matches!(string, rlua::Value::Table(_)), "string should exist");
+        assert!(
+            matches!(string, rlua::Value::Table(_)),
+            "string should exist"
+        );
     }
 
     #[test]
     fn load_str_defines_global_function() {
         let lua = runtime();
-        lua.load_str("function apply_discount(_) return nil end").unwrap();
+        lua.load_str("function apply_discount(_) return nil end")
+            .unwrap();
         let globals = lua.lua.globals();
         let hook: rlua::Value = globals.get("apply_discount").unwrap();
         assert!(matches!(hook, rlua::Value::Function(_)));
@@ -322,7 +363,8 @@ mod tests {
     #[test]
     fn apply_discount_uses_lines_table() {
         let lua = runtime();
-        lua.load_str(r#"
+        lua.load_str(
+            r#"
 function apply_discount(lines)
     local total = 0
     for i = 1, #lines do
@@ -333,10 +375,15 @@ function apply_discount(lines)
     end
     return nil
 end
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let lines = vec![CartLineData {
-            sku: "COFFEE".into(), qty: 5, unit_price_minor: 500, currency: "USD".into(),
+            sku: "COFFEE".into(),
+            qty: 5,
+            unit_price_minor: 500,
+            currency: "USD".into(),
         }];
         let result = lua.apply_discount(&lines).unwrap();
         let d = result.expect("should get discount for >1000");
@@ -347,7 +394,8 @@ end
     #[test]
     fn apply_discount_returns_nil_for_small_orders() {
         let lua = runtime();
-        lua.load_str(r#"
+        lua.load_str(
+            r#"
 function apply_discount(lines)
     local total = 0
     for i = 1, #lines do
@@ -358,10 +406,15 @@ function apply_discount(lines)
     end
     return nil
 end
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let lines = vec![CartLineData {
-            sku: "CHEAP".into(), qty: 1, unit_price_minor: 200, currency: "USD".into(),
+            sku: "CHEAP".into(),
+            qty: 1,
+            unit_price_minor: 200,
+            currency: "USD".into(),
         }];
         let result = lua.apply_discount(&lines).unwrap();
         assert!(result.is_none());
@@ -370,14 +423,17 @@ end
     #[test]
     fn calc_line_tax_returns_override() {
         let lua = runtime();
-        lua.load_str(r#"
+        lua.load_str(
+            r#"
 function calc_line_tax(sku, qty, unit_price_minor, currency)
     if sku == "CIGARETTES" then
         return { rate_bps = 2000, is_inclusive = true }
     end
     return nil
 end
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let result = lua.calc_line_tax("CIGARETTES", 1, 1000, "USD").unwrap();
         let tax = result.expect("cigarettes should have override");
@@ -398,7 +454,8 @@ end
     #[test]
     fn validate_order_returns_errors() {
         let lua = runtime();
-        lua.load_str(r#"
+        lua.load_str(
+            r#"
 function validate_order(lines, total_minor, currency)
     local errors = {}
     for i = 1, #lines do
@@ -408,11 +465,23 @@ function validate_order(lines, total_minor, currency)
     end
     return errors
 end
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let lines = vec![
-            CartLineData { sku: "COFFEE".into(), qty: 20, unit_price_minor: 350, currency: "USD".into() },
-            CartLineData { sku: "TEA".into(), qty: 2, unit_price_minor: 250, currency: "USD".into() },
+            CartLineData {
+                sku: "COFFEE".into(),
+                qty: 20,
+                unit_price_minor: 350,
+                currency: "USD".into(),
+            },
+            CartLineData {
+                sku: "TEA".into(),
+                qty: 2,
+                unit_price_minor: 250,
+                currency: "USD".into(),
+            },
         ];
         let errors = lua.validate_order(&lines, 7500, "USD").unwrap();
         assert_eq!(errors.len(), 1);
@@ -487,15 +556,20 @@ end
     #[test]
     fn multiple_scripts_can_be_loaded() {
         let lua = runtime();
-        lua.load_str("function apply_discount(_) return { percent = 5, label = \"First\" } end").unwrap();
+        lua.load_str("function apply_discount(_) return { percent = 5, label = \"First\" } end")
+            .unwrap();
         lua.load_str("function calc_line_tax(_, _, _, _) return { rate_bps = 800, is_inclusive = false } end").unwrap();
-        lua.load_str("function validate_order(_, _, _) return {} end").unwrap();
+        lua.load_str("function validate_order(_, _, _) return {} end")
+            .unwrap();
 
-        let lines = vec![CartLineData { sku: "X".into(), qty: 1, unit_price_minor: 100, currency: "USD".into() }];
+        let lines = vec![CartLineData {
+            sku: "X".into(),
+            qty: 1,
+            unit_price_minor: 100,
+            currency: "USD".into(),
+        }];
         assert!(lua.apply_discount(&lines).unwrap().is_some());
         assert!(lua.calc_line_tax("X", 1, 100, "USD").unwrap().is_some());
         assert!(lua.validate_order(&lines, 100, "USD").unwrap().is_empty());
     }
-
-
 }

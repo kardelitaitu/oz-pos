@@ -7,7 +7,7 @@ use tauri::{State, command};
 
 use oz_core::auth::hash_pin;
 use oz_core::db::Store;
-use oz_core::{User, Role};
+use oz_core::{Role, User};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -44,9 +44,7 @@ fn to_staff_dto(user: &User, roles: &[Role]) -> StaffMemberDto {
 // ── List staff ─────────────────────────────────────────────────────
 
 #[command]
-pub async fn list_staff(
-    state: State<'_, AppState>,
-) -> Result<Vec<StaffMemberDto>, AppError> {
+pub async fn list_staff(state: State<'_, AppState>) -> Result<Vec<StaffMemberDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let users = store.list_users()?;
@@ -65,9 +63,7 @@ pub struct RoleDto {
 }
 
 #[command]
-pub async fn list_roles(
-    state: State<'_, AppState>,
-) -> Result<Vec<RoleDto>, AppError> {
+pub async fn list_roles(state: State<'_, AppState>) -> Result<Vec<RoleDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let roles = store.list_roles()?;
@@ -107,14 +103,16 @@ pub async fn create_staff(
         return Err(AppError::Invalid("display name must not be empty".into()));
     }
     if args.pin.len() < 4 {
-        return Err(AppError::Invalid("PIN must be at least 4 characters".into()));
+        return Err(AppError::Invalid(
+            "PIN must be at least 4 characters".into(),
+        ));
     }
     if args.role_id.is_empty() {
         return Err(AppError::Invalid("role must be selected".into()));
     }
 
-    let pin_hash = hash_pin(&args.pin)
-        .map_err(|e| AppError::Internal(format!("hashing PIN: {e}")))?;
+    let pin_hash =
+        hash_pin(&args.pin).map_err(|e| AppError::Internal(format!("hashing PIN: {e}")))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -145,7 +143,13 @@ pub async fn update_staff(
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
-    let user = store.update_user(&args.id, &args.username, &args.display_name, &args.role_id, args.is_active)?;
+    let user = store.update_user(
+        &args.id,
+        &args.username,
+        &args.display_name,
+        &args.role_id,
+        args.is_active,
+    )?;
     let roles = store.list_roles()?;
     drop(db);
 

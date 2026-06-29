@@ -5,9 +5,9 @@
 //! `get_setup_status` lets the front-end decide whether to show the
 //! wizard or go straight to the main app.
 
+use oz_core::{FeatureRegistry, Settings, Store, features};
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
-use oz_core::{features, FeatureRegistry, Store, Settings};
+use tauri::{State, command};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -203,12 +203,10 @@ mod tests {
     fn get_setup_status_defaults_to_not_completed() {
         let conn = fresh_conn();
 
-        let completed = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE)
-            .unwrap();
+        let completed = Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE).unwrap();
         assert_eq!(completed, None);
 
-        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET)
-            .unwrap();
+        let preset = Settings::get(&conn, oz_core::settings::keys::STORE_PRESET).unwrap();
         assert_eq!(preset, None);
     }
 
@@ -412,9 +410,13 @@ mod tests {
         assert_eq!(preset, "simple-retail");
 
         // Feature flags.
-        let cash = Settings::get(&conn, "feature.cash-payment").unwrap().unwrap();
+        let cash = Settings::get(&conn, "feature.cash-payment")
+            .unwrap()
+            .unwrap();
         assert_eq!(cash, "1");
-        let receipt = Settings::get(&conn, "feature.receipt-printing").unwrap().unwrap();
+        let receipt = Settings::get(&conn, "feature.receipt-printing")
+            .unwrap()
+            .unwrap();
         assert_eq!(receipt, "1");
 
         // Unknown feature should NOT be present.
@@ -460,12 +462,7 @@ mod tests {
         let conn = fresh_conn();
 
         // Run setup twice with different presets.
-        run_complete_setup(
-            &conn,
-            "first",
-            &["cash-payment", "barcode-scanning"],
-        )
-        .unwrap();
+        run_complete_setup(&conn, "first", &["cash-payment", "barcode-scanning"]).unwrap();
 
         run_complete_setup(
             &conn,

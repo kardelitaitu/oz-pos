@@ -70,8 +70,8 @@ pub const KNOWN_PRINTERS: &[(u16, u16)] = &[
 
 /// Enumerate USB devices whose interface class matches `class`.
 pub fn probe_by_class(class: u8) -> Result<Vec<UsbDeviceInfo>, HalError> {
-    let context = Context::new()
-        .map_err(|e| HalError::Usb(format!("failed to create USB context: {e}")))?;
+    let context =
+        Context::new().map_err(|e| HalError::Usb(format!("failed to create USB context: {e}")))?;
     let devices = context
         .devices()
         .map_err(|e| HalError::Usb(format!("failed to list USB devices: {e}")))?;
@@ -114,9 +114,7 @@ pub fn probe_by_class(class: u8) -> Result<Vec<UsbDeviceInfo>, HalError> {
                         handle
                             .read_manufacturer_string_ascii(&desc)
                             .unwrap_or_default(),
-                        handle
-                            .read_product_string_ascii(&desc)
-                            .unwrap_or_default(),
+                        handle.read_product_string_ascii(&desc).unwrap_or_default(),
                         handle
                             .read_serial_number_string_ascii(&desc)
                             .unwrap_or_default(),
@@ -179,8 +177,8 @@ pub fn open_device(
     pid: u16,
     interface: u8,
 ) -> Result<rusb::DeviceHandle<rusb::Context>, HalError> {
-    let context = Context::new()
-        .map_err(|e| HalError::Usb(format!("failed to create USB context: {e}")))?;
+    let context =
+        Context::new().map_err(|e| HalError::Usb(format!("failed to create USB context: {e}")))?;
 
     let device = context
         .devices()

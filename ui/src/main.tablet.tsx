@@ -34,7 +34,7 @@ import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
-import DesignSystem from '@/features/design/DesignSystem';
+import _DesignSystem from '@/features/design/DesignSystem';
 import type { ReactNode } from 'react';
 
 // ── SVG icon factory ─────────────────────────────────────────────

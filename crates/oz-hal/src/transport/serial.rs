@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use serialport::{available_ports, SerialPort, SerialPortBuilder, SerialPortType, UsbPortInfo};
+use serialport::{SerialPort, SerialPortBuilder, SerialPortType, UsbPortInfo, available_ports};
 
 use crate::error::HalError;
 
@@ -48,8 +48,8 @@ pub struct SerialPortInfo {
 /// Use [`probe_bluetooth()`] specifically to find Bluetooth SPP serial
 /// ports that are typically used by BT receipt printers.
 pub fn probe_ports(only_known: bool) -> Result<Vec<SerialPortInfo>, HalError> {
-    let ports = available_ports()
-        .map_err(|e| HalError::Io(std::io::Error::other(e.to_string())))?;
+    let ports =
+        available_ports().map_err(|e| HalError::Io(std::io::Error::other(e.to_string())))?;
 
     let mut results = Vec::new();
 
@@ -87,10 +87,7 @@ pub fn probe_ports(only_known: bool) -> Result<Vec<SerialPortInfo>, HalError> {
 
 /// Open a serial port at the given baud rate with typical POS device
 /// settings (8 data bits, 1 stop bit, no parity, no flow control).
-pub fn open_port(
-    port_name: &str,
-    baud_rate: u32,
-) -> Result<Box<dyn SerialPort>, HalError> {
+pub fn open_port(port_name: &str, baud_rate: u32) -> Result<Box<dyn SerialPort>, HalError> {
     serialport::new(port_name, baud_rate)
         .data_bits(serialport::DataBits::Eight)
         .stop_bits(serialport::StopBits::One)
@@ -115,8 +112,8 @@ pub fn open_port_with_settings(
 /// On Windows these appear as virtual COM ports after pairing; on Linux
 /// as `/dev/rfcomm*` or `/dev/tty*` with Bluetooth port type.
 pub fn probe_bluetooth() -> Result<Vec<SerialPortInfo>, HalError> {
-    let ports = available_ports()
-        .map_err(|e| HalError::Io(std::io::Error::other(e.to_string())))?;
+    let ports =
+        available_ports().map_err(|e| HalError::Io(std::io::Error::other(e.to_string())))?;
 
     Ok(ports
         .into_iter()

@@ -13,8 +13,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use oz_core::{CoreError, ProductWithDetails};
 use oz_core::db::Store;
+use oz_core::{CoreError, ProductWithDetails};
 
 use crate::AppState;
 
@@ -23,18 +23,28 @@ use crate::AppState;
 /// Convert a [`CoreError`] from the Store into an HTTP response.
 fn store_error_response(e: CoreError) -> Response {
     match e {
-        CoreError::Validation { message, .. } => {
-            (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": message}))).into_response()
-        }
-        CoreError::Conflict { .. } => {
-            (StatusCode::CONFLICT, Json(serde_json::json!({"error": "resource already exists"}))).into_response()
-        }
-        CoreError::NotFound { .. } => {
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "not found"}))).into_response()
-        }
+        CoreError::Validation { message, .. } => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": message})),
+        )
+            .into_response(),
+        CoreError::Conflict { .. } => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "resource already exists"})),
+        )
+            .into_response(),
+        CoreError::NotFound { .. } => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "not found"})),
+        )
+            .into_response(),
         e => {
             tracing::error!("unexpected store error: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "internal error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -71,9 +81,7 @@ pub struct PatchStockResponse {
 // ── Handlers ──────────────────────────────────────────────────────────
 
 /// List all products, ordered by name, with category name and stock.
-pub async fn list_products(
-    State(state): State<AppState>,
-) -> Response {
+pub async fn list_products(State(state): State<AppState>) -> Response {
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -86,10 +94,7 @@ pub async fn list_products(
 /// Get a single product by SKU, including category name and stock.
 ///
 /// Returns JSON `null` when the product is not found.
-pub async fn get_product(
-    State(state): State<AppState>,
-    Path(sku): Path<String>,
-) -> Response {
+pub async fn get_product(State(state): State<AppState>, Path(sku): Path<String>) -> Response {
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -126,7 +131,11 @@ pub async fn create_product(
             let detail = ProductWithDetails {
                 product,
                 category_name: None,
-                stock_qty: if initial_stock > 0 { Some(initial_stock) } else { None },
+                stock_qty: if initial_stock > 0 {
+                    Some(initial_stock)
+                } else {
+                    None
+                },
             };
             (StatusCode::CREATED, Json(detail)).into_response()
         }
@@ -156,7 +165,11 @@ pub async fn patch_stock(
     let product = match store.get_product(&sku) {
         Ok(Some(p)) => p,
         Ok(None) => {
-            return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "product not found"}))).into_response();
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "product not found"})),
+            )
+                .into_response();
         }
         Err(e) => return store_error_response(e),
     };

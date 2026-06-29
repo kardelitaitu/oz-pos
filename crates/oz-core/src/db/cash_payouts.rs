@@ -2,8 +2,8 @@
 
 use rusqlite::params;
 
-use crate::error::CoreError;
 use crate::CashPayout;
+use crate::error::CoreError;
 
 use super::Store;
 
@@ -26,8 +26,12 @@ impl Store<'_> {
         }
 
         // Verify the shift exists and is open.
-        let shift = self.get_shift(shift_id)?
-            .ok_or_else(|| CoreError::NotFound { entity: "shift", id: shift_id.to_owned() })?;
+        let shift = self
+            .get_shift(shift_id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "shift",
+                id: shift_id.to_owned(),
+            })?;
         if shift.is_closed() {
             return Err(CoreError::Validation {
                 field: "status",
@@ -52,7 +56,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, shift_id, amount_minor, reason, created_at
              FROM cash_payouts WHERE shift_id = ?1
-             ORDER BY created_at ASC"
+             ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map(params![shift_id], |row| {
             Ok(CashPayout {
@@ -128,7 +132,9 @@ mod tests {
     fn create_payout_not_found_shift() {
         let conn = fresh();
         let s = Store::new(&conn);
-        let err = s.create_cash_payout("nonexistent", 1000, "drop").unwrap_err();
+        let err = s
+            .create_cash_payout("nonexistent", 1000, "drop")
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "shift"));
     }
 

@@ -173,8 +173,8 @@ impl Default for EventBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
     // ── Test event types ─────────────────────────────────────────
 
@@ -279,10 +279,6 @@ mod tests {
             Self {
                 was_called: AtomicBool::new(false),
             }
-        }
-
-        fn was_called(&self) -> bool {
-            self.was_called.load(Ordering::SeqCst)
         }
     }
 

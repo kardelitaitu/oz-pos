@@ -15,12 +15,12 @@
 //! oz_logging::eventlog::init_eventlog("OZ-POS").ok();
 //! ```
 
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
-use crate::visitor::MessageVisitor;
 use crate::LoggingError;
+use crate::visitor::MessageVisitor;
 
 /// Initialise Windows Event Log logging.
 ///
@@ -42,15 +42,16 @@ use crate::LoggingError;
 ///
 /// Panics if the global subscriber has already been set.
 pub fn init_eventlog(source_name: &str) -> Result<(), LoggingError> {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
 
     tracing_subscriber::registry()
         .with(filter)
         .with(fmt_layer)
-        .with(EventLogLayer { source: source_name.to_owned() })
+        .with(EventLogLayer {
+            source: source_name.to_owned(),
+        })
         .init();
 
     Ok(())
@@ -65,11 +66,7 @@ struct EventLogLayer {
 }
 
 impl<S: tracing::Subscriber> Layer<S> for EventLogLayer {
-    fn on_event(
-        &self,
-        event: &tracing::Event<'_>,
-        _ctx: Context<'_, S>,
-    ) {
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
         // Format the message as: [LEVEL] source: message
         let mut message = String::new();
         message.push('[');
@@ -98,10 +95,7 @@ impl<S: tracing::Subscriber> Layer<S> for EventLogLayer {
 /// DebugView and the Windows Event Log when configured.
 #[cfg(target_os = "windows")]
 fn write_debug_string(message: &str) {
-    let wide: Vec<u16> = message
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
+    let wide: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
 
     // SAFETY: OutputDebugStringW is safe with a valid wide string.
     unsafe {
@@ -138,7 +132,9 @@ mod tests {
 
     #[test]
     fn eventlog_layer_formats_info_event() {
-        let layer = EventLogLayer { source: "TEST".into() };
+        let layer = EventLogLayer {
+            source: "TEST".into(),
+        };
         let subscriber = registry().with(layer);
         // Should not panic.
         tracing::subscriber::with_default(subscriber, || {
@@ -148,7 +144,9 @@ mod tests {
 
     #[test]
     fn eventlog_layer_formats_all_levels() {
-        let layer = EventLogLayer { source: "OZ-POS".into() };
+        let layer = EventLogLayer {
+            source: "OZ-POS".into(),
+        };
         let subscriber = registry().with(layer);
         tracing::subscriber::with_default(subscriber, || {
             tracing::error!("error event");
@@ -161,7 +159,9 @@ mod tests {
 
     #[test]
     fn eventlog_layer_formats_with_fields() {
-        let layer = EventLogLayer { source: "TEST".into() };
+        let layer = EventLogLayer {
+            source: "TEST".into(),
+        };
         let subscriber = registry().with(layer);
         tracing::subscriber::with_default(subscriber, || {
             tracing::info!(sku = "ABC", qty = 5, "stock updated");

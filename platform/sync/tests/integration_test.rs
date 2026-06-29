@@ -6,11 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use axum::{
-    Json, Router,
-    extract::State,
-    routing::post,
-};
+use axum::{Json, Router, extract::State, routing::post};
 use oz_core::{
     Store, migrations,
     offline::{OfflineQueueItem, OfflineQueueStatus},
@@ -18,7 +14,7 @@ use oz_core::{
 };
 use platform_sync::{
     SyncEngine,
-    transport::{PushOutcome, PushResponse, PullResponse, PullRequest},
+    transport::{PullRequest, PullResponse, PushOutcome, PushResponse},
 };
 
 // ── Test HTTP server ─────────────────────────────────────────────────
@@ -48,9 +44,7 @@ async fn handle_push(
 }
 
 /// Handler: POST /api/sync/pull
-async fn handle_pull(
-    Json(_request): Json<PullRequest>,
-) -> Json<PullResponse> {
+async fn handle_pull(Json(_request): Json<PullRequest>) -> Json<PullResponse> {
     Json(PullResponse { items: vec![] })
 }
 
@@ -71,7 +65,11 @@ async fn spawn_test_server() -> TestServer {
     // Brief delay so the server is ready before tests send requests.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-    TestServer { port, state, handle }
+    TestServer {
+        port,
+        state,
+        handle,
+    }
 }
 
 /// Create a test server with custom route handlers, returning both the port
@@ -121,7 +119,8 @@ async fn single_sale_enqueued_is_pushed_and_marked_synced() {
         "total_minor": 1500,
         "currency": "USD",
         "line_items": [{"sku": "COFFEE", "qty": 3, "unit_price_minor": 500}],
-    }).to_string();
+    })
+    .to_string();
 
     let queued = store.enqueue_offline("complete_sale", &payload).unwrap();
     assert_eq!(queued.action, "complete_sale");
@@ -187,24 +186,34 @@ async fn conflict_response_marks_item_and_re_enqueues() {
     let conflict_state = conflict_count.clone();
 
     let app = Router::new()
-        .route("/api/sync/push", post(move |Json(items): Json<Vec<OfflineQueueItem>>| async move {
-            let mut count = conflict_state.lock().unwrap();
-            if *count == 0 {
-                *count += 1;
-                let results: Vec<PushOutcome> = items.iter().map(|item| {
-                    PushOutcome::Conflict(item.clone())
-                }).collect();
-                Json(PushResponse { results })
-            } else {
-                let results: Vec<PushOutcome> = items.iter().map(|_| PushOutcome::Accepted).collect();
-                Json(PushResponse { results })
-            }
-        }))
-        .route("/api/sync/pull", post(|| async { Json(PullResponse { items: vec![] }) }));
+        .route(
+            "/api/sync/push",
+            post(move |Json(items): Json<Vec<OfflineQueueItem>>| async move {
+                let mut count = conflict_state.lock().unwrap();
+                if *count == 0 {
+                    *count += 1;
+                    let results: Vec<PushOutcome> = items
+                        .iter()
+                        .map(|item| PushOutcome::Conflict(item.clone()))
+                        .collect();
+                    Json(PushResponse { results })
+                } else {
+                    let results: Vec<PushOutcome> =
+                        items.iter().map(|_| PushOutcome::Accepted).collect();
+                    Json(PushResponse { results })
+                }
+            }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async { Json(PullResponse { items: vec![] }) }),
+        );
 
     let (port, handle) = spawn_custom_server(app).await;
     let store = setup_store();
-    store.enqueue_offline("complete_sale", r#"{"sale_id":"conflict-1"}"#).unwrap();
+    store
+        .enqueue_offline("complete_sale", r#"{"sale_id":"conflict-1"}"#)
+        .unwrap();
 
     let engine = SyncEngine::new(test_config(port));
     let result = engine.run_sync_cycle(&store).await.unwrap();
@@ -224,15 +233,23 @@ async fn conflict_response_marks_item_and_re_enqueues() {
 #[tokio::test]
 async fn rejected_item_marked_failed() {
     let app = Router::new()
-        .route("/api/sync/push", post(|| async {
-            let results = vec![
-                PushOutcome::Accepted,
-                PushOutcome::Rejected { reason: "invalid payload".into() },
-                PushOutcome::Accepted,
-            ];
-            Json(PushResponse { results })
-        }))
-        .route("/api/sync/pull", post(|| async { Json(PullResponse { items: vec![] }) }));
+        .route(
+            "/api/sync/push",
+            post(|| async {
+                let results = vec![
+                    PushOutcome::Accepted,
+                    PushOutcome::Rejected {
+                        reason: "invalid payload".into(),
+                    },
+                    PushOutcome::Accepted,
+                ];
+                Json(PushResponse { results })
+            }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async { Json(PullResponse { items: vec![] }) }),
+        );
 
     let (port, handle) = spawn_custom_server(app).await;
     let store = setup_store();
@@ -261,15 +278,21 @@ async fn pull_returns_items() {
     let pull_item = remote_item.clone();
 
     let app = Router::new()
-        .route("/api/sync/push", post(|| async {
-            let results: Vec<PushOutcome> = vec![];
-            Json(PushResponse { results })
-        }))
-        .route("/api/sync/pull", post(|| async move {
-            Json(PullResponse {
-                items: vec![pull_item.clone()],
-            })
-        }));
+        .route(
+            "/api/sync/push",
+            post(|| async {
+                let results: Vec<PushOutcome> = vec![];
+                Json(PushResponse { results })
+            }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async move {
+                Json(PullResponse {
+                    items: vec![pull_item.clone()],
+                })
+            }),
+        );
 
     let (port, handle) = spawn_custom_server(app).await;
     let store = setup_store();
@@ -289,14 +312,22 @@ async fn api_key_is_sent_in_headers() {
     let auth_state = auth_header.clone();
 
     let app = Router::new()
-        .route("/api/sync/push", post(move |req: axum::http::Request<axum::body::Body>| {
-            let auth = req.headers().get("authorization").and_then(|v| v.to_str().ok()).map(|s| s.to_owned());
-            *auth_state.lock().unwrap() = auth;
-            async {
-                Json(PushResponse { results: vec![] })
-            }
-        }))
-        .route("/api/sync/pull", post(|| async { Json(PullResponse { items: vec![] }) }));
+        .route(
+            "/api/sync/push",
+            post(move |req: axum::http::Request<axum::body::Body>| {
+                let auth = req
+                    .headers()
+                    .get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.to_owned());
+                *auth_state.lock().unwrap() = auth;
+                async { Json(PushResponse { results: vec![] }) }
+            }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async { Json(PullResponse { items: vec![] }) }),
+        );
 
     let (port, handle) = spawn_custom_server(app).await;
     let store = setup_store();
@@ -327,11 +358,16 @@ async fn connection_refused_returns_error() {
     let engine = SyncEngine::new(config);
     let result = engine.run_sync_cycle(&store).await;
 
-    assert!(result.is_err(), "sync should fail when server is unreachable");
+    assert!(
+        result.is_err(),
+        "sync should fail when server is unreachable"
+    );
     if let Err(e) = result {
         let msg = e.to_string();
         assert!(
-            msg.contains("transport") || msg.contains("Connection refused") || msg.contains("push request failed"),
+            msg.contains("transport")
+                || msg.contains("Connection refused")
+                || msg.contains("push request failed"),
             "expected transport error, got: {msg}"
         );
     }
@@ -359,9 +395,15 @@ async fn multiple_items_are_all_pushed_and_synced() {
     let server = spawn_test_server().await;
     let store = setup_store();
 
-    store.enqueue_offline("complete_sale", r#"{"sale_id":"s1"}"#).unwrap();
-    store.enqueue_offline("product_created", r#"{"sku":"P1"}"#).unwrap();
-    store.enqueue_offline("stock_adjusted", r#"{"sku":"P1","delta":-1}"#).unwrap();
+    store
+        .enqueue_offline("complete_sale", r#"{"sale_id":"s1"}"#)
+        .unwrap();
+    store
+        .enqueue_offline("product_created", r#"{"sku":"P1"}"#)
+        .unwrap();
+    store
+        .enqueue_offline("stock_adjusted", r#"{"sku":"P1","delta":-1}"#)
+        .unwrap();
     assert_eq!(store.pending_offline_count().unwrap(), 3);
 
     let engine = SyncEngine::new(test_config(server.port));
@@ -374,7 +416,10 @@ async fn multiple_items_are_all_pushed_and_synced() {
 
     // All 3 items synced locally.
     let all = store.list_all_offline().unwrap();
-    let synced = all.iter().filter(|i| i.status == OfflineQueueStatus::Synced).count();
+    let synced = all
+        .iter()
+        .filter(|i| i.status == OfflineQueueStatus::Synced)
+        .count();
     assert_eq!(synced, 3);
 
     assert_eq!(result.pushed, 3);
@@ -386,11 +431,15 @@ async fn multiple_items_are_all_pushed_and_synced() {
 #[tokio::test]
 async fn server_error_prevents_sync_item_stays_pending() {
     // Start a server that will reject the request by returning 500.
-    let reject_app = Router::new()
-        .route("/api/sync/push", post(|| async { axum::http::StatusCode::INTERNAL_SERVER_ERROR }));
+    let reject_app = Router::new().route(
+        "/api/sync/push",
+        post(|| async { axum::http::StatusCode::INTERNAL_SERVER_ERROR }),
+    );
     let (port, handle) = spawn_custom_server(reject_app).await;
     let store = setup_store();
-    store.enqueue_offline("complete_sale", r#"{"sale_id":"fail-1"}"#).unwrap();
+    store
+        .enqueue_offline("complete_sale", r#"{"sale_id":"fail-1"}"#)
+        .unwrap();
 
     let engine = SyncEngine::new(test_config(port));
     let result = engine.run_sync_cycle(&store).await;
@@ -401,7 +450,11 @@ async fn server_error_prevents_sync_item_stays_pending() {
     // The item should remain pending (the error happens at the transport level,
     // so mark_synced is never called).
     let pending = store.list_pending_offline().unwrap();
-    assert_eq!(pending.len(), 1, "item should remain pending after server error");
+    assert_eq!(
+        pending.len(),
+        1,
+        "item should remain pending after server error"
+    );
 
     handle.abort();
 }

@@ -11,8 +11,8 @@ use super::Store;
 impl Store<'_> {
     /// Process a refund — persist refund + lines inside a transaction.
     pub fn create_refund(&self, refund: &Refund) -> Result<(), CoreError> {
-        let cur_str = std::str::from_utf8(&refund.total.currency.0)
-            .expect("currency bytes are valid UTF-8");
+        let cur_str =
+            std::str::from_utf8(&refund.total.currency.0).expect("currency bytes are valid UTF-8");
 
         let tx = self.conn.unchecked_transaction()?;
 
@@ -63,21 +63,26 @@ impl Store<'_> {
     pub fn list_refunds_for_sale(&self, sale_id: &str) -> Result<Vec<Refund>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, total_minor, currency, reason, note, processed_by, created_at
-             FROM refunds WHERE sale_id = ?1 ORDER BY created_at ASC"
+             FROM refunds WHERE sale_id = ?1 ORDER BY created_at ASC",
         )?;
-        let refunds: Vec<Refund> = stmt.query_map(params![sale_id], |row| {
-            let cur_str: String = row.get("currency")?;
-            Ok(Refund {
-                id: row.get("id")?,
-                sale_id: row.get("sale_id")?,
-                total: Money { minor_units: row.get("total_minor")?, currency: cur_str.parse().expect("valid currency in DB") },
-                reason: row.get("reason")?,
-                note: row.get("note")?,
-                processed_by: row.get("processed_by")?,
-                created_at: row.get("created_at")?,
-                lines: Vec::new(),
-            })
-        })?.collect::<Result<Vec<_>, _>>()?;
+        let refunds: Vec<Refund> = stmt
+            .query_map(params![sale_id], |row| {
+                let cur_str: String = row.get("currency")?;
+                Ok(Refund {
+                    id: row.get("id")?,
+                    sale_id: row.get("sale_id")?,
+                    total: Money {
+                        minor_units: row.get("total_minor")?,
+                        currency: cur_str.parse().expect("valid currency in DB"),
+                    },
+                    reason: row.get("reason")?,
+                    note: row.get("note")?,
+                    processed_by: row.get("processed_by")?,
+                    created_at: row.get("created_at")?,
+                    lines: Vec::new(),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         let mut line_stmt = self.conn.prepare(
             "SELECT id, refund_id, sale_line_id, sku, qty, unit_minor, line_minor, currency, created_at
@@ -85,7 +90,8 @@ impl Store<'_> {
         )?;
         let mut result: Vec<Refund> = Vec::new();
         for mut r in refunds {
-            let lines: Vec<RefundLine> = line_stmt.query_map(params![r.id], Self::row_to_refund_line)?
+            let lines: Vec<RefundLine> = line_stmt
+                .query_map(params![r.id], Self::row_to_refund_line)?
                 .collect::<Result<Vec<_>, _>>()?;
             r.lines = lines;
             result.push(r);
@@ -106,11 +112,15 @@ impl Store<'_> {
         match row {
             Ok((total, cur_str)) => {
                 let currency: Currency = cur_str.parse().expect("valid currency in DB");
-                Ok(Money { minor_units: total, currency })
+                Ok(Money {
+                    minor_units: total,
+                    currency,
+                })
             }
-            Err(rusqlite::Error::QueryReturnedNoRows) => {
-                Err(CoreError::NotFound { entity: "refund", id: sale_id.to_owned() })
-            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(CoreError::NotFound {
+                entity: "refund",
+                id: sale_id.to_owned(),
+            }),
             Err(e) => Err(e.into()),
         }
     }
@@ -124,8 +134,14 @@ impl Store<'_> {
             sale_line_id: row.get("sale_line_id")?,
             sku: row.get("sku")?,
             qty: row.get("qty")?,
-            unit_price: Money { minor_units: row.get("unit_minor")?, currency },
-            line_total: Money { minor_units: row.get("line_minor")?, currency },
+            unit_price: Money {
+                minor_units: row.get("unit_minor")?,
+                currency,
+            },
+            line_total: Money {
+                minor_units: row.get("line_minor")?,
+                currency,
+            },
             created_at: row.get("created_at")?,
         })
     }
@@ -156,7 +172,10 @@ mod tests {
     }
 
     fn price(minor: i64) -> Money {
-        Money { minor_units: minor, currency: usd() }
+        Money {
+            minor_units: minor,
+            currency: usd(),
+        }
     }
 
     fn seed_completed_sale(conn: &Connection) {
@@ -177,7 +196,14 @@ mod tests {
         let s = store(&conn);
 
         let line = RefundLine::new("ref-sl-1", "COFFEE", 2, price(350), price(700));
-        let refund = Refund::new("ref-sale-1", price(700), "customer changed mind", "", "user-1", vec![line]);
+        let refund = Refund::new(
+            "ref-sale-1",
+            price(700),
+            "customer changed mind",
+            "",
+            "user-1",
+            vec![line],
+        );
 
         s.create_refund(&refund).unwrap();
 
@@ -231,12 +257,26 @@ mod tests {
 
         // First refund: 1 item.
         let line1 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
-        let r1 = Refund::new("ref-sale-1", price(350), "partial", "", "user-1", vec![line1]);
+        let r1 = Refund::new(
+            "ref-sale-1",
+            price(350),
+            "partial",
+            "",
+            "user-1",
+            vec![line1],
+        );
         s.create_refund(&r1).unwrap();
 
         // Second refund: 1 item.
         let line2 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
-        let r2 = Refund::new("ref-sale-1", price(350), "partial", "", "user-1", vec![line2]);
+        let r2 = Refund::new(
+            "ref-sale-1",
+            price(350),
+            "partial",
+            "",
+            "user-1",
+            vec![line2],
+        );
         s.create_refund(&r2).unwrap();
 
         let refunds = s.list_refunds_for_sale("ref-sale-1").unwrap();

@@ -4,8 +4,8 @@
 //! Initially only Last-Write-Wins (LWW) is implemented, using the
 //! `created_at` timestamp to determine the winner.
 
-use oz_core::offline::OfflineQueueItem;
 use crate::queue::ResolvedItem;
+use oz_core::offline::OfflineQueueItem;
 
 /// Resolve a conflict using Last-Write-Wins (LWW).
 ///

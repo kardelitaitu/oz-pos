@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { Update } from '@tauri-apps/plugin-updater';
 import './UpdateBanner.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ interface UpdateInfo {
 
 interface UpdateState {
   info: UpdateInfo;
-  instance: Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater')['check']>> | null;
+  instance: Update | null;
 }
 
 function useUpdateCheck(): UpdateState {

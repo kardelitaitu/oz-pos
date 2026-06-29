@@ -24,10 +24,7 @@ mod tests {
     #[test]
     fn subcommand_error_display() {
         let err = CliError::Subcommand("migrate", "failed".into());
-        assert_eq!(
-            err.to_string(),
-            "subcommand `migrate` failed: failed"
-        );
+        assert_eq!(err.to_string(), "subcommand `migrate` failed: failed");
     }
 
     #[test]

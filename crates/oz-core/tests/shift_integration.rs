@@ -3,7 +3,7 @@
 //! Tests cover the full open/close lifecycle, cash reconciliation
 //! calculations, FK constraints, timestamps, and listing order.
 
-use oz_core::{Store, migrations, Shift};
+use oz_core::{Shift, Store, migrations};
 
 fn setup() -> rusqlite::Connection {
     let mut conn = rusqlite::Connection::open_in_memory().unwrap();
@@ -65,7 +65,9 @@ fn shift_open_with_terminal() {
     seed_terminal(&conn);
     let s = store(&conn);
 
-    let shift = s.open_shift("user-alice", Some("term-front"), 1000).unwrap();
+    let shift = s
+        .open_shift("user-alice", Some("term-front"), 1000)
+        .unwrap();
     assert_eq!(shift.terminal_id.as_deref(), Some("term-front"));
 }
 
@@ -86,7 +88,9 @@ fn shift_open_negative_balance_rejected() {
     let s = store(&conn);
 
     let err = s.open_shift("user-alice", None, -100).unwrap_err();
-    assert!(matches!(err, oz_core::CoreError::Validation { field, .. } if field == "opening_balance_minor"));
+    assert!(
+        matches!(err, oz_core::CoreError::Validation { field, .. } if field == "opening_balance_minor")
+    );
 }
 
 #[test]
@@ -105,7 +109,10 @@ fn shift_open_nonexistent_user_rejected() {
 
     let err = s.open_shift("user-ghost", None, 100).unwrap_err();
     // FK constraint on users(id) — should produce an error
-    assert!(err.to_string().contains("constraint") || matches!(err, oz_core::CoreError::NotFound { .. }));
+    assert!(
+        err.to_string().contains("constraint")
+            || matches!(err, oz_core::CoreError::NotFound { .. })
+    );
 }
 
 // ── Close shift ───────────────────────────────────────────────────────
@@ -414,8 +421,14 @@ fn shift_timestamps_are_iso8601() {
     let s = store(&conn);
 
     let shift = s.open_shift("user-alice", None, 100).unwrap();
-    assert!(shift.opened_at.contains('T'), "opened_at should be ISO-8601");
-    assert!(shift.opened_at.ends_with('Z'), "opened_at should end with Z");
+    assert!(
+        shift.opened_at.contains('T'),
+        "opened_at should be ISO-8601"
+    );
+    assert!(
+        shift.opened_at.ends_with('Z'),
+        "opened_at should end with Z"
+    );
     assert!(shift.created_at.contains('T'));
     assert!(shift.created_at.ends_with('Z'));
     assert!(shift.updated_at.contains('T'));

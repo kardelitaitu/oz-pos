@@ -36,10 +36,8 @@ pub mod handlers;
 
 // Re-export key inventory domain types from oz-core so consumers can
 // access inventory types through this module without importing oz-core.
-pub use oz_core::{
-    Category, Inventory, Money, Product, ProductVariant, Sku,
-};
 pub use oz_core::db::ProductWithDetails;
+pub use oz_core::{Category, Inventory, Money, Product, ProductVariant, Sku};
 
 use std::fmt::Debug;
 

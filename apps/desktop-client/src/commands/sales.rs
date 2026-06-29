@@ -8,18 +8,14 @@
 //! This file re-exports everything for callers that haven't migrated yet.
 
 pub use super::pos::{
-    start_sale, add_line, complete_sale, set_cart_discount,
-    hold_cart, list_held_carts, get_held_cart, delete_held_cart,
-    StartSaleArgs, StartSaleResult, AddLineArgs, AddLineResult,
-    CompleteSaleArgs, CompleteSaleResult, SetCartDiscountArgs,
-    HoldCartArgs, HoldCartResult,
+    AddLineArgs, AddLineResult, CompleteSaleArgs, CompleteSaleResult, HoldCartArgs, HoldCartResult,
+    SetCartDiscountArgs, StartSaleArgs, StartSaleResult, add_line, complete_sale, delete_held_cart,
+    get_held_cart, hold_cart, list_held_carts, set_cart_discount, start_sale,
 };
 
 pub use super::history::{
-    list_sales, get_sale, export_daily_summary, export_sales_by_hour, export_eod_report,
-    SaleListItem, SaleDetail, EodReport, PaymentBreakdown,
+    EodReport, PaymentBreakdown, SaleDetail, SaleListItem, export_daily_summary, export_eod_report,
+    export_sales_by_hour, get_sale, list_sales,
 };
 
-pub use super::void::{
-    void_sale, VoidSaleArgs,
-};
+pub use super::void::{VoidSaleArgs, void_sale};

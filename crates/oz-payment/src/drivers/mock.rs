@@ -4,15 +4,15 @@
 //! errors without touching any payment gateway.
 
 use async_trait::async_trait;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use foundation::{Currency, Money};
 use oz_hal::types::DeviceInfo;
 
+use crate::PaymentProcessor;
 use crate::error::PaymentError;
 use crate::types::{PaymentMethod, PaymentReceipt, PaymentRequest, PaymentResult};
-use crate::PaymentProcessor;
 
 /// A builder for [`MockPaymentProcessor`].
 ///
@@ -264,7 +264,9 @@ mod tests {
 
     #[tokio::test]
     async fn mock_timeout() {
-        let p = MockPaymentProcessor::builder().simulate_timeout(true).build();
+        let p = MockPaymentProcessor::builder()
+            .simulate_timeout(true)
+            .build();
         let result = p.authorize(&make_req()).await;
         assert!(matches!(result, Err(PaymentError::Timeout(5000))));
     }

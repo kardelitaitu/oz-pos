@@ -29,7 +29,11 @@ impl Sku {
     #[must_use]
     pub fn try_new(s: impl Into<String>) -> Option<Self> {
         let trimmed = s.into().trim().to_owned();
-        if trimmed.is_empty() { None } else { Some(Self(trimmed)) }
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(Self(trimmed))
+        }
     }
 
     /// Borrow the underlying string.

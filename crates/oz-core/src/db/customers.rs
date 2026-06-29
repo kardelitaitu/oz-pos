@@ -2,8 +2,8 @@
 
 use rusqlite::params;
 
-use crate::error::CoreError;
 use crate::Customer;
+use crate::error::CoreError;
 
 use super::Store;
 
@@ -62,10 +62,17 @@ impl Store<'_> {
 
     /// Insert a new customer.
     pub fn create_customer(
-        &self, name: &str, email: Option<&str>, phone: Option<&str>, notes: Option<&str>,
+        &self,
+        name: &str,
+        email: Option<&str>,
+        phone: Option<&str>,
+        notes: Option<&str>,
     ) -> Result<Customer, CoreError> {
         if name.trim().is_empty() {
-            return Err(CoreError::Validation { field: "name", message: "customer name must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "customer name must not be empty".into(),
+            });
         }
 
         let id = uuid::Uuid::new_v4().to_string();
@@ -74,7 +81,15 @@ impl Store<'_> {
         self.conn.execute(
             "INSERT INTO customers (id, name, email, phone, notes, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![id, name.trim(), email, phone, notes.unwrap_or_default(), now, now],
+            params![
+                id,
+                name.trim(),
+                email,
+                phone,
+                notes.unwrap_or_default(),
+                now,
+                now
+            ],
         )?;
 
         Ok(Customer {
@@ -93,10 +108,18 @@ impl Store<'_> {
 
     /// Update an existing customer.
     pub fn update_customer(
-        &self, id: &str, name: &str, email: Option<&str>, phone: Option<&str>, notes: Option<&str>,
+        &self,
+        id: &str,
+        name: &str,
+        email: Option<&str>,
+        phone: Option<&str>,
+        notes: Option<&str>,
     ) -> Result<Customer, CoreError> {
         if name.trim().is_empty() {
-            return Err(CoreError::Validation { field: "name", message: "customer name must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "customer name must not be empty".into(),
+            });
         }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -106,17 +129,28 @@ impl Store<'_> {
         )?;
 
         if rows == 0 {
-            return Err(CoreError::NotFound { entity: "customer", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "customer",
+                id: id.to_owned(),
+            });
         }
 
-        self.get_customer(id)?.ok_or_else(|| CoreError::NotFound { entity: "customer", id: id.to_owned() })
+        self.get_customer(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "customer",
+            id: id.to_owned(),
+        })
     }
 
     /// Delete a customer by id.
     pub fn delete_customer(&self, id: &str) -> Result<(), CoreError> {
-        let rows = self.conn.execute("DELETE FROM customers WHERE id = ?1", params![id])?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM customers WHERE id = ?1", params![id])?;
         if rows == 0 {
-            return Err(CoreError::NotFound { entity: "customer", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "customer",
+                id: id.to_owned(),
+            });
         }
         Ok(())
     }
@@ -205,7 +239,9 @@ mod tests {
     #[test]
     fn create_customer_minimal() {
         let conn = fresh();
-        let c = store(&conn).create_customer("Diana", None, None, None).unwrap();
+        let c = store(&conn)
+            .create_customer("Diana", None, None, None)
+            .unwrap();
         assert_eq!(c.name, "Diana");
         assert!(c.email.is_none());
         assert!(c.phone.is_none());
@@ -217,7 +253,12 @@ mod tests {
     fn create_customer_with_all_fields() {
         let conn = fresh();
         let c = store(&conn)
-            .create_customer("Diana", Some("diana@test.com"), Some("555-0100"), Some("Preferred"))
+            .create_customer(
+                "Diana",
+                Some("diana@test.com"),
+                Some("555-0100"),
+                Some("Preferred"),
+            )
             .unwrap();
         assert_eq!(c.name, "Diana");
         assert_eq!(c.email.as_deref(), Some("diana@test.com"));
@@ -230,7 +271,9 @@ mod tests {
     #[test]
     fn create_customer_empty_name() {
         let conn = fresh();
-        let err = store(&conn).create_customer("   ", None, None, None).unwrap_err();
+        let err = store(&conn)
+            .create_customer("   ", None, None, None)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
 
@@ -241,7 +284,13 @@ mod tests {
         let conn = fresh();
         seed_customers(&conn);
         let updated = store(&conn)
-            .update_customer("cust-1", "Alice Updated", Some("alice@new.com"), None, Some("Changed"))
+            .update_customer(
+                "cust-1",
+                "Alice Updated",
+                Some("alice@new.com"),
+                None,
+                Some("Changed"),
+            )
             .unwrap();
         assert_eq!(updated.name, "Alice Updated");
         assert_eq!(updated.email.as_deref(), Some("alice@new.com"));
@@ -252,7 +301,9 @@ mod tests {
     #[test]
     fn update_customer_not_found() {
         let conn = fresh();
-        let err = store(&conn).update_customer("nope", "X", None, None, None).unwrap_err();
+        let err = store(&conn)
+            .update_customer("nope", "X", None, None, None)
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
@@ -260,7 +311,9 @@ mod tests {
     fn update_customer_empty_name() {
         let conn = fresh();
         seed_customers(&conn);
-        let err = store(&conn).update_customer("cust-1", "", None, None, None).unwrap_err();
+        let err = store(&conn)
+            .update_customer("cust-1", "", None, None, None)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
 

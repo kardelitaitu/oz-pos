@@ -25,7 +25,9 @@ use tokio::sync::Mutex as AsyncMutex;
 use tracing::info;
 
 /// Open a WAL-mode SQLite connection for event handlers.
-fn open_handler_connection(db_path: &std::path::Path) -> Result<Arc<Mutex<Connection>>, Box<dyn std::error::Error>> {
+fn open_handler_connection(
+    db_path: &std::path::Path,
+) -> Result<Arc<Mutex<Connection>>, Box<dyn std::error::Error>> {
     let conn = Connection::open(db_path)?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -150,15 +152,36 @@ mod tests {
 
         let k = kernel.blocking_lock();
         // Verify modules are registered
-        assert!(k.is_registered("inventory"), "inventory module should be registered");
+        assert!(
+            k.is_registered("inventory"),
+            "inventory module should be registered"
+        );
         assert!(k.is_registered("crm"), "crm module should be registered");
         assert!(k.is_registered("tax"), "tax module should be registered");
-        assert!(k.is_registered("settings"), "settings module should be registered");
-        assert!(k.is_registered("staff"), "staff module should be registered");
-        assert!(k.is_registered("sales"), "sales module should be registered");
-        assert!(k.is_registered("reporting"), "reporting module should be registered");
-        assert!(k.is_registered("terminal"), "terminal module should be registered");
-        assert!(k.is_registered("currency"), "currency module should be registered");
+        assert!(
+            k.is_registered("settings"),
+            "settings module should be registered"
+        );
+        assert!(
+            k.is_registered("staff"),
+            "staff module should be registered"
+        );
+        assert!(
+            k.is_registered("sales"),
+            "sales module should be registered"
+        );
+        assert!(
+            k.is_registered("reporting"),
+            "reporting module should be registered"
+        );
+        assert!(
+            k.is_registered("terminal"),
+            "terminal module should be registered"
+        );
+        assert!(
+            k.is_registered("currency"),
+            "currency module should be registered"
+        );
         assert_eq!(k.module_count(), 9);
     }
 
@@ -184,11 +207,23 @@ mod tests {
         let k = kernel.blocking_lock();
         let bus = k.event_bus();
         // Verify event handlers are registered for key topics
-        assert!(bus.has_handlers("sale.completed"), "sale.completed should have handlers");
-        assert!(bus.has_handlers("product.created"), "product.created should have handlers");
-        assert!(bus.has_handlers("stock.adjusted"), "stock.adjusted should have handlers");
+        assert!(
+            bus.has_handlers("sale.completed"),
+            "sale.completed should have handlers"
+        );
+        assert!(
+            bus.has_handlers("product.created"),
+            "product.created should have handlers"
+        );
+        assert!(
+            bus.has_handlers("stock.adjusted"),
+            "stock.adjusted should have handlers"
+        );
         // 4 handlers on sale.completed, 2 on product.created, 2 on stock.adjusted
-        assert!(bus.handler_count() >= 4, "expected at least 4 handlers total");
+        assert!(
+            bus.handler_count() >= 4,
+            "expected at least 4 handlers total"
+        );
     }
 
     #[test]
@@ -209,7 +244,10 @@ mod tests {
 
         // Calling init again should fail because modules are already registered
         let result = init_module_system(&kernel, &db_path);
-        assert!(result.is_err(), "second init should fail due to duplicate modules");
+        assert!(
+            result.is_err(),
+            "second init should fail due to duplicate modules"
+        );
     }
 
     #[test]

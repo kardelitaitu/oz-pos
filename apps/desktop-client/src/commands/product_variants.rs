@@ -5,7 +5,7 @@
 //! its own SKU, optional price override, and barcode.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::{Money, ProductVariant, Store};
 

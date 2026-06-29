@@ -30,10 +30,7 @@ mod tests {
     #[test]
     fn invalid_window_display() {
         let err = ReportingError::InvalidWindow("end before start".into());
-        assert_eq!(
-            err.to_string(),
-            "invalid time window: end before start"
-        );
+        assert_eq!(err.to_string(), "invalid time window: end before start");
     }
 
     #[test]

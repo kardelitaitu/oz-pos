@@ -49,7 +49,7 @@ export default function TabletAppLayout({
         </main>
 
         {/* ── Bottom tab bar ────────────────────────── */}
-        <nav className="tablet-tab-bar" role="tablist" aria-label="Navigation tabs">
+        <div className="tablet-tab-bar" role="tablist" aria-label="Navigation tabs">
           {navItems.map((item) => (
             <button
               key={item.route}
@@ -72,7 +72,7 @@ export default function TabletAppLayout({
               <span className="tablet-tab-label">{item.label}</span>
             </button>
           ))}
-        </nav>
+        </div>
       </div>
     </div>
   );

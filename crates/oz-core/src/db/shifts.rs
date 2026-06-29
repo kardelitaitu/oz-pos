@@ -2,19 +2,30 @@
 
 use rusqlite::params;
 
-use crate::error::CoreError;
 use crate::Shift;
+use crate::error::CoreError;
 
 use super::Store;
 
 impl Store<'_> {
     /// Open a new shift for a user.
-    pub fn open_shift(&self, user_id: &str, terminal_id: Option<&str>, opening_balance_minor: i64) -> Result<Shift, CoreError> {
+    pub fn open_shift(
+        &self,
+        user_id: &str,
+        terminal_id: Option<&str>,
+        opening_balance_minor: i64,
+    ) -> Result<Shift, CoreError> {
         if user_id.trim().is_empty() {
-            return Err(CoreError::Validation { field: "user_id", message: "user_id must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "user_id",
+                message: "user_id must not be empty".into(),
+            });
         }
         if opening_balance_minor < 0 {
-            return Err(CoreError::Validation { field: "opening_balance_minor", message: "opening_balance_minor must be ≥ 0".into() });
+            return Err(CoreError::Validation {
+                field: "opening_balance_minor",
+                message: "opening_balance_minor must be ≥ 0".into(),
+            });
         }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -26,7 +37,10 @@ impl Store<'_> {
             params![id, user_id.trim(), terminal_id, opening_balance_minor, now, now, now],
         )?;
 
-        self.get_shift(&id)?.ok_or_else(|| CoreError::NotFound { entity: "shift", id: id.to_owned() })
+        self.get_shift(&id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "shift",
+            id: id.to_owned(),
+        })
     }
 
     /// Close an active shift with a counted closing balance and optional notes.
@@ -34,15 +48,25 @@ impl Store<'_> {
     /// Calculates `expected_cash_minor` (opening + cash sales) and
     /// `cash_difference_minor` (closing - expected). Updates all aggregated
     /// sales fields from the sales table.
-    pub fn close_shift(&self, id: &str, closing_balance_minor: i64, notes: Option<&str>) -> Result<Shift, CoreError> {
+    pub fn close_shift(
+        &self,
+        id: &str,
+        closing_balance_minor: i64,
+        notes: Option<&str>,
+    ) -> Result<Shift, CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         // Verify the shift exists and is open.
-        let shift = self.get_shift(id)?
-            .ok_or_else(|| CoreError::NotFound { entity: "shift", id: id.to_owned() })?;
+        let shift = self.get_shift(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "shift",
+            id: id.to_owned(),
+        })?;
 
         if shift.is_closed() {
-            return Err(CoreError::Validation { field: "status", message: "shift is already closed".into() });
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "shift is already closed".into(),
+            });
         }
 
         // Calculate sales totals from the sales table for sales made during this shift.
@@ -83,13 +107,27 @@ impl Store<'_> {
                 notes = ?12, status = 'closed', updated_at = ?13
              WHERE id = ?14",
             params![
-                now, closing_balance_minor, expected_cash, cash_difference,
-                total_sales, total_cash, total_card, total_other, total_voids,
-                total_refunds, total_payouts, notes.unwrap_or(""), now, id,
+                now,
+                closing_balance_minor,
+                expected_cash,
+                cash_difference,
+                total_sales,
+                total_cash,
+                total_card,
+                total_other,
+                total_voids,
+                total_refunds,
+                total_payouts,
+                notes.unwrap_or(""),
+                now,
+                id,
             ],
         )?;
 
-        self.get_shift(id)?.ok_or_else(|| CoreError::NotFound { entity: "shift", id: id.to_owned() })
+        self.get_shift(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "shift",
+            id: id.to_owned(),
+        })
     }
 
     /// Get the currently open shift for a user, if any.
@@ -103,7 +141,7 @@ impl Store<'_> {
                     total_payouts_minor,
                     notes, status, created_at, updated_at
              FROM shifts WHERE user_id = ?1 AND status = 'open'
-             ORDER BY opened_at DESC LIMIT 1"
+             ORDER BY opened_at DESC LIMIT 1",
         )?;
         let result = stmt.query_row(params![user_id], Self::row_to_shift);
         match result {
@@ -123,7 +161,7 @@ impl Store<'_> {
                     total_other_minor, total_voids_minor, total_refunds_minor,
                     total_payouts_minor,
                     notes, status, created_at, updated_at
-             FROM shifts ORDER BY opened_at DESC"
+             FROM shifts ORDER BY opened_at DESC",
         )?;
         let rows = stmt.query_map([], Self::row_to_shift)?;
         rows.map(|r| Ok(r?)).collect()
@@ -139,7 +177,7 @@ impl Store<'_> {
                     total_other_minor, total_voids_minor, total_refunds_minor,
                     total_payouts_minor,
                     notes, status, created_at, updated_at
-             FROM shifts WHERE id = ?1"
+             FROM shifts WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], Self::row_to_shift);
         match result {
@@ -155,8 +193,12 @@ impl Store<'_> {
     /// breakdowns computed from the `sales` and `payments` tables within the
     /// shift's time window.
     pub fn get_shift_report(&self, shift_id: &str) -> Result<ShiftReport, CoreError> {
-        let shift = self.get_shift(shift_id)?
-            .ok_or_else(|| CoreError::NotFound { entity: "shift", id: shift_id.to_owned() })?;
+        let shift = self
+            .get_shift(shift_id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "shift",
+                id: shift_id.to_owned(),
+            })?;
 
         let start = &shift.opened_at;
         let now_str = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -173,7 +215,7 @@ impl Store<'_> {
                  WHERE s.user_id = ?1 AND s.created_at >= ?2 AND s.created_at <= ?3
                    AND s.status = 'completed'
                  GROUP BY p.method
-                 ORDER BY tot DESC"
+                 ORDER BY tot DESC",
             )?;
             let rows = stmt.query_map(params![user, start, end], |row| {
                 Ok(ShiftPaymentBreakdown {
@@ -194,7 +236,7 @@ impl Store<'_> {
                  FROM sales
                  WHERE user_id = ?1 AND created_at >= ?2 AND created_at <= ?3
                    AND status = 'completed'
-                 GROUP BY hour ORDER BY hour"
+                 GROUP BY hour ORDER BY hour",
             )?;
             let rows = stmt.query_map(params![user, start, end], |row| {
                 Ok(ShiftSalesByHour {
@@ -375,7 +417,9 @@ mod tests {
         let conn = fresh();
         seed_user(&conn);
         let err = store(&conn).open_shift("user-1", None, -1).unwrap_err();
-        assert!(matches!(err, CoreError::Validation { field, .. } if field == "opening_balance_minor"));
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "opening_balance_minor")
+        );
     }
 
     #[test]
@@ -423,7 +467,9 @@ mod tests {
     #[test]
     fn close_shift_not_found() {
         let conn = fresh();
-        let err = store(&conn).close_shift("nonexistent", 100, None).unwrap_err();
+        let err = store(&conn)
+            .close_shift("nonexistent", 100, None)
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "shift"));
     }
 
@@ -589,7 +635,10 @@ mod tests {
         assert_eq!(report.refund_count, 0, "no refunds");
 
         // Hourly breakdown should have the sales grouped by hour.
-        assert!(!report.hourly_breakdown.is_empty(), "should have hourly data");
+        assert!(
+            !report.hourly_breakdown.is_empty(),
+            "should have hourly data"
+        );
         let total_from_hours: i64 = report.hourly_breakdown.iter().map(|h| h.total_minor).sum();
         assert_eq!(total_from_hours, 1000, "hourly totals match sales");
     }
@@ -614,7 +663,11 @@ mod tests {
         assert_eq!(report.shift.status, "open");
         assert!(report.shift.closed_at.is_none());
         assert_eq!(report.sale_count, 1);
-        assert_eq!(report.payment_breakdown.len(), 0, "no payments table entries");
+        assert_eq!(
+            report.payment_breakdown.len(),
+            0,
+            "no payments table entries"
+        );
     }
 
     #[test]

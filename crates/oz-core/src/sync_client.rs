@@ -6,9 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::db::Store;
 use crate::error::CoreError;
 use crate::offline::OfflineQueueItem;
-use crate::db::Store;
 
 /// Result of a single sync attempt.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +43,10 @@ impl SyncConfig {
             _ => return Ok(None),
         };
         let api_key = crate::settings::Settings::get_sync_api_key(store.conn())?;
-        Ok(Some(Self { server_url, api_key }))
+        Ok(Some(Self {
+            server_url,
+            api_key,
+        }))
     }
 }
 
@@ -54,7 +57,11 @@ impl SyncConfig {
 pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptResult, CoreError> {
     let pending = store.list_pending_offline()?;
     if pending.is_empty() {
-        return Ok(SyncAttemptResult { synced: 0, failed: 0, error: None });
+        return Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: None,
+        });
     }
 
     let mut synced = 0usize;
@@ -76,12 +83,19 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
         }
     }
 
-    Ok(SyncAttemptResult { synced, failed, error: global_error })
+    Ok(SyncAttemptResult {
+        synced,
+        failed,
+        error: global_error,
+    })
 }
 
 /// Send a single offline queue item to the remote server via HTTP POST.
 #[cfg(feature = "sync-http")]
-fn send_item_to_server(config: &SyncConfig, item: &OfflineQueueItem) -> Result<(), Box<dyn std::error::Error>> {
+fn send_item_to_server(
+    config: &SyncConfig,
+    item: &OfflineQueueItem,
+) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("{}/api/events", config.server_url.trim_end_matches('/'));
     let payload = serde_json::json!({
         "id": item.id,
@@ -119,7 +133,10 @@ fn send_item_to_server(config: &SyncConfig, item: &OfflineQueueItem) -> Result<(
 
 /// Stub used when `sync-http` feature is disabled — just logs the intent.
 #[cfg(not(feature = "sync-http"))]
-fn send_item_to_server(config: &SyncConfig, item: &OfflineQueueItem) -> Result<(), Box<dyn std::error::Error>> {
+fn send_item_to_server(
+    config: &SyncConfig,
+    item: &OfflineQueueItem,
+) -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(
         item_id = %item.id,
         action = %item.action,
@@ -177,7 +194,9 @@ mod tests {
     #[test]
     fn sync_pending_marks_items_synced() {
         let store = setup();
-        let _item = store.enqueue_offline("complete_sale", r#"{"test": true}"#).unwrap();
+        let _item = store
+            .enqueue_offline("complete_sale", r#"{"test": true}"#)
+            .unwrap();
 
         let config = SyncConfig {
             server_url: "http://localhost:3099".into(),
@@ -200,8 +219,12 @@ mod tests {
     #[test]
     fn sync_pending_multiple_items() {
         let store = setup();
-        store.enqueue_offline("complete_sale", r#"{"id":1}"#).unwrap();
-        store.enqueue_offline("complete_sale", r#"{"id":2}"#).unwrap();
+        store
+            .enqueue_offline("complete_sale", r#"{"id":1}"#)
+            .unwrap();
+        store
+            .enqueue_offline("complete_sale", r#"{"id":2}"#)
+            .unwrap();
 
         let config = SyncConfig {
             server_url: "http://localhost:3099".into(),

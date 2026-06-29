@@ -73,4 +73,3 @@ mod tests {
         assert_eq!(a.pulled, b.pulled);
     }
 }
-

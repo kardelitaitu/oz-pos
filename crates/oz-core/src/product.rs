@@ -147,15 +147,13 @@ mod tests {
 
     #[test]
     fn builder_sets_category() {
-        let p = Product::new("SKU", "Widget", test_price())
-            .with_category("cat-tools");
+        let p = Product::new("SKU", "Widget", test_price()).with_category("cat-tools");
         assert_eq!(p.category_id, Some("cat-tools".into()));
     }
 
     #[test]
     fn builder_sets_barcode() {
-        let p = Product::new("SKU", "Widget", test_price())
-            .with_barcode("5901234123457");
+        let p = Product::new("SKU", "Widget", test_price()).with_barcode("5901234123457");
         assert_eq!(p.barcode, Some("5901234123457".into()));
     }
 
@@ -218,6 +216,9 @@ mod tests {
         let p = Product::new("COFFEE", "Espresso", test_price());
         let json = serde_json::to_string(&p).unwrap();
         // Sku field should be "COFFEE", not {"0": "COFFEE"} or similar.
-        assert!(json.contains(r#""sku":"COFFEE""#), "unexpected JSON: {json}");
+        assert!(
+            json.contains(r#""sku":"COFFEE""#),
+            "unexpected JSON: {json}"
+        );
     }
 }

@@ -34,9 +34,9 @@
 
 // Re-export key sales domain types from oz-core so consumers can
 // access sales types through this module without importing oz-core.
-pub use oz_core::{Cart, CartLine, CartId, CartError, LineId, Money, Sale, SaleLine, SaleStatus, Sku};
-pub use oz_core::db::{
-    DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow,
+pub use oz_core::db::{DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
+pub use oz_core::{
+    Cart, CartError, CartId, CartLine, LineId, Money, Sale, SaleLine, SaleStatus, Sku,
 };
 
 use std::fmt::Debug;

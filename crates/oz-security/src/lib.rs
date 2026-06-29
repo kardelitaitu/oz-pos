@@ -18,12 +18,12 @@
 #![warn(missing_docs)]
 
 pub mod error;
-pub mod mask;
-pub mod tls;
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
+pub mod mask;
+pub mod tls;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
@@ -110,24 +110,27 @@ impl InMemoryKeyring {
 
 impl Keyring for InMemoryKeyring {
     fn get_secret(&self, name: &str) -> Result<Option<String>, SecurityError> {
-        let map = self.secrets.lock().map_err(|e| {
-            SecurityError::KeyUnavailable(format!("lock poisoned: {e}"))
-        })?;
+        let map = self
+            .secrets
+            .lock()
+            .map_err(|e| SecurityError::KeyUnavailable(format!("lock poisoned: {e}")))?;
         Ok(map.get(name).cloned())
     }
 
     fn set_secret(&self, name: &str, value: &str) -> Result<(), SecurityError> {
-        let mut map = self.secrets.lock().map_err(|e| {
-            SecurityError::KeyUnavailable(format!("lock poisoned: {e}"))
-        })?;
+        let mut map = self
+            .secrets
+            .lock()
+            .map_err(|e| SecurityError::KeyUnavailable(format!("lock poisoned: {e}")))?;
         map.insert(name.to_owned(), value.to_owned());
         Ok(())
     }
 
     fn delete_secret(&self, name: &str) -> Result<bool, SecurityError> {
-        let mut map = self.secrets.lock().map_err(|e| {
-            SecurityError::KeyUnavailable(format!("lock poisoned: {e}"))
-        })?;
+        let mut map = self
+            .secrets
+            .lock()
+            .map_err(|e| SecurityError::KeyUnavailable(format!("lock poisoned: {e}")))?;
         Ok(map.remove(name).is_some())
     }
 }

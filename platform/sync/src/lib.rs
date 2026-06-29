@@ -103,8 +103,14 @@ mod tests {
             id: "x".into(),
         });
         let msg = err.to_string();
-        assert!(msg.contains("database error"), "expected database error, got: {msg}");
-        assert!(msg.contains("not found"), "expected 'not found' in message, got: {msg}");
+        assert!(
+            msg.contains("database error"),
+            "expected database error, got: {msg}"
+        );
+        assert!(
+            msg.contains("not found"),
+            "expected 'not found' in message, got: {msg}"
+        );
     }
 
     #[test]
@@ -157,10 +163,12 @@ mod tests {
     fn sync_result_err() {
         let result: SyncResult<i32> = Err(SyncError::Config("bad config".into()));
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "configuration error: bad config");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "configuration error: bad config"
+        );
     }
 }
-
 
 /// The top-level sync engine that orchestrates queue, transport, replication,
 /// and conflict resolution for a single sync cycle.
@@ -196,8 +204,7 @@ impl SyncEngine {
                         queue.mark_synced(store, &item.id)?;
                     }
                     transport::PushOutcome::Conflict(server_item) => {
-                        let resolved =
-                            conflict::resolve_lww(item, server_item);
+                        let resolved = conflict::resolve_lww(item, server_item);
                         queue.apply_resolution(store, &resolved)?;
                     }
                     transport::PushOutcome::Rejected { reason } => {

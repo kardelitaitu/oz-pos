@@ -23,8 +23,8 @@
 //! See `modules/currency/manifest.json` for the module metadata.
 
 // Re-export key currency/exchange domain types from oz-core.
-pub use oz_core::exchange_rate::ExchangeRateRow;
 pub use foundation::money::Currency;
+pub use oz_core::exchange_rate::ExchangeRateRow;
 
 use std::fmt::Debug;
 
@@ -174,8 +174,14 @@ mod tests {
             "other"
         }
 
-        fn on_load(&mut self) -> ModuleResult { Ok(()) }
-        fn on_start(&mut self) -> ModuleResult { Ok(()) }
-        fn on_stop(&mut self) -> ModuleResult { Ok(()) }
+        fn on_load(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_start(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_stop(&mut self) -> ModuleResult {
+            Ok(())
+        }
     }
 }

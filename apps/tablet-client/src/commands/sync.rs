@@ -5,7 +5,7 @@
 //! let the user configure the server URL and API key.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::db::Store;
 use oz_core::settings::Settings;
@@ -24,9 +24,7 @@ pub struct SyncSettingsDto {
 
 /// Get sync settings.
 #[command]
-pub async fn get_sync_settings(
-    state: State<'_, AppState>,
-) -> Result<SyncSettingsDto, AppError> {
+pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSettingsDto, AppError> {
     let db = state.db.lock().await;
     let server_url = Settings::get_sync_server_url(&db)?;
     let api_key = Settings::get_sync_api_key(&db)?;
@@ -66,9 +64,7 @@ pub async fn update_sync_settings(
 
 /// Immediately trigger a sync cycle.
 #[command]
-pub async fn trigger_sync(
-    state: State<'_, AppState>,
-) -> Result<SyncAttemptResult, AppError> {
+pub async fn trigger_sync(state: State<'_, AppState>) -> Result<SyncAttemptResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let config = SyncConfig::from_settings(&store)?;
@@ -86,9 +82,7 @@ pub async fn trigger_sync(
 
 /// Get the pending sync count.
 #[command]
-pub async fn pending_sync_count(
-    state: State<'_, AppState>,
-) -> Result<i64, AppError> {
+pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let count = store.pending_offline_count()?;

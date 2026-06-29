@@ -4,8 +4,8 @@
 //! with additional tracking for conflict resolution and last-sync timing.
 
 use oz_core::db::Store;
-use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
 use oz_core::error::CoreError;
+use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
 
 /// A resolved item after conflict resolution — may be accepted from either
 /// the local or remote side, or a merged version.
@@ -54,12 +54,7 @@ impl SyncQueue {
     }
 
     /// Mark an item as failed with an error message.
-    pub fn mark_failed(
-        &self,
-        store: &Store<'_>,
-        id: &str,
-        error: &str,
-    ) -> Result<(), CoreError> {
+    pub fn mark_failed(&self, store: &Store<'_>, id: &str, error: &str) -> Result<(), CoreError> {
         store.mark_offline_failed(id, error)
     }
 
@@ -160,7 +155,9 @@ mod tests {
     fn queue_enqueue_and_list() {
         let store = setup_store();
         let queue = SyncQueue::new();
-        let item = queue.enqueue(&store, "complete_sale", r#"{"sale_id":"s1"}"#).unwrap();
+        let item = queue
+            .enqueue(&store, "complete_sale", r#"{"sale_id":"s1"}"#)
+            .unwrap();
         assert_eq!(item.action, "complete_sale");
 
         let pending = queue.list_pending(&store).unwrap();
@@ -184,7 +181,9 @@ mod tests {
         let store = setup_store();
         let queue = SyncQueue::new();
         let item = queue.enqueue(&store, "test", "{}").unwrap();
-        queue.mark_failed(&store, &item.id, "network error").unwrap();
+        queue
+            .mark_failed(&store, &item.id, "network error")
+            .unwrap();
 
         let all = queue.list_all(&store).unwrap();
         assert_eq!(all[0].status, OfflineQueueStatus::Failed);

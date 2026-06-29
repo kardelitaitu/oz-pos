@@ -5,7 +5,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
-use oz_core::{Store, migrations, Money, Currency, ProductVariant};
+use oz_core::{Currency, Money, ProductVariant, Store, migrations};
 use rusqlite::Connection;
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -26,12 +26,17 @@ fn usd() -> Currency {
 }
 
 fn price(minor: i64) -> Money {
-    Money { minor_units: minor, currency: usd() }
+    Money {
+        minor_units: minor,
+        currency: usd(),
+    }
 }
 
 /// Seed a product with initial stock.
 fn seed_product(conn: &Connection, id: &str, sku: &str, name: &str, initial_stock: i64) {
-    store(conn).create_product(sku, name, price(1000), None, None, initial_stock).unwrap();
+    store(conn)
+        .create_product(sku, name, price(1000), None, None, initial_stock)
+        .unwrap();
 }
 
 // ── Stock: Multi-step adjustments ────────────────────────────────────
@@ -74,7 +79,9 @@ fn stock_first_adjustment_creates_inventory_row() {
     let conn = setup();
     // Create a product without initial stock.
     let s = store(&conn);
-    let p = s.create_product("FIRST-ADJ", "First Adjustment", price(500), None, None, 0).unwrap();
+    let p = s
+        .create_product("FIRST-ADJ", "First Adjustment", price(500), None, None, 0)
+        .unwrap();
 
     // No inventory row yet — get_stock returns 0.
     assert_eq!(s.get_stock(&p.id).unwrap(), 0);
@@ -135,7 +142,9 @@ fn stock_multiple_products_tracked_independently() {
 fn stock_adjust_overflow_rejected() {
     let conn = setup();
     let s = store(&conn);
-    let p = s.create_product("OVERFLOW", "Overflow", price(100), None, None, i64::MAX).unwrap();
+    let p = s
+        .create_product("OVERFLOW", "Overflow", price(100), None, None, i64::MAX)
+        .unwrap();
 
     let err = s.adjust_stock("OVERFLOW", 1).unwrap_err();
     assert!(matches!(err, oz_core::CoreError::Validation { field, .. } if field == "delta"));
@@ -176,8 +185,14 @@ fn list_products_reflects_stock_adjustments() {
     s.adjust_stock("LIST-ADJ-B", 5).unwrap();
 
     let products = s.list_products().unwrap();
-    let a = products.iter().find(|p| p.product.sku.as_str() == "LIST-ADJ-A").unwrap();
-    let b = products.iter().find(|p| p.product.sku.as_str() == "LIST-ADJ-B").unwrap();
+    let a = products
+        .iter()
+        .find(|p| p.product.sku.as_str() == "LIST-ADJ-A")
+        .unwrap();
+    let b = products
+        .iter()
+        .find(|p| p.product.sku.as_str() == "LIST-ADJ-B")
+        .unwrap();
 
     assert_eq!(a.stock_qty, Some(20), "30 - 10 = 20");
     assert_eq!(b.stock_qty, Some(45), "40 + 5 = 45");
@@ -250,7 +265,10 @@ fn variants_no_price_override() {
     s.create_product_variant(&v).unwrap();
 
     let loaded = s.get_product_variant("VNP-001").unwrap().unwrap();
-    assert!(loaded.price.is_none(), "variant with no price override should have None price");
+    assert!(
+        loaded.price.is_none(),
+        "variant with no price override should have None price"
+    );
 }
 
 #[test]
@@ -259,8 +277,8 @@ fn variants_price_override_roundtrip() {
     seed_product(&conn, "pv-po", "VARIANT-PRICE", "Price Variant", 0);
     let s = store(&conn);
 
-    let v = ProductVariant::new("VARIANT-PRICE", "Price Override", "VPO-001")
-        .with_price(price(1500));
+    let v =
+        ProductVariant::new("VARIANT-PRICE", "Price Override", "VPO-001").with_price(price(1500));
     s.create_product_variant(&v).unwrap();
 
     let loaded = s.get_product_variant("VPO-001").unwrap().unwrap();
@@ -322,7 +340,10 @@ fn variant_create_with_missing_parent_rejected_by_fk() {
 
     let v = ProductVariant::new("PARENT-DOES-NOT-EXIST", "Orphan", "ORPHAN-001");
     let result = s.create_product_variant(&v);
-    assert!(result.is_err(), "should reject variant with non-existent parent SKU");
+    assert!(
+        result.is_err(),
+        "should reject variant with non-existent parent SKU"
+    );
 }
 
 #[test]
@@ -351,12 +372,12 @@ fn variant_duplicate_barcode_rejected() {
     seed_product(&conn, "pv-bc", "VARIANT-BARCODE", "Barcode Test", 0);
     let s = store(&conn);
 
-    let v1 = ProductVariant::new("VARIANT-BARCODE", "First", "VB-001")
-        .with_barcode("1234567890123");
+    let v1 =
+        ProductVariant::new("VARIANT-BARCODE", "First", "VB-001").with_barcode("1234567890123");
     s.create_product_variant(&v1).unwrap();
 
-    let v2 = ProductVariant::new("VARIANT-BARCODE", "Second", "VB-002")
-        .with_barcode("1234567890123");
+    let v2 =
+        ProductVariant::new("VARIANT-BARCODE", "Second", "VB-002").with_barcode("1234567890123");
     let result = s.create_product_variant(&v2);
     assert!(result.is_err(), "duplicate barcode should be rejected");
 }
@@ -384,8 +405,8 @@ fn variant_update_barcode() {
     seed_product(&conn, "pv-ub", "VARIANT-UPDATE-BC", "Update Barcode", 0);
     let s = store(&conn);
 
-    let v = ProductVariant::new("VARIANT-UPDATE-BC", "Original", "VUB-001")
-        .with_barcode("old-barcode");
+    let v =
+        ProductVariant::new("VARIANT-UPDATE-BC", "Original", "VUB-001").with_barcode("old-barcode");
     s.create_product_variant(&v).unwrap();
 
     let updated = ProductVariant {
@@ -407,10 +428,7 @@ fn variant_update_sort_order() {
     let v = ProductVariant::new("VARIANT-SORT", "Reorder Me", "VS-001").with_sort_order(1);
     s.create_product_variant(&v).unwrap();
 
-    let updated = ProductVariant {
-        sort_order: 5,
-        ..v
-    };
+    let updated = ProductVariant { sort_order: 5, ..v };
     s.update_product_variant(&updated).unwrap();
 
     let loaded = s.get_product_variant("VS-001").unwrap().unwrap();
@@ -430,7 +448,9 @@ fn get_stock_nonexistent_product_id_returns_zero() {
 fn get_stock_zero_for_product_without_inventory_row() {
     let conn = setup();
     let s = store(&conn);
-    let p = s.create_product("NO-INV", "No Inventory Row", price(100), None, None, 0).unwrap();
+    let p = s
+        .create_product("NO-INV", "No Inventory Row", price(100), None, None, 0)
+        .unwrap();
 
     // Product exists but has no inventory row → get_stock returns 0.
     assert_eq!(s.get_stock(&p.id).unwrap(), 0);
@@ -442,11 +462,16 @@ fn get_stock_zero_for_product_without_inventory_row() {
 fn products_without_stock_show_none_in_list() {
     let conn = setup();
     let s = store(&conn);
-    let p = s.create_product("NO-STOCK-LIST", "No Stock", price(100), None, None, 0).unwrap();
+    let p = s
+        .create_product("NO-STOCK-LIST", "No Stock", price(100), None, None, 0)
+        .unwrap();
 
     let products = s.list_products().unwrap();
     let found = products.iter().find(|pr| pr.product.id == p.id).unwrap();
-    assert_eq!(found.stock_qty, None, "product without inventory row shows None");
+    assert_eq!(
+        found.stock_qty, None,
+        "product without inventory row shows None"
+    );
 }
 
 #[test]
@@ -456,7 +481,10 @@ fn products_with_stock_show_qty_in_list() {
     let s = store(&conn);
 
     let products = s.list_products().unwrap();
-    let found = products.iter().find(|p| p.product.sku.as_str() == "STOCK-LIST").unwrap();
+    let found = products
+        .iter()
+        .find(|p| p.product.sku.as_str() == "STOCK-LIST")
+        .unwrap();
     assert_eq!(found.stock_qty, Some(42));
 }
 
@@ -471,23 +499,30 @@ fn inventory_updated_at_changes_on_adjustment() {
     let id = s.product_id_by_sku("INV-TIMESTAMP").unwrap().unwrap();
 
     // Read initial updated_at from inventory table.
-    let initial: String = conn.query_row(
-        "SELECT updated_at FROM inventory WHERE product_id = ?1",
-        rusqlite::params![id],
-        |row| row.get(0),
-    ).unwrap();
+    let initial: String = conn
+        .query_row(
+            "SELECT updated_at FROM inventory WHERE product_id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        )
+        .unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(2));
 
     s.adjust_stock("INV-TIMESTAMP", 5).unwrap();
 
-    let after: String = conn.query_row(
-        "SELECT updated_at FROM inventory WHERE product_id = ?1",
-        rusqlite::params![id],
-        |row| row.get(0),
-    ).unwrap();
+    let after: String = conn
+        .query_row(
+            "SELECT updated_at FROM inventory WHERE product_id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        )
+        .unwrap();
 
-    assert!(after > initial, "updated_at should be newer after adjustment");
+    assert!(
+        after > initial,
+        "updated_at should be newer after adjustment"
+    );
     assert!(after.contains('T'), "updated_at should be ISO-8601");
     assert!(after.ends_with('Z'), "updated_at should be UTC");
 }

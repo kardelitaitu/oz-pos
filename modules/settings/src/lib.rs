@@ -35,10 +35,8 @@
 
 // Re-export key settings domain types from oz-core so consumers can
 // access settings types through this module without importing oz-core.
-pub use oz_core::{
-    Feature, FeatureRegistry, Settings,
-};
 pub use oz_core::settings::keys;
+pub use oz_core::{Feature, FeatureRegistry, Settings};
 
 use std::fmt::Debug;
 
@@ -175,9 +173,17 @@ mod tests {
     struct OtherModule;
 
     impl Module for OtherModule {
-        fn id(&self) -> &'static str { "other" }
-        fn on_load(&mut self) -> ModuleResult { Ok(()) }
-        fn on_start(&mut self) -> ModuleResult { Ok(()) }
-        fn on_stop(&mut self) -> ModuleResult { Ok(()) }
+        fn id(&self) -> &'static str {
+            "other"
+        }
+        fn on_load(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_start(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_stop(&mut self) -> ModuleResult {
+            Ok(())
+        }
     }
 }

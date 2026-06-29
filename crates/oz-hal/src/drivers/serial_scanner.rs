@@ -18,7 +18,7 @@ use tokio::task::spawn_blocking;
 
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
-use crate::transport::serial::{open_port, SerialPortInfo};
+use crate::transport::serial::{SerialPortInfo, open_port};
 use crate::types::{Barcode, DeviceInfo};
 
 /// Common baud rates supported by most serial barcode scanners.
@@ -36,11 +36,7 @@ pub struct SerialBarcodeScanner {
 impl SerialBarcodeScanner {
     /// Create a new serial scanner stub targeting the given port.
     pub fn new(info: SerialPortInfo, baud_rate: u32) -> Self {
-        let device_info = DeviceInfo::new(
-            "serial",
-            &info.description,
-            &info.port_name,
-        );
+        let device_info = DeviceInfo::new("serial", &info.description, &info.port_name);
 
         Self {
             port_name: info.port_name,

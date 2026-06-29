@@ -325,8 +325,20 @@ struct TableCols {
 impl TableCols {
     fn for_width(w: usize) -> Self {
         match w {
-            32 => Self { name: 16, qty: 3, price: 5, total: 5, sep: " " },
-            _ => Self { name: 26, qty: 4, price: 6, total: 6, sep: "  " },
+            32 => Self {
+                name: 16,
+                qty: 3,
+                price: 5,
+                total: 5,
+                sep: " ",
+            },
+            _ => Self {
+                name: 26,
+                qty: 4,
+                price: 6,
+                total: 6,
+                sep: "  ",
+            },
         }
     }
 }
@@ -379,7 +391,8 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
         let total_h = right_pad("Total", cols.total);
         let header = format!(
             "Item{:<name_w$}{s}{qty_h}{s}{price_h}{s}{total_h}",
-            "", s = cols.sep,
+            "",
+            s = cols.sep,
         );
         b.bold(&header);
     }
@@ -397,7 +410,10 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
 
         let line = format!(
             "{:<name$}{sep}{:>qty_pad$}{qty_s}{sep}{:>price_pad$}{price_s}{sep}{:>total_pad$}{total_s}",
-            name, "", "", "",
+            name,
+            "",
+            "",
+            "",
             name = cols.name,
             sep = cols.sep,
             qty_pad = qty_pad,
@@ -405,18 +421,37 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
             total_pad = total_pad,
         );
         b.text(&line);
-        if config.show_tax && let Some(ref tax) = item.tax_amount {
-            let indent = cols.name + cols.sep.len() + cols.qty + cols.sep.len() + cols.price + cols.sep.len();
+        if config.show_tax
+            && let Some(ref tax) = item.tax_amount
+        {
+            let indent = cols.name
+                + cols.sep.len()
+                + cols.qty
+                + cols.sep.len()
+                + cols.price
+                + cols.sep.len();
             let tax_str = format_money(tax, config);
-            let tax_line = format!("{:indent$}Tax: {:>tax_pad$}{tax_str}", "", "", indent = indent, tax_pad = cols.total.saturating_sub(tax_str.len() + 5));
+            let tax_line = format!(
+                "{:indent$}Tax: {:>tax_pad$}{tax_str}",
+                "",
+                "",
+                indent = indent,
+                tax_pad = cols.total.saturating_sub(tax_str.len() + 5)
+            );
             b.text(&tax_line);
         }
     }
     b.separator();
 
     // ── Totals (right-aligned) ────────────────────────
-    b.text(&right_line("SUBTOTAL:", &format_money(&r.subtotal, config), w));
-    if config.show_tax && let Some(ref tax) = r.tax {
+    b.text(&right_line(
+        "SUBTOTAL:",
+        &format_money(&r.subtotal, config),
+        w,
+    ));
+    if config.show_tax
+        && let Some(ref tax) = r.tax
+    {
         b.text(&right_line("TAX:", &format_money(tax, config), w));
     }
     b.separator();
@@ -425,7 +460,11 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
 
     // ── Payments ──────────────────────────────────────
     for pmt in &r.payments {
-        b.text(&right_line(&pmt.method.to_uppercase(), &format_money(&pmt.amount, config), w));
+        b.text(&right_line(
+            &pmt.method.to_uppercase(),
+            &format_money(&pmt.amount, config),
+            w,
+        ));
         if let Some(ref chg) = pmt.change {
             b.text(&right_line("CHANGE:", &format_money(chg, config), w));
         }
@@ -623,7 +662,10 @@ mod tests {
 
     #[test]
     fn sales_receipt_contains_tax_when_show_tax() {
-        let cfg = ReceiptConfig { show_tax: true, ..default_config() };
+        let cfg = ReceiptConfig {
+            show_tax: true,
+            ..default_config()
+        };
         let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("TAX:"));
@@ -632,15 +674,24 @@ mod tests {
 
     #[test]
     fn sales_receipt_hides_tax_when_show_tax_false() {
-        let cfg = ReceiptConfig { show_tax: false, ..default_config() };
+        let cfg = ReceiptConfig {
+            show_tax: false,
+            ..default_config()
+        };
         let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
-        assert!(!text.contains("TAX:"), "tax should not appear when show_tax=false");
+        assert!(
+            !text.contains("TAX:"),
+            "tax should not appear when show_tax=false"
+        );
     }
 
     #[test]
     fn sales_receipt_shows_per_line_tax() {
-        let cfg = ReceiptConfig { show_tax: true, ..default_config() };
+        let cfg = ReceiptConfig {
+            show_tax: true,
+            ..default_config()
+        };
         let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("Tax:"), "per-line tax label should appear");
@@ -651,18 +702,31 @@ mod tests {
 
     #[test]
     fn sales_receipt_hides_per_line_tax_when_show_tax_false() {
-        let cfg = ReceiptConfig { show_tax: false, ..default_config() };
+        let cfg = ReceiptConfig {
+            show_tax: false,
+            ..default_config()
+        };
         let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
-        assert!(!text.contains("Tax:"), "per-line tax should not appear when show_tax=false");
+        assert!(
+            !text.contains("Tax:"),
+            "per-line tax should not appear when show_tax=false"
+        );
     }
 
     #[test]
     fn sales_receipt_contains_currency_when_enabled() {
-        let cfg = ReceiptConfig { show_currency: true, ..default_config() };
+        let cfg = ReceiptConfig {
+            show_currency: true,
+            ..default_config()
+        };
         let data = format_sales_receipt(&sample_receipt(), &cfg);
         let text = String::from_utf8_lossy(&data);
-        assert!(text.contains("$13.20"), "receipt should show $ prefix: {:?}", text);
+        assert!(
+            text.contains("$13.20"),
+            "receipt should show $ prefix: {:?}",
+            text
+        );
     }
 
     #[test]

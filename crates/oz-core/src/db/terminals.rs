@@ -2,8 +2,8 @@
 
 use rusqlite::params;
 
-use crate::error::CoreError;
 use crate::Terminal;
+use crate::error::CoreError;
 
 use super::Store;
 
@@ -13,7 +13,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, device_id, terminal_secret, is_active,
                     last_seen_at, metadata, created_at, updated_at
-             FROM terminals ORDER BY name ASC"
+             FROM terminals ORDER BY name ASC",
         )?;
         let rows = stmt.query_map([], Self::row_to_terminal)?;
         rows.map(|r| Ok(r?)).collect()
@@ -24,7 +24,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, device_id, terminal_secret, is_active,
                     last_seen_at, metadata, created_at, updated_at
-             FROM terminals WHERE id = ?1"
+             FROM terminals WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], Self::row_to_terminal);
         match result {
@@ -35,11 +35,14 @@ impl Store<'_> {
     }
 
     /// Get a terminal by device_id.
-    pub fn get_terminal_by_device_id(&self, device_id: &str) -> Result<Option<Terminal>, CoreError> {
+    pub fn get_terminal_by_device_id(
+        &self,
+        device_id: &str,
+    ) -> Result<Option<Terminal>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, device_id, terminal_secret, is_active,
                     last_seen_at, metadata, created_at, updated_at
-             FROM terminals WHERE device_id = ?1"
+             FROM terminals WHERE device_id = ?1",
         )?;
         let result = stmt.query_row(params![device_id], Self::row_to_terminal);
         match result {
@@ -56,10 +59,15 @@ impl Store<'_> {
                                     last_seen_at, metadata, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                terminal.id, terminal.name, terminal.device_id,
-                terminal.terminal_secret, terminal.is_active as i64,
-                terminal.last_seen_at, terminal.metadata,
-                terminal.created_at, terminal.updated_at,
+                terminal.id,
+                terminal.name,
+                terminal.device_id,
+                terminal.terminal_secret,
+                terminal.is_active as i64,
+                terminal.last_seen_at,
+                terminal.metadata,
+                terminal.created_at,
+                terminal.updated_at,
             ],
         )?;
         Ok(())
@@ -73,13 +81,20 @@ impl Store<'_> {
                                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE id = ?7",
             params![
-                terminal.name, terminal.device_id, terminal.terminal_secret,
-                terminal.is_active as i64, terminal.last_seen_at, terminal.metadata,
+                terminal.name,
+                terminal.device_id,
+                terminal.terminal_secret,
+                terminal.is_active as i64,
+                terminal.last_seen_at,
+                terminal.metadata,
                 terminal.id,
             ],
         )?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "terminal", id: terminal.id.clone() });
+            return Err(CoreError::NotFound {
+                entity: "terminal",
+                id: terminal.id.clone(),
+            });
         }
         Ok(())
     }
@@ -93,16 +108,24 @@ impl Store<'_> {
             params![id],
         )?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "terminal", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "terminal",
+                id: id.to_owned(),
+            });
         }
         Ok(())
     }
 
     /// Delete a terminal by id.
     pub fn delete_terminal(&self, id: &str) -> Result<(), CoreError> {
-        let affected = self.conn.execute("DELETE FROM terminals WHERE id = ?1", params![id])?;
+        let affected = self
+            .conn
+            .execute("DELETE FROM terminals WHERE id = ?1", params![id])?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "terminal", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "terminal",
+                id: id.to_owned(),
+            });
         }
         Ok(())
     }
@@ -218,7 +241,10 @@ mod tests {
     fn get_terminal_by_device_id_found() {
         let conn = fresh();
         seed_terminals(&conn);
-        let t = store(&conn).get_terminal_by_device_id("dev-002").unwrap().unwrap();
+        let t = store(&conn)
+            .get_terminal_by_device_id("dev-002")
+            .unwrap()
+            .unwrap();
         assert_eq!(t.name, "Back Office");
         assert_eq!(t.id, "term-2");
     }
@@ -226,7 +252,9 @@ mod tests {
     #[test]
     fn get_terminal_by_device_id_not_found() {
         let conn = fresh();
-        let t = store(&conn).get_terminal_by_device_id("unknown-device").unwrap();
+        let t = store(&conn)
+            .get_terminal_by_device_id("unknown-device")
+            .unwrap();
         assert!(t.is_none());
     }
 
@@ -263,7 +291,10 @@ mod tests {
 
         let loaded = store(&conn).get_terminal("term-meta").unwrap().unwrap();
         assert!(!loaded.is_active);
-        assert_eq!(loaded.metadata.as_deref(), Some("{\"location\":\"warehouse\"}"));
+        assert_eq!(
+            loaded.metadata.as_deref(),
+            Some("{\"location\":\"warehouse\"}")
+        );
     }
 
     #[test]

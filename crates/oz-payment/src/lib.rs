@@ -39,16 +39,14 @@ pub use types::{PaymentMethod, PaymentReceipt, PaymentRequest, PaymentResult};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foundation::{Currency, Money};
-
-    fn usd() -> Currency {
-        "USD".parse().unwrap()
-    }
 
     #[test]
     fn declined_display() {
         let err = PaymentError::Declined("insufficient funds".into());
-        assert_eq!(err.to_string(), "authorization declined: insufficient funds");
+        assert_eq!(
+            err.to_string(),
+            "authorization declined: insufficient funds"
+        );
     }
 
     #[test]

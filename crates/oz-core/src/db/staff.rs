@@ -51,15 +51,26 @@ impl Store<'_> {
     }
 
     /// Insert a new role.
-    pub fn create_role(&self, id: &str, name: &str, description: &str, permissions: &str) -> Result<Role, CoreError> {
+    pub fn create_role(
+        &self,
+        id: &str,
+        name: &str,
+        description: &str,
+        permissions: &str,
+    ) -> Result<Role, CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let result = self.conn.execute(
             "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![id, name.trim(), description, permissions, now, now],
         );
         match result {
-            Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::ConstraintViolation => {
-                return Err(CoreError::Conflict { entity: "role", field: "name" });
+            Err(rusqlite::Error::SqliteFailure(e, _))
+                if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+            {
+                return Err(CoreError::Conflict {
+                    entity: "role",
+                    field: "name",
+                });
             }
             Err(e) => return Err(e.into()),
             Ok(_) => {}
@@ -150,12 +161,24 @@ impl Store<'_> {
     }
 
     /// Insert a new user.
-    pub fn create_user(&self, username: &str, pin_hash: &str, display_name: &str, role_id: &str) -> Result<User, CoreError> {
+    pub fn create_user(
+        &self,
+        username: &str,
+        pin_hash: &str,
+        display_name: &str,
+        role_id: &str,
+    ) -> Result<User, CoreError> {
         if username.trim().is_empty() {
-            return Err(CoreError::Validation { field: "username", message: "username must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "username",
+                message: "username must not be empty".into(),
+            });
         }
         if display_name.trim().is_empty() {
-            return Err(CoreError::Validation { field: "display_name", message: "display name must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "display_name",
+                message: "display name must not be empty".into(),
+            });
         }
 
         let id = uuid::Uuid::new_v4().to_string();
@@ -167,8 +190,13 @@ impl Store<'_> {
             params![id, username.trim(), pin_hash, display_name.trim(), role_id, now, now],
         );
         match result {
-            Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::ConstraintViolation => {
-                return Err(CoreError::Conflict { entity: "user", field: "username" });
+            Err(rusqlite::Error::SqliteFailure(e, _))
+                if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+            {
+                return Err(CoreError::Conflict {
+                    entity: "user",
+                    field: "username",
+                });
             }
             Err(e) => return Err(e.into()),
             Ok(_) => {}
@@ -187,9 +215,19 @@ impl Store<'_> {
     }
 
     /// Update an existing user.
-    pub fn update_user(&self, id: &str, username: &str, display_name: &str, role_id: &str, is_active: bool) -> Result<User, CoreError> {
+    pub fn update_user(
+        &self,
+        id: &str,
+        username: &str,
+        display_name: &str,
+        role_id: &str,
+        is_active: bool,
+    ) -> Result<User, CoreError> {
         if display_name.trim().is_empty() {
-            return Err(CoreError::Validation { field: "display_name", message: "display name must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "display_name",
+                message: "display name must not be empty".into(),
+            });
         }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -198,16 +236,27 @@ impl Store<'_> {
             params![username.trim(), display_name.trim(), role_id, is_active, now, id],
         )?;
         if rows == 0 {
-            return Err(CoreError::NotFound { entity: "user", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "user",
+                id: id.to_owned(),
+            });
         }
-        self.get_user(id)?.ok_or_else(|| CoreError::NotFound { entity: "user", id: id.to_owned() })
+        self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "user",
+            id: id.to_owned(),
+        })
     }
 
     /// Delete a user by id.
     pub fn delete_user(&self, id: &str) -> Result<(), CoreError> {
-        let rows = self.conn.execute("DELETE FROM users WHERE id = ?1", params![id])?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM users WHERE id = ?1", params![id])?;
         if rows == 0 {
-            return Err(CoreError::NotFound { entity: "user", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "user",
+                id: id.to_owned(),
+            });
         }
         Ok(())
     }
@@ -294,7 +343,12 @@ mod tests {
     fn create_role_basic() {
         let conn = fresh();
         let r = store(&conn)
-            .create_role("role-viewer", "viewer", "Read-only access", "[\"sales:view\"]")
+            .create_role(
+                "role-viewer",
+                "viewer",
+                "Read-only access",
+                "[\"sales:view\"]",
+            )
             .unwrap();
         assert_eq!(r.name, "viewer");
         assert_eq!(r.description, "Read-only access");
@@ -305,7 +359,9 @@ mod tests {
     fn create_role_duplicate_name() {
         let conn = fresh();
         seed_roles(&conn);
-        let err = store(&conn).create_role("role-dup", "owner", "Dup", "[]").unwrap_err();
+        let err = store(&conn)
+            .create_role("role-dup", "owner", "Dup", "[]")
+            .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { entity, .. } if entity == "role"));
     }
 
@@ -391,7 +447,9 @@ mod tests {
     fn create_user_empty_username() {
         let conn = fresh();
         seed_roles(&conn);
-        let err = store(&conn).create_user("", "hash", "Diana", "role-cashier").unwrap_err();
+        let err = store(&conn)
+            .create_user("", "hash", "Diana", "role-cashier")
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "username"));
     }
 
@@ -399,7 +457,9 @@ mod tests {
     fn create_user_empty_display_name() {
         let conn = fresh();
         seed_roles(&conn);
-        let err = store(&conn).create_user("diana", "hash", "   ", "role-cashier").unwrap_err();
+        let err = store(&conn)
+            .create_user("diana", "hash", "   ", "role-cashier")
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
     }
 
@@ -407,7 +467,9 @@ mod tests {
     fn create_user_duplicate_username() {
         let conn = fresh();
         seed_users(&conn);
-        let err = store(&conn).create_user("alice", "hash2", "Alice 2", "role-owner").unwrap_err();
+        let err = store(&conn)
+            .create_user("alice", "hash2", "Alice 2", "role-owner")
+            .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { .. }));
     }
 
@@ -438,7 +500,9 @@ mod tests {
     #[test]
     fn update_user_not_found() {
         let conn = fresh();
-        let err = store(&conn).update_user("nope", "u", "U", "role-owner", true).unwrap_err();
+        let err = store(&conn)
+            .update_user("nope", "u", "U", "role-owner", true)
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
@@ -446,7 +510,9 @@ mod tests {
     fn update_user_empty_display_name() {
         let conn = fresh();
         seed_users(&conn);
-        let err = store(&conn).update_user("user-1", "alice", "", "role-cashier", true).unwrap_err();
+        let err = store(&conn)
+            .update_user("user-1", "alice", "", "role-cashier", true)
+            .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
     }
 

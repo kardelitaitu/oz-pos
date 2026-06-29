@@ -18,7 +18,10 @@ pub struct Money {
 
 impl Default for Money {
     fn default() -> Self {
-        Self { minor_units: 0, currency: Currency(*b"USD") }
+        Self {
+            minor_units: 0,
+            currency: Currency(*b"USD"),
+        }
     }
 }
 
@@ -83,7 +86,10 @@ impl Money {
     /// Construct a zero amount in the given currency.
     #[must_use]
     pub fn zero(currency: Currency) -> Self {
-        Self { minor_units: 0, currency }
+        Self {
+            minor_units: 0,
+            currency,
+        }
     }
 
     /// Construct from a major-unit amount (e.g., dollars).
@@ -104,7 +110,10 @@ impl Money {
         }
         self.minor_units
             .checked_add(other.minor_units)
-            .map(|v| Self { minor_units: v, currency: self.currency })
+            .map(|v| Self {
+                minor_units: v,
+                currency: self.currency,
+            })
     }
 }
 
@@ -112,7 +121,9 @@ impl Money {
 mod tests {
     use super::*;
 
-    fn usd() -> Currency { "USD".parse().unwrap() }
+    fn usd() -> Currency {
+        "USD".parse().unwrap()
+    }
 
     #[test]
     fn money_zero_is_zero() {
@@ -155,7 +166,10 @@ mod tests {
 
     #[test]
     fn checked_add_overflow_returns_none() {
-        let a = Money { minor_units: i64::MAX, currency: usd() };
+        let a = Money {
+            minor_units: i64::MAX,
+            currency: usd(),
+        };
         let b = Money::from_major(1, usd()).unwrap();
         assert!(a.checked_add(b).is_none());
     }

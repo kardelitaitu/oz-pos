@@ -52,7 +52,12 @@ impl CartLine {
     /// Panics if `qty <= 0`.
     pub fn new(sku: Sku, qty: i64, unit_price: Money) -> Self {
         assert!(qty > 0, "qty must be > 0, got {qty}");
-        Self { id: LineId::new(), sku, qty, unit_price }
+        Self {
+            id: LineId::new(),
+            sku,
+            qty,
+            unit_price,
+        }
     }
 
     /// Total for this line: `unit_price * qty`, in minor units.
@@ -62,7 +67,10 @@ impl CartLine {
         self.unit_price
             .minor_units
             .checked_mul(self.qty)
-            .map(|minor_units| Money { minor_units, currency: self.unit_price.currency })
+            .map(|minor_units| Money {
+                minor_units,
+                currency: self.unit_price.currency,
+            })
     }
 }
 
@@ -104,17 +112,29 @@ impl Cart {
     }
 
     #[must_use]
-    pub fn id(&self) -> CartId { self.id }
+    pub fn id(&self) -> CartId {
+        self.id
+    }
     #[must_use]
-    pub fn currency(&self) -> Currency { self.currency }
+    pub fn currency(&self) -> Currency {
+        self.currency
+    }
     #[must_use]
-    pub fn lines(&self) -> &[CartLine] { &self.lines }
+    pub fn lines(&self) -> &[CartLine] {
+        &self.lines
+    }
     #[must_use]
-    pub fn line_count(&self) -> usize { self.lines.len() }
+    pub fn line_count(&self) -> usize {
+        self.lines.len()
+    }
     #[must_use]
-    pub fn discount_percent(&self) -> i64 { self.discount_percent }
+    pub fn discount_percent(&self) -> i64 {
+        self.discount_percent
+    }
     #[must_use]
-    pub fn discount_label(&self) -> Option<&str> { self.discount_label.as_deref() }
+    pub fn discount_label(&self) -> Option<&str> {
+        self.discount_label.as_deref()
+    }
 
     /// Set a cart-level discount. `percent` must be 0-100.
     pub fn set_discount(&mut self, percent: i64, label: Option<String>) -> Result<(), CartError> {
@@ -162,7 +182,10 @@ impl Cart {
         if self.discount_percent > 0 {
             let discount_multiplier = 100 - self.discount_percent;
             let discounted = acc.minor_units.checked_mul(discount_multiplier)? / 100;
-            acc = Money { minor_units: discounted, currency: self.currency };
+            acc = Money {
+                minor_units: discounted,
+                currency: self.currency,
+            };
         }
         Some(acc)
     }
@@ -179,7 +202,10 @@ impl Cart {
             subtotal = subtotal.checked_add(t)?;
         }
         let discounted = subtotal.minor_units.checked_mul(self.discount_percent)? / 100;
-        Some(Money { minor_units: discounted, currency: self.currency })
+        Some(Money {
+            minor_units: discounted,
+            currency: self.currency,
+        })
     }
 }
 
@@ -191,8 +217,12 @@ fn currency_summary(c: &Currency) -> String {
 mod tests {
     use super::*;
 
-    fn usd() -> Currency { "USD".parse().unwrap() }
-    fn eur() -> Currency { "EUR".parse().unwrap() }
+    fn usd() -> Currency {
+        "USD".parse().unwrap()
+    }
+    fn eur() -> Currency {
+        "EUR".parse().unwrap()
+    }
 
     #[test]
     fn empty_cart_has_zero_total() {
@@ -204,7 +234,14 @@ mod tests {
     #[test]
     fn add_line_appends_and_returns_id() {
         let mut cart = Cart::new(usd());
-        let line = CartLine::new(Sku::new("COFFEE"), 2, Money { minor_units: 350, currency: usd() });
+        let line = CartLine::new(
+            Sku::new("COFFEE"),
+            2,
+            Money {
+                minor_units: 350,
+                currency: usd(),
+            },
+        );
         let id = cart.add_line(line).unwrap();
         assert_eq!(cart.line_count(), 1);
         assert_eq!(cart.lines()[0].id, id);
@@ -214,16 +251,50 @@ mod tests {
     #[test]
     fn add_line_currency_mismatch_rejected() {
         let mut cart = Cart::new(usd());
-        let bad = CartLine::new(Sku::new("TEA"), 1, Money { minor_units: 200, currency: eur() });
-        assert!(matches!(cart.add_line(bad), Err(CartError::CurrencyMismatch { .. })));
+        let bad = CartLine::new(
+            Sku::new("TEA"),
+            1,
+            Money {
+                minor_units: 200,
+                currency: eur(),
+            },
+        );
+        assert!(matches!(
+            cart.add_line(bad),
+            Err(CartError::CurrencyMismatch { .. })
+        ));
     }
 
     #[test]
     fn remove_sku_drops_matching_lines() {
         let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 100, currency: usd() })).unwrap();
-        cart.add_line(CartLine::new(Sku::new("B"), 1, Money { minor_units: 200, currency: usd() })).unwrap();
-        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 150, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("A"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("B"),
+            1,
+            Money {
+                minor_units: 200,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("A"),
+            1,
+            Money {
+                minor_units: 150,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
         let removed = cart.remove_sku("A").unwrap();
         assert_eq!(removed, 2);
         assert_eq!(cart.line_count(), 1);
@@ -232,8 +303,24 @@ mod tests {
     #[test]
     fn total_overflow_returns_none() {
         let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(Sku::new("BIG"), 1, Money { minor_units: i64::MAX, currency: usd() })).unwrap();
-        cart.add_line(CartLine::new(Sku::new("PLUS"), 1, Money { minor_units: 1, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("BIG"),
+            1,
+            Money {
+                minor_units: i64::MAX,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("PLUS"),
+            1,
+            Money {
+                minor_units: 1,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
         assert!(cart.total().is_none());
     }
 
@@ -319,7 +406,15 @@ mod tests {
     #[test]
     fn discount_applied_to_total() {
         let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(Sku::new("ITEM"), 2, Money { minor_units: 1000, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("ITEM"),
+            2,
+            Money {
+                minor_units: 1000,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
         // 2 x 1000 = 2000, with 10% discount = 1800
         cart.set_discount(10, None).unwrap();
         assert_eq!(cart.total().unwrap().minor_units, 1800);
@@ -328,7 +423,15 @@ mod tests {
     #[test]
     fn discount_amount_calculated_correctly() {
         let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(Sku::new("ITEM"), 3, Money { minor_units: 500, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("ITEM"),
+            3,
+            Money {
+                minor_units: 500,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
         // 3 x 500 = 1500, with 10% discount = 150 discount
         cart.set_discount(10, Some("10%".into())).unwrap();
         assert_eq!(cart.discount_amount().unwrap().minor_units, 150);
@@ -343,7 +446,15 @@ mod tests {
     #[test]
     fn discount_overflow_returns_none() {
         let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(Sku::new("BIG"), 1, Money { minor_units: i64::MAX, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("BIG"),
+            1,
+            Money {
+                minor_units: i64::MAX,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
         // Setting a discount on an overflowing subtotal should propagate the overflow
         cart.set_discount(50, None).unwrap();
         assert!(cart.discount_amount().is_none());
@@ -353,7 +464,15 @@ mod tests {
     #[test]
     fn remove_sku_not_found_returns_error() {
         let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 100, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(
+            Sku::new("A"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
         assert!(matches!(
             cart.remove_sku("Z"),
             Err(CartError::SkuNotInCart(..))
@@ -364,7 +483,10 @@ mod tests {
     fn cart_line_new_panics_on_zero_qty() {
         use std::panic::catch_unwind;
         let sku = Sku::new("TEST");
-        let price = Money { minor_units: 100, currency: usd() };
+        let price = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
         let result = catch_unwind(|| CartLine::new(sku, 0, price));
         assert!(result.is_err());
     }
@@ -373,20 +495,37 @@ mod tests {
     fn cart_line_new_panics_on_negative_qty() {
         use std::panic::catch_unwind;
         let sku = Sku::new("TEST");
-        let price = Money { minor_units: 100, currency: usd() };
+        let price = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
         let result = catch_unwind(|| CartLine::new(sku, -1, price));
         assert!(result.is_err());
     }
 
     #[test]
     fn cart_line_total_calculated() {
-        let line = CartLine::new(Sku::new("TEA"), 3, Money { minor_units: 150, currency: usd() });
+        let line = CartLine::new(
+            Sku::new("TEA"),
+            3,
+            Money {
+                minor_units: 150,
+                currency: usd(),
+            },
+        );
         assert_eq!(line.total().unwrap().minor_units, 450);
     }
 
     #[test]
     fn cart_line_total_overflow_returns_none() {
-        let line = CartLine::new(Sku::new("BIG"), 2, Money { minor_units: i64::MAX, currency: usd() });
+        let line = CartLine::new(
+            Sku::new("BIG"),
+            2,
+            Money {
+                minor_units: i64::MAX,
+                currency: usd(),
+            },
+        );
         assert!(line.total().is_none());
     }
 
@@ -412,7 +551,10 @@ mod tests {
         let err = CartError::InvalidDiscount(150);
         let msg = err.to_string();
         assert!(msg.contains("150"), "msg should contain 150, got: {msg}");
-        assert!(msg.contains("discount"), "msg should contain discount, got: {msg}");
+        assert!(
+            msg.contains("discount"),
+            "msg should contain discount, got: {msg}"
+        );
     }
 
     #[test]

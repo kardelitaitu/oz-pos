@@ -126,20 +126,50 @@ mod tests {
 
     #[test]
     fn sale_status_valid_transitions() {
-        assert!(SaleStatus::can_transition_to(SaleStatus::Pending, SaleStatus::Active));
-        assert!(SaleStatus::can_transition_to(SaleStatus::Active, SaleStatus::Completed));
-        assert!(SaleStatus::can_transition_to(SaleStatus::Active, SaleStatus::Voided));
+        assert!(SaleStatus::can_transition_to(
+            SaleStatus::Pending,
+            SaleStatus::Active
+        ));
+        assert!(SaleStatus::can_transition_to(
+            SaleStatus::Active,
+            SaleStatus::Completed
+        ));
+        assert!(SaleStatus::can_transition_to(
+            SaleStatus::Active,
+            SaleStatus::Voided
+        ));
     }
 
     #[test]
     fn sale_status_invalid_transitions() {
-        assert!(!SaleStatus::can_transition_to(SaleStatus::Pending, SaleStatus::Completed));
-        assert!(!SaleStatus::can_transition_to(SaleStatus::Pending, SaleStatus::Voided));
-        assert!(!SaleStatus::can_transition_to(SaleStatus::Completed, SaleStatus::Pending));
-        assert!(!SaleStatus::can_transition_to(SaleStatus::Completed, SaleStatus::Active));
-        assert!(!SaleStatus::can_transition_to(SaleStatus::Completed, SaleStatus::Voided));
-        assert!(!SaleStatus::can_transition_to(SaleStatus::Voided, SaleStatus::Pending));
-        assert!(!SaleStatus::can_transition_to(SaleStatus::Voided, SaleStatus::Active));
+        assert!(!SaleStatus::can_transition_to(
+            SaleStatus::Pending,
+            SaleStatus::Completed
+        ));
+        assert!(!SaleStatus::can_transition_to(
+            SaleStatus::Pending,
+            SaleStatus::Voided
+        ));
+        assert!(!SaleStatus::can_transition_to(
+            SaleStatus::Completed,
+            SaleStatus::Pending
+        ));
+        assert!(!SaleStatus::can_transition_to(
+            SaleStatus::Completed,
+            SaleStatus::Active
+        ));
+        assert!(!SaleStatus::can_transition_to(
+            SaleStatus::Completed,
+            SaleStatus::Voided
+        ));
+        assert!(!SaleStatus::can_transition_to(
+            SaleStatus::Voided,
+            SaleStatus::Pending
+        ));
+        assert!(!SaleStatus::can_transition_to(
+            SaleStatus::Voided,
+            SaleStatus::Active
+        ));
     }
 
     #[test]
@@ -152,17 +182,34 @@ mod tests {
 
     #[test]
     fn sale_status_from_stored_str() {
-        assert_eq!(SaleStatus::from_stored_str("pending"), Some(SaleStatus::Pending));
-        assert_eq!(SaleStatus::from_stored_str("active"), Some(SaleStatus::Active));
-        assert_eq!(SaleStatus::from_stored_str("completed"), Some(SaleStatus::Completed));
-        assert_eq!(SaleStatus::from_stored_str("voided"), Some(SaleStatus::Voided));
+        assert_eq!(
+            SaleStatus::from_stored_str("pending"),
+            Some(SaleStatus::Pending)
+        );
+        assert_eq!(
+            SaleStatus::from_stored_str("active"),
+            Some(SaleStatus::Active)
+        );
+        assert_eq!(
+            SaleStatus::from_stored_str("completed"),
+            Some(SaleStatus::Completed)
+        );
+        assert_eq!(
+            SaleStatus::from_stored_str("voided"),
+            Some(SaleStatus::Voided)
+        );
         assert_eq!(SaleStatus::from_stored_str("unknown"), None);
         assert_eq!(SaleStatus::from_stored_str(""), None);
     }
 
     #[test]
     fn sale_status_serde_roundtrip() {
-        let statuses = [SaleStatus::Pending, SaleStatus::Active, SaleStatus::Completed, SaleStatus::Voided];
+        let statuses = [
+            SaleStatus::Pending,
+            SaleStatus::Active,
+            SaleStatus::Completed,
+            SaleStatus::Voided,
+        ];
         for s in &statuses {
             let json = serde_json::to_string(s).unwrap();
             let back: SaleStatus = serde_json::from_str(&json).unwrap();
@@ -199,8 +246,14 @@ mod tests {
             to: SaleStatus::Completed,
         };
         let msg = err.to_string();
-        assert!(msg.contains("Pending"), "message should contain 'Pending', got: {msg}");
-        assert!(msg.contains("Completed"), "message should contain 'Completed', got: {msg}");
+        assert!(
+            msg.contains("Pending"),
+            "message should contain 'Pending', got: {msg}"
+        );
+        assert!(
+            msg.contains("Completed"),
+            "message should contain 'Completed', got: {msg}"
+        );
     }
 
     #[test]
@@ -223,10 +276,22 @@ mod tests {
 
     #[test]
     fn invalid_transition_clone_eq() {
-        let a = InvalidTransition { from: SaleStatus::Pending, to: SaleStatus::Active };
-        let b = InvalidTransition { from: SaleStatus::Pending, to: SaleStatus::Active };
+        let a = InvalidTransition {
+            from: SaleStatus::Pending,
+            to: SaleStatus::Active,
+        };
+        let b = InvalidTransition {
+            from: SaleStatus::Pending,
+            to: SaleStatus::Active,
+        };
         assert_eq!(a, b);
-        assert_ne!(a, InvalidTransition { from: SaleStatus::Pending, to: SaleStatus::Completed });
+        assert_ne!(
+            a,
+            InvalidTransition {
+                from: SaleStatus::Pending,
+                to: SaleStatus::Completed
+            }
+        );
     }
 
     // ── PaymentMethod ─────────────────────────────────────────────
@@ -243,7 +308,10 @@ mod tests {
 
     #[test]
     fn payment_method_other_display() {
-        assert_eq!(PaymentMethod::Other("gift-card".to_string()).to_string(), "gift-card");
+        assert_eq!(
+            PaymentMethod::Other("gift-card".to_string()).to_string(),
+            "gift-card"
+        );
     }
 
     #[test]
@@ -276,7 +344,13 @@ mod tests {
 
     #[test]
     fn payment_method_serde_kebab_case() {
-        assert_eq!(serde_json::to_string(&PaymentMethod::Cash).unwrap(), "\"cash\"");
-        assert_eq!(serde_json::to_string(&PaymentMethod::Card).unwrap(), "\"card\"");
+        assert_eq!(
+            serde_json::to_string(&PaymentMethod::Cash).unwrap(),
+            "\"cash\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PaymentMethod::Card).unwrap(),
+            "\"card\""
+        );
     }
 }

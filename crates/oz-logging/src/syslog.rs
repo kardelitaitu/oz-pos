@@ -14,12 +14,12 @@
 //! oz_logging::syslog::init_syslog("oz-pos", "local0").ok();
 //! ```
 
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
-use crate::visitor::MessageVisitor;
 use crate::LoggingError;
+use crate::visitor::MessageVisitor;
 
 /// Initialise syslog logging for Linux systems.
 ///
@@ -63,7 +63,11 @@ pub fn init_syslog(ident: &str, facility: &str) -> Result<(), LoggingError> {
         "syslog" => libc::LOG_SYSLOG,
         "user" => libc::LOG_USER,
         "uucp" => libc::LOG_UUCP,
-        _ => return Err(LoggingError::InvalidLevel(format!("unknown syslog facility: {facility}"))),
+        _ => {
+            return Err(LoggingError::InvalidLevel(format!(
+                "unknown syslog facility: {facility}"
+            )));
+        }
     };
 
     let c_ident = std::ffi::CString::new(ident)
@@ -71,11 +75,14 @@ pub fn init_syslog(ident: &str, facility: &str) -> Result<(), LoggingError> {
 
     // SAFETY: openlog is safe with a valid CString and facility constant.
     unsafe {
-        libc::openlog(c_ident.as_ptr(), libc::LOG_PID | libc::LOG_NOWAIT, facility_code);
+        libc::openlog(
+            c_ident.as_ptr(),
+            libc::LOG_PID | libc::LOG_NOWAIT,
+            facility_code,
+        );
     }
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
 
@@ -94,11 +101,7 @@ use tracing_subscriber::layer::{Context, Layer};
 struct SyslogLayer;
 
 impl<S: tracing::Subscriber> Layer<S> for SyslogLayer {
-    fn on_event(
-        &self,
-        event: &tracing::Event<'_>,
-        _ctx: Context<'_, S>,
-    ) {
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
         let priority = match *event.metadata().level() {
             tracing::Level::ERROR => libc::LOG_ERR,
             tracing::Level::WARN => libc::LOG_WARNING,

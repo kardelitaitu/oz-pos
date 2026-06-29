@@ -5,7 +5,7 @@
 //! manipulate product categories.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::Store;
 
@@ -22,9 +22,7 @@ pub struct CategoryDto {
 
 /// Fetch all categories, ordered by name.
 #[command]
-pub async fn list_categories(
-    state: State<'_, AppState>,
-) -> Result<Vec<CategoryDto>, AppError> {
+pub async fn list_categories(state: State<'_, AppState>) -> Result<Vec<CategoryDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let categories = store.list_categories()?;

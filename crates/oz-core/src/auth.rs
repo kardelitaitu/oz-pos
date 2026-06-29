@@ -3,4 +3,4 @@
 //! Re-exports the hash/verify functions and `LoginSession` from the
 //! platform-core auth module.
 
-pub use platform_core::auth::{hash_pin, verify_pin, LoginSession};
+pub use platform_core::auth::{LoginSession, hash_pin, verify_pin};

@@ -80,12 +80,10 @@ mod tests {
         conn
     }
 
-    const TEST_MIGRATIONS: &[Migration] = &[
-        Migration {
-            id: "001_test.sql",
-            sql: "CREATE TABLE test_table (id INTEGER PRIMARY KEY)",
-        },
-    ];
+    const TEST_MIGRATIONS: &[Migration] = &[Migration {
+        id: "001_test.sql",
+        sql: "CREATE TABLE test_table (id INTEGER PRIMARY KEY)",
+    }];
 
     #[test]
     fn first_run_applies_all_migrations() {

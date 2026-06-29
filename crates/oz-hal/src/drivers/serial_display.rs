@@ -137,12 +137,9 @@ impl CustomerDisplay for SerialCustomerDisplay {
                 .ok_or_else(|| HalError::NotFound("display not connected".into()))?;
 
             // Clear, home, then write both lines.
-            port.write_all(CMD_CLEAR)
-                .map_err(HalError::Io)?;
-            port.write_all(&write_line(&line1))
-                .map_err(HalError::Io)?;
-            port.write_all(&write_line(&line2))
-                .map_err(HalError::Io)?;
+            port.write_all(CMD_CLEAR).map_err(HalError::Io)?;
+            port.write_all(&write_line(&line1)).map_err(HalError::Io)?;
+            port.write_all(&write_line(&line2)).map_err(HalError::Io)?;
 
             Ok::<_, HalError>(())
         })
@@ -159,8 +156,7 @@ impl CustomerDisplay for SerialCustomerDisplay {
                 .as_mut()
                 .ok_or_else(|| HalError::NotFound("display not connected".into()))?;
 
-            port.write_all(CMD_CLEAR)
-                .map_err(HalError::Io)?;
+            port.write_all(CMD_CLEAR).map_err(HalError::Io)?;
 
             Ok::<_, HalError>(())
         })

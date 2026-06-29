@@ -54,17 +54,30 @@ impl Store<'_> {
 
     /// Insert a new tax rate.
     pub fn create_tax_rate(
-        &self, name: &str, rate_bps: i64, is_default: bool, is_inclusive: bool,
+        &self,
+        name: &str,
+        rate_bps: i64,
+        is_default: bool,
+        is_inclusive: bool,
     ) -> Result<TaxRate, CoreError> {
         if name.trim().is_empty() {
-            return Err(CoreError::Validation { field: "name", message: "tax rate name must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "tax rate name must not be empty".into(),
+            });
         }
         if rate_bps < 0 {
-            return Err(CoreError::Validation { field: "rate_bps", message: "rate must be non-negative".into() });
+            return Err(CoreError::Validation {
+                field: "rate_bps",
+                message: "rate must be non-negative".into(),
+            });
         }
 
         if is_default {
-            self.conn.execute("UPDATE tax_rates SET is_default = 0 WHERE is_default = 1", [])?;
+            self.conn.execute(
+                "UPDATE tax_rates SET is_default = 0 WHERE is_default = 1",
+                [],
+            )?;
         }
 
         let id = uuid::Uuid::new_v4().to_string();
@@ -76,22 +89,44 @@ impl Store<'_> {
             params![id, name.trim(), rate_bps, is_default, is_inclusive, now, now],
         )?;
 
-        Ok(TaxRate { id, name: name.trim().to_owned(), rate_bps, is_default, is_inclusive, created_at: now.clone(), updated_at: now })
+        Ok(TaxRate {
+            id,
+            name: name.trim().to_owned(),
+            rate_bps,
+            is_default,
+            is_inclusive,
+            created_at: now.clone(),
+            updated_at: now,
+        })
     }
 
     /// Update an existing tax rate.
     pub fn update_tax_rate(
-        &self, id: &str, name: &str, rate_bps: i64, is_default: bool, is_inclusive: bool,
+        &self,
+        id: &str,
+        name: &str,
+        rate_bps: i64,
+        is_default: bool,
+        is_inclusive: bool,
     ) -> Result<TaxRate, CoreError> {
         if name.trim().is_empty() {
-            return Err(CoreError::Validation { field: "name", message: "tax rate name must not be empty".into() });
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "tax rate name must not be empty".into(),
+            });
         }
         if rate_bps < 0 {
-            return Err(CoreError::Validation { field: "rate_bps", message: "rate must be non-negative".into() });
+            return Err(CoreError::Validation {
+                field: "rate_bps",
+                message: "rate must be non-negative".into(),
+            });
         }
 
         if is_default {
-            self.conn.execute("UPDATE tax_rates SET is_default = 0 WHERE is_default = 1", [])?;
+            self.conn.execute(
+                "UPDATE tax_rates SET is_default = 0 WHERE is_default = 1",
+                [],
+            )?;
         }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -100,27 +135,53 @@ impl Store<'_> {
             params![name.trim(), rate_bps, is_default, is_inclusive, now, id],
         )?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "tax_rate", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "tax_rate",
+                id: id.to_owned(),
+            });
         }
 
-        Ok(TaxRate { id: id.to_owned(), name: name.trim().to_owned(), rate_bps, is_default, is_inclusive, created_at: String::new(), updated_at: now })
+        Ok(TaxRate {
+            id: id.to_owned(),
+            name: name.trim().to_owned(),
+            rate_bps,
+            is_default,
+            is_inclusive,
+            created_at: String::new(),
+            updated_at: now,
+        })
     }
 
     /// Delete a tax rate by id.
     pub fn delete_tax_rate(&self, id: &str) -> Result<(), CoreError> {
-        let affected = self.conn.execute("DELETE FROM tax_rates WHERE id = ?1", params![id])?;
+        let affected = self
+            .conn
+            .execute("DELETE FROM tax_rates WHERE id = ?1", params![id])?;
         if affected == 0 {
-            return Err(CoreError::NotFound { entity: "tax_rate", id: id.to_owned() });
+            return Err(CoreError::NotFound {
+                entity: "tax_rate",
+                id: id.to_owned(),
+            });
         }
         Ok(())
     }
 
     /// Assign tax rates to a product.
-    pub fn set_product_tax_rates(&self, sku: &str, tax_rate_ids: &[String]) -> Result<(), CoreError> {
+    pub fn set_product_tax_rates(
+        &self,
+        sku: &str,
+        tax_rate_ids: &[String],
+    ) -> Result<(), CoreError> {
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute("DELETE FROM product_taxes WHERE product_sku = ?1", params![sku])?;
+        tx.execute(
+            "DELETE FROM product_taxes WHERE product_sku = ?1",
+            params![sku],
+        )?;
         for id in tax_rate_ids {
-            tx.execute("INSERT OR IGNORE INTO product_taxes (product_sku, tax_rate_id) VALUES (?1, ?2)", params![sku, id])?;
+            tx.execute(
+                "INSERT OR IGNORE INTO product_taxes (product_sku, tax_rate_id) VALUES (?1, ?2)",
+                params![sku, id],
+            )?;
         }
         tx.commit()?;
         Ok(())
@@ -131,17 +192,28 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT tax_rate_id FROM product_taxes WHERE product_sku = ?1 ORDER BY created_at",
         )?;
-        let ids = stmt.query_map(params![sku], |row| row.get::<_, String>(0))?
+        let ids = stmt
+            .query_map(params![sku], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ids)
     }
 
     /// Assign tax rates to a category.
-    pub fn set_category_tax_rates(&self, category_id: &str, tax_rate_ids: &[String]) -> Result<(), CoreError> {
+    pub fn set_category_tax_rates(
+        &self,
+        category_id: &str,
+        tax_rate_ids: &[String],
+    ) -> Result<(), CoreError> {
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute("DELETE FROM category_taxes WHERE category_id = ?1", params![category_id])?;
+        tx.execute(
+            "DELETE FROM category_taxes WHERE category_id = ?1",
+            params![category_id],
+        )?;
         for id in tax_rate_ids {
-            tx.execute("INSERT OR IGNORE INTO category_taxes (category_id, tax_rate_id) VALUES (?1, ?2)", params![category_id, id])?;
+            tx.execute(
+                "INSERT OR IGNORE INTO category_taxes (category_id, tax_rate_id) VALUES (?1, ?2)",
+                params![category_id, id],
+            )?;
         }
         tx.commit()?;
         Ok(())
@@ -152,7 +224,8 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT tax_rate_id FROM category_taxes WHERE category_id = ?1 ORDER BY created_at",
         )?;
-        let ids = stmt.query_map(params![category_id], |row| row.get::<_, String>(0))?
+        let ids = stmt
+            .query_map(params![category_id], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ids)
     }
@@ -214,7 +287,10 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let result = s.create_tax_rate("", 1000, false, false);
-        assert!(matches!(result, Err(CoreError::Validation { field: "name", .. })));
+        assert!(matches!(
+            result,
+            Err(CoreError::Validation { field: "name", .. })
+        ));
     }
 
     #[test]
@@ -222,7 +298,13 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let result = s.create_tax_rate("Bad", -1, false, false);
-        assert!(matches!(result, Err(CoreError::Validation { field: "rate_bps", .. })));
+        assert!(matches!(
+            result,
+            Err(CoreError::Validation {
+                field: "rate_bps",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -248,7 +330,9 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let created = s.create_tax_rate("Old Name", 500, false, false).unwrap();
-        let updated = s.update_tax_rate(&created.id, "New Name", 600, true, true).unwrap();
+        let updated = s
+            .update_tax_rate(&created.id, "New Name", 600, true, true)
+            .unwrap();
         assert_eq!(updated.name, "New Name");
         assert_eq!(updated.rate_bps, 600);
         assert!(updated.is_default);
@@ -269,7 +353,10 @@ mod tests {
         let s = store(&conn);
         let created = s.create_tax_rate("Test", 100, false, false).unwrap();
         let result = s.update_tax_rate(&created.id, "", 100, false, false);
-        assert!(matches!(result, Err(CoreError::Validation { field: "name", .. })));
+        assert!(matches!(
+            result,
+            Err(CoreError::Validation { field: "name", .. })
+        ));
     }
 
     #[test]
@@ -278,7 +365,13 @@ mod tests {
         let s = store(&conn);
         let created = s.create_tax_rate("Test", 100, false, false).unwrap();
         let result = s.update_tax_rate(&created.id, "Test", -5, false, false);
-        assert!(matches!(result, Err(CoreError::Validation { field: "rate_bps", .. })));
+        assert!(matches!(
+            result,
+            Err(CoreError::Validation {
+                field: "rate_bps",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -317,11 +410,16 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let currency = Currency::from_str("USD").unwrap();
-        let money = crate::Money { minor_units: 1000, currency };
-        s.create_product("SKU-TAX", "Taxed Product", money, None, None, 0).unwrap();
+        let money = crate::Money {
+            minor_units: 1000,
+            currency,
+        };
+        s.create_product("SKU-TAX", "Taxed Product", money, None, None, 0)
+            .unwrap();
 
         let rate = s.create_tax_rate("VAT", 1000, true, false).unwrap();
-        s.set_product_tax_rates("SKU-TAX", &[rate.id.clone()]).unwrap();
+        s.set_product_tax_rates("SKU-TAX", &[rate.id.clone()])
+            .unwrap();
 
         let ids = s.get_product_tax_rates("SKU-TAX").unwrap();
         assert_eq!(ids, vec![rate.id]);
@@ -332,14 +430,20 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let currency = Currency::from_str("USD").unwrap();
-        let money = crate::Money { minor_units: 1000, currency };
-        s.create_product("SKU-TAX2", "Item", money, None, None, 0).unwrap();
+        let money = crate::Money {
+            minor_units: 1000,
+            currency,
+        };
+        s.create_product("SKU-TAX2", "Item", money, None, None, 0)
+            .unwrap();
 
         let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();
         let r2 = s.create_tax_rate("R2", 1000, false, false).unwrap();
 
-        s.set_product_tax_rates("SKU-TAX2", &[r1.id.clone()]).unwrap();
-        s.set_product_tax_rates("SKU-TAX2", &[r2.id.clone()]).unwrap();
+        s.set_product_tax_rates("SKU-TAX2", &[r1.id.clone()])
+            .unwrap();
+        s.set_product_tax_rates("SKU-TAX2", &[r2.id.clone()])
+            .unwrap();
 
         let ids = s.get_product_tax_rates("SKU-TAX2").unwrap();
         assert_eq!(ids, vec![r2.id]);
@@ -352,7 +456,8 @@ mod tests {
         s.create_category("cat-tax", "Taxed Cat", "#fff").unwrap();
 
         let rate = s.create_tax_rate("CT", 800, false, false).unwrap();
-        s.set_category_tax_rates("cat-tax", &[rate.id.clone()]).unwrap();
+        s.set_category_tax_rates("cat-tax", &[rate.id.clone()])
+            .unwrap();
 
         let ids = s.get_category_tax_rates("cat-tax").unwrap();
         assert_eq!(ids, vec![rate.id]);

@@ -73,9 +73,7 @@ pub struct CategoryTaxRateRow {
 // ── Tax Rate CRUD ─────────────────────────────────────────────────────
 
 #[command]
-pub async fn list_tax_rates(
-    state: State<'_, AppState>,
-) -> Result<Vec<TaxRateDto>, AppError> {
+pub async fn list_tax_rates(state: State<'_, AppState>) -> Result<Vec<TaxRateDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let rates = store.list_tax_rates()?;
@@ -90,7 +88,12 @@ pub async fn create_tax_rate(
 ) -> Result<TaxRateDto, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let rate = store.create_tax_rate(&args.name, args.rate_bps, args.is_default, args.is_inclusive)?;
+    let rate = store.create_tax_rate(
+        &args.name,
+        args.rate_bps,
+        args.is_default,
+        args.is_inclusive,
+    )?;
     drop(db);
     Ok(to_dto(rate))
 }
@@ -102,16 +105,19 @@ pub async fn update_tax_rate(
 ) -> Result<TaxRateDto, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let rate = store.update_tax_rate(&args.id, &args.name, args.rate_bps, args.is_default, args.is_inclusive)?;
+    let rate = store.update_tax_rate(
+        &args.id,
+        &args.name,
+        args.rate_bps,
+        args.is_default,
+        args.is_inclusive,
+    )?;
     drop(db);
     Ok(to_dto(rate))
 }
 
 #[command]
-pub async fn delete_tax_rate(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn delete_tax_rate(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     store.delete_tax_rate(&id)?;

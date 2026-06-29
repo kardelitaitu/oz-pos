@@ -1,10 +1,10 @@
 //! Refund commands — process refund against a completed sale.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
-use oz_core::{Money, Refund, RefundLine};
 use oz_core::db::Store;
+use oz_core::{Money, Refund, RefundLine};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -49,7 +49,8 @@ pub async fn process_refund(
     let store = Store::new(&db);
 
     // Verify the sale exists and is completed.
-    let sale = store.get_sale(&args.sale_id)?
+    let sale = store
+        .get_sale(&args.sale_id)?
         .ok_or_else(|| AppError::Invalid(format!("sale {} not found", args.sale_id)))?;
     if sale.status != oz_core::SaleStatus::Completed {
         return Err(AppError::Invalid(format!(
@@ -59,16 +60,28 @@ pub async fn process_refund(
     }
 
     // Build refund domain objects.
-    let refund_lines: Vec<RefundLine> = args.lines.iter().map(|l| {
-        let currency: oz_core::Currency = l.currency.parse()
-            .unwrap_or(sale.currency);
-        let unit_price = Money { minor_units: l.unit_price_minor, currency };
-        let line_total = Money { minor_units: l.line_total_minor, currency };
-        RefundLine::new(&l.sale_line_id, &l.sku, l.qty, unit_price, line_total)
-    }).collect();
+    let refund_lines: Vec<RefundLine> = args
+        .lines
+        .iter()
+        .map(|l| {
+            let currency: oz_core::Currency = l.currency.parse().unwrap_or(sale.currency);
+            let unit_price = Money {
+                minor_units: l.unit_price_minor,
+                currency,
+            };
+            let line_total = Money {
+                minor_units: l.line_total_minor,
+                currency,
+            };
+            RefundLine::new(&l.sale_line_id, &l.sku, l.qty, unit_price, line_total)
+        })
+        .collect();
 
     let total_minor: i64 = refund_lines.iter().map(|l| l.line_total.minor_units).sum();
-    let total = Money { minor_units: total_minor, currency: sale.currency };
+    let total = Money {
+        minor_units: total_minor,
+        currency: sale.currency,
+    };
 
     let refund = Refund::new(
         &args.sale_id,
@@ -149,16 +162,32 @@ mod tests {
             line_total_minor: 700,
         }];
 
-        let refund_lines: Vec<RefundLine> = lines.iter().map(|l| {
-            let currency: oz_core::Currency = l.currency.parse().unwrap();
-            RefundLine::new(&l.sale_line_id, &l.sku, l.qty,
-                Money { minor_units: l.unit_price_minor, currency },
-                Money { minor_units: l.line_total_minor, currency })
-        }).collect();
+        let refund_lines: Vec<RefundLine> = lines
+            .iter()
+            .map(|l| {
+                let currency: oz_core::Currency = l.currency.parse().unwrap();
+                RefundLine::new(
+                    &l.sale_line_id,
+                    &l.sku,
+                    l.qty,
+                    Money {
+                        minor_units: l.unit_price_minor,
+                        currency,
+                    },
+                    Money {
+                        minor_units: l.line_total_minor,
+                        currency,
+                    },
+                )
+            })
+            .collect();
 
         let refund = Refund::new(
             &sale_id,
-            Money { minor_units: 700, currency: "USD".parse().unwrap() },
+            Money {
+                minor_units: 700,
+                currency: "USD".parse().unwrap(),
+            },
             "Customer changed mind",
             "",
             "user-1",
@@ -178,12 +207,30 @@ mod tests {
         let conn = fresh_conn();
         let store = Store::new(&conn);
 
-        let lines = vec![RefundLine::new("sl-x", "COFFEE", 1,
-            Money { minor_units: 350, currency: "USD".parse().unwrap() },
-            Money { minor_units: 350, currency: "USD".parse().unwrap() })];
-        let refund = Refund::new("nonexistent",
-            Money { minor_units: 350, currency: "USD".parse().unwrap() },
-            "test", "", "user-1", lines);
+        let lines = vec![RefundLine::new(
+            "sl-x",
+            "COFFEE",
+            1,
+            Money {
+                minor_units: 350,
+                currency: "USD".parse().unwrap(),
+            },
+            Money {
+                minor_units: 350,
+                currency: "USD".parse().unwrap(),
+            },
+        )];
+        let refund = Refund::new(
+            "nonexistent",
+            Money {
+                minor_units: 350,
+                currency: "USD".parse().unwrap(),
+            },
+            "test",
+            "",
+            "user-1",
+            lines,
+        );
         let result = store.create_refund(&refund);
         assert!(result.is_err());
     }

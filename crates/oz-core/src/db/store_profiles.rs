@@ -100,10 +100,11 @@ impl Store<'_> {
                 id: id.to_owned(),
             });
         }
-        self.get_store_profile(id)?.ok_or_else(|| CoreError::NotFound {
-            entity: "store_profile",
-            id: id.to_owned(),
-        })
+        self.get_store_profile(id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "store_profile",
+                id: id.to_owned(),
+            })
     }
 
     /// Promote a store to primary, demoting the current primary.
@@ -131,10 +132,11 @@ impl Store<'_> {
             });
         }
         tx.commit()?;
-        self.get_store_profile(id)?.ok_or_else(|| CoreError::NotFound {
-            entity: "store_profile",
-            id: id.to_owned(),
-        })
+        self.get_store_profile(id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "store_profile",
+                id: id.to_owned(),
+            })
     }
 
     /// Delete a store profile. The primary store cannot be deleted.
@@ -153,10 +155,8 @@ impl Store<'_> {
                 id: id.to_owned(),
             });
         }
-        self.conn.execute(
-            "DELETE FROM store_profiles WHERE id = ?1",
-            params![id],
-        )?;
+        self.conn
+            .execute("DELETE FROM store_profiles WHERE id = ?1", params![id])?;
         Ok(())
     }
 

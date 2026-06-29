@@ -170,9 +170,17 @@ mod tests {
     struct OtherModule;
 
     impl Module for OtherModule {
-        fn id(&self) -> &'static str { "other" }
-        fn on_load(&mut self) -> ModuleResult { Ok(()) }
-        fn on_start(&mut self) -> ModuleResult { Ok(()) }
-        fn on_stop(&mut self) -> ModuleResult { Ok(()) }
+        fn id(&self) -> &'static str {
+            "other"
+        }
+        fn on_load(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_start(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_stop(&mut self) -> ModuleResult {
+            Ok(())
+        }
     }
 }

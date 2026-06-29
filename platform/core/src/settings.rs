@@ -53,10 +53,7 @@ impl Settings {
     }
 
     /// Write multiple settings inside a single transaction.
-    pub fn set_batch(
-        conn: &Connection,
-        rows: &[(String, String)],
-    ) -> Result<(), PlatformError> {
+    pub fn set_batch(conn: &Connection, rows: &[(String, String)]) -> Result<(), PlatformError> {
         let tx = conn.unchecked_transaction()?;
         for (key, value) in rows {
             tx.execute(
@@ -161,10 +158,7 @@ impl Settings {
     }
 
     /// Set whether to show the currency symbol prefix.
-    pub fn set_receipt_show_currency(
-        conn: &Connection,
-        on: bool,
-    ) -> Result<(), PlatformError> {
+    pub fn set_receipt_show_currency(conn: &Connection, on: bool) -> Result<(), PlatformError> {
         Self::set(
             conn,
             keys::RECEIPT_SHOW_CURRENCY,
@@ -174,8 +168,7 @@ impl Settings {
 
     /// Decimal separator style: `"dot"`, `"comma"`, or `"none"`.
     pub fn get_receipt_decimal_separator(conn: &Connection) -> Result<String, PlatformError> {
-        Ok(Self::get(conn, keys::RECEIPT_DECIMAL_SEP)?
-            .unwrap_or_else(|| "dot".into()))
+        Ok(Self::get(conn, keys::RECEIPT_DECIMAL_SEP)?.unwrap_or_else(|| "dot".into()))
     }
 
     /// Set the decimal separator style.
@@ -211,8 +204,7 @@ impl Settings {
 
     /// Paper width: `"standard"` (80 mm) or `"narrow"` (58 mm).
     pub fn get_receipt_paper_width(conn: &Connection) -> Result<String, PlatformError> {
-        Ok(Self::get(conn, keys::RECEIPT_PAPER_WIDTH)?
-            .unwrap_or_else(|| "standard".into()))
+        Ok(Self::get(conn, keys::RECEIPT_PAPER_WIDTH)?.unwrap_or_else(|| "standard".into()))
     }
 
     /// Set the paper width.
@@ -249,11 +241,7 @@ impl Settings {
 
     /// Enable or disable sync.
     pub fn set_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), PlatformError> {
-        Self::set(
-            conn,
-            keys::SYNC_ENABLED,
-            if enabled { "1" } else { "0" },
-        )
+        Self::set(conn, keys::SYNC_ENABLED, if enabled { "1" } else { "0" })
     }
 }
 
@@ -320,8 +308,7 @@ mod tests {
     #[test]
     fn set_batch_inserts_multiple() {
         let conn = fresh();
-        let rows: Vec<(String, String)> =
-            vec![("a".into(), "1".into()), ("b".into(), "2".into())];
+        let rows: Vec<(String, String)> = vec![("a".into(), "1".into()), ("b".into(), "2".into())];
         Settings::set_batch(&conn, &rows).unwrap();
         assert_eq!(Settings::get(&conn, "a").unwrap(), Some("1".into()));
         assert_eq!(Settings::get(&conn, "b").unwrap(), Some("2".into()));
@@ -461,7 +448,10 @@ mod tests {
     #[test]
     fn receipt_decimal_separator_default_dot() {
         let conn = fresh();
-        assert_eq!(Settings::get_receipt_decimal_separator(&conn).unwrap(), "dot");
+        assert_eq!(
+            Settings::get_receipt_decimal_separator(&conn).unwrap(),
+            "dot"
+        );
     }
 
     #[test]
@@ -513,10 +503,7 @@ mod tests {
     fn set_receipt_paper_width_narrow() {
         let conn = fresh();
         Settings::set_receipt_paper_width(&conn, "narrow").unwrap();
-        assert_eq!(
-            Settings::get_receipt_paper_width(&conn).unwrap(),
-            "narrow"
-        );
+        assert_eq!(Settings::get_receipt_paper_width(&conn).unwrap(), "narrow");
     }
 
     // ── Sync settings ───────────────────────────────────────────-
@@ -571,7 +558,10 @@ mod tests {
     #[test]
     fn get_unknown_key_returns_none() {
         let conn = fresh();
-        assert_eq!(Settings::get(&conn, "completely.unknown.key").unwrap(), None);
+        assert_eq!(
+            Settings::get(&conn, "completely.unknown.key").unwrap(),
+            None
+        );
     }
 
     #[test]

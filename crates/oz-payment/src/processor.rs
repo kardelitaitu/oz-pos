@@ -107,9 +107,7 @@ mod tests {
 
     #[tokio::test]
     async fn default_sale_returns_auth_failure() {
-        let proc = MockPaymentProcessor::builder()
-            .decline_next(true)
-            .build();
+        let proc = MockPaymentProcessor::builder().decline_next(true).build();
         let req = PaymentRequest {
             amount: Money::from_major(10, usd()).unwrap(),
             reference: None,
@@ -117,7 +115,10 @@ mod tests {
         };
 
         let result = proc.sale(&req).await;
-        assert!(result.is_err(), "sale should return Err when authorize declines");
+        assert!(
+            result.is_err(),
+            "sale should return Err when authorize declines"
+        );
         // capture should not have been called because authorize failed.
         assert_eq!(proc.authorize_calls(), 1);
         assert_eq!(proc.capture_calls(), 0);
@@ -148,10 +149,7 @@ mod tests {
     #[tokio::test]
     async fn refund_happy_path() {
         let proc = MockPaymentProcessor::new();
-        let result = proc
-            .refund("txn_test_001", None)
-            .await
-            .unwrap();
+        let result = proc.refund("txn_test_001", None).await.unwrap();
         assert!(result.success);
     }
 

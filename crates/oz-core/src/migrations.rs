@@ -132,14 +132,13 @@ mod tests {
     #[test]
     fn first_run_applies_all_migrations() {
         let mut conn = fresh();
-        run(&mut conn).unwrap();            let mut stmt = conn
-                .prepare("SELECT id FROM schema_migrations")
-                .unwrap();
-            let applied: std::collections::HashSet<String> = stmt
-                .query_map([], |row| row.get::<_, String>(0))
-                .unwrap()
-                .map(|r| r.unwrap())
-                .collect();
+        run(&mut conn).unwrap();
+        let mut stmt = conn.prepare("SELECT id FROM schema_migrations").unwrap();
+        let applied: std::collections::HashSet<String> = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
         for mig in ALL {
             assert!(
                 applied.contains(mig.id),
@@ -153,14 +152,13 @@ mod tests {
     fn second_run_is_idempotent() {
         let mut conn = fresh();
         run(&mut conn).unwrap();
-        run(&mut conn).unwrap();            let mut stmt = conn
-                .prepare("SELECT id FROM schema_migrations")
-                .unwrap();
-            let applied: Vec<String> = stmt
-                .query_map([], |row| row.get::<_, String>(0))
-                .unwrap()
-                .map(|r| r.unwrap())
-                .collect();
+        run(&mut conn).unwrap();
+        let mut stmt = conn.prepare("SELECT id FROM schema_migrations").unwrap();
+        let applied: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
         assert_eq!(applied.len(), ALL.len());
     }
 
@@ -182,7 +180,10 @@ mod tests {
     fn all_migrations_have_ids() {
         for mig in ALL {
             assert!(!mig.id.is_empty(), "migration id must not be empty");
-            assert!(mig.id.ends_with(".sql"), "migration id should end with .sql");
+            assert!(
+                mig.id.ends_with(".sql"),
+                "migration id should end with .sql"
+            );
         }
     }
 
@@ -197,11 +198,7 @@ mod tests {
     fn all_migration_ids_are_unique() {
         let mut ids: std::collections::HashSet<&str> = std::collections::HashSet::new();
         for mig in ALL {
-            assert!(
-                ids.insert(mig.id),
-                "duplicate migration id: {}",
-                mig.id
-            );
+            assert!(ids.insert(mig.id), "duplicate migration id: {}", mig.id);
         }
     }
 
@@ -211,12 +208,29 @@ mod tests {
         run(&mut conn).unwrap();
 
         let expected_tables = [
-            "sales", "sale_lines", "products", "categories", "inventory",
-            "settings", "customers", "currencies", "exchange_rates",
-            "tax_rates", "audit_log", "users", "roles",
-            "offline_queue", "refunds", "refund_lines", "terminals",
-            "product_taxes", "held_carts", "product_variants",
-            "category_taxes", "payments", "cash_payouts",
+            "sales",
+            "sale_lines",
+            "products",
+            "categories",
+            "inventory",
+            "settings",
+            "customers",
+            "currencies",
+            "exchange_rates",
+            "tax_rates",
+            "audit_log",
+            "users",
+            "roles",
+            "offline_queue",
+            "refunds",
+            "refund_lines",
+            "terminals",
+            "product_taxes",
+            "held_carts",
+            "product_variants",
+            "category_taxes",
+            "payments",
+            "cash_payouts",
             "store_profiles",
         ];
 
@@ -228,9 +242,10 @@ mod tests {
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert_eq!(exists, 1, "expected table `{table}` to exist after migration");
+            assert_eq!(
+                exists, 1,
+                "expected table `{table}` to exist after migration"
+            );
         }
     }
-
-
 }

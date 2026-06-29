@@ -22,14 +22,149 @@
 // calls (libc syslog, Windows Event Log).
 
 pub mod error;
-pub mod visitor;
-#[cfg(target_os = "linux")]
-pub mod syslog;
 #[cfg(target_os = "windows")]
 pub mod eventlog;
+#[cfg(target_os = "linux")]
+pub mod syslog;
+pub mod visitor;
 
-use tracing_subscriber::EnvFilter;
 pub use error::LoggingError;
+use tracing_subscriber::EnvFilter;
+
+/// Initialise structured logging via `tracing-subscriber` with
+/// human-readable text output to stdout.
+///
+/// Reads `RUST_LOG` from the environment; falls back to `info` if unset.
+/// Call this once, early in `main` / `run`, before any `tracing` macro
+/// is hit.
+///
+/// # Panics
+///
+/// Panics if the global subscriber has already been set.
+pub fn init() {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
+}
+
+/// Initialise log output as newline-delimited JSON records (stdout).
+///
+/// Reads `RUST_LOG` from the environment; falls back to `info` if unset.
+/// Each log line is a flat JSON object with `timestamp`, `level`,
+/// `message`, and optional `fields` / `span` attributes.
+///
+/// Use this in production deployments where logs are shipped to
+/// ELK, Loki, or Datadog.
+///
+/// # Panics
+///
+/// Panics if the global subscriber has already been set.
+pub fn init_json() {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .json()
+        .with_target(false)
+        .flatten_event(false)
+        .with_current_span(false)
+        .with_span_list(false)
+        .init();
+}
+
+/// Remove log files in `dir` that start with `file_prefix` and whose
+/// modification time is older than `retention_days`.
+fn cleanup_old_log_files(dir: &str, file_prefix: &str, retention_days: u32) {
+    if retention_days == 0 {
+        return;
+    }
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.starts_with(file_prefix)
+                && let Ok(metadata) = std::fs::metadata(&path)
+                && let Ok(modified) = metadata.modified()
+            {
+                let modified: chrono::DateTime<chrono::Utc> = modified.into();
+                if modified < cutoff {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+        }
+    }
+}
+
+/// Initialise human-readable log output to both stdout and a rolling
+/// file writer.
+///
+/// The file appender rotates hourly (default) and uses the given
+/// directory and file prefix for the log files. Logs older than
+/// `retention_days` are automatically cleaned up.
+///
+/// # Panics
+///
+/// Panics if the global subscriber has already been set.
+///
+/// # Example
+///
+/// ```no_run
+/// oz_logging::init_with_file("logs", "oz-pos", 30);
+/// ```
+pub fn init_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let file_appender = tracing_appender::rolling::hourly(log_dir, file_prefix);
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .with_writer(non_blocking)
+        .init();
+
+    // Spawn a background task for log retention cleanup.
+    let dir = log_dir.to_owned();
+    let prefix = file_prefix.to_owned();
+    std::thread::spawn(move || {
+        cleanup_old_log_files(&dir, &prefix, retention_days);
+    });
+}
+
+/// Initialise JSON log output to both stdout and a rolling file writer.
+///
+/// Same as [`init_with_file`] but uses JSON formatting.
+///
+/// # Panics
+///
+/// Panics if the global subscriber has already been set.
+pub fn init_json_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let file_appender = tracing_appender::rolling::hourly(log_dir, file_prefix);
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .json()
+        .with_target(false)
+        .flatten_event(false)
+        .with_current_span(false)
+        .with_span_list(false)
+        .with_writer(non_blocking)
+        .init();
+
+    // Spawn a background task for log retention cleanup.
+    let dir = log_dir.to_owned();
+    let prefix = file_prefix.to_owned();
+    std::thread::spawn(move || {
+        cleanup_old_log_files(&dir, &prefix, retention_days);
+    });
+}
 
 #[cfg(test)]
 mod tests {
@@ -52,7 +187,10 @@ mod tests {
         cleanup_old_log_files(dir.to_str().unwrap(), "oz-pos", 0);
 
         // File should still exist (retention 0 means skip cleanup).
-        assert!(file_path.exists(), "file should not be removed when retention_days is 0");
+        assert!(
+            file_path.exists(),
+            "file should not be removed when retention_days is 0"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -66,10 +204,8 @@ mod tests {
         std::fs::write(&old_file, "old data").unwrap();
 
         // Set modification time to 30 days ago.
-        let old_time = filetime::FileTime::from_unix_time(
-            chrono::Utc::now().timestamp() - 30 * 86400,
-            0,
-        );
+        let old_time =
+            filetime::FileTime::from_unix_time(chrono::Utc::now().timestamp() - 30 * 86400, 0);
         filetime::set_file_mtime(&old_file, old_time).unwrap();
 
         // Create a recent file (should NOT be removed).
@@ -90,16 +226,17 @@ mod tests {
 
         let other_file = dir.join("other-app.log");
         std::fs::write(&other_file, "other data").unwrap();
-        let old_time = filetime::FileTime::from_unix_time(
-            chrono::Utc::now().timestamp() - 30 * 86400,
-            0,
-        );
+        let old_time =
+            filetime::FileTime::from_unix_time(chrono::Utc::now().timestamp() - 30 * 86400, 0);
         filetime::set_file_mtime(&other_file, old_time).unwrap();
 
         cleanup_old_log_files(dir.to_str().unwrap(), "oz-pos", 7);
 
         // File with non-matching prefix should be kept.
-        assert!(other_file.exists(), "file with non-matching prefix should not be removed");
+        assert!(
+            other_file.exists(),
+            "file with non-matching prefix should not be removed"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -214,143 +351,4 @@ mod tests {
         assert!(output.contains("stock adjusted"));
         assert!(output.contains("sku=XYZ"));
     }
-}
-
-/// Initialise structured logging via `tracing-subscriber` with
-/// human-readable text output to stdout.
-///
-/// Reads `RUST_LOG` from the environment; falls back to `info` if unset.
-/// Call this once, early in `main` / `run`, before any `tracing` macro
-/// is hit.
-///
-/// # Panics
-///
-/// Panics if the global subscriber has already been set.
-pub fn init() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .init();
-}
-
-/// Initialise log output as newline-delimited JSON records (stdout).
-///
-/// Reads `RUST_LOG` from the environment; falls back to `info` if unset.
-/// Each log line is a flat JSON object with `timestamp`, `level`,
-/// `message`, and optional `fields` / `span` attributes.
-///
-/// Use this in production deployments where logs are shipped to
-/// ELK, Loki, or Datadog.
-///
-/// # Panics
-///
-/// Panics if the global subscriber has already been set.
-pub fn init_json() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .json()
-        .with_target(false)
-        .flatten_event(false)
-        .with_current_span(false)
-        .with_span_list(false)
-        .init();
-}
-
-/// Remove log files in `dir` that start with `file_prefix` and whose
-/// modification time is older than `retention_days`.
-fn cleanup_old_log_files(dir: &str, file_prefix: &str, retention_days: u32) {
-    if retention_days == 0 {
-        return;
-    }
-    let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && name.starts_with(file_prefix)
-                && let Ok(metadata) = std::fs::metadata(&path)
-                && let Ok(modified) = metadata.modified()
-            {
-                let modified: chrono::DateTime<chrono::Utc> = modified.into();
-                if modified < cutoff {
-                    let _ = std::fs::remove_file(&path);
-                }
-            }
-        }
-    }
-}
-
-/// Initialise human-readable log output to both stdout and a rolling
-/// file writer.
-///
-/// The file appender rotates hourly (default) and uses the given
-/// directory and file prefix for the log files. Logs older than
-/// `retention_days` are automatically cleaned up.
-///
-/// # Panics
-///
-/// Panics if the global subscriber has already been set.
-///
-/// # Example
-///
-/// ```no_run
-/// oz_logging::init_with_file("logs", "oz-pos", 30);
-/// ```
-pub fn init_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-
-    let file_appender = tracing_appender::rolling::hourly(log_dir, file_prefix);
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .with_writer(non_blocking)
-        .init();
-
-    // Spawn a background task for log retention cleanup.
-    let dir = log_dir.to_owned();
-    let prefix = file_prefix.to_owned();
-    std::thread::spawn(move || {
-        cleanup_old_log_files(&dir, &prefix, retention_days);
-    });
-}
-
-/// Initialise JSON log output to both stdout and a rolling file writer.
-///
-/// Same as [`init_with_file`] but uses JSON formatting.
-///
-/// # Panics
-///
-/// Panics if the global subscriber has already been set.
-pub fn init_json_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-
-    let file_appender = tracing_appender::rolling::hourly(log_dir, file_prefix);
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .json()
-        .with_target(false)
-        .flatten_event(false)
-        .with_current_span(false)
-        .with_span_list(false)
-        .with_writer(non_blocking)
-        .init();
-
-    // Spawn a background task for log retention cleanup.
-    let dir = log_dir.to_owned();
-    let prefix = file_prefix.to_owned();
-    std::thread::spawn(move || {
-        cleanup_old_log_files(&dir, &prefix, retention_days);
-    });
 }

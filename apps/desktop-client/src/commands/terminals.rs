@@ -4,7 +4,7 @@
 //! registers itself with a unique name and device identifier.
 
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::{State, command};
 
 use oz_core::{Store, Terminal};
 
@@ -190,10 +190,7 @@ pub async fn update_terminal(
 
 /// Update a terminal's last_seen_at timestamp (heartbeat).
 #[command]
-pub async fn ping_terminal(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     if id.trim().is_empty() {
         return Err(AppError::Invalid("id must not be empty".into()));
     }
@@ -209,10 +206,7 @@ pub async fn ping_terminal(
 
 /// Delete a terminal by id.
 #[command]
-pub async fn delete_terminal(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn delete_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     if id.trim().is_empty() {
         return Err(AppError::Invalid("id must not be empty".into()));
     }
@@ -337,11 +331,21 @@ mod tests {
         store.create_terminal(&t).unwrap();
 
         // Initially last_seen_at is None.
-        assert!(store.get_terminal(&t.id).unwrap().unwrap().last_seen_at.is_none());
+        assert!(
+            store
+                .get_terminal(&t.id)
+                .unwrap()
+                .unwrap()
+                .last_seen_at
+                .is_none()
+        );
 
         store.ping_terminal(&t.id).unwrap();
         let loaded = store.get_terminal(&t.id).unwrap().unwrap();
-        assert!(loaded.last_seen_at.is_some(), "ping should set last_seen_at");
+        assert!(
+            loaded.last_seen_at.is_some(),
+            "ping should set last_seen_at"
+        );
     }
 
     #[test]

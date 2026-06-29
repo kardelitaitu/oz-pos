@@ -12,8 +12,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use oz_core::{Cart, CartLine, CoreError, Money, Sale, SaleStatus, Sku};
 use oz_core::db::Store;
+use oz_core::{Cart, CartLine, CoreError, Money, Sale, SaleStatus, Sku};
 
 use crate::AppState;
 
@@ -21,15 +21,23 @@ use crate::AppState;
 
 fn store_error_response(e: CoreError) -> Response {
     match e {
-        CoreError::Validation { message, .. } => {
-            (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": message}))).into_response()
-        }
-        CoreError::NotFound { .. } => {
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "not found"}))).into_response()
-        }
+        CoreError::Validation { message, .. } => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": message})),
+        )
+            .into_response(),
+        CoreError::NotFound { .. } => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "not found"})),
+        )
+            .into_response(),
         e => {
             tracing::error!("unexpected store error: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "internal error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -92,7 +100,11 @@ pub async fn create_sale(
     for line in &body.lines {
         let cl = CartLine::new(Sku::new(&line.sku), line.qty, line.unit_price);
         if let Err(e) = cart.add_line(cl) {
-            return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
         }
     }
 
@@ -119,10 +131,7 @@ pub async fn create_sale(
 /// Get a single sale by id, including all line items.
 ///
 /// Returns JSON `null` when the sale is not found.
-pub async fn get_sale(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Response {
+pub async fn get_sale(State(state): State<AppState>, Path(id): Path<String>) -> Response {
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -155,9 +164,11 @@ pub async fn update_sale_status(
             };
             Json(resp).into_response()
         }
-        Err(CoreError::Validation { message, .. }) => {
-            (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({"error": message}))).into_response()
-        }
+        Err(CoreError::Validation { message, .. }) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({"error": message})),
+        )
+            .into_response(),
         Err(e) => store_error_response(e),
     }
 }

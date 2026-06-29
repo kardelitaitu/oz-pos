@@ -190,8 +190,14 @@ mod tests {
             "other"
         }
 
-        fn on_load(&mut self) -> ModuleResult { Ok(()) }
-        fn on_start(&mut self) -> ModuleResult { Ok(()) }
-        fn on_stop(&mut self) -> ModuleResult { Ok(()) }
+        fn on_load(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_start(&mut self) -> ModuleResult {
+            Ok(())
+        }
+        fn on_stop(&mut self) -> ModuleResult {
+            Ok(())
+        }
     }
 }

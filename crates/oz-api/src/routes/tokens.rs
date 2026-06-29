@@ -24,9 +24,7 @@ pub struct CreateTokenResponse {
     pub token: TokenResponse,
 }
 
-pub async fn create_token_handler(
-    Json(body): Json<CreateTokenRequest>,
-) -> impl IntoResponse {
+pub async fn create_token_handler(Json(body): Json<CreateTokenRequest>) -> impl IntoResponse {
     let resp = create_token(&body.label, body.expiry_hours);
     Json(CreateTokenResponse { token: resp })
 }

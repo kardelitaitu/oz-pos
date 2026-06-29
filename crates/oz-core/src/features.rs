@@ -260,8 +260,7 @@ impl FeatureRegistry {
             .iter()
             .filter_map(|(key, value)| {
                 if value == "1" {
-                    key.strip_prefix("feature.")
-                        .and_then(feature_from_key)
+                    key.strip_prefix("feature.").and_then(feature_from_key)
                 } else {
                     None
                 }
@@ -781,7 +780,10 @@ mod tests {
 
         assert!(reg.enable(Feature::StaffRoles));
         assert!(reg.is_enabled(Feature::StaffRoles));
-        assert!(reg.is_enabled(Feature::StaffLogin), "dep restored by enable");
+        assert!(
+            reg.is_enabled(Feature::StaffLogin),
+            "dep restored by enable"
+        );
     }
 
     #[test]
@@ -858,10 +860,7 @@ mod tests {
 
     #[test]
     fn from_set_with_all_deps_present_does_not_panic() {
-        let reg = FeatureRegistry::from_set([
-            Feature::SimpleRetail,
-            Feature::SelfServiceKiosk,
-        ]);
+        let reg = FeatureRegistry::from_set([Feature::SimpleRetail, Feature::SelfServiceKiosk]);
         assert!(reg.is_enabled(Feature::SimpleRetail));
         assert!(reg.is_enabled(Feature::SelfServiceKiosk));
         assert_eq!(reg.count(), 2);
@@ -869,10 +868,7 @@ mod tests {
 
     #[test]
     fn from_set_with_direct_dep_present_does_not_panic() {
-        let reg = FeatureRegistry::from_set([
-            Feature::Reporting,
-            Feature::Analytics,
-        ]);
+        let reg = FeatureRegistry::from_set([Feature::Reporting, Feature::Analytics]);
         assert!(reg.is_enabled(Feature::Reporting));
         assert!(reg.is_enabled(Feature::Analytics));
     }
@@ -1298,6 +1294,9 @@ mod proptests {
         let reg = FeatureRegistry::new();
         assert_eq!(reg.count(), 0);
         let features: Vec<Feature> = reg.enabled_features().collect();
-        assert!(features.is_empty(), "empty registry should have no enabled features: {features:?}");
+        assert!(
+            features.is_empty(),
+            "empty registry should have no enabled features: {features:?}"
+        );
     }
 }
