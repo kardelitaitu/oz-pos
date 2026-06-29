@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::{Feature, Store};
+use oz_core::{Feature, Store, Terminal};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -124,6 +124,12 @@ pub async fn set_feature(
         // Enable the feature (this auto-enables dependencies).
         reg.enable(feature);
 
+        // Auto-enable CloudSync when MultiTerminal is enabled (logical coupling:
+        // cross-terminal sync requires the cloud sync backend).
+        if feature == Feature::MultiTerminal && !reg.is_enabled(Feature::CloudSync) {
+            reg.enable(Feature::CloudSync);
+        }
+
         // Figure out what was newly auto-enabled.
         for f in reg.enabled_features() {
             if !before_enable.contains(&f) && f != feature {
@@ -137,6 +143,38 @@ pub async fn set_feature(
     // Persist the updated registry and prune stale rows (from disabling).
     store.save_features(&reg)?;
     store.prune_stale_features(&reg)?;
+
+    // Auto-register this device as a terminal when MultiTerminal is enabled.
+    // This ensures every POS device has a registered terminal entry for
+    // cross-terminal inventory sync and Redis pub/sub filtering.
+    if args.enabled && feature == Feature::MultiTerminal {
+        let device_id = device_hostname();
+        if store.get_terminal_by_device_id(&device_id)?.is_none() {
+            let name = format!("{} (auto)", &device_id);
+            let terminal = Terminal::new(&name, &device_id);
+            store.create_terminal(&terminal)?;
+            // SAFETY: set_var is called once during feature toggle, not from
+            // multiple threads simultaneously. The terminal ID value is stable.
+            unsafe {
+                std::env::set_var("OZ_TERMINAL_ID", &terminal.id);
+            }
+            tracing::info!(
+                id = %terminal.id,
+                name = %terminal.name,
+                "terminal auto-registered for multi-terminal"
+            );
+        } else {
+            // Terminal already registered — ensure env var is set.
+            if std::env::var("OZ_TERMINAL_ID").is_err() {
+                if let Some(existing) = store.get_terminal_by_device_id(&device_id)? {
+                    // SAFETY: single-threaded toggle, value is stable.
+                    unsafe {
+                        std::env::set_var("OZ_TERMINAL_ID", existing.id);
+                    }
+                }
+            }
+        }
+    }
 
     // Build the full feature list response.
     let features = all_feature_metadata()
@@ -164,6 +202,17 @@ pub async fn set_feature(
         features,
         auto_enabled,
     })
+}
+
+/// Return a stable device identifier for this machine.
+///
+/// Uses `COMPUTERNAME` (Windows) or `HOSTNAME` (Unix) if available,
+/// falling back to `"unknown-device"`. This identifier is used to
+/// auto-register the terminal when multi-terminal mode is enabled.
+fn device_hostname() -> String {
+    std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "unknown-device".to_string())
 }
 
 // ── Feature metadata ────────────────────────────────────────────────

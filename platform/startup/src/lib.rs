@@ -1,3 +1,7 @@
+// Allow `cfg(feature = "metrics")` from the transitive dependency on
+// `oz-reporting` without requiring platform-startup to declare the feature.
+#![allow(unexpected_cfgs)]
+
 //! Shared application startup for OZ-POS desktop and tablet clients.
 //!
 //! Both [`apps/desktop-client`] and [`apps/tablet-client`] call this crate
@@ -16,6 +20,7 @@
 //! ```
 
 pub mod event_handlers;
+pub mod metrics;
 pub mod rate_sync;
 
 use std::sync::{Arc, Mutex};

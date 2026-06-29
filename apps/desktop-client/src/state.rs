@@ -116,6 +116,32 @@ impl AppState {
             .unwrap_or(300);
         let cache = platform_startup::init_cache(&redis_url, cache_ttl);
 
+        // ── OZ_TERMINAL_ID for multi-terminal support ───────────────
+        // On subsequent launches where MultiTerminal is already enabled,
+        // look up the registered terminal by hostname and set the env var
+        // so the Redis pub/sub subscriber can filter its own messages.
+        let reg = oz_core::Settings::load_features(&conn)
+            .unwrap_or_default();
+        if reg.is_enabled(oz_core::Feature::MultiTerminal) {
+            let device_id = std::env::var("COMPUTERNAME")
+                .or_else(|_| std::env::var("HOSTNAME"))
+                .unwrap_or_default();
+            if !device_id.is_empty() {
+                let store = oz_core::db::Store::new(&conn);
+                if let Ok(Some(terminal)) = store.get_terminal_by_device_id(&device_id) {
+                    // SAFETY: single-threaded startup, called once per process.
+                    unsafe {
+                        std::env::set_var("OZ_TERMINAL_ID", &terminal.id);
+                    }
+                    tracing::info!(
+                        terminal_id = %terminal.id,
+                        device_id = %device_id,
+                        "OZ_TERMINAL_ID set at startup for multi-terminal"
+                    );
+                }
+            }
+        }
+
         // ── Start inventory pub/sub listener (Redis only) ────────────
         let inventory_pubsub_shutdown = cache.start_inventory_pubsub(cache.clone());
         if inventory_pubsub_shutdown.is_some() {

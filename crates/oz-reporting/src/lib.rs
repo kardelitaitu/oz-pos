@@ -13,8 +13,12 @@
 #![warn(missing_docs)]
 
 pub mod error;
+#[cfg(feature = "metrics")]
+pub mod metrics;
 
 pub use error::ReportingError;
+#[cfg(feature = "metrics")]
+pub use metrics::*;
 
 #[cfg(test)]
 mod tests {

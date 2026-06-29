@@ -153,6 +153,26 @@ impl SyncQueue {
                 store.adjust_stock(&payload.sku, payload.delta)?;
                 Ok(())
             }
+            // A new product created on another terminal — create locally.
+            "product.created" => {
+                let payload: serde_json::Value = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid product payload: {e}")))?;
+                let sku = payload["sku"].as_str().unwrap_or("");
+                let name = payload["name"].as_str().unwrap_or("Unknown");
+                let price_minor = payload["price_minor"].as_i64().unwrap_or(0);
+                let currency = payload["currency"].as_str().unwrap_or("USD");
+                let currency_parsed: oz_core::Currency = currency.parse().map_err(|e: oz_core::money::InvalidCurrencyCode| {
+                    CoreError::Internal(format!("invalid currency in sync payload: {e}"))
+                })?;
+                if !sku.is_empty() && store.get_product(sku).ok().flatten().is_none() {
+                    let price = oz_core::Money { minor_units: price_minor, currency: currency_parsed };
+                    let category_id = payload["category_id"].as_str();
+                    let barcode = payload["barcode"].as_str();
+                    let initial_stock = payload["initial_stock"].as_i64().unwrap_or(0);
+                    store.create_product(sku, name, price, category_id, barcode, initial_stock)?;
+                }
+                Ok(())
+            }
             // Unsupported action — log and skip.
             _ => {
                 tracing::warn!(action = %item.action, "unsupported remote sync action");

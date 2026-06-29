@@ -111,7 +111,7 @@ impl EventHandler<ProductCreated> for InventorySyncEnqueuer {
         .to_string();
 
         store
-            .enqueue_offline("product_created", &payload)
+            .enqueue_offline("product.created", &payload)
             .map_err(|e| {
                 error!(
                     sku = %event.sku,
@@ -147,7 +147,7 @@ impl EventHandler<StockAdjusted> for InventorySyncEnqueuer {
         .to_string();
 
         store
-            .enqueue_offline("stock_adjusted", &payload)
+            .enqueue_offline("stock.adjusted", &payload)
             .map_err(|e| {
                 error!(
                     sku = %event.sku,
@@ -491,7 +491,7 @@ mod tests {
         let store = Store::new(&conn);
         let pending = store.list_pending_offline().unwrap();
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].action, "product_created");
+        assert_eq!(pending[0].action, "product.created");
         assert!(pending[0].payload.contains("SYNC-PROD"));
         assert_eq!(pending[0].status, OfflineQueueStatus::Pending);
     }
@@ -514,7 +514,7 @@ mod tests {
         let store = Store::new(&conn);
         let pending = store.list_pending_offline().unwrap();
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].action, "stock_adjusted");
+        assert_eq!(pending[0].action, "stock.adjusted");
         assert!(pending[0].payload.contains("COFFEE"));
         assert!(pending[0].payload.contains("-5"));
         assert_eq!(pending[0].status, OfflineQueueStatus::Pending);
@@ -548,8 +548,8 @@ mod tests {
         let store = Store::new(&conn);
         let pending = store.list_pending_offline().unwrap();
         assert_eq!(pending.len(), 2);
-        assert!(pending.iter().any(|i| i.action == "product_created"));
-        assert!(pending.iter().any(|i| i.action == "stock_adjusted"));
+        assert!(pending.iter().any(|i| i.action == "product.created"));
+        assert!(pending.iter().any(|i| i.action == "stock.adjusted"));
     }
 
     // ── SaleSyncEnqueuer tests ───────────────────────────────────────
