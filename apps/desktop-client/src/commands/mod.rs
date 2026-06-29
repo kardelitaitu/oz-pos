@@ -21,6 +21,7 @@ pub mod pos;
 pub mod product_variants;
 pub mod products;
 pub mod refunds;
+pub mod reports;
 pub mod sales;
 pub mod settings;
 pub mod setup;

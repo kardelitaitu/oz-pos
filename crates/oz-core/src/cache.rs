@@ -3,6 +3,8 @@
 //! Provides a [`Cache`] trait, a [`NoopCache`] fallback, and an optional
 //! [`RedisCache`] implementation behind the `cache-redis` feature flag.
 
+use std::sync::Arc;
+
 use crate::db::ProductWithDetails;
 
 /// A key-value cache for frequently-accessed POS data.
@@ -23,6 +25,27 @@ pub trait Cache: Send + Sync {
 
     /// Returns `true` when the cache backend is connected and healthy.
     fn is_healthy(&self) -> bool;
+
+    /// Start a background listener for inventory change notifications.
+    ///
+    /// Returns a shutdown sender that can be used to stop the listener.
+    /// Returns `None` when the backend does not support pub/sub (e.g.
+    /// no-op cache). The `_cache` Arc is passed through so the spawned
+    /// thread can hold a reference to the cache for invalidation.
+    fn start_inventory_pubsub(
+        &self,
+        _cache: Arc<dyn Cache>,
+    ) -> Option<std::sync::mpsc::Sender<()>> {
+        let _ = _cache;
+        None
+    }
+
+    /// Publish an inventory change notification.
+    ///
+    /// Called after stock adjustments so other terminals subscribed to the
+    /// pub/sub channel can invalidate their local cache. Default impl is a
+    /// no-op; `RedisCache` overrides this to publish to `inventory:updates`.
+    fn publish_inventory_change(&self, _product_id: &str, _sku: &str, _new_qty: i64) {}
 }
 
 /// No-op cache that always misses.
@@ -45,6 +68,13 @@ impl Cache for NoopCache {
     fn is_healthy(&self) -> bool {
         false
     }
+    fn start_inventory_pubsub(
+        &self,
+        _cache: Arc<dyn Cache>,
+    ) -> Option<std::sync::mpsc::Sender<()>> {
+        let _ = _cache;
+        None
+    }
 }
 
 /// Redis-backed cache implementation.
@@ -54,7 +84,7 @@ impl Cache for NoopCache {
 /// enabled.
 #[cfg(feature = "cache-redis")]
 pub mod redis_cache {
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use super::Cache;
     use crate::db::ProductWithDetails;
@@ -82,6 +112,117 @@ pub mod redis_cache {
                 conn: Mutex::new(conn),
                 ttl_seconds,
             })
+        }
+
+        /// Subscribe to the inventory change channel and invalidate local cache
+        /// entries when remote updates arrive.
+        ///
+        /// Spawns a background task that listens on `inventory:updates` and
+        /// calls `invalidate_inventory` for each received notification.
+        /// The returned `std::sync::mpsc::Sender` can be used to stop the
+        /// subscription (drop it or send a value).
+        ///
+        /// A read timeout of 5 seconds is set on the underlying TCP connection
+        /// so the shutdown signal is checked at least every 5 seconds even when
+        /// no messages are being published.
+        fn subscribe_inventory_changes(
+            client: redis::Client,
+            cache: Arc<dyn Cache>,
+        ) -> Result<std::sync::mpsc::Sender<()>, redis::RedisError> {
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+
+            // Spawn a blocking task since `redis` crate connections are synchronous.
+            // `redis::Client` is `Clone` (wraps an Arc internally), so we can cheaply
+            // share it with the spawned thread.
+            std::thread::spawn(move || {
+                // Connect with a 5-second timeout so the shutdown signal can be
+                // checked regularly even when no messages arrive.
+                let mut conn = match client.get_connection_with_timeout(
+                    std::time::Duration::from_secs(5),
+                ) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "failed to connect for inventory pub/sub"
+                        );
+                        return;
+                    }
+                };
+
+                // Set read timeout on the TCP stream so `get_message()` unblocks.
+                let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+
+                let mut pubsub = match conn.as_pubsub() {
+                    Ok(ps) => ps,
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to create pubsub connection");
+                        return;
+                    }
+                };
+
+                if let Err(e) = pubsub.subscribe("inventory:updates") {
+                    tracing::error!(error = %e, "failed to subscribe to inventory:updates");
+                    return;
+                }
+
+                tracing::info!("subscribed to inventory:updates channel");
+
+                loop {
+                    // Check if we should stop (non-blocking check).
+                    if rx.try_recv().is_ok() {
+                        tracing::info!("inventory pub/sub shutting down");
+                        let _ = pubsub.unsubscribe("inventory:updates");
+                        return;
+                    }
+
+                    match pubsub.get_message() {
+                        Ok(msg) => {
+                            let payload: String = msg.get_payload().unwrap_or_default();
+                            if let Ok(notification) =
+                                serde_json::from_str::<serde_json::Value>(&payload)
+                            {
+                                let terminal_id = notification["terminal_id"]
+                                    .as_str()
+                                    .unwrap_or("");
+                                // Skip own messages.
+                                if terminal_id == whoami() {
+                                    continue;
+                                }
+                                if let Some(pid) = notification["product_id"].as_str() {
+                                    cache.invalidate_inventory(pid);
+                                    tracing::debug!(
+                                        product_id = pid,
+                                        "invalidated inventory cache from pub/sub"
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            // Timeouts are expected when no messages arrive.
+                            // Other errors (connection lost) terminate the loop.
+                            let err_str = e.to_string();
+                            if err_str.contains("timed out") || err_str.contains("timeout") {
+                                continue;
+                            }
+                            tracing::warn!(error = %e, "inventory pub/sub error");
+                            break;
+                        }
+                    }
+                }
+            });
+
+            Ok(tx)
+        }
+
+        /// Attempt to read a stable terminal ID from the environment. Falls back
+        /// to empty string when unavailable (standalone / test mode).
+        ///
+        /// Set `OZ_TERMINAL_ID` in the environment to give each terminal a unique
+        /// identity — this is used to filter own pub/sub messages so a terminal
+        /// doesn't invalidate its own cache from its own inventory changes.
+        fn whoami() -> String {
+            std::env::var("OZ_TERMINAL_ID").unwrap_or_else(|_| String::new())
         }
     }
 
@@ -148,6 +289,46 @@ pub mod redis_cache {
                 return false;
             };
             redis::cmd("PING").query::<String>(&mut *conn).is_ok()
+        }
+
+        fn start_inventory_pubsub(
+            &self,
+            cache: Arc<dyn Cache>,
+        ) -> Option<std::sync::mpsc::Sender<()>> {
+            let client = self.client.clone();
+            match Self::subscribe_inventory_changes(client, cache) {
+                Ok(tx) => Some(tx),
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "failed to start inventory pub/sub subscription"
+                    );
+                    None
+                }
+            }
+        }
+
+        fn publish_inventory_change(&self, product_id: &str, sku: &str, new_qty: i64) {
+            let key = "inventory:updates";
+            let payload = serde_json::json!({
+                "product_id": product_id,
+                "sku": sku,
+                "new_qty": new_qty,
+                "terminal_id": std::env::var("OZ_TERMINAL_ID").unwrap_or_default(),
+                "timestamp": chrono::Utc::now().to_rfc3339_opts(
+                    chrono::SecondsFormat::Millis, true,
+                ),
+            });
+            let Ok(msg) = serde_json::to_string(&payload) else {
+                return;
+            };
+            let Ok(mut conn) = self.conn.lock() else {
+                return;
+            };
+            let _: Result<(), _> = redis::cmd("PUBLISH")
+                .arg(key)
+                .arg(&msg)
+                .query(&mut *conn);
         }
     }
 
@@ -227,15 +408,15 @@ pub mod redis_cache {
 /// logs a warning and returns [`NoopCache`]. When the feature is
 /// disabled, always returns [`NoopCache`].
 #[cfg_attr(not(feature = "cache-redis"), allow(unused_variables))]
-pub fn create_cache(redis_url: &str, ttl_seconds: u64) -> Box<dyn Cache> {
+pub fn create_cache(redis_url: &str, ttl_seconds: u64) -> Arc<dyn Cache> {
     #[cfg(feature = "cache-redis")]
     {
         match redis_cache::RedisCache::connect(redis_url, ttl_seconds) {
-            Ok(cache) => return Box::new(cache),
+            Ok(cache) => return Arc::new(cache),
             Err(e) => tracing::warn!(error = %e, "Redis unavailable, using noop cache"),
         }
     }
-    Box::new(NoopCache)
+    Arc::new(NoopCache)
 }
 
 #[cfg(test)]
@@ -293,6 +474,13 @@ mod tests {
     fn noop_cache_is_not_healthy() {
         let cache = NoopCache;
         assert!(!cache.is_healthy());
+    }
+
+    #[test]
+    fn noop_cache_start_inventory_pubsub_returns_none() {
+        let cache = NoopCache;
+        let arc_cache: Arc<dyn Cache> = Arc::new(NoopCache);
+        assert!(cache.start_inventory_pubsub(arc_cache).is_none());
     }
 
     #[test]

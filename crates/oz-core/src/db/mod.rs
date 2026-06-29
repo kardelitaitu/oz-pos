@@ -11,6 +11,8 @@
 
 use rusqlite::Connection;
 
+use std::sync::Arc;
+
 use crate::cache::Cache;
 use crate::Money;
 use crate::error::CoreError;
@@ -22,6 +24,7 @@ pub mod offline;
 pub mod payments;
 pub mod products;
 pub mod refunds;
+pub mod reports;
 pub mod sales;
 pub mod settings;
 pub mod shifts;
@@ -34,6 +37,10 @@ pub mod terminals;
 // ── Re-exports ──────────────────────────────────────────────────────
 
 pub use products::ProductWithDetails;
+pub use reports::{
+    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert,
+    MonthlyRevenueRow, TopProductRow, WeeklyRevenueRow,
+};
 pub use sales::{DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
 pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 
@@ -49,7 +56,9 @@ pub struct Store<'a> {
     /// Underlying SQLite connection.
     pub conn: &'a Connection,
     /// Optional caching layer for product and inventory lookups.
-    pub cache: Option<Box<dyn Cache>>,
+    /// Uses `Arc` so multiple `Store` instances can share the same
+    /// cache backend (e.g. Redis).
+    pub cache: Option<Arc<dyn Cache>>,
 }
 
 impl<'a> Store<'a> {
@@ -59,7 +68,7 @@ impl<'a> Store<'a> {
     }
 
     /// Wrap an existing connection with a cache backend.
-    pub fn with_cache(conn: &'a Connection, cache: Box<dyn Cache>) -> Self {
+    pub fn with_cache(conn: &'a Connection, cache: Arc<dyn Cache>) -> Self {
         Self {
             conn,
             cache: Some(cache),

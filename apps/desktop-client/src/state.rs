@@ -22,6 +22,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use oz_core::cache::Cache;
+
 use rusqlite::Connection;
 use tauri::AppHandle;
 use tauri::Manager;
@@ -73,6 +75,14 @@ pub struct AppState {
     /// Background sync daemon. Started during app setup via
     /// [`SyncDaemon::start`](platform_sync::daemon::SyncDaemon::start).
     pub sync_daemon: SyncDaemon,
+
+    /// Caching layer (Redis-backed when configured, no-op otherwise).
+    /// Shared across all `Store` instances via `Arc`.
+    pub cache: Arc<dyn Cache>,
+
+    /// Shutdown sender for the inventory pub/sub background listener.
+    /// Dropped on app shutdown to stop the listener thread gracefully.
+    pub inventory_pubsub_shutdown: Option<std::sync::mpsc::Sender<()>>,
 }
 
 impl AppState {
@@ -99,6 +109,19 @@ impl AppState {
         seed_primary_store(&conn)
             .map_err(|e| AppError::Internal(format!("seeding primary store: {e}")))?;
 
+        // ── Cache layer initialisation (read settings BEFORE moving conn) ──
+        let redis_url = oz_core::Settings::get_redis_url(&conn)
+            .unwrap_or_else(|_| "redis://127.0.0.1/".into());
+        let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn)
+            .unwrap_or(300);
+        let cache = platform_startup::init_cache(&redis_url, cache_ttl);
+
+        // ── Start inventory pub/sub listener (Redis only) ────────────
+        let inventory_pubsub_shutdown = cache.start_inventory_pubsub(cache.clone());
+        if inventory_pubsub_shutdown.is_some() {
+            tracing::info!("inventory pub/sub listener started");
+        }
+
         let db = Arc::new(Mutex::new(conn));
         let registry = Arc::new(DriverRegistry::default());
 
@@ -122,7 +145,12 @@ impl AppState {
             }
         })();
 
-        tracing::info!(?db_path, lua_loaded = lua.is_some(), "AppState initialised");
+        tracing::info!(
+            cache_healthy = cache.is_healthy(),
+            ?db_path,
+            lua_loaded = lua.is_some(),
+            "AppState initialised"
+        );
 
         Ok(Self {
             db,
@@ -134,6 +162,8 @@ impl AppState {
             kernel: Mutex::new(Kernel::new()),
             lua: Mutex::new(lua),
             sync_daemon: SyncDaemon::new(),
+            cache,
+            inventory_pubsub_shutdown,
         })
     }
 }
@@ -154,6 +184,16 @@ fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
         tracing::info!("seeded default primary store profile");
     }
     Ok(())
+}
+
+impl AppState {
+    /// Create a [`Store`] with the shared cache layer.
+    ///
+    /// Command handlers should use this instead of `Store::new(&conn)`
+    /// to benefit from Redis caching (when configured).
+    pub fn store<'a>(&self, conn: &'a Connection) -> oz_core::db::Store<'a> {
+        oz_core::db::Store::with_cache(conn, self.cache.clone())
+    }
 }
 
 fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -179,6 +219,8 @@ impl AppState {
             kernel: Mutex::new(Kernel::new()),
             lua: Mutex::new(None),
             sync_daemon: SyncDaemon::new(),
+            cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
+            inventory_pubsub_shutdown: None,
         }
     }
 
@@ -195,6 +237,8 @@ impl AppState {
             kernel: Mutex::new(Kernel::new()),
             lua: Mutex::new(None),
             sync_daemon: SyncDaemon::new(),
+            cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
+            inventory_pubsub_shutdown: None,
         }
     }
 }

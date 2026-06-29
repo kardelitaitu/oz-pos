@@ -41,7 +41,7 @@ fn open_handler_connection(
 /// Attempts a Redis connection using `redis_url` and `ttl_seconds`.
 /// Falls back to a no-op cache when Redis is unavailable or the
 /// `cache-redis` feature is disabled.
-pub fn init_cache(redis_url: &str, ttl_seconds: u64) -> Box<dyn Cache> {
+pub fn init_cache(redis_url: &str, ttl_seconds: u64) -> Arc<dyn Cache> {
     oz_core::cache::create_cache(redis_url, ttl_seconds)
 }
 

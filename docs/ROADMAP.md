@@ -378,7 +378,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Store entity: each store has its own settings + feature flags
 - [x] Store profile seeded on first startup + IPC commands (list, get, create, update, set-primary, delete)
 - [x] Multi-store management UI (owner view across all locations) — Store Switcher + Multi-Store Dashboard + Terminal Status Panel
-- [ ] Multi-terminal: terminals in the same store share inventory via cloud sync
+- [x] Multi-terminal: terminals in the same store share inventory via cloud sync
 - [x] Per-terminal feature overrides (e.g., terminal A has KDS, terminal B does not) — migration `028_terminal_feature_overrides.sql` + IPC + UI in TerminalManagementScreen
 
 ### oz-payment
@@ -575,4 +575,4 @@ On-Features can be activated at any phase once the core infrastructure is in pla
 
 ---
 
-*Last updated: 2026-06-30.* (All Phase 2 items complete. Phase 4 < 10 items remaining.)
+*Last updated: 2026-06-30.* (Phase 2 ✓ Phase 3 ✓ Phase 4 < 5 items remaining — mobile builds + acceptance criteria only.)

@@ -1,6 +1,7 @@
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
+import { LocaleProvider } from './i18n/LocaleContext';
 import AppShell from '@/frontend/shell/AppShell';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
@@ -130,12 +131,14 @@ registerNavItem({ route: 'design', label: 'Design System', icon: icon('M12 12a3 
  */
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <AppShell />
-        </ToastProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <LocaleProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <AppShell />
+          </ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </LocaleProvider>
   );
 }

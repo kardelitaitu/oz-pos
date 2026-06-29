@@ -23,6 +23,7 @@ import {
 } from '@/api/offline';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { LanguageSelector } from '@/i18n/LanguageSelector';
 import './SettingsPage.css';
 
 /**
@@ -176,6 +177,11 @@ export default function SettingsPage() {
               onChange={(e) => setStore({ ...store, taxId: e.target.value })}
             />
           </label>
+
+          <div className="settings-field" aria-label="Language">
+            <span className="settings-label">Language</span>
+            <LanguageSelector />
+          </div>
         </div>
       </Card>
 
