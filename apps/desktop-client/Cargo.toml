@@ -38,6 +38,7 @@ modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
+platform-sync = { workspace = true }
 tauri = { workspace = true, features = [] }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-dialog = { workspace = true }

@@ -246,6 +246,9 @@ pub async fn complete_sale(
             let single_split = vec![PaymentSplitArg {
                 method: payment_method.into(),
                 amount_minor: sale.total.minor_units,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
             }];
             store.create_payments(&sale_id, &single_split, &sale.currency, &sale.created_at)?;
         }

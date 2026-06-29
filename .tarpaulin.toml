@@ -1,0 +1,5 @@
+[tarpaulin]
+manifest-path = "Cargo.toml"
+packages = ["oz-core", "oz-hal", "oz-lua"]
+out = ["Html", "Json"]
+output-dir = "coverage/"

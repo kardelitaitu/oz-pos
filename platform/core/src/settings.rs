@@ -104,6 +104,20 @@ pub mod keys {
     pub const SYNC_API_KEY: &str = "sync_api_key";
     /// Whether cloud sync is enabled. `"1"` or `"0"`. Default `"0"`.
     pub const SYNC_ENABLED: &str = "sync_enabled";
+
+    // ── PostgreSQL Sync settings ─────────────────────────────────
+    /// Whether PostgreSQL sync is enabled. `"1"` or `"0"`. Default `"0"`.
+    pub const PG_SYNC_ENABLED: &str = "pg_sync.enabled";
+    /// PostgreSQL hostname or IP address.
+    pub const PG_SYNC_HOST: &str = "pg_sync.host";
+    /// PostgreSQL port (default `"5432"`).
+    pub const PG_SYNC_PORT: &str = "pg_sync.port";
+    /// PostgreSQL database name.
+    pub const PG_SYNC_DBNAME: &str = "pg_sync.dbname";
+    /// PostgreSQL user name.
+    pub const PG_SYNC_USER: &str = "pg_sync.user";
+    /// PostgreSQL password.
+    pub const PG_SYNC_PASSWORD: &str = "pg_sync.password";
 }
 
 impl Settings {
@@ -242,6 +256,68 @@ impl Settings {
     /// Enable or disable sync.
     pub fn set_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), PlatformError> {
         Self::set(conn, keys::SYNC_ENABLED, if enabled { "1" } else { "0" })
+    }
+
+    // ── PostgreSQL Sync ─────────────────────────────────────────
+
+    /// Check if PostgreSQL sync is enabled.
+    pub fn is_pg_sync_enabled(conn: &Connection) -> Result<bool, PlatformError> {
+        Ok(Self::get(conn, keys::PG_SYNC_ENABLED)?.as_deref() == Some("1"))
+    }
+
+    /// Enable or disable PostgreSQL sync.
+    pub fn set_pg_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PG_SYNC_ENABLED, if enabled { "1" } else { "0" })
+    }
+
+    /// Get the PostgreSQL host.
+    pub fn get_pg_sync_host(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::PG_SYNC_HOST)
+    }
+
+    /// Set the PostgreSQL host.
+    pub fn set_pg_sync_host(conn: &Connection, host: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PG_SYNC_HOST, host)
+    }
+
+    /// Get the PostgreSQL port.
+    pub fn get_pg_sync_port(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::PG_SYNC_PORT)
+    }
+
+    /// Set the PostgreSQL port.
+    pub fn set_pg_sync_port(conn: &Connection, port: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PG_SYNC_PORT, port)
+    }
+
+    /// Get the PostgreSQL database name.
+    pub fn get_pg_sync_dbname(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::PG_SYNC_DBNAME)
+    }
+
+    /// Set the PostgreSQL database name.
+    pub fn set_pg_sync_dbname(conn: &Connection, dbname: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PG_SYNC_DBNAME, dbname)
+    }
+
+    /// Get the PostgreSQL user.
+    pub fn get_pg_sync_user(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::PG_SYNC_USER)
+    }
+
+    /// Set the PostgreSQL user.
+    pub fn set_pg_sync_user(conn: &Connection, user: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PG_SYNC_USER, user)
+    }
+
+    /// Get the PostgreSQL password.
+    pub fn get_pg_sync_password(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::PG_SYNC_PASSWORD)
+    }
+
+    /// Set the PostgreSQL password.
+    pub fn set_pg_sync_password(conn: &Connection, password: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PG_SYNC_PASSWORD, password)
     }
 }
 
@@ -595,5 +671,11 @@ mod tests {
         assert!(!keys::SYNC_SERVER_URL.is_empty());
         assert!(!keys::SYNC_API_KEY.is_empty());
         assert!(!keys::SYNC_ENABLED.is_empty());
+        assert!(!keys::PG_SYNC_ENABLED.is_empty());
+        assert!(!keys::PG_SYNC_HOST.is_empty());
+        assert!(!keys::PG_SYNC_PORT.is_empty());
+        assert!(!keys::PG_SYNC_DBNAME.is_empty());
+        assert!(!keys::PG_SYNC_USER.is_empty());
+        assert!(!keys::PG_SYNC_PASSWORD.is_empty());
     }
 }

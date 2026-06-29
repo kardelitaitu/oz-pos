@@ -378,7 +378,8 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 
 ### Cloud Sync (Optional On-Feature)
 - [x] SQLite outbox pattern (`offline_queue` table in `oz-core` + `platform-sync` queue/transport/replication layer)
-- [ ] Background sync daemon: outbox → PostgreSQL (via `tokio-postgres`)
+- [x] Background sync daemon: outbox → PostgreSQL (via `tokio-postgres`)
+- [x] Background sync daemon: outbox → HTTP server (via `reqwest`)
 - [x] Conflict resolution strategy (last-write-wins with timestamp in `platform/sync/src/conflict.rs`)
 - [ ] Cloud DB add-on: AWS RDS or Azure Database for PostgreSQL
 - [ ] Redis cache: product look-ups, pricing rules, inventory pub/sub

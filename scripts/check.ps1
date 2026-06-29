@@ -48,8 +48,46 @@ function Step {
 
 # --- Rust (mirrors CI rust job) -------------------------------------------
 Step -Name "cargo fmt" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
-Step -Name "cargo clippy" -RetryCommand "cargo clippy --workspace --all-targets --all-features -- -D warnings" -ScriptBlock { cargo clippy --workspace --all-targets --all-features -- -D warnings }
-Step -Name "cargo test" -RetryCommand "cargo test --workspace --all-features" -ScriptBlock { cargo test --workspace --all-features }
+
+$Packages = @(
+    "oz-api",
+    "oz-core",
+    "oz-hal",
+    "oz-lua",
+    "oz-security",
+    "oz-payment",
+    "oz-reporting",
+    "oz-logging",
+    "oz-cli",
+    "foundation",
+    "platform-core",
+    "platform-kernel",
+    "platform-startup",
+    "platform-sync",
+    "modules-sales",
+    "modules-inventory",
+    "modules-crm",
+    "modules-tax",
+    "modules-settings",
+    "modules-staff",
+    "modules-reporting",
+    "modules-terminal",
+    "modules-currency",
+    "oz-pos-app",
+    "oz-pos-tablet"
+)
+
+foreach ($pkg in $Packages) {
+    Step -Name "clippy $pkg" -RetryCommand "cargo clippy -p $pkg --all-targets --all-features -- -D warnings" -ScriptBlock {
+        cargo clippy -p $pkg --all-targets --all-features -- -D warnings
+    }
+}
+
+foreach ($pkg in $Packages) {
+    Step -Name "test $pkg" -RetryCommand "cargo test -p $pkg --all-features" -ScriptBlock {
+        cargo test -p $pkg --all-features
+    }
+}
 
 # --- Migration (mirrors CI migration job) ---------------------------------
 Step -Name "migration smoke test" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }

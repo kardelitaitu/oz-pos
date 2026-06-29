@@ -29,6 +29,9 @@ export interface AddLineResult {
 export interface PaymentSplitArg {
   method: string;
   amountMinor: number;
+  gatewayReference?: string;
+  gatewayStatus?: string;
+  gatewayResponse?: string;
 }
 
 export interface CompleteSaleArgs {

@@ -31,15 +31,19 @@ impl Store<'_> {
         for split in splits {
             let id = uuid::Uuid::new_v4().to_string();
             tx.execute(
-                "INSERT INTO payments (id, sale_id, method, amount_minor, currency, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO payments (id, sale_id, method, amount_minor, currency, created_at,
+                                       gateway_reference, gateway_status, gateway_response)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     id,
                     sale_id,
                     split.method,
                     split.amount_minor,
                     cur_str,
-                    created_at
+                    created_at,
+                    split.gateway_reference,
+                    split.gateway_status,
+                    split.gateway_response,
                 ],
             )?;
             payments.push(Payment {
@@ -51,6 +55,9 @@ impl Store<'_> {
                     currency: *currency,
                 },
                 created_at: created_at.to_string(),
+                gateway_reference: split.gateway_reference.clone(),
+                gateway_status: split.gateway_status.clone(),
+                gateway_response: split.gateway_response.clone(),
             });
         }
 
@@ -61,7 +68,8 @@ impl Store<'_> {
     /// Retrieve all payment records for a given sale.
     pub fn list_payments_for_sale(&self, sale_id: &str) -> Result<Vec<Payment>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, method, amount_minor, currency, created_at
+            "SELECT id, sale_id, method, amount_minor, currency, created_at,
+                    gateway_reference, gateway_status, gateway_response
              FROM payments WHERE sale_id = ?1 ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map(params![sale_id], |row| {
@@ -76,6 +84,9 @@ impl Store<'_> {
                     currency,
                 },
                 created_at: row.get("created_at")?,
+                gateway_reference: row.get("gateway_reference")?,
+                gateway_status: row.get("gateway_status")?,
+                gateway_response: row.get("gateway_response")?,
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -128,10 +139,16 @@ mod tests {
             PaymentSplitArg {
                 method: "cash".into(),
                 amount_minor: 600,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
             },
             PaymentSplitArg {
                 method: "card".into(),
                 amount_minor: 400,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
             },
         ];
 
@@ -147,6 +164,41 @@ mod tests {
 
         let listed = store.list_payments_for_sale(&sale_id).unwrap();
         assert_eq!(listed.len(), 2);
+    }
+
+    #[test]
+    fn create_payment_with_gateway_ref() {
+        let conn = fresh();
+        let store = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = "2025-06-01T12:00:00Z";
+        insert_sale(&conn, &sale_id, 500, now);
+
+        let splits = vec![PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 500,
+            gateway_reference: Some("txn_abc123".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: Some(r#"{"id":"txn_abc123","status":"approved"}"#.into()),
+        }];
+
+        let currency: Currency = "USD".parse().unwrap();
+        let payments = store
+            .create_payments(&sale_id, &splits, &currency, now)
+            .unwrap();
+        assert_eq!(payments.len(), 1);
+        assert_eq!(payments[0].gateway_reference.as_deref(), Some("txn_abc123"));
+        assert_eq!(payments[0].gateway_status.as_deref(), Some("approved"));
+
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].gateway_reference.as_deref(), Some("txn_abc123"));
+        assert_eq!(listed[0].gateway_status.as_deref(), Some("approved"));
+        assert_eq!(
+            listed[0].gateway_response.as_deref(),
+            Some(r#"{"id":"txn_abc123","status":"approved"}"#)
+        );
     }
 
     #[test]

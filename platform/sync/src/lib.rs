@@ -19,6 +19,9 @@
 #![allow(clippy::items_after_test_module)]
 
 pub mod conflict;
+pub mod daemon;
+pub mod pg_daemon;
+pub mod pg_transport;
 pub mod queue;
 pub mod replication;
 pub mod transport;

@@ -17,8 +17,6 @@ pub mod state;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use oz_core::db::Store;
-use oz_core::sync_client::SyncConfig;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -37,30 +35,15 @@ pub fn run() {
             // ── Module system lifecycle (shared startup) ──────────────
             platform_startup::init_module_system(&state.kernel, &state.db_path)?;
 
+            app.manage(state);
+
             // ── Background sync daemon ────────────────────────────────
+            let db = app.state::<AppState>().db.clone();
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-                loop {
-                    interval.tick().await;
-                    if let Some(state) = app_handle.try_state::<AppState>() {
-                        let db = state.db.lock().await;
-                        let store = Store::new(&db);
-                        match SyncConfig::from_settings(&store) {
-                            Ok(Some(config)) => {
-                                if let Err(e) = oz_core::sync_client::sync_pending(&store, &config)
-                                {
-                                    tracing::error!(error = %e, "sync cycle failed");
-                                }
-                            }
-                            Ok(None) => {}
-                            Err(e) => tracing::error!(error = %e, "failed to load sync config"),
-                        }
-                    }
-                }
+                let state = app_handle.state::<AppState>();
+                state.sync_daemon.start(db).await;
             });
-
-            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

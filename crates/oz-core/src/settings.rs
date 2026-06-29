@@ -195,6 +195,80 @@ impl Settings {
             conn, enabled,
         )?)
     }
+
+    /// Check if PostgreSQL sync is enabled.
+    pub fn is_pg_sync_enabled(conn: &Connection) -> Result<bool, CoreError> {
+        Ok(platform_core::settings::Settings::is_pg_sync_enabled(conn)?)
+    }
+
+    /// Enable or disable PostgreSQL sync.
+    pub fn set_pg_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_pg_sync_enabled(
+            conn, enabled,
+        )?)
+    }
+
+    /// Get the PostgreSQL host.
+    pub fn get_pg_sync_host(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_pg_sync_host(conn)?)
+    }
+
+    /// Set the PostgreSQL host.
+    pub fn set_pg_sync_host(conn: &Connection, host: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_pg_sync_host(
+            conn, host,
+        )?)
+    }
+
+    /// Get the PostgreSQL port.
+    pub fn get_pg_sync_port(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_pg_sync_port(conn)?)
+    }
+
+    /// Set the PostgreSQL port.
+    pub fn set_pg_sync_port(conn: &Connection, port: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_pg_sync_port(
+            conn, port,
+        )?)
+    }
+
+    /// Get the PostgreSQL database name.
+    pub fn get_pg_sync_dbname(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_pg_sync_dbname(conn)?)
+    }
+
+    /// Set the PostgreSQL database name.
+    pub fn set_pg_sync_dbname(conn: &Connection, dbname: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_pg_sync_dbname(
+            conn, dbname,
+        )?)
+    }
+
+    /// Get the PostgreSQL user.
+    pub fn get_pg_sync_user(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_pg_sync_user(conn)?)
+    }
+
+    /// Set the PostgreSQL user.
+    pub fn set_pg_sync_user(conn: &Connection, user: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_pg_sync_user(
+            conn, user,
+        )?)
+    }
+
+    /// Get the PostgreSQL password.
+    pub fn get_pg_sync_password(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_pg_sync_password(
+            conn,
+        )?)
+    }
+
+    /// Set the PostgreSQL password.
+    pub fn set_pg_sync_password(conn: &Connection, password: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_pg_sync_password(
+            conn, password,
+        )?)
+    }
 }
 
 // ── Feature flags (oz-core specific) ─────────────────────────────────

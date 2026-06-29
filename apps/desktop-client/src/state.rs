@@ -30,14 +30,15 @@ use tokio::sync::{Mutex, oneshot};
 use oz_core::{Cart, CartId, migrations};
 use oz_hal::DriverRegistry;
 use platform_kernel::Kernel;
+use platform_sync::daemon::SyncDaemon;
 
 use crate::error::AppError;
 
 /// Shared application state.
 pub struct AppState {
-    /// SQLite connection for the local store. Wrapped in a `Mutex` so
-    /// commands can borrow it across `.await` points safely.
-    pub db: Mutex<Connection>,
+    /// SQLite connection for the local store. Wrapped in `Arc<Mutex<..>>` so
+    /// the background sync daemon can hold a reference.
+    pub db: Arc<Mutex<Connection>>,
 
     /// HAL driver registry. Use `state.registry.scanner(id)` etc.
     pub registry: Arc<DriverRegistry>,
@@ -68,6 +69,10 @@ pub struct AppState {
     /// Wrapped in a `Mutex` because `rlua::Lua` uses interior mutability
     /// and is not safe for concurrent access from multiple Tauri commands.
     pub lua: Mutex<Option<oz_lua::LuaRuntime>>,
+
+    /// Background sync daemon. Started during app setup via
+    /// [`SyncDaemon::start`](platform_sync::daemon::SyncDaemon::start).
+    pub sync_daemon: SyncDaemon,
 }
 
 impl AppState {
@@ -94,6 +99,7 @@ impl AppState {
         seed_primary_store(&conn)
             .map_err(|e| AppError::Internal(format!("seeding primary store: {e}")))?;
 
+        let db = Arc::new(Mutex::new(conn));
         let registry = Arc::new(DriverRegistry::default());
 
         // Load Lua business rule scripts from <app_data_dir>/scripts/.
@@ -119,7 +125,7 @@ impl AppState {
         tracing::info!(?db_path, lua_loaded = lua.is_some(), "AppState initialised");
 
         Ok(Self {
-            db: Mutex::new(conn),
+            db,
             registry,
             app: Some(app.clone()),
             db_path,
@@ -127,6 +133,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             lua: Mutex::new(lua),
+            sync_daemon: SyncDaemon::new(),
         })
     }
 }
@@ -163,7 +170,7 @@ impl AppState {
     /// Creates a lightweight Tauri app handle via `tauri::test::mock_builder`.
     pub fn for_test() -> Self {
         Self {
-            db: Mutex::new(Connection::open_in_memory().unwrap()),
+            db: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
@@ -171,6 +178,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             lua: Mutex::new(None),
+            sync_daemon: SyncDaemon::new(),
         }
     }
 
@@ -178,7 +186,7 @@ impl AppState {
     /// already run). Used by integration tests that need a seeded database.
     pub fn for_test_with_conn(conn: Connection) -> Self {
         Self {
-            db: Mutex::new(conn),
+            db: Arc::new(Mutex::new(conn)),
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
@@ -186,6 +194,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             lua: Mutex::new(None),
+            sync_daemon: SyncDaemon::new(),
         }
     }
 }

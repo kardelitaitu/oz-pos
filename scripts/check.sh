@@ -36,8 +36,42 @@ total_start=$(date +%s)
 
 # ── Rust (mirrors CI `rust` job) ──────────────────────────────────────────
 step "cargo fmt" "cargo fmt --all -- --check" cargo fmt --all -- --check
-step "cargo clippy" "cargo clippy --workspace --all-targets --all-features -- -D warnings" cargo clippy --workspace --all-targets --all-features -- -D warnings
-step "cargo test" "cargo test --workspace --all-features" cargo test --workspace --all-features
+
+packages=(
+    "oz-api"
+    "oz-core"
+    "oz-hal"
+    "oz-lua"
+    "oz-security"
+    "oz-payment"
+    "oz-reporting"
+    "oz-logging"
+    "oz-cli"
+    "foundation"
+    "platform-core"
+    "platform-kernel"
+    "platform-startup"
+    "platform-sync"
+    "modules-sales"
+    "modules-inventory"
+    "modules-crm"
+    "modules-tax"
+    "modules-settings"
+    "modules-staff"
+    "modules-reporting"
+    "modules-terminal"
+    "modules-currency"
+    "oz-pos-app"
+    "oz-pos-tablet"
+)
+
+for pkg in "${packages[@]}"; do
+    step "clippy $pkg" "cargo clippy -p $pkg --all-targets --all-features -- -D warnings" cargo clippy -p "$pkg" --all-targets --all-features -- -D warnings
+done
+
+for pkg in "${packages[@]}"; do
+    step "test $pkg" "cargo test -p $pkg --all-features" cargo test -p "$pkg" --all-features
+done
 
 # ── Migration (mirrors CI `migration` job) ────────────────────────────────
 step "migration smoke test" "cargo run -p oz-cli -- migrate" cargo run -p oz-cli -- migrate
