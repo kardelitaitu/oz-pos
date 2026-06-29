@@ -33,7 +33,7 @@ fn price(minor: i64) -> Money {
 }
 
 /// Seed a product with initial stock.
-fn seed_product(conn: &Connection, id: &str, sku: &str, name: &str, initial_stock: i64) {
+fn seed_product(conn: &Connection, _id: &str, sku: &str, name: &str, initial_stock: i64) {
     store(conn)
         .create_product(sku, name, price(1000), None, None, initial_stock)
         .unwrap();
@@ -142,7 +142,7 @@ fn stock_multiple_products_tracked_independently() {
 fn stock_adjust_overflow_rejected() {
     let conn = setup();
     let s = store(&conn);
-    let p = s
+    let _p = s
         .create_product("OVERFLOW", "Overflow", price(100), None, None, i64::MAX)
         .unwrap();
 

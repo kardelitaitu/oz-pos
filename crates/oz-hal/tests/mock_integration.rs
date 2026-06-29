@@ -293,10 +293,12 @@ async fn scan_print_open_workflow() {
     printer.print_receipt(&receipt_body).await.unwrap();
     printer.cut().await.unwrap();
 
-    let captured = printer.printed.lock().unwrap();
-    assert_eq!(captured.len(), 1);
-    assert!(captured[0].contains("4901234567890"));
-    assert!(captured[0].contains("$5.00"));
+    {
+        let captured = printer.printed.lock().unwrap();
+        assert_eq!(captured.len(), 1);
+        assert!(captured[0].contains("4901234567890"));
+        assert!(captured[0].contains("$5.00"));
+    }
     assert_eq!(
         printer.cut_calls.load(std::sync::atomic::Ordering::SeqCst),
         1

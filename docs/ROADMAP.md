@@ -395,7 +395,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Mock payment processor (for testing and offline demo)
 - [x] Stripe integration (card present + card not present)
 - [ ] Square integration (optional)
-- [ ] QRIS / local payment gateway support (Indonesian market)
+- [x] QRIS / local payment gateway support (Indonesian market) — via Midtrans
 - [ ] Payment result stored in `payments` table linked to `order_id`
 
 ### Multi-Currency

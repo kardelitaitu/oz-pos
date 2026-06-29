@@ -418,7 +418,7 @@ mod tests {
             .unwrap();
 
         let rate = s.create_tax_rate("VAT", 1000, true, false).unwrap();
-        s.set_product_tax_rates("SKU-TAX", &[rate.id.clone()])
+        s.set_product_tax_rates("SKU-TAX", std::slice::from_ref(&rate.id))
             .unwrap();
 
         let ids = s.get_product_tax_rates("SKU-TAX").unwrap();
@@ -440,9 +440,9 @@ mod tests {
         let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();
         let r2 = s.create_tax_rate("R2", 1000, false, false).unwrap();
 
-        s.set_product_tax_rates("SKU-TAX2", &[r1.id.clone()])
+        s.set_product_tax_rates("SKU-TAX2", std::slice::from_ref(&r1.id))
             .unwrap();
-        s.set_product_tax_rates("SKU-TAX2", &[r2.id.clone()])
+        s.set_product_tax_rates("SKU-TAX2", std::slice::from_ref(&r2.id))
             .unwrap();
 
         let ids = s.get_product_tax_rates("SKU-TAX2").unwrap();
@@ -456,7 +456,7 @@ mod tests {
         s.create_category("cat-tax", "Taxed Cat", "#fff").unwrap();
 
         let rate = s.create_tax_rate("CT", 800, false, false).unwrap();
-        s.set_category_tax_rates("cat-tax", &[rate.id.clone()])
+        s.set_category_tax_rates("cat-tax", std::slice::from_ref(&rate.id))
             .unwrap();
 
         let ids = s.get_category_tax_rates("cat-tax").unwrap();

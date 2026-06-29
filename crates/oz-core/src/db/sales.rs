@@ -1233,7 +1233,7 @@ mod tests {
         let _default_id = seed_tax_rate(&conn, "Default 5%", 500, true, false);
         let product_id = seed_tax_rate(&conn, "Product 10%", 1000, false, false);
         seed_product_with_category(&conn, "COFFEE", None);
-        s.set_product_tax_rates("COFFEE", &[product_id.clone()])
+        s.set_product_tax_rates("COFFEE", std::slice::from_ref(&product_id))
             .unwrap();
 
         let mut sale = make_single_line_sale("COFFEE", 1, 1000);
@@ -1253,7 +1253,7 @@ mod tests {
         let _default_id = seed_tax_rate(&conn, "Default 5%", 500, true, false);
         let cat_id = seed_tax_rate(&conn, "Category 8%", 800, false, false);
         s.create_category("cat-1", "Beverages", "#fff").unwrap();
-        s.set_category_tax_rates("cat-1", &[cat_id.clone()])
+        s.set_category_tax_rates("cat-1", std::slice::from_ref(&cat_id))
             .unwrap();
         seed_product_with_category(&conn, "COFFEE", Some("cat-1"));
 

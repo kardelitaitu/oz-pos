@@ -66,7 +66,7 @@ fn auto_generated_timestamps_are_iso8601() {
     let s = store(&conn);
     for i in 0..10 {
         let entry = AuditEntry::new(
-            &format!("user-{i}"),
+            format!("user-{i}"),
             "system.backup",
             None::<String>,
             None::<String>,
@@ -110,7 +110,7 @@ fn timestamps_are_unique_per_entry() {
     let mut ids = Vec::new();
     for i in 0..5 {
         let entry = AuditEntry::new(
-            &format!("user-{i}"),
+            format!("user-{i}"),
             "test.action",
             None::<String>,
             None::<String>,
@@ -283,7 +283,7 @@ fn pagination_large_offsets_return_empty() {
 
     for i in 0..5 {
         let entry = AuditEntry::new(
-            &format!("u{i}"),
+            format!("u{i}"),
             "paginate.test",
             None::<String>,
             None::<String>,
@@ -338,7 +338,6 @@ fn pagination_consistent_across_calls() {
 #[test]
 fn query_entries_by_date_range() {
     let conn = setup();
-    let s = store(&conn);
 
     // Insert entries on 3 different days.
     let day1 = "2026-01-10T10:00:00.000Z";

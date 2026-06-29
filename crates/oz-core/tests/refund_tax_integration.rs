@@ -258,7 +258,7 @@ fn total_refunded_aggregates_correctly() {
         s.create_refund(&Refund::new(
             "agg-sale",
             price(350),
-            &format!("partial-{i}"),
+            format!("partial-{i}"),
             "",
             "user-1",
             vec![line],
@@ -458,7 +458,8 @@ fn clearing_product_tax_rates_removes_all() {
     let s = store(&conn);
 
     let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();
-    s.set_product_tax_rates("CLEAR", &[r1.id.clone()]).unwrap();
+    s.set_product_tax_rates("CLEAR", std::slice::from_ref(&r1.id))
+        .unwrap();
     assert_eq!(s.get_product_tax_rates("CLEAR").unwrap().len(), 1);
 
     // Setting an empty list should clear all assignments.
@@ -474,7 +475,7 @@ fn clearing_category_tax_rates_removes_all() {
     s.create_category("cat-clear", "Clear Cat", "#fff").unwrap();
 
     let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();
-    s.set_category_tax_rates("cat-clear", &[r1.id.clone()])
+    s.set_category_tax_rates("cat-clear", std::slice::from_ref(&r1.id))
         .unwrap();
     assert_eq!(s.get_category_tax_rates("cat-clear").unwrap().len(), 1);
 
@@ -497,9 +498,9 @@ fn product_and_category_tax_assignments_are_independent() {
         .create_tax_rate("Category Rate", 500, false, false)
         .unwrap();
 
-    s.set_product_tax_rates("INDEP", &[prod_rate.id.clone()])
+    s.set_product_tax_rates("INDEP", std::slice::from_ref(&prod_rate.id))
         .unwrap();
-    s.set_category_tax_rates("cat-indep", &[cat_rate.id.clone()])
+    s.set_category_tax_rates("cat-indep", std::slice::from_ref(&cat_rate.id))
         .unwrap();
 
     let prod_ids = s.get_product_tax_rates("INDEP").unwrap();
@@ -625,7 +626,7 @@ fn delete_tax_rate_with_product_assignments() {
     let rate = s
         .create_tax_rate("To Be Deleted", 500, false, false)
         .unwrap();
-    s.set_product_tax_rates("TAX-DEL", &[rate.id.clone()])
+    s.set_product_tax_rates("TAX-DEL", std::slice::from_ref(&rate.id))
         .unwrap();
     assert_eq!(s.get_product_tax_rates("TAX-DEL").unwrap().len(), 1);
 

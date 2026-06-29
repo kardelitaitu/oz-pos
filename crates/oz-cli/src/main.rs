@@ -10,6 +10,7 @@
 //! - `oz product delete <sku>` — delete a product
 //! - `oz backup` — snapshot the local SQLite store (scaffold)
 //! - `oz export` — write a CSV report (scaffold)
+#![allow(clippy::items_after_test_module)]
 
 use std::collections::HashMap;
 use std::str::FromStr;

@@ -3,7 +3,7 @@
 //! Tests cover the full open/close lifecycle, cash reconciliation
 //! calculations, FK constraints, timestamps, and listing order.
 
-use oz_core::{Shift, Store, migrations};
+use oz_core::{Store, migrations};
 
 fn setup() -> rusqlite::Connection {
     let mut conn = rusqlite::Connection::open_in_memory().unwrap();

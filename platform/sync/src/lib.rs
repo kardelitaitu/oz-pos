@@ -16,6 +16,8 @@
 //! let result = engine.run_sync_cycle(&store).await?;
 //! ```
 
+#![allow(clippy::items_after_test_module)]
+
 pub mod conflict;
 pub mod queue;
 pub mod replication;
@@ -60,6 +62,7 @@ impl From<reqwest::Error> for SyncError {
 }
 
 #[cfg(test)]
+#[allow(clippy::unnecessary_literal_unwrap)]
 mod tests {
     use super::*;
     use oz_core::sync_client::SyncConfig;

@@ -153,7 +153,7 @@ mod tests {
         let sale_id = seed_completed_sale(&conn);
         let store = Store::new(&conn);
 
-        let lines = vec![RefundLineArg {
+        let lines = [RefundLineArg {
             sale_line_id: "sl-1".into(),
             sku: "COFFEE".into(),
             qty: 2,

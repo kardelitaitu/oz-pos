@@ -4,7 +4,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
-use oz_core::{Customer, Store, migrations};
+use oz_core::{Store, migrations};
 use rusqlite::Connection;
 
 // ── Helpers ───────────────────────────────────────────────────────────
