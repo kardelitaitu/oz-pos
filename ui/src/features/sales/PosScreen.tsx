@@ -146,7 +146,9 @@ function CartLineItem({ line, onRemove, onDecreaseQty, onIncreaseQty }: CartLine
           }}
           aria-label={`Remove ${line.sku}`}
         >
-          Remove
+          <Localized id="pos-cart-remove">
+            <span>Remove</span>
+          </Localized>
         </button>
       </div>
     </div>
@@ -447,8 +449,12 @@ export default function PosScreen() {
     return (
       <div className="pos-screen">
         <div className="pos-login-required">
-          <h2>Login Required</h2>
-          <p>Please log in to use the POS.</p>
+          <Localized id="pos-login-required">
+            <h2>Login Required</h2>
+          </Localized>
+          <Localized id="pos-login-desc">
+            <p>Please log in to use the POS.</p>
+          </Localized>
         </div>
       </div>
     );
@@ -472,52 +478,67 @@ export default function PosScreen() {
               <span className="pos-cart-count">{lines.length}</span>
             )}
           </h2>
-          <button
-            type="button"
-            className="pos-cart-lock-btn"
-            onClick={logout}
-            aria-label="Lock terminal and log out"
-            title="Lock terminal"
-          >
-            Lock
-          </button>
+          <Localized id="pos-cart-lock">
+            <button
+              type="button"
+              className="pos-cart-lock-btn"
+              onClick={logout}
+              aria-label="Lock terminal and log out"
+              title="Lock terminal"
+            >
+              Lock
+            </button>
+          </Localized>
         </div>
 
         {/* ── Shift status bar ───────────────────────── */}
         <div className="pos-shift-bar" aria-label="Shift status">
           {shiftLoading ? (
-            <span className="pos-shift-bar-label">Loading shift…</span>
+            <Localized id="pos-shift-loading">
+              <span className="pos-shift-bar-label">Loading shift…</span>
+            </Localized>
           ) : activeShift ? (
             <>
               <span className="pos-shift-bar-indicator pos-shift-bar-indicator--open" />
-              <span className="pos-shift-bar-label">
-                Shift open since{' '}
-                {new Date(activeShift.openedAt).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-              <button
-                type="button"
-                className="pos-shift-close-btn"
-                onClick={handleCloseShiftClick}
-                aria-label="Close current shift"
-              >
-                Close Shift
-              </button>
+              <Localized id="pos-shift-open-since" vars={{ time: new Date(activeShift.openedAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              }) }}>
+                <span className="pos-shift-bar-label">
+                  Shift open since{' '}
+                  {new Date(activeShift.openedAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </Localized>
+              <Localized id="pos-shift-header-close">
+                <button
+                  type="button"
+                  className="pos-shift-close-btn"
+                  onClick={handleCloseShiftClick}
+                  aria-label="Close current shift"
+                >
+                  Close Shift
+                </button>
+              </Localized>
             </>
           ) : (
             <>
               <span className="pos-shift-bar-indicator pos-shift-bar-indicator--closed" />
-              <span className="pos-shift-bar-label">No active shift</span>
-              <button
-                type="button"
-                className="pos-shift-open-btn"
-                onClick={handleOpenShiftClick}
-                aria-label="Open a new shift"
-              >
-                Open Shift
-              </button>
+              <Localized id="pos-shift-no-active">
+                <span className="pos-shift-bar-label">No active shift</span>
+              </Localized>
+              <Localized id="pos-shift-header-open">
+                <button
+                  type="button"
+                  className="pos-shift-open-btn"
+                  onClick={handleOpenShiftClick}
+                  aria-label="Open a new shift"
+                >
+                  Open Shift
+                </button>
+              </Localized>
             </>
           )}
           {/* ── Inline shift error (cart not empty) ──── */}
@@ -562,7 +583,9 @@ export default function PosScreen() {
           <div className="pos-cart-footer">
             {/* Subtotal */}
             <div className="pos-cart-subtotal-row">
-              <span className="pos-cart-subtotal-label">Subtotal</span>
+              <Localized id="pos-cart-subtotal">
+                <span className="pos-cart-subtotal-label">Subtotal</span>
+              </Localized>
               <span className="pos-cart-subtotal-amount">
                 {formatMoney(subtotal)}
               </span>
@@ -573,7 +596,9 @@ export default function PosScreen() {
               {discountPercent > 0 ? (
                 <div className="pos-cart-discount-row">
                   <span className="pos-cart-discount-label">
-                    Discount ({discountLabel || `${discountPercent}%`})
+                    <Localized id="pos-cart-discount-label" vars={{ label: discountLabel || `${discountPercent}%` }}>
+                      <span>Discount ({discountLabel || `${discountPercent}%`})</span>
+                    </Localized>
                   </span>
                   <span className="pos-cart-discount-amount">
                     -{discountAmount ? formatMoney(discountAmount) : ''}
@@ -588,57 +613,67 @@ export default function PosScreen() {
                   </button>
                 </div>
               ) : !showDiscountInput ? (
-                <button
-                  type="button"
-                  className="pos-cart-discount-btn"
-                  onClick={() => setShowDiscountInput(true)}
-                >
-                  + Add Discount
-                </button>
+                <Localized id="pos-cart-add-discount">
+                  <button
+                    type="button"
+                    className="pos-cart-discount-btn"
+                    onClick={() => setShowDiscountInput(true)}
+                  >
+                    + Add Discount
+                  </button>
+                </Localized>
               ) : null}
 
               {/* Discount input form */}
               {showDiscountInput && (
                 <div className="pos-cart-discount-form">
                   <div className="pos-cart-discount-input-row">
-                    <input
-                      type="number"
-                      className="pos-cart-discount-pct"
-                      min="1"
-                      max="100"
-                      placeholder="%"
-                      value={discountInput}
-                      onChange={(e) => setDiscountInput(e.target.value)}
-                      aria-label="Discount percentage"
-                    />
-                    <input
-                      type="text"
-                      className="pos-cart-discount-name"
-                      placeholder="Label (optional)"
-                      value={discountName}
-                      onChange={(e) => setDiscountName(e.target.value)}
-                      aria-label="Discount label"
-                    />
-                    <button
-                      type="button"
-                      className="pos-cart-discount-apply"
-                      onClick={handleApplyDiscount}
-                      disabled={!discountInput || parseInt(discountInput, 10) < 1 || parseInt(discountInput, 10) > 100}
-                    >
-                      Apply
-                    </button>
-                    <button
-                      type="button"
-                      className="pos-cart-discount-cancel"
-                      onClick={() => {
-                        setShowDiscountInput(false);
-                        setDiscountInput('');
-                        setDiscountName('');
-                      }}
-                      aria-label="Cancel discount"
-                    >
-                      Cancel
-                    </button>
+                    <Localized id="pos-cart-pct-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        type="number"
+                        className="pos-cart-discount-pct"
+                        min="1"
+                        max="100"
+                        placeholder="%"
+                        value={discountInput}
+                        onChange={(e) => setDiscountInput(e.target.value)}
+                        aria-label="Discount percentage"
+                      />
+                    </Localized>
+                    <Localized id="pos-cart-label-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        type="text"
+                        className="pos-cart-discount-name"
+                        placeholder="Label (optional)"
+                        value={discountName}
+                        onChange={(e) => setDiscountName(e.target.value)}
+                        aria-label="Discount label"
+                      />
+                    </Localized>
+                    <Localized id="pos-cart-apply">
+                      <button
+                        type="button"
+                        className="pos-cart-discount-apply"
+                        onClick={handleApplyDiscount}
+                        disabled={!discountInput || parseInt(discountInput, 10) < 1 || parseInt(discountInput, 10) > 100}
+                      >
+                        Apply
+                      </button>
+                    </Localized>
+                    <Localized id="pos-cart-cancel">
+                      <button
+                        type="button"
+                        className="pos-cart-discount-cancel"
+                        onClick={() => {
+                          setShowDiscountInput(false);
+                          setDiscountInput('');
+                          setDiscountName('');
+                        }}
+                        aria-label="Cancel discount"
+                      >
+                        Cancel
+                      </button>
+                    </Localized>
                   </div>
                 </div>
               )}
@@ -659,19 +694,21 @@ export default function PosScreen() {
             )}              {/* Action buttons row */}
             <div className="pos-cart-actions-row">
               {/* Clear cart button */}
-              <button
-                type="button"
-                className="pos-cart-clear-btn"
-                onClick={resetCart}
-                aria-label="Clear all items from cart"
-                title="Clear cart"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-                Clear
-              </button>
+              <Localized id="pos-cart-clear">
+                <button
+                  type="button"
+                  className="pos-cart-clear-btn"
+                  onClick={resetCart}
+                  aria-label="Clear all items from cart"
+                  title="Clear cart"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Clear
+                </button>
+              </Localized>
 
               {/* Pay button */}
               <button
@@ -686,35 +723,41 @@ export default function PosScreen() {
               </button>
 
               {/* Hold button */}
-              <button
-                type="button"
-                className="pos-cart-hold-btn"
-                onClick={() => setShowHoldInput(true)}
-                aria-label="Hold this order"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="16" />
-                  <line x1="8" y1="12" x2="16" y2="12" />
-                </svg>
-                Hold
-              </button>
+              <Localized id="pos-cart-hold">
+                <button
+                  type="button"
+                  className="pos-cart-hold-btn"
+                  onClick={() => setShowHoldInput(true)}
+                  aria-label="Hold this order"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="16" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                  </svg>
+                  Hold
+                </button>
+              </Localized>
             </div>
 
             {/* ── Undo bar ────────────────────────────── */}
             {undoCartLine && (
               <div className="pos-cart-undo-bar" role="status" aria-live="polite">
-                <span className="pos-cart-undo-message">
-                  Removed {undoCartLine.name ?? undoCartLine.sku}
-                </span>
-                <button
-                  type="button"
-                  className="pos-cart-undo-btn"
-                  onClick={handleUndoRemove}
-                  aria-label="Undo remove from cart"
-                >
-                  Undo
-                </button>
+                <Localized id="pos-cart-removed" vars={{ name: undoCartLine.name ?? undoCartLine.sku }}>
+                  <span className="pos-cart-undo-message">
+                    Removed {undoCartLine.name ?? undoCartLine.sku}
+                  </span>
+                </Localized>
+                <Localized id="pos-cart-undo">
+                  <button
+                    type="button"
+                    className="pos-cart-undo-btn"
+                    onClick={handleUndoRemove}
+                    aria-label="Undo remove from cart"
+                  >
+                    Undo
+                  </button>
+                </Localized>
               </div>
             )}
           </div>
@@ -733,7 +776,9 @@ export default function PosScreen() {
             <path d="M2 17l10 5 10-5" />
             <path d="M2 12l10 5 10-5" />
           </svg>
-          <span>Held Orders</span>
+          <Localized id="pos-held-orders">
+            <span>Held Orders</span>
+          </Localized>
           {heldCarts.length > 0 && (
             <span className="pos-cart-held-count">{heldCarts.length}</span>
           )}
@@ -758,37 +803,47 @@ export default function PosScreen() {
       {showHoldInput && (
         <div className="pos-hold-overlay" role="dialog" aria-modal="true" aria-label="Hold order">
           <div className="pos-hold-modal">
-            <h3 className="pos-hold-title">Hold Current Order</h3>
-            <p className="pos-hold-desc">
-              Enter a name for this held order so you can find it later.
-            </p>
-            <input
-              type="text"
-              className="pos-hold-input"
-              placeholder="e.g. Customer waiting for manager"
-              value={holdLabel}
-              onChange={(e) => setHoldLabel(e.target.value)}
-              aria-label="Hold order label"
-            />
+            <Localized id="pos-hold-title">
+              <h3 className="pos-hold-title">Hold Current Order</h3>
+            </Localized>
+            <Localized id="pos-hold-desc">
+              <p className="pos-hold-desc">
+                Enter a name for this held order so you can find it later.
+              </p>
+            </Localized>
+            <Localized id="pos-hold-label-placeholder" attrs={{ placeholder: true }}>
+              <input
+                type="text"
+                className="pos-hold-input"
+                placeholder="e.g. Customer waiting for manager"
+                value={holdLabel}
+                onChange={(e) => setHoldLabel(e.target.value)}
+                aria-label="Hold order label"
+              />
+            </Localized>
             <div className="pos-hold-actions">
-              <button
-                type="button"
-                className="pos-hold-cancel-btn"
-                onClick={() => {
-                  setShowHoldInput(false);
-                  setHoldLabel('');
-                }}
-                disabled={holding}
-              >
-                Cancel
-              </button>
+              <Localized id="pos-hold-cancel">
+                <button
+                  type="button"
+                  className="pos-hold-cancel-btn"
+                  onClick={() => {
+                    setShowHoldInput(false);
+                    setHoldLabel('');
+                  }}
+                  disabled={holding}
+                >
+                  Cancel
+                </button>
+              </Localized>
               <button
                 type="button"
                 className="pos-hold-confirm-btn"
                 onClick={handleHold}
                 disabled={holding}
               >
-                {holding ? 'Holding…' : 'Hold Order'}
+                <Localized id={holding ? 'pos-hold-confirming' : 'pos-hold-confirm'}>
+                  <span>{holding ? 'Holding…' : 'Hold Order'}</span>
+                </Localized>
               </button>
             </div>
           </div>
@@ -800,7 +855,9 @@ export default function PosScreen() {
         <div className="pos-hold-overlay" role="dialog" aria-modal="true" aria-label="Held orders list">
           <div className="pos-held-list-modal">
             <div className="pos-held-list-header">
-              <h3>Held Orders</h3>
+              <Localized id="pos-held-orders">
+                <h3>Held Orders</h3>
+              </Localized>
               <button
                 type="button"
                 className="pos-held-list-close"
@@ -812,7 +869,9 @@ export default function PosScreen() {
             </div>
             <div className="pos-held-list-body">
               {heldCarts.length === 0 ? (
-                <p className="pos-held-list-empty">No held orders.</p>
+                <Localized id="pos-held-empty">
+                  <p className="pos-held-list-empty">No held orders.</p>
+                </Localized>
               ) : (
                 heldCarts.map((hc) => (
                   <div key={hc.id} className="pos-held-item">
@@ -822,14 +881,16 @@ export default function PosScreen() {
                         {hc.item_count} item{hc.item_count !== 1 ? 's' : ''} &middot; {formatMoney({ minor_units: hc.total_minor, currency: hc.currency })} &middot; {new Date(hc.created_at).toLocaleString()}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      className="pos-held-item-resume"
-                      onClick={() => handleResumeCart(hc.id)}
-                      aria-label={`Resume order: ${hc.label}`}
-                    >
-                      Resume
-                    </button>
+                    <Localized id="pos-held-resume">
+                      <button
+                        type="button"
+                        className="pos-held-item-resume"
+                        onClick={() => handleResumeCart(hc.id)}
+                        aria-label={`Resume order: ${hc.label}`}
+                      >
+                        Resume
+                      </button>
+                    </Localized>
                   </div>
                 ))
               )}
@@ -847,7 +908,9 @@ export default function PosScreen() {
           aria-label="Close shift"
         >
           <div className="pos-close-shift-modal">
-            <h3 className="pos-close-shift-title">Close Shift</h3>
+            <Localized id="pos-close-shift-title">
+              <h3 className="pos-close-shift-title">Close Shift</h3>
+            </Localized>
 
             {closeShiftError && (
               <div className="pos-close-shift-error">
@@ -857,58 +920,72 @@ export default function PosScreen() {
 
             <div className="pos-close-shift-info">
               <div className="pos-close-shift-info-row">
-                <span>Opened</span>
+                <Localized id="pos-close-shift-opened">
+                  <span>Opened</span>
+                </Localized>
                 <span>{new Date(activeShift.openedAt).toLocaleString()}</span>
               </div>
               <div className="pos-close-shift-info-row">
-                <span>Opening balance</span>
+                <Localized id="pos-close-shift-opening-balance">
+                  <span>Opening balance</span>
+                </Localized>
                 <span>{formatMoney({ minor_units: activeShift.openingBalanceMinor, currency: 'USD' })}</span>
               </div>
             </div>
 
             <div className="pos-close-shift-field">
-              <label htmlFor="closing-balance" className="pos-close-shift-label">
-                Counted cash in drawer (minor units)
-              </label>
-              <input
-                id="closing-balance"
-                type="number"
-                className="pos-close-shift-input"
-                min="0"
-                placeholder="e.g. 15000 for $150.00"
-                value={closingBalance}
-                onChange={(e) => setClosingBalance(e.target.value)}
-                aria-label="Closing balance in minor units"
-              />
+              <Localized id="pos-close-shift-counted-label">
+                <label htmlFor="closing-balance" className="pos-close-shift-label">
+                  Counted cash in drawer (minor units)
+                </label>
+              </Localized>
+              <Localized id="pos-close-shift-counted-placeholder" attrs={{ placeholder: true }}>
+                <input
+                  id="closing-balance"
+                  type="number"
+                  className="pos-close-shift-input"
+                  min="0"
+                  placeholder="e.g. 15000 for $150.00"
+                  value={closingBalance}
+                  onChange={(e) => setClosingBalance(e.target.value)}
+                  aria-label="Closing balance in minor units"
+                />
+              </Localized>
             </div>
 
             <div className="pos-close-shift-field">
-              <label htmlFor="shift-notes" className="pos-close-shift-label">
-                Notes (optional)
-              </label>
-              <textarea
-                id="shift-notes"
-                className="pos-close-shift-textarea"
-                rows={2}
-                placeholder="Any notes about this shift…"
-                value={shiftNotes}
-                onChange={(e) => setShiftNotes(e.target.value)}
-                aria-label="Shift notes"
-              />
+              <Localized id="pos-close-shift-notes-label">
+                <label htmlFor="shift-notes" className="pos-close-shift-label">
+                  Notes (optional)
+                </label>
+              </Localized>
+              <Localized id="pos-close-shift-notes-placeholder" attrs={{ placeholder: true }}>
+                <textarea
+                  id="shift-notes"
+                  className="pos-close-shift-textarea"
+                  rows={2}
+                  placeholder="Any notes about this shift…"
+                  value={shiftNotes}
+                  onChange={(e) => setShiftNotes(e.target.value)}
+                  aria-label="Shift notes"
+                />
+              </Localized>
             </div>
 
             <div className="pos-close-shift-actions">
-              <button
-                type="button"
-                className="pos-close-shift-cancel-btn"
-                onClick={() => {
-                  setShowCloseShift(false);
-                  setCloseShiftError(null);
-                }}
-                disabled={closingShift}
-              >
-                Cancel
-              </button>
+              <Localized id="cancel">
+                <button
+                  type="button"
+                  className="pos-close-shift-cancel-btn"
+                  onClick={() => {
+                    setShowCloseShift(false);
+                    setCloseShiftError(null);
+                  }}
+                  disabled={closingShift}
+                >
+                  Cancel
+                </button>
+              </Localized>
               <button
                 type="button"
                 className="pos-close-shift-confirm-btn"
@@ -920,7 +997,9 @@ export default function PosScreen() {
                   Number.isNaN(parseInt(closingBalance, 10))
                 }
               >
-                {closingShift ? 'Closing…' : 'Close Shift'}
+                <Localized id={closingShift ? 'pos-close-shift-closing' : 'pos-close-shift-confirm'}>
+                  <span>{closingShift ? 'Closing…' : 'Close Shift'}</span>
+                </Localized>
               </button>
             </div>
           </div>
@@ -936,31 +1015,41 @@ export default function PosScreen() {
           aria-label="Shift closed summary"
         >
           <div className="pos-close-shift-modal pos-close-shift-summary">
-            <h3 className="pos-close-shift-title">
-              Shift Closed
-            </h3>
+            <Localized id="pos-shift-closed-title">
+              <h3 className="pos-close-shift-title">
+                Shift Closed
+              </h3>
+            </Localized>
 
             <div className="pos-close-shift-summary-grid">
               <div className="pos-close-shift-summary-item">
-                <span className="pos-close-shift-summary-label">Total Sales</span>
+                <Localized id="pos-shift-total-sales">
+                  <span className="pos-close-shift-summary-label">Total Sales</span>
+                </Localized>
                 <span className="pos-close-shift-summary-value">
                   {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: 'USD' })}
                 </span>
               </div>
               <div className="pos-close-shift-summary-item">
-                <span className="pos-close-shift-summary-label">Cash Sales</span>
+                <Localized id="pos-shift-cash-sales">
+                  <span className="pos-close-shift-summary-label">Cash Sales</span>
+                </Localized>
                 <span className="pos-close-shift-summary-value">
                   {formatMoney({ minor_units: closedShiftSummary.totalCashMinor, currency: 'USD' })}
                 </span>
               </div>
               <div className="pos-close-shift-summary-item">
-                <span className="pos-close-shift-summary-label">Card Sales</span>
+                <Localized id="pos-shift-card-sales">
+                  <span className="pos-close-shift-summary-label">Card Sales</span>
+                </Localized>
                 <span className="pos-close-shift-summary-value">
                   {formatMoney({ minor_units: closedShiftSummary.totalCardMinor, currency: 'USD' })}
                 </span>
               </div>
               <div className="pos-close-shift-summary-item">
-                <span className="pos-close-shift-summary-label">Expected Cash</span>
+                <Localized id="pos-shift-expected-cash">
+                  <span className="pos-close-shift-summary-label">Expected Cash</span>
+                </Localized>
                 <span className="pos-close-shift-summary-value">
                   {closedShiftSummary.expectedCashMinor !== null
                     ? formatMoney({ minor_units: closedShiftSummary.expectedCashMinor, currency: 'USD' })
@@ -968,7 +1057,9 @@ export default function PosScreen() {
                 </span>
               </div>
               <div className="pos-close-shift-summary-item">
-                <span className="pos-close-shift-summary-label">Counted</span>
+                <Localized id="pos-shift-counted">
+                  <span className="pos-close-shift-summary-label">Counted</span>
+                </Localized>
                 <span className="pos-close-shift-summary-value">
                   {closedShiftSummary.closingBalanceMinor !== null
                     ? formatMoney({ minor_units: closedShiftSummary.closingBalanceMinor, currency: 'USD' })
@@ -976,7 +1067,9 @@ export default function PosScreen() {
                 </span>
               </div>
               <div className="pos-close-shift-summary-item">
-                <span className="pos-close-shift-summary-label">Difference</span>
+                <Localized id="pos-shift-difference">
+                  <span className="pos-close-shift-summary-label">Difference</span>
+                </Localized>
                 <span
                   className={`pos-close-shift-summary-value ${
                     closedShiftSummary.cashDifferenceMinor !== null && closedShiftSummary.cashDifferenceMinor < 0
@@ -991,7 +1084,9 @@ export default function PosScreen() {
                     : '—'}
                   {closedShiftSummary.cashDifferenceMinor !== null && closedShiftSummary.cashDifferenceMinor !== 0 && (
                     <span className="pos-close-shift-diff-tag">
-                      {closedShiftSummary.cashDifferenceMinor > 0 ? 'Over' : 'Short'}
+                      <Localized id={closedShiftSummary.cashDifferenceMinor > 0 ? 'pos-shift-over' : 'pos-shift-short'}>
+                        <span>{closedShiftSummary.cashDifferenceMinor > 0 ? 'Over' : 'Short'}</span>
+                      </Localized>
                     </span>
                   )}
                 </span>
@@ -1000,18 +1095,22 @@ export default function PosScreen() {
 
             {closedShiftSummary.notes && (
               <div className="pos-close-shift-notes-display">
-                <span className="pos-close-shift-summary-label">Notes</span>
+                <Localized id="pos-shift-notes">
+                  <span className="pos-close-shift-summary-label">Notes</span>
+                </Localized>
                 <p>{closedShiftSummary.notes}</p>
               </div>
             )}
 
-            <button
-              type="button"
-              className="pos-close-shift-dismiss-btn"
-              onClick={handleDismissShiftSummary}
-            >
-              Done
-            </button>
+            <Localized id="pos-shift-summary-done">
+              <button
+                type="button"
+                className="pos-close-shift-dismiss-btn"
+                onClick={handleDismissShiftSummary}
+              >
+                Done
+              </button>
+            </Localized>
           </div>
         </div>
       )}
@@ -1025,40 +1124,50 @@ export default function PosScreen() {
           aria-label="Open shift"
         >
           <div className="pos-close-shift-modal">
-            <h3 className="pos-close-shift-title">Open Shift</h3>
+            <Localized id="pos-open-shift-title">
+              <h3 className="pos-close-shift-title">Open Shift</h3>
+            </Localized>
 
             <div className="pos-close-shift-field">
-              <label htmlFor="opening-balance" className="pos-close-shift-label">
-                Opening balance (minor units)
-              </label>
-              <input
-                id="opening-balance"
-                type="number"
-                className="pos-close-shift-input"
-                min="0"
-                placeholder="e.g. 500 for $5.00"
-                value={openingBalance}
-                onChange={(e) => setOpeningBalance(e.target.value)}
-                aria-label="Opening balance in minor units"
-              />
+              <Localized id="pos-open-shift-balance-label">
+                <label htmlFor="opening-balance" className="pos-close-shift-label">
+                  Opening balance (minor units)
+                </label>
+              </Localized>
+              <Localized id="pos-open-shift-balance-placeholder" attrs={{ placeholder: true }}>
+                <input
+                  id="opening-balance"
+                  type="number"
+                  className="pos-close-shift-input"
+                  min="0"
+                  placeholder="e.g. 500 for $5.00"
+                  value={openingBalance}
+                  onChange={(e) => setOpeningBalance(e.target.value)}
+                  aria-label="Opening balance in minor units"
+                />
+              </Localized>
             </div>
 
             <div className="pos-close-shift-actions">
-              <button
-                type="button"
-                className="pos-close-shift-cancel-btn"
-                onClick={() => setShowOpenShift(false)}
-                disabled={openingShift}
-              >
-                Cancel
-              </button>
+              <Localized id="cancel">
+                <button
+                  type="button"
+                  className="pos-close-shift-cancel-btn"
+                  onClick={() => setShowOpenShift(false)}
+                  disabled={openingShift}
+                >
+                  Cancel
+                </button>
+              </Localized>
               <button
                 type="button"
                 className="pos-close-shift-confirm-btn"
                 onClick={handleConfirmOpenShift}
                 disabled={openingShift}
               >
-                {openingShift ? 'Opening…' : 'Open Shift'}
+                <Localized id={openingShift ? 'pos-open-shift-opening' : 'pos-open-shift-title'}>
+                  <span>{openingShift ? 'Opening…' : 'Open Shift'}</span>
+                </Localized>
               </button>
             </div>
           </div>

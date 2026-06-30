@@ -7,17 +7,37 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Real platform keychains**: Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`), macOS Keychain (`security-framework`), Linux Secret Service (`zbus`) — all three platform backends for the `Keyring` trait are now implemented.
-- **Sync HTTP transport**: `sync_client.rs` now performs an actual `reqwest` blocking POST to the configured server URL instead of logging "would sync".
-- **Tax breakdown on receipt**: `LineItem` carries `tax_amount: Option<Money>`, receipt shows per-line `Tax: $X.XX` inline when `show_tax` is enabled.
-- **8 tax computation unit tests**: no rates, default exclusive, default inclusive, product-level wins, category-level wins, multi-line, persisted after create, empty sale.
-- **122 UI tests passing** (was 113): fixed 9 test failures across `SalesDashboardScreen`, `TaxConfigurationScreen`, and `StaffManagementScreen` caused by widget-registry architecture and Fluent bidi isolate characters in aria-labels.
-- **`oz-core` Cargo.toml**: `sync-http` feature (enabled by default) gates the `reqwest` dependency.
+- *(none yet)*
 
-### Changed
-- `SalesDashboardScreen` is now widget-based — widget registration (`registerSalesWidgets`) must be called before rendering.
-- `TaxConfigurationScreen` requires `list_categories` and `list_category_tax_rates` invoke mocks in tests.
-- `rust-toolchain.toml`: restored comment accuracy (channel is `stable`, MSRV floor is 1.88 in `Cargo.toml`).
+## [0.0.2] — 2026-06-30
+
+### Added
+- **Coverage tooling**: `.tarpaulin.toml` config, coverage CI job in `.github/workflows/ci.yml`, gated coverage step in `scripts/check.sh`.
+- **Payment gateway fields**: Migration `027_payment_gateway_fields.sql` adds `gateway_reference`, `gateway_status`, `gateway_response` to `payments` table.
+- **Square payment processor**: `SquarePaymentProcessor` driver (`crates/oz-payment/src/drivers/square.rs`) — all 6 trait methods via REST API, 18 tests.
+- **PostgreSQL cloud sync**: `PgTransport` and `PgSyncDaemon` in `platform/sync/src/` — outbox replication to any PostgreSQL host.
+- **Multi-currency checkout**: Currency selector in `PaymentModal`, exchange rate display, dual-currency receipt info.
+- **Multi-store UI**: `StoreSwitcher` header dropdown, `MultiStoreDashboardScreen`, `TerminalStatusPanel` with 30s auto-refresh.
+- **Responsive layout**: Breakpoint CSS vars, 44–48px touch targets, responsive POS/Settings/Orders layouts, swipe gestures (`useSwipe` hook), collapsible sidebar.
+- **Per-terminal feature overrides**: Migration `028_terminal_feature_overrides.sql`, domain type, store CRUD, IPC commands, toggle UI in `TerminalManagementScreen`.
+- **Exchange rate auto-sync**: `RateSyncDaemon` (`platform/startup/src/rate_sync.rs`) — Frankfurter API, configurable interval, upsert to `exchange_rates`.
+- **Swipe gestures + navigation**: `useSwipe` hook for cart swipe-to-remove (with undo bar) and order swipe-to-void (manager-only); collapsible sidebar with localStorage persistence.
+- **Gateway status badge + QRIS QR**: `GatewayStatusBadge` (green/red dot, 60s auto-refresh), `QrisQrDisplay` (full-screen overlay, pulse animation), integrated into `PaymentModal`.
+- **Mobile build guide**: `packaging/mobile/README.md` — Tauri v2 mobile setup for Android & iOS.
+- **Redis cache layer**: `Cache` trait + `RedisCache`/`NoopCache` (feature-gated `cache-redis`), settings `redis_url`/`redis_cache_ttl`, integration in product/inventory queries.
+- **Multi-terminal inventory sharing**: `apply_remote` in sync queue handles `complete_sale` (deduct stock) and `stock.adjusted` (apply delta), wired in both HTTP and PostgreSQL daemons.
+- **Mobile platform config**: Android/iOS bundle config in `tauri.conf.json` + `capabilities/mobile.json`.
+- **Reporting queries**: `Store` methods for daily/weekly/monthly revenue, top products, hourly heatmap, low-stock alerts, category breakdown — plus 7 Tauri IPC commands.
+- **Report screens**: Dashboard (KPI cards, weekly chart, low-stock alerts), Sales Report (recharts bar/pie charts, 7×24 heatmap, date range filter, CSV export), Inventory Report (stock table, low-stock coloring, CSV export).
+- **i18n**: Full locale support with English (`en.ftl`), Bahasa Indonesia (`id.ftl`), and Thai (`th.ftl`) — `LocaleProvider`, `LanguageSelector` in Settings, 200+ strings per locale.
+- **Key pages migrated to `<Localized>`**: `PosScreen`, `SettingsPage`, `ProductManagementScreen`, `CategoryManagementScreen`, `StaffManagementScreen`, `CustomerManagementScreen`, `ShiftManagementScreen`, `InventoryAdjustmentScreen`.
+- **Performance benchmarks**: Criterion suite (`crates/oz-core/benches/`) — barcode lookup (cold/cache hit/miss) and transaction commit (minimal/5-line/checkout) with targets in `docs/benchmarks.md`.
+- **Prometheus metrics**: Counters, gauges, histograms in `oz-reporting` (behind `metrics` feature) + HTTP endpoint server in `platform-startup`.
+- **tokio-console integration**: `platform/startup/src/console.rs` (behind `console` feature + `RUSTFLAGS="--cfg tokio_unstable"`).
+- **Print Report button**: Sales Report and Inventory Report screens now have a Print button wired to `printSalesReceipt`.
+- **Accessibility docs**: `docs/a11y.md` — WCAG 2.1 AA audit checklist, testing tools, target scores.
+- **RTL layout scaffold**: `ui/src/styles/rtl.css` for future Arabic/Hebrew locale support.
+- **Flamegraph docs**: `cargo flamegraph` guide appended to `docs/benchmarks.md`.
 
 ## [0.0.1] — 2026-06-28
 
@@ -65,5 +85,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.2
 [0.0.1]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.1

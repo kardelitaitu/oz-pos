@@ -48,17 +48,17 @@ pub mod terminal;
 pub mod terminal_override;
 pub mod user;
 
-pub use cache::{Cache, NoopCache, create_cache};
+pub use audit::AuditEntry;
 #[cfg(feature = "cache-redis")]
 pub use cache::redis_cache::RedisCache;
-pub use audit::AuditEntry;
+pub use cache::{Cache, NoopCache, create_cache};
 pub use cart::{Cart, CartError, CartId, CartLine};
 pub use cash_payout::CashPayout;
 pub use category::Category;
 pub use customer::Customer;
 pub use db::reports::{
-    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert,
-    MonthlyRevenueRow, TopProductRow, WeeklyRevenueRow,
+    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
+    TopProductRow, WeeklyRevenueRow,
 };
 pub use db::{ProductWithDetails, Store};
 pub use error::CoreError;

@@ -20,6 +20,9 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialise tokio-console before any other tracing setup.
+    platform_startup::console::init_console_subscriber();
+
     oz_logging::init();
 
     let result: Result<(), AppError> = tauri::Builder::default()

@@ -4,6 +4,7 @@
 //! reconciliation details, and allows opening/closing shifts.
 
 import { useState, useCallback, useEffect } from 'react';
+import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -190,11 +191,15 @@ export default function ShiftManagementScreen() {
   return (
     <div className="shift-mgmt">
       <div className="shift-mgmt-header">
-        <h1 className="shift-mgmt-title">Shift Management</h1>
+        <Localized id="shift-title">
+          <h1 className="shift-mgmt-title">Shift Management</h1>
+        </Localized>
       </div>
 
       {loading && (
-        <p className="shift-mgmt-loading">Loading shifts…</p>
+        <Localized id="shift-loading">
+          <p className="shift-mgmt-loading">Loading shifts…</p>
+        </Localized>
       )}
 
       {!loading && (
@@ -205,70 +210,88 @@ export default function ShiftManagementScreen() {
               <div className="shift-mgmt-active-header">
                 <div className="shift-mgmt-active-info">
                   <span className="shift-mgmt-active-dot" />
-                  <span className="shift-mgmt-active-label">Active Shift</span>
+                  <Localized id="shift-active-label">
+                    <span className="shift-mgmt-active-label">Active Shift</span>
+                  </Localized>
                 </div>
                 <div className="shift-mgmt-active-actions">
-                  <button
-                    type="button"
-                    className="shift-mgmt-payout-btn"
-                    onClick={() => {
-                      setPayoutAmount('');
-                      setPayoutReason('');
-                      setError(null);
-                      setShowPayoutModal(true);
-                    }}
-                    aria-label="Record cash payout"
-                  >
-                    Record Payout
-                  </button>
-                  <button
-                    type="button"
-                    className="shift-mgmt-close-btn"
-                    onClick={() => {
-                      setClosingBalance('');
-                      setShiftNotes('');
-                      setError(null);
-                      setShowCloseModal(true);
-                    }}
-                    aria-label="Close active shift"
-                  >
-                    Close Shift
-                  </button>
+                  <Localized id="shift-btn-payout">
+                    <button
+                      type="button"
+                      className="shift-mgmt-payout-btn"
+                      onClick={() => {
+                        setPayoutAmount('');
+                        setPayoutReason('');
+                        setError(null);
+                        setShowPayoutModal(true);
+                      }}
+                      aria-label="Record cash payout"
+                    >
+                      Record Payout
+                    </button>
+                  </Localized>
+                  <Localized id="shift-btn-close">
+                    <button
+                      type="button"
+                      className="shift-mgmt-close-btn"
+                      onClick={() => {
+                        setClosingBalance('');
+                        setShiftNotes('');
+                        setError(null);
+                        setShowCloseModal(true);
+                      }}
+                      aria-label="Close active shift"
+                    >
+                      Close Shift
+                    </button>
+                  </Localized>
                 </div>
               </div>
               <div className="shift-mgmt-active-details">
                 <div className="shift-mgmt-active-stat">
-                  <span className="shift-mgmt-stat-label">Since</span>
+                  <Localized id="shift-stat-since">
+                    <span className="shift-mgmt-stat-label">Since</span>
+                  </Localized>
                   <span className="shift-mgmt-stat-value">
                     {time(activeShift.openedAt)}
                   </span>
                 </div>
                 <div className="shift-mgmt-active-stat">
-                  <span className="shift-mgmt-stat-label">Opening Balance</span>
+                  <Localized id="shift-opening-balance">
+                    <span className="shift-mgmt-stat-label">Opening Balance</span>
+                  </Localized>
                   <span className="shift-mgmt-stat-value">
                     {fmt(activeShift.openingBalanceMinor, currency)}
                   </span>
                 </div>
                 <div className="shift-mgmt-active-stat">
-                  <span className="shift-mgmt-stat-label">Sales</span>
+                  <Localized id="shift-stat-sales">
+                    <span className="shift-mgmt-stat-label">Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-stat-value">
                     {fmt(activeShift.totalSalesMinor, currency)}
                   </span>
                 </div>
                 <div className="shift-mgmt-active-stat">
-                  <span className="shift-mgmt-stat-label">Cash Sales</span>
+                  <Localized id="shift-stat-cash-sales">
+                    <span className="shift-mgmt-stat-label">Cash Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-stat-value">
                     {fmt(activeShift.totalCashMinor, currency)}
                   </span>
                 </div>
                 <div className="shift-mgmt-active-stat">
-                  <span className="shift-mgmt-stat-label">Card Sales</span>
+                  <Localized id="shift-stat-card-sales">
+                    <span className="shift-mgmt-stat-label">Card Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-stat-value">
                     {fmt(activeShift.totalCardMinor, currency)}
                   </span>
                 </div>
                 <div className="shift-mgmt-active-stat">
-                  <span className="shift-mgmt-stat-label">Transactions</span>
+                  <Localized id="shift-stat-transactions">
+                    <span className="shift-mgmt-stat-label">Transactions</span>
+                  </Localized>
                   <span className="shift-mgmt-stat-value">
                     {activeShift.totalSalesMinor > 0 ? 'Active' : 'None'}
                   </span>
@@ -287,40 +310,50 @@ export default function ShiftManagementScreen() {
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
                 <div>
-                  <p className="shift-mgmt-no-active-title">No active shift</p>
-                  <p className="shift-mgmt-no-active-sub">
-                    Open a shift to start tracking cashier sessions.
-                  </p>
+                  <Localized id="shift-no-active-title">
+                    <p className="shift-mgmt-no-active-title">No active shift</p>
+                  </Localized>
+                  <Localized id="shift-no-active-sub">
+                    <p className="shift-mgmt-no-active-sub">
+                      Open a shift to start tracking cashier sessions.
+                    </p>
+                  </Localized>
                 </div>
-                <Button onClick={() => { setOpeningBalance(''); setError(null); setShowOpenModal(true); }}>
-                  Open Shift
-                </Button>
+                <Localized id="shift-btn-open">
+                  <Button onClick={() => { setOpeningBalance(''); setError(null); setShowOpenModal(true); }}>
+                    Open Shift
+                  </Button>
+                </Localized>
               </div>
             </Card>
           )}
 
           {/* ── Shifts table ────────────────────────────── */}
           <Card shadow="sm" className="shift-mgmt-table-card">
-            <h2 className="shift-mgmt-table-title">Shift History</h2>
+            <Localized id="shift-table-title">
+              <h2 className="shift-mgmt-table-title">Shift History</h2>
+            </Localized>
 
             {shifts.length === 0 ? (
               <div className="shift-mgmt-empty">
-                <p>No shifts recorded yet.</p>
+                <Localized id="shift-empty">
+                  <p>No shifts recorded yet.</p>
+                </Localized>
               </div>
             ) : (
               <div className="shift-mgmt-table-wrap">
                 <table className="shift-mgmt-table" aria-label="Shift history">
                   <thead>
                     <tr>
-                      <th>Status</th>
-                      <th>Opened</th>
-                      <th>Closed</th>
-                      <th>Opening</th>
-                      <th>Counted</th>
-                      <th>Expected</th>
-                      <th>Diff</th>
-                      <th>Sales</th>
-                      <th>Actions</th>
+                      <Localized id="shift-table-status"><th>Status</th></Localized>
+                      <Localized id="shift-table-opened"><th>Opened</th></Localized>
+                      <Localized id="shift-table-closed"><th>Closed</th></Localized>
+                      <Localized id="shift-table-opening"><th>Opening</th></Localized>
+                      <Localized id="shift-table-counted"><th>Counted</th></Localized>
+                      <Localized id="shift-table-expected"><th>Expected</th></Localized>
+                      <Localized id="shift-table-diff"><th>Diff</th></Localized>
+                      <Localized id="shift-table-sales"><th>Sales</th></Localized>
+                      <Localized id="shift-table-actions"><th>Actions</th></Localized>
                     </tr>
                   </thead>
                   <tbody>
@@ -336,7 +369,9 @@ export default function ShiftManagementScreen() {
                         <tr key={s.id} className={s.status === 'open' ? 'shift-mgmt-row--open' : ''}>
                           <td>
                             <span className={`shift-mgmt-status-badge shift-mgmt-status-badge--${s.status}`}>
-                              {s.status === 'open' ? 'Open' : 'Closed'}
+                              <Localized id={s.status === 'open' ? 'shift-status-open' : 'shift-status-closed'}>
+                                <span>{s.status === 'open' ? 'Open' : 'Closed'}</span>
+                              </Localized>
                             </span>
                           </td>
                           <td className="shift-mgmt-cell-date">{dateTime(s.openedAt)}</td>
@@ -353,19 +388,25 @@ export default function ShiftManagementScreen() {
                           <td className={`shift-mgmt-cell-mono ${diffClass}`}>
                             {diff !== null ? fmt(diff, currency) : '—'}
                             {diff !== null && diff !== 0 && (
-                              <span className="shift-mgmt-tag">{diff > 0 ? 'Over' : 'Short'}</span>
+                              <span className="shift-mgmt-tag">
+                                <Localized id={diff > 0 ? 'shift-tag-over' : 'shift-tag-short'}>
+                                  <span>{diff > 0 ? 'Over' : 'Short'}</span>
+                                </Localized>
+                              </span>
                             )}
                           </td>
                           <td className="shift-mgmt-cell-mono">{fmt(s.totalSalesMinor, currency)}</td>
                           <td>
-                            <button
-                              type="button"
-                              className="shift-mgmt-view-btn"
-                              onClick={() => setShowDetailModal(s)}
-                              aria-label={`View shift details`}
-                            >
-                              View
-                            </button>
+                            <Localized id="shift-btn-view">
+                              <button
+                                type="button"
+                                className="shift-mgmt-view-btn"
+                                onClick={() => setShowDetailModal(s)}
+                                aria-label="View shift details"
+                              >
+                                View
+                              </button>
+                            </Localized>
                           </td>
                         </tr>
                       );
@@ -383,7 +424,9 @@ export default function ShiftManagementScreen() {
         <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Open shift">
           <div className="shift-mgmt-modal">
             <div className="shift-mgmt-modal-header">
-              <h2>Open Shift</h2>
+              <Localized id="shift-modal-open-title">
+                <h2>Open Shift</h2>
+              </Localized>
               <button
                 type="button"
                 className="shift-mgmt-modal-close"
@@ -399,27 +442,35 @@ export default function ShiftManagementScreen() {
                 <div className="shift-mgmt-modal-error" role="alert">{error}</div>
               )}
               <label className="shift-mgmt-field" htmlFor="open-balance">
-                <span className="shift-mgmt-label">Opening balance (minor units)</span>
-                <input
-                  id="open-balance"
-                  type="number"
-                  className="shift-mgmt-input"
-                  min="0"
-                  placeholder="e.g. 500 for $5.00"
-                  value={openingBalance}
-                  onChange={(e) => setOpeningBalance(e.target.value)}
-                  aria-label="Opening balance in minor units"
-                  disabled={saving}
-                />
+                <Localized id="shift-open-balance-label">
+                  <span className="shift-mgmt-label">Opening balance (minor units)</span>
+                </Localized>
+                <Localized id="shift-open-balance-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    id="open-balance"
+                    type="number"
+                    className="shift-mgmt-input"
+                    min="0"
+                    placeholder="e.g. 500 for $5.00"
+                    value={openingBalance}
+                    onChange={(e) => setOpeningBalance(e.target.value)}
+                    aria-label="Opening balance in minor units"
+                    disabled={saving}
+                  />
+                </Localized>
               </label>
             </div>
             <div className="shift-mgmt-modal-actions">
-              <Button variant="ghost" onClick={() => setShowOpenModal(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleOpenShift} loading={saving}>
-                Open Shift
-              </Button>
+              <Localized id="shift-btn-cancel">
+                <Button variant="ghost" onClick={() => setShowOpenModal(false)} disabled={saving}>
+                  Cancel
+                </Button>
+              </Localized>
+              <Localized id="shift-btn-open">
+                <Button variant="primary" onClick={handleOpenShift} loading={saving}>
+                  Open Shift
+                </Button>
+              </Localized>
             </div>
           </div>
         </div>
@@ -430,7 +481,9 @@ export default function ShiftManagementScreen() {
         <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Record cash payout">
           <div className="shift-mgmt-modal">
             <div className="shift-mgmt-modal-header">
-              <h2>Record Cash Payout</h2>
+              <Localized id="shift-modal-payout-title">
+                <h2>Record Cash Payout</h2>
+              </Localized>
               <button
                 type="button"
                 className="shift-mgmt-modal-close"
@@ -445,49 +498,63 @@ export default function ShiftManagementScreen() {
               {error && (
                 <div className="shift-mgmt-modal-error" role="alert">{error}</div>
               )}
-              <p className="shift-mgmt-payout-hint">
-                Record cash removed from the drawer (safe drop, manager pickup, etc.).
-              </p>
+              <Localized id="shift-payout-hint">
+                <p className="shift-mgmt-payout-hint">
+                  Record cash removed from the drawer (safe drop, manager pickup, etc.).
+                </p>
+              </Localized>
               <label className="shift-mgmt-field" htmlFor="payout-amount">
-                <span className="shift-mgmt-label">Amount (minor units)</span>
-                <input
-                  id="payout-amount"
-                  type="number"
-                  className="shift-mgmt-input"
-                  min="1"
-                  placeholder="e.g. 20000 for $200.00"
-                  value={payoutAmount}
-                  onChange={(e) => setPayoutAmount(e.target.value)}
-                  aria-label="Payout amount in minor units"
-                  disabled={saving}
-                />
+                <Localized id="shift-payout-amount-label">
+                  <span className="shift-mgmt-label">Amount (minor units)</span>
+                </Localized>
+                <Localized id="shift-payout-amount-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    id="payout-amount"
+                    type="number"
+                    className="shift-mgmt-input"
+                    min="1"
+                    placeholder="e.g. 20000 for $200.00"
+                    value={payoutAmount}
+                    onChange={(e) => setPayoutAmount(e.target.value)}
+                    aria-label="Payout amount in minor units"
+                    disabled={saving}
+                  />
+                </Localized>
               </label>
               <label className="shift-mgmt-field" htmlFor="payout-reason">
-                <span className="shift-mgmt-label">Reason</span>
-                <input
-                  id="payout-reason"
-                  type="text"
-                  className="shift-mgmt-input"
-                  placeholder="e.g. bank drop, manager pickup"
-                  value={payoutReason}
-                  onChange={(e) => setPayoutReason(e.target.value)}
-                  aria-label="Payout reason"
-                  disabled={saving}
-                />
+                <Localized id="shift-payout-reason-label">
+                  <span className="shift-mgmt-label">Reason</span>
+                </Localized>
+                <Localized id="shift-payout-reason-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    id="payout-reason"
+                    type="text"
+                    className="shift-mgmt-input"
+                    placeholder="e.g. bank drop, manager pickup"
+                    value={payoutReason}
+                    onChange={(e) => setPayoutReason(e.target.value)}
+                    aria-label="Payout reason"
+                    disabled={saving}
+                  />
+                </Localized>
               </label>
             </div>
             <div className="shift-mgmt-modal-actions">
-              <Button variant="ghost" onClick={() => setShowPayoutModal(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleCreatePayout}
-                loading={saving}
-                disabled={!payoutAmount || parseInt(payoutAmount, 10) <= 0 || Number.isNaN(parseInt(payoutAmount, 10))}
-              >
-                Record Payout
-              </Button>
+              <Localized id="shift-btn-cancel">
+                <Button variant="ghost" onClick={() => setShowPayoutModal(false)} disabled={saving}>
+                  Cancel
+                </Button>
+              </Localized>
+              <Localized id="shift-btn-payout">
+                <Button
+                  variant="primary"
+                  onClick={handleCreatePayout}
+                  loading={saving}
+                  disabled={!payoutAmount || parseInt(payoutAmount, 10) <= 0 || Number.isNaN(parseInt(payoutAmount, 10))}
+                >
+                  Record Payout
+                </Button>
+              </Localized>
             </div>
           </div>
         </div>
@@ -498,7 +565,9 @@ export default function ShiftManagementScreen() {
         <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Close shift">
           <div className="shift-mgmt-modal shift-mgmt-modal--wide">
             <div className="shift-mgmt-modal-header">
-              <h2>Close Shift</h2>
+              <Localized id="shift-modal-close-title">
+                <h2>Close Shift</h2>
+              </Localized>
               <button
                 type="button"
                 className="shift-mgmt-modal-close"
@@ -516,81 +585,109 @@ export default function ShiftManagementScreen() {
 
               {/* Reconciliation breakdown */}
               <div className="shift-mgmt-recon">
-                <h3 className="shift-mgmt-recon-title">Cash Reconciliation</h3>
+                <Localized id="shift-recon-title">
+                  <h3 className="shift-mgmt-recon-title">Cash Reconciliation</h3>
+                </Localized>
                 <div className="shift-mgmt-recon-row">
-                  <span>Opening balance</span>
+                  <Localized id="shift-recon-opening">
+                    <span>Opening balance</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(activeShift.openingBalanceMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-recon-row">
-                  <span>+ Cash sales</span>
+                  <Localized id="shift-recon-cash-sales">
+                    <span>+ Cash sales</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(activeShift.totalCashMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-recon-row">
-                  <span>− Payouts</span>
+                  <Localized id="shift-recon-payouts">
+                    <span>− Payouts</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">−{fmt(activeShift.totalPayoutsMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-recon-row shift-mgmt-recon-row--total">
-                  <span>Expected cash</span>
+                  <Localized id="shift-recon-expected">
+                    <span>Expected cash</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">
                     {fmt(activeShift.openingBalanceMinor + activeShift.totalCashMinor - activeShift.totalPayoutsMinor, currency)}
                   </span>
                 </div>
                 <div className="shift-mgmt-recon-row">
-                  <span>+ Payouts returned</span>
+                  <Localized id="shift-recon-payouts-returned">
+                    <span>+ Payouts returned</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(activeShift.totalPayoutsMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-recon-divider" />
                 <div className="shift-mgmt-close-info-row">
-                  <span>Shift opened</span>
+                  <Localized id="shift-recon-opened">
+                    <span>Shift opened</span>
+                  </Localized>
                   <span>{dateTime(activeShift.openedAt)}</span>
                 </div>
                 <div className="shift-mgmt-close-info-row">
-                  <span>Sales this shift</span>
+                  <Localized id="shift-recon-sales">
+                    <span>Sales this shift</span>
+                  </Localized>
                   <span>{fmt(activeShift.totalSalesMinor, currency)}</span>
                 </div>
               </div>
 
               <label className="shift-mgmt-field" htmlFor="close-balance">
-                <span className="shift-mgmt-label">Counted cash in drawer (minor units)</span>
-                <input
-                  id="close-balance"
-                  type="number"
-                  className="shift-mgmt-input"
-                  min="0"
-                  placeholder="e.g. 15000 for $150.00"
-                  value={closingBalance}
-                  onChange={(e) => setClosingBalance(e.target.value)}
-                  aria-label="Closing balance in minor units"
-                  disabled={saving}
-                />
+                <Localized id="shift-close-counted-label">
+                  <span className="shift-mgmt-label">Counted cash in drawer (minor units)</span>
+                </Localized>
+                <Localized id="shift-close-counted-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    id="close-balance"
+                    type="number"
+                    className="shift-mgmt-input"
+                    min="0"
+                    placeholder="e.g. 15000 for $150.00"
+                    value={closingBalance}
+                    onChange={(e) => setClosingBalance(e.target.value)}
+                    aria-label="Closing balance in minor units"
+                    disabled={saving}
+                  />
+                </Localized>
               </label>
 
               <label className="shift-mgmt-field" htmlFor="close-notes">
-                <span className="shift-mgmt-label">Notes (optional)</span>
-                <textarea
-                  id="close-notes"
-                  className="shift-mgmt-textarea"
-                  rows={2}
-                  placeholder="Any notes about this shift…"
-                  value={shiftNotes}
-                  onChange={(e) => setShiftNotes(e.target.value)}
-                  aria-label="Shift notes"
-                  disabled={saving}
-                />
+                <Localized id="shift-close-notes-label">
+                  <span className="shift-mgmt-label">Notes (optional)</span>
+                </Localized>
+                <Localized id="shift-close-notes-placeholder" attrs={{ placeholder: true }}>
+                  <textarea
+                    id="close-notes"
+                    className="shift-mgmt-textarea"
+                    rows={2}
+                    placeholder="Any notes about this shift…"
+                    value={shiftNotes}
+                    onChange={(e) => setShiftNotes(e.target.value)}
+                    aria-label="Shift notes"
+                    disabled={saving}
+                  />
+                </Localized>
               </label>
             </div>
             <div className="shift-mgmt-modal-actions">
-              <Button variant="ghost" onClick={() => setShowCloseModal(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleCloseShift}
-                loading={saving}
-                disabled={!closingBalance || parseInt(closingBalance, 10) < 0 || Number.isNaN(parseInt(closingBalance, 10))}
-              >
-                Close Shift
-              </Button>
+              <Localized id="shift-btn-cancel">
+                <Button variant="ghost" onClick={() => setShowCloseModal(false)} disabled={saving}>
+                  Cancel
+                </Button>
+              </Localized>
+              <Localized id="shift-btn-close">
+                <Button
+                  variant="primary"
+                  onClick={handleCloseShift}
+                  loading={saving}
+                  disabled={!closingBalance || parseInt(closingBalance, 10) < 0 || Number.isNaN(parseInt(closingBalance, 10))}
+                >
+                  Close Shift
+                </Button>
+              </Localized>
             </div>
           </div>
         </div>
@@ -601,36 +698,50 @@ export default function ShiftManagementScreen() {
         <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Shift closed summary">
           <div className="shift-mgmt-modal">
             <div className="shift-mgmt-modal-header">
-              <h2>Shift Closed</h2>
+              <Localized id="shift-modal-closed-title">
+                <h2>Shift Closed</h2>
+              </Localized>
             </div>
             <div className="shift-mgmt-modal-body">
               <div className="shift-mgmt-summary-grid">
                 <div className="shift-mgmt-summary-item">
-                  <span className="shift-mgmt-summary-label">Total Sales</span>
+                  <Localized id="shift-summary-total-sales">
+                    <span className="shift-mgmt-summary-label">Total Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-summary-value">{fmt(closedShiftSummary.totalSalesMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-summary-item">
-                  <span className="shift-mgmt-summary-label">Cash Sales</span>
+                  <Localized id="shift-summary-cash-sales">
+                    <span className="shift-mgmt-summary-label">Cash Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-summary-value">{fmt(closedShiftSummary.totalCashMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-summary-item">
-                  <span className="shift-mgmt-summary-label">Card Sales</span>
+                  <Localized id="shift-summary-card-sales">
+                    <span className="shift-mgmt-summary-label">Card Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-summary-value">{fmt(closedShiftSummary.totalCardMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-summary-item">
-                  <span className="shift-mgmt-summary-label">Expected Cash</span>
+                  <Localized id="shift-summary-expected-cash">
+                    <span className="shift-mgmt-summary-label">Expected Cash</span>
+                  </Localized>
                   <span className="shift-mgmt-summary-value">
                     {closedShiftSummary.expectedCashMinor !== null ? fmt(closedShiftSummary.expectedCashMinor, currency) : '—'}
                   </span>
                 </div>
                 <div className="shift-mgmt-summary-item">
-                  <span className="shift-mgmt-summary-label">Counted</span>
+                  <Localized id="shift-summary-counted">
+                    <span className="shift-mgmt-summary-label">Counted</span>
+                  </Localized>
                   <span className="shift-mgmt-summary-value">
                     {closedShiftSummary.closingBalanceMinor !== null ? fmt(closedShiftSummary.closingBalanceMinor, currency) : '—'}
                   </span>
                 </div>
                 <div className="shift-mgmt-summary-item">
-                  <span className="shift-mgmt-summary-label">Difference</span>
+                  <Localized id="shift-summary-difference">
+                    <span className="shift-mgmt-summary-label">Difference</span>
+                  </Localized>
                   <span className={`shift-mgmt-summary-value ${
                     closedShiftSummary.cashDifferenceMinor !== null && closedShiftSummary.cashDifferenceMinor < 0
                       ? 'shift-mgmt-diff--negative'
@@ -640,7 +751,11 @@ export default function ShiftManagementScreen() {
                   }`}>
                     {closedShiftSummary.cashDifferenceMinor !== null ? fmt(closedShiftSummary.cashDifferenceMinor, currency) : '—'}
                     {closedShiftSummary.cashDifferenceMinor !== null && closedShiftSummary.cashDifferenceMinor !== 0 && (
-                      <span className="shift-mgmt-tag">{closedShiftSummary.cashDifferenceMinor > 0 ? 'Over' : 'Short'}</span>
+                      <span className="shift-mgmt-tag">
+                        <Localized id={closedShiftSummary.cashDifferenceMinor > 0 ? 'shift-tag-over' : 'shift-tag-short'}>
+                          <span>{closedShiftSummary.cashDifferenceMinor > 0 ? 'Over' : 'Short'}</span>
+                        </Localized>
+                      </span>
                     )}
                   </span>
                 </div>
@@ -648,15 +763,19 @@ export default function ShiftManagementScreen() {
 
               {closedShiftSummary.notes && (
                 <div className="shift-mgmt-summary-notes">
-                  <span className="shift-mgmt-summary-label">Notes</span>
+                  <Localized id="shift-summary-notes">
+                    <span className="shift-mgmt-summary-label">Notes</span>
+                  </Localized>
                   <p>{closedShiftSummary.notes}</p>
                 </div>
               )}
             </div>
             <div className="shift-mgmt-modal-actions">
-              <Button variant="primary" onClick={dismissCloseSummary}>
-                Done
-              </Button>
+              <Localized id="shift-btn-done">
+                <Button variant="primary" onClick={dismissCloseSummary}>
+                  Done
+                </Button>
+              </Localized>
             </div>
           </div>
         </div>
@@ -667,7 +786,9 @@ export default function ShiftManagementScreen() {
         <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Shift details">
           <div className="shift-mgmt-modal shift-mgmt-modal--wide">
             <div className="shift-mgmt-modal-header">
-              <h2>Shift Details</h2>
+              <Localized id="shift-modal-detail-title">
+                <h2>Shift Details</h2>
+              </Localized>
               <button
                 type="button"
                 className="shift-mgmt-modal-close"
@@ -680,37 +801,53 @@ export default function ShiftManagementScreen() {
             <div className="shift-mgmt-modal-body">
               <div className="shift-mgmt-detail-grid">
                 <div className="shift-mgmt-detail-row">
-                  <span>Status</span>
+                  <Localized id="shift-detail-status">
+                    <span>Status</span>
+                  </Localized>
                   <span className={`shift-mgmt-status-badge shift-mgmt-status-badge--${showDetailModal.status}`}>
-                    {showDetailModal.status === 'open' ? 'Open' : 'Closed'}
+                    <Localized id={showDetailModal.status === 'open' ? 'shift-status-open' : 'shift-status-closed'}>
+                      <span>{showDetailModal.status === 'open' ? 'Open' : 'Closed'}</span>
+                    </Localized>
                   </span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Opened</span>
+                  <Localized id="shift-detail-opened">
+                    <span>Opened</span>
+                  </Localized>
                   <span>{dateTime(showDetailModal.openedAt)}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Closed</span>
+                  <Localized id="shift-detail-closed">
+                    <span>Closed</span>
+                  </Localized>
                   <span>{showDetailModal.closedAt ? dateTime(showDetailModal.closedAt) : '—'}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Opening Balance</span>
+                  <Localized id="shift-detail-opening-balance">
+                    <span>Opening Balance</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(showDetailModal.openingBalanceMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Closing Balance</span>
+                  <Localized id="shift-detail-closing-balance">
+                    <span>Closing Balance</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">
                     {showDetailModal.closingBalanceMinor !== null ? fmt(showDetailModal.closingBalanceMinor, currency) : '—'}
                   </span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Expected Cash</span>
+                  <Localized id="shift-detail-expected-cash">
+                    <span>Expected Cash</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">
                     {showDetailModal.expectedCashMinor !== null ? fmt(showDetailModal.expectedCashMinor, currency) : '—'}
                   </span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Difference</span>
+                  <Localized id="shift-detail-difference">
+                    <span>Difference</span>
+                  </Localized>
                   <span className={`shift-mgmt-cell-mono ${
                     showDetailModal.cashDifferenceMinor !== null && showDetailModal.cashDifferenceMinor < 0
                       ? 'shift-mgmt-diff--negative'
@@ -720,39 +857,57 @@ export default function ShiftManagementScreen() {
                   }`}>
                     {showDetailModal.cashDifferenceMinor !== null ? fmt(showDetailModal.cashDifferenceMinor, currency) : '—'}
                     {showDetailModal.cashDifferenceMinor !== null && showDetailModal.cashDifferenceMinor !== 0 && (
-                      <span className="shift-mgmt-tag">{showDetailModal.cashDifferenceMinor > 0 ? 'Over' : 'Short'}</span>
+                      <span className="shift-mgmt-tag">
+                        <Localized id={showDetailModal.cashDifferenceMinor > 0 ? 'shift-tag-over' : 'shift-tag-short'}>
+                          <span>{showDetailModal.cashDifferenceMinor > 0 ? 'Over' : 'Short'}</span>
+                        </Localized>
+                      </span>
                     )}
                   </span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Total Sales</span>
+                  <Localized id="shift-detail-total-sales">
+                    <span>Total Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(showDetailModal.totalSalesMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Cash Sales</span>
+                  <Localized id="shift-detail-cash-sales">
+                    <span>Cash Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(showDetailModal.totalCashMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Card Sales</span>
+                  <Localized id="shift-detail-card-sales">
+                    <span>Card Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(showDetailModal.totalCardMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Other Sales</span>
+                  <Localized id="shift-detail-other-sales">
+                    <span>Other Sales</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(showDetailModal.totalOtherMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Voids</span>
+                  <Localized id="shift-detail-voids">
+                    <span>Voids</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(showDetailModal.totalVoidsMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-detail-row">
-                  <span>Refunds</span>
+                  <Localized id="shift-detail-refunds">
+                    <span>Refunds</span>
+                  </Localized>
                   <span className="shift-mgmt-cell-mono">{fmt(showDetailModal.totalRefundsMinor, currency)}</span>
                 </div>
               </div>
 
               {/* ── Shift Report sections ──────────────── */}
               {reportLoading && (
-                <div className="shift-mgmt-report-loading">Loading report…</div>
+                <Localized id="shift-report-loading">
+                  <div className="shift-mgmt-report-loading">Loading report…</div>
+                </Localized>
               )}
 
               {shiftReport && !reportLoading && (
@@ -760,12 +915,20 @@ export default function ShiftManagementScreen() {
                   {/* Payment breakdown */}
                   {shiftReport.paymentBreakdown.length > 0 && (
                     <div className="shift-mgmt-report-section">
-                      <h3 className="shift-mgmt-report-title">Payment Breakdown</h3>
+                      <Localized id="shift-report-payment-breakdown">
+                        <h3 className="shift-mgmt-report-title">Payment Breakdown</h3>
+                      </Localized>
                       <div className="shift-mgmt-report-table">
                         <div className="shift-mgmt-report-table-header">
-                          <span>Method</span>
-                          <span>Transactions</span>
-                          <span>Total</span>
+                          <Localized id="shift-report-col-method">
+                            <span>Method</span>
+                          </Localized>
+                          <Localized id="shift-report-col-transactions">
+                            <span>Transactions</span>
+                          </Localized>
+                          <Localized id="shift-report-col-total">
+                            <span>Total</span>
+                          </Localized>
                         </div>
                         {shiftReport.paymentBreakdown.map((pmt) => (
                           <div key={pmt.method} className="shift-mgmt-report-row">
@@ -781,12 +944,20 @@ export default function ShiftManagementScreen() {
                   {/* Hourly breakdown */}
                   {shiftReport.hourlyBreakdown.length > 0 && (
                     <div className="shift-mgmt-report-section">
-                      <h3 className="shift-mgmt-report-title">Hourly Sales</h3>
+                      <Localized id="shift-report-hourly-sales">
+                        <h3 className="shift-mgmt-report-title">Hourly Sales</h3>
+                      </Localized>
                       <div className="shift-mgmt-report-table">
                         <div className="shift-mgmt-report-table-header">
-                          <span>Hour</span>
-                          <span>Sales</span>
-                          <span>Total</span>
+                          <Localized id="shift-report-col-hour">
+                            <span>Hour</span>
+                          </Localized>
+                          <Localized id="shift-report-col-sales">
+                            <span>Sales</span>
+                          </Localized>
+                          <Localized id="shift-report-col-total">
+                            <span>Total</span>
+                          </Localized>
                         </div>
                         {shiftReport.hourlyBreakdown.map((h) => (
                           <div key={h.hour} className="shift-mgmt-report-row">
@@ -802,22 +973,34 @@ export default function ShiftManagementScreen() {
                   {/* Counts summary */}
                   {(shiftReport.saleCount > 0 || shiftReport.voidCount > 0 || shiftReport.refundCount > 0) && (
                     <div className="shift-mgmt-report-section">
-                      <h3 className="shift-mgmt-report-title">Transaction Summary</h3>
+                      <Localized id="shift-report-transaction-summary">
+                        <h3 className="shift-mgmt-report-title">Transaction Summary</h3>
+                      </Localized>
                       <div className="shift-mgmt-report-table">
                         <div className="shift-mgmt-report-table-header">
-                          <span>Type</span>
-                          <span>Count</span>
+                          <Localized id="shift-report-col-type">
+                            <span>Type</span>
+                          </Localized>
+                          <Localized id="shift-report-col-count">
+                            <span>Count</span>
+                          </Localized>
                         </div>
                         <div className="shift-mgmt-report-row">
-                          <span>Completed sales</span>
+                          <Localized id="shift-report-completed-sales">
+                            <span>Completed sales</span>
+                          </Localized>
                           <span className="shift-mgmt-cell-mono">{shiftReport.saleCount}</span>
                         </div>
                         <div className="shift-mgmt-report-row">
-                          <span>Voids</span>
+                          <Localized id="shift-report-voids">
+                            <span>Voids</span>
+                          </Localized>
                           <span className="shift-mgmt-cell-mono">{shiftReport.voidCount}</span>
                         </div>
                         <div className="shift-mgmt-report-row">
-                          <span>Refunds</span>
+                          <Localized id="shift-report-refunds">
+                            <span>Refunds</span>
+                          </Localized>
                           <span className="shift-mgmt-cell-mono">{shiftReport.refundCount}</span>
                         </div>
                       </div>
@@ -827,12 +1010,20 @@ export default function ShiftManagementScreen() {
                   {/* Cash payouts */}
                   {shiftReport.cashPayouts.length > 0 && (
                     <div className="shift-mgmt-report-section">
-                      <h3 className="shift-mgmt-report-title">Cash Payouts (Safe Drops)</h3>
+                      <Localized id="shift-report-cash-payouts">
+                        <h3 className="shift-mgmt-report-title">Cash Payouts (Safe Drops)</h3>
+                      </Localized>
                       <div className="shift-mgmt-report-table">
                         <div className="shift-mgmt-report-table-header">
-                          <span>Amount</span>
-                          <span>Reason</span>
-                          <span>Time</span>
+                          <Localized id="shift-report-col-amount">
+                            <span>Amount</span>
+                          </Localized>
+                          <Localized id="shift-report-col-reason">
+                            <span>Reason</span>
+                          </Localized>
+                          <Localized id="shift-report-col-time">
+                            <span>Time</span>
+                          </Localized>
                         </div>
                         {shiftReport.cashPayouts.map((p) => (
                           <div key={p.id} className="shift-mgmt-report-row">
@@ -843,10 +1034,13 @@ export default function ShiftManagementScreen() {
                         ))}
                         <div className="shift-mgmt-report-row shift-mgmt-report-row--total">
                           <span className="shift-mgmt-cell-mono">
-                            <strong>Total: {fmt(
+                            <Localized id="shift-report-total">
+                              <strong>Total: </strong>
+                            </Localized>
+                            {fmt(
                               shiftReport.cashPayouts.reduce((s, p) => s + p.amountMinor, 0),
                               currency,
-                            )}</strong>
+                            )}
                           </span>
                           <span />
                           <span />
@@ -859,15 +1053,19 @@ export default function ShiftManagementScreen() {
 
               {showDetailModal.notes && (
                 <div className="shift-mgmt-summary-notes">
-                  <span className="shift-mgmt-summary-label">Notes</span>
+                  <Localized id="shift-detail-notes">
+                    <span className="shift-mgmt-summary-label">Notes</span>
+                  </Localized>
                   <p>{showDetailModal.notes}</p>
                 </div>
               )}
             </div>
             <div className="shift-mgmt-modal-actions">
-              <Button variant="ghost" onClick={() => setShowDetailModal(null)}>
-                Close
-              </Button>
+              <Localized id="close">
+                <Button variant="ghost" onClick={() => setShowDetailModal(null)}>
+                  Close
+                </Button>
+              </Localized>
             </div>
           </div>
         </div>

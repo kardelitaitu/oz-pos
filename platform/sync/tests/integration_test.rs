@@ -559,7 +559,10 @@ async fn product_created_on_terminal_a_appears_on_terminal_b() {
 
     // Verify Terminal B has no products yet
     let products_before = store_b.list_products().unwrap();
-    assert!(products_before.is_empty(), "Terminal B should be empty initially");
+    assert!(
+        products_before.is_empty(),
+        "Terminal B should be empty initially"
+    );
 
     // Run sync cycle on Terminal B (push nothing, pull the product)
     let engine_b = SyncEngine::new(test_config(relay_port));
@@ -572,7 +575,11 @@ async fn product_created_on_terminal_a_appears_on_terminal_b() {
 
     // ── Verify: the product now exists on Terminal B ────────────────
     let products_after = store_b.list_products().unwrap();
-    assert_eq!(products_after.len(), 1, "Terminal B should now have 1 product");
+    assert_eq!(
+        products_after.len(),
+        1,
+        "Terminal B should now have 1 product"
+    );
     assert_eq!(
         products_after[0].product.sku.as_str(),
         "SYNC-COFFEE",

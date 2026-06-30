@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Localized } from '@fluent/react';
+import { printSalesReceipt } from '@/api/sales';
 import { getLowStockAlerts, type LowStockAlert } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -35,6 +36,22 @@ export default function InventoryReportScreen() {
     URL.revokeObjectURL(url);
   };
 
+  const printReport = async () => {
+    await printSalesReceipt({
+      date: new Date().toISOString().slice(0, 10),
+      receiptNumber: `INV-${Date.now()}`,
+      items: items.map((i) => ({
+        name: i.name,
+        quantity: i.current_qty,
+        unitPrice: { minorUnits: 0, currency: 'USD' },
+        totalPrice: { minorUnits: 0, currency: 'USD' },
+      })),
+      subtotal: { minorUnits: 0, currency: 'USD' },
+      total: { minorUnits: 0, currency: 'USD' },
+      payments: [{ method: 'Report', amount: { minorUnits: 0, currency: 'USD' }, change: null }],
+    });
+  };
+
   if (loading) {
     return (
       <div className="inventory-report">
@@ -62,6 +79,13 @@ export default function InventoryReportScreen() {
             className="inventory-report-input"
             aria-label="Stock threshold"
           />
+          <Button
+            variant="secondary"
+            onClick={printReport}
+            aria-label="Print report"
+          >
+            <Localized id="print">Print</Localized>
+          </Button>
           <Button
             variant="secondary"
             onClick={exportCsv}

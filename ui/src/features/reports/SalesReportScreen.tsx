@@ -12,6 +12,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
+import { printSalesReceipt } from '@/api/sales';
 import {
   getDailyRevenue,
   getWeeklyRevenue,
@@ -160,6 +161,27 @@ export default function SalesReportScreen() {
     URL.revokeObjectURL(url);
   };
 
+  const printReport = async () => {
+    const totalMinor = (revenueData as any[]).reduce(
+      (s: number, r: any) => s + (r.total_minor ?? 0),
+      0,
+    );
+
+    await printSalesReceipt({
+      date: new Date().toISOString().slice(0, 10),
+      receiptNumber: `RPT-${Date.now()}`,
+      items: topProducts.map((p) => ({
+        name: p.name,
+        quantity: p.total_qty,
+        unitPrice: { minorUnits: 0, currency },
+        totalPrice: { minorUnits: p.total_minor, currency },
+      })),
+      subtotal: { minorUnits: totalMinor, currency },
+      total: { minorUnits: totalMinor, currency },
+      payments: [{ method: 'Report', amount: { minorUnits: totalMinor, currency }, change: null }],
+    });
+  };
+
   if (loading) {
     return (
       <div className="sales-report">
@@ -232,6 +254,13 @@ export default function SalesReportScreen() {
             ))}
           </div>
 
+          <Button
+            variant="secondary"
+            onClick={printReport}
+            aria-label="Print report"
+          >
+            <Localized id="print">Print</Localized>
+          </Button>
           <Button
             variant="secondary"
             onClick={exportCsv}

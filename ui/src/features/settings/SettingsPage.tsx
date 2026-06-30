@@ -179,7 +179,9 @@ export default function SettingsPage() {
           </label>
 
           <div className="settings-field" aria-label="Language">
-            <span className="settings-label">Language</span>
+            <Localized id="settings-field-language">
+              <span className="settings-label"><span>Language</span></span>
+            </Localized>
             <LanguageSelector />
           </div>
         </div>

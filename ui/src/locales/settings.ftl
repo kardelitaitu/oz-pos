@@ -57,6 +57,7 @@ settings-field-tax-id = Tax / VAT ID
 settings-field-default-currency = Default currency
 settings-field-decimal-separator = Decimal separator
 settings-field-paper-width = Paper width
+settings-field-language = Language
 settings-field-footer = Receipt footer
 settings-toggle-show-currency = Show currency symbol on amounts
 settings-toggle-show-tax = Show tax line on receipts
@@ -71,3 +72,10 @@ settings-sync-sync-now = Sync Now
 settings-sync-syncing = Syncing…
 settings-sync-result = Last sync: { $synced } synced, { $failed } failed
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
+
+# Settings option labels
+settings-decimal-separator-dot = 1.00 (dot)
+settings-decimal-separator-comma = 1,00 (comma)
+settings-decimal-separator-none = 1 (none)
+settings-paper-width-standard = 80 mm (standard)
+settings-paper-width-narrow = 58 mm (narrow)

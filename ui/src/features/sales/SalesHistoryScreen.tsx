@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listSales,
   getSale,
@@ -51,6 +51,7 @@ interface SwipeableOrderRowProps {
 }
 
 function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: SwipeableOrderRowProps) {
+  const { l10n } = useLocalization();
   const [revealed, setRevealed] = useState(false);
   const swipe = useSwipe({
     onSwipeLeft: () => { if (isManager) setRevealed(true); },
@@ -78,26 +79,30 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
       <td className="sales-history-cell-cashier">{cashierName}</td>
       <td className="sales-history-cell-actions">
         <div className="sales-history-cell-actions-inner">
-          <button
-            type="button"
-            className="sales-history-action-btn"
-            onClick={() => onView(sale.id)}
-            aria-label={`View ${sale.id}`}
-          >
-            View
-          </button>
-          {isManager && revealed && (
+          <Localized id="sales-history-action-view">
             <button
               type="button"
-              className="sales-history-void-btn"
-              onClick={() => {
-                onVoid(sale);
-                setRevealed(false);
-              }}
-              aria-label={`Void order ${sale.id}`}
+              className="sales-history-action-btn"
+              onClick={() => onView(sale.id)}
+              aria-label={`${l10n.getString('sales-history-view-aria', { id: sale.id })}`}
             >
-              Void
+              <span>View</span>
             </button>
+          </Localized>
+          {isManager && revealed && (
+            <Localized id="sales-history-action-void">
+              <button
+                type="button"
+                className="sales-history-void-btn"
+                onClick={() => {
+                  onVoid(sale);
+                  setRevealed(false);
+                }}
+                aria-label={`Void order ${sale.id}`}
+              >
+                <span>Void</span>
+              </button>
+            </Localized>
           )}
         </div>
       </td>
@@ -171,6 +176,7 @@ export default function SalesHistoryScreen() {
   const [voidReason, setVoidReason] = useState('');
   const [voiding, setVoiding] = useState(false);
   const [voidError, setVoidError] = useState<string | null>(null);
+  const { l10n: _screenL10n } = useLocalization();
 
   const handleOpenVoid = useCallback((sale: SaleListItem) => {
     setVoidTarget(sale);
@@ -393,18 +399,26 @@ export default function SalesHistoryScreen() {
             <h1 className="sales-history-title">Sales History</h1>
           </Localized>
           {!loading && (
-            <span className="sales-history-count">{filteredSales.length} sale{filteredSales.length !== 1 ? 's' : ''}</span>
+            <span className="sales-history-count">
+              <Localized id="sales-history-count" vars={{ count: filteredSales.length }}>
+                <>{filteredSales.length} sale{filteredSales.length !== 1 ? 's' : ''}</>
+              </Localized>
+            </span>
           )}
           {!loading && filteredSales.length > pageSize && (
             <span className="sales-history-page-info">
-              Page {safePage} of {totalPages}
+              <Localized id="sales-history-page-info" vars={{ current: safePage, total: totalPages }}>
+                <span>Page {safePage} of {totalPages}</span>
+              </Localized>
             </span>
           )}
         </div>
         <div className="sales-history-header-actions">
-          <button type="button" className="sales-history-export-btn" onClick={handleExportCsv}>
-            Export CSV
-          </button>
+          <Localized id="sales-history-export-csv">
+            <button type="button" className="sales-history-export-btn" onClick={handleExportCsv}>
+              <span>Export CSV</span>
+            </button>
+          </Localized>
         </div>
       </div>
 
@@ -412,7 +426,9 @@ export default function SalesHistoryScreen() {
       <div className="sales-history-filters" role="search" aria-label="Filter sales">
         {/* Search */}
         <div className="sales-history-filter-group">
-          <label className="sales-history-filter-label" htmlFor="sh-search">Search</label>
+          <Localized id="sales-history-search-label">
+            <label className="sales-history-filter-label" htmlFor="sh-search"><span>Search</span></label>
+          </Localized>
           <input
             id="sh-search"
             type="text"
@@ -426,25 +442,38 @@ export default function SalesHistoryScreen() {
 
         {/* Status filter */}
         <div className="sales-history-filter-group">
-          <span className="sales-history-filter-label">Status</span>
+          <Localized id="sales-history-status-label">
+            <span className="sales-history-filter-label"><span>Status</span></span>
+          </Localized>
           <div className="sales-history-filter-chips" role="radiogroup" aria-label="Filter by status">
-            {STATUS_OPTIONS.map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                className={`sales-history-chip ${statusFilter === opt ? 'sales-history-chip--active' : ''}`}
-                onClick={() => setStatusFilter(opt)}
-                aria-pressed={statusFilter === opt}
-              >
-                {opt}
-              </button>
-            ))}
+            {STATUS_OPTIONS.map((opt) => {
+              const statusIds: Record<string, string> = {
+                'All': 'sales-history-status-all',
+                'Completed': 'sales-history-status-completed',
+                'Pending': 'sales-history-status-pending',
+                'Voided': 'sales-history-status-voided',
+              };
+              return (
+                <Localized id={statusIds[opt] ?? opt} key={opt}>
+                  <button
+                    type="button"
+                    className={`sales-history-chip ${statusFilter === opt ? 'sales-history-chip--active' : ''}`}
+                    onClick={() => setStatusFilter(opt)}
+                    aria-pressed={statusFilter === opt}
+                  >
+                    <span>{opt}</span>
+                  </button>
+                </Localized>
+              );
+            })}
           </div>
         </div>
 
         {/* Date range */}
         <div className="sales-history-filter-group">
-          <label className="sales-history-filter-label" htmlFor="sh-date-from">From</label>
+          <Localized id="sales-history-from-label">
+            <label className="sales-history-filter-label" htmlFor="sh-date-from"><span>From</span></label>
+          </Localized>
           <input
             id="sh-date-from"
             type="date"
@@ -455,7 +484,9 @@ export default function SalesHistoryScreen() {
           />
         </div>
         <div className="sales-history-filter-group">
-          <label className="sales-history-filter-label" htmlFor="sh-date-to">To</label>
+          <Localized id="sales-history-to-label">
+            <label className="sales-history-filter-label" htmlFor="sh-date-to"><span>To</span></label>
+          </Localized>
           <input
             id="sh-date-to"
             type="date"
@@ -468,7 +499,9 @@ export default function SalesHistoryScreen() {
 
         {/* Cashier filter */}
         <div className="sales-history-filter-group">
-          <label className="sales-history-filter-label" htmlFor="sh-cashier">Cashier</label>
+          <Localized id="sales-history-cashier-label">
+            <label className="sales-history-filter-label" htmlFor="sh-cashier"><span>Cashier</span></label>
+          </Localized>
           <select
             id="sh-cashier"
             className="sales-history-filter-select"
@@ -476,7 +509,9 @@ export default function SalesHistoryScreen() {
             onChange={(e) => setCashierFilter(e.target.value)}
             aria-label="Filter by cashier"
           >
-            <option value="">All Cashiers</option>
+            <Localized id="sales-history-cashier-all">
+              <option value=""><span>All Cashiers</span></option>
+            </Localized>
             {staff.map((m) => (
               <option key={m.id} value={m.id}>{m.display_name}</option>
             ))}
@@ -492,17 +527,25 @@ export default function SalesHistoryScreen() {
       ) : filteredSales.length === 0 ? (
         <Card shadow="sm">
           <div className="sales-history-empty">
-            <Localized id="sales-history-empty">
-              <p>{sales.length === 0 ? 'No sales recorded yet' : 'No sales match your filters'}</p>
-            </Localized>
+            {sales.length === 0 ? (
+              <Localized id="sales-history-empty">
+                <p>No sales recorded yet</p>
+              </Localized>
+            ) : (
+              <Localized id="sales-history-empty-filtered">
+                <p>No sales match your filters</p>
+              </Localized>
+            )}
             {sales.length > 0 && (
-              <button
-                type="button"
-                className="sales-history-clear-filters-btn"
-                onClick={() => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); }}
-              >
-                Clear filters
-              </button>
+              <Localized id="sales-history-clear-filters">
+                <button
+                  type="button"
+                  className="sales-history-clear-filters-btn"
+                  onClick={() => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); }}
+                >
+                  <span>Clear filters</span>
+                </button>
+              </Localized>
             )}
           </div>
         </Card>
@@ -559,7 +602,9 @@ export default function SalesHistoryScreen() {
                     </button>
                   </th>
                 </Localized>
-                <th>Cashier</th>
+                <Localized id="sales-history-col-cashier">
+                  <th><span>Cashier</span></th>
+                </Localized>
                 <th aria-label="Actions"> </th>
               </tr>
             </thead>
@@ -582,29 +627,37 @@ export default function SalesHistoryScreen() {
       {/* ── Pagination controls ────────────────────────────── */}
       {!loading && filteredSales.length > pageSize && (
         <nav className="sales-history-pagination" aria-label="Pagination">
-          <button
-            type="button"
-            className="sales-history-page-btn"
-            disabled={safePage <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            aria-label="Previous page"
-          >
-            &larr; Prev
-          </button>
+          <Localized id="sales-history-prev-page">
+            <button
+              type="button"
+              className="sales-history-page-btn"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              aria-label="Previous page"
+            >
+              <span>&larr; Prev</span>
+            </button>
+          </Localized>
           <span className="sales-history-page-indicator">
-            Page {safePage} of {totalPages}
+            <Localized id="sales-history-page-info" vars={{ current: safePage, total: totalPages }}>
+              <span>Page {safePage} of {totalPages}</span>
+            </Localized>
           </span>
-          <button
-            type="button"
-            className="sales-history-page-btn"
-            disabled={safePage >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            aria-label="Next page"
-          >
-            Next &rarr;
-          </button>
+          <Localized id="sales-history-next-page">
+            <button
+              type="button"
+              className="sales-history-page-btn"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              aria-label="Next page"
+            >
+              <span>Next &rarr;</span>
+            </button>
+          </Localized>
           <span className="sales-history-page-size-group">
-            <label htmlFor="sh-page-size" className="sales-history-page-size-label">Per page</label>
+            <Localized id="sales-history-per-page-label">
+              <label htmlFor="sh-page-size" className="sales-history-page-size-label"><span>Per page</span></label>
+            </Localized>
             <select
               id="sh-page-size"
               className="sales-history-page-size-select"
@@ -635,27 +688,35 @@ export default function SalesHistoryScreen() {
         <div className="sales-history-overlay" role="dialog" aria-modal="true" aria-label="Void order">
           <div className="sales-history-modal sales-history-void-modal">
             <div className="sales-history-modal-header">
-              <h2>Void Order</h2>
-              <button
-                type="button"
-                className="sales-history-modal-close"
-                onClick={handleCloseVoid}
-                aria-label="Close void dialog"
-              >
-                &times;
-              </button>
+              <Localized id="sales-history-void-title">
+                <h2><span>Void Order</span></h2>
+              </Localized>
+              <Localized id="sales-history-void-close-aria">
+                <button
+                  type="button"
+                  className="sales-history-modal-close"
+                  onClick={handleCloseVoid}
+                  aria-label="Close void dialog"
+                >
+                  &times;
+                </button>
+              </Localized>
             </div>
             <div className="sales-history-modal-body">
-              <p className="sales-history-void-desc">
-                This will cancel order <strong>{voidTarget.id.slice(0, 8)}</strong>
-                {' '}for {formatMoney(voidTarget.total)} and restore inventory.
-                This action cannot be undone.
-              </p>
+              <Localized id="sales-history-void-desc" vars={{ id: voidTarget.id.slice(0, 8), amount: formatMoney(voidTarget.total) }}>
+                <p className="sales-history-void-desc">
+                  <span>This will cancel order <strong>{voidTarget.id.slice(0, 8)}</strong>
+                  {' '}for {formatMoney(voidTarget.total)} and restore inventory.
+                  This action cannot be undone.</span>
+                </p>
+              </Localized>
 
               <div className="sales-history-void-field">
-                <label htmlFor="sh-void-reason" className="sales-history-void-label">
-                  Reason for void
-                </label>
+                <Localized id="sales-history-void-reason-label">
+                  <label htmlFor="sh-void-reason" className="sales-history-void-label">
+                    <span>Reason for void</span>
+                  </label>
+                </Localized>
                 <input
                   id="sh-void-reason"
                   type="text"
@@ -674,16 +735,20 @@ export default function SalesHistoryScreen() {
               )}
 
               <div className="sales-history-modal-actions">
-                <Button variant="ghost" onClick={handleCloseVoid} disabled={voiding}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="danger"
-                  onClick={handleConfirmVoid}
-                  loading={voiding}
-                >
-                  {voiding ? 'Voiding…' : 'Confirm Void'}
-                </Button>
+                <Localized id="sales-history-void-cancel">
+                  <Button variant="ghost" onClick={handleCloseVoid} disabled={voiding}>
+                    <span>Cancel</span>
+                  </Button>
+                </Localized>
+                <Localized id={voiding ? 'sales-history-void-progress' : 'sales-history-void-confirm'}>
+                  <Button
+                    variant="danger"
+                    onClick={handleConfirmVoid}
+                    loading={voiding}
+                  >
+                    <span>{voiding ? 'Voiding…' : 'Confirm Void'}</span>
+                  </Button>
+                </Localized>
               </div>
             </div>
           </div>
@@ -708,35 +773,67 @@ export default function SalesHistoryScreen() {
                   &times;
                 </button>
               </Localized>
-            </div>
-
-            {detailLoading ? (
-              <p>Loading&hellip;</p>
+            </div>            {detailLoading ? (
+              <Localized id="sales-history-detail-loading">
+                <p><span>Loading&hellip;</span></p>
+              </Localized>
             ) : (
               <div className="sales-history-modal-body">
                 <div className="sales-history-detail-meta">
-                  <div><strong>ID:</strong> {detail.id}</div>
-                  <div><strong>Date:</strong> {new Date(detail.createdAt).toLocaleString()}</div>
                   <div>
-                    <strong>Status:</strong>{' '}
+                    <Localized id="sales-history-detail-id">
+                      <strong><span>ID:</span></strong>
+                    </Localized>
+                    {' '}{detail.id}
+                  </div>
+                  <div>
+                    <Localized id="sales-history-detail-date">
+                      <strong><span>Date:</span></strong>
+                    </Localized>
+                    {' '}{new Date(detail.createdAt).toLocaleString()}
+                  </div>
+                  <div>
+                    <Localized id="sales-history-detail-status">
+                      <strong><span>Status:</span></strong>
+                    </Localized>
+                    {' '}
                     <Badge variant={statusBadgeVariant(detail.status)}>
                       <Localized id={statusFluentId(detail.status)}>
                         <span>{detail.status}</span>
                       </Localized>
                     </Badge>
                   </div>
-                  <div><strong>Payment:</strong> {detail.paymentMethod ?? '\u2014'}</div>
-                  <div><strong>Cashier:</strong> {cashierName(detail.userId)}</div>
                   <div>
-                    <strong>Subtotal:</strong> {formatMoney(detail.subtotal)}
+                    <Localized id="sales-history-detail-payment">
+                      <strong><span>Payment:</span></strong>
+                    </Localized>
+                    {' '}{detail.paymentMethod ?? '\u2014'}
+                  </div>
+                  <div>
+                    <Localized id="sales-history-detail-cashier">
+                      <strong><span>Cashier:</span></strong>
+                    </Localized>
+                    {' '}{cashierName(detail.userId)}
+                  </div>
+                  <div>
+                    <Localized id="sales-history-detail-subtotal">
+                      <strong><span>Subtotal:</span></strong>
+                    </Localized>
+                    {' '}{formatMoney(detail.subtotal)}
                   </div>
                   {detail.taxTotal.minor_units > 0 && (
                     <div>
-                      <strong>Tax:</strong> {formatMoney(detail.taxTotal)}
+                      <Localized id="sales-history-detail-tax">
+                        <strong><span>Tax:</span></strong>
+                      </Localized>
+                      {' '}{formatMoney(detail.taxTotal)}
                     </div>
                   )}
                   <div>
-                    <strong>Total:</strong> {formatMoney(detail.total)}
+                    <Localized id="sales-history-detail-total">
+                      <strong><span>Total:</span></strong>
+                    </Localized>
+                    {' '}{formatMoney(detail.total)}
                     {refunds.length > 0 && (
                       <Badge variant="warning" style={{ marginLeft: 8 }}>
                         <Localized id="refund-title">
@@ -747,16 +844,20 @@ export default function SalesHistoryScreen() {
                   </div>
                 </div>
 
-                <h3>Line Items</h3>
+                <Localized id="sales-history-lines-title">
+                  <h3><span>Line Items</span></h3>
+                </Localized>
                 <table className="sales-history-lines-table" aria-label="Sale line items">
                   <thead>
                     <tr>
-                      <th>SKU</th>
-                      <th>Name</th>
-                      <th>Qty</th>
-                      <th>Unit Price</th>
-                      <th>Total</th>
-                      {detail.lines.some((l) => l.tax_amount) && <th>Tax</th>}
+                      <Localized id="sales-history-line-sku"><th><span>SKU</span></th></Localized>
+                      <Localized id="sales-history-line-name"><th><span>Name</span></th></Localized>
+                      <Localized id="sales-history-line-qty"><th><span>Qty</span></th></Localized>
+                      <Localized id="sales-history-line-unit-price"><th><span>Unit Price</span></th></Localized>
+                      <Localized id="sales-history-line-total"><th><span>Total</span></th></Localized>
+                      {detail.lines.some((l) => l.tax_amount) && (
+                        <Localized id="sales-history-line-tax"><th><span>Tax</span></th></Localized>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -776,11 +877,9 @@ export default function SalesHistoryScreen() {
                 {/* ── Previous Refunds ──────────────────────── */}
                 {refunds.length > 0 && (
                   <div className="sales-history-refunds">
-                    <h3>
-                      <Localized id="refund-previous-refunds">
-                        <span>Previous Refunds</span>
-                      </Localized>
-                    </h3>
+                    <Localized id="refund-previous-refunds">
+                      <h3><span>Previous Refunds</span></h3>
+                    </Localized>
                     {refunds.map((rf) => (
                       <div key={rf.id} className="sales-history-refund-item">
                         <div className="sales-history-refund-meta">
@@ -791,9 +890,9 @@ export default function SalesHistoryScreen() {
                         <table className="sales-history-lines-table" aria-label="Refund line items">
                           <thead>
                             <tr>
-                              <th>SKU</th>
-                              <th>Qty</th>
-                              <th>Total</th>
+                              <Localized id="refund-line-sku"><th><span>SKU</span></th></Localized>
+                              <Localized id="refund-line-qty"><th><span>Qty</span></th></Localized>
+                              <Localized id="refund-line-total"><th><span>Total</span></th></Localized>
                             </tr>
                           </thead>
                           <tbody>
@@ -809,7 +908,8 @@ export default function SalesHistoryScreen() {
                       </div>
                     ))}
                   </div>
-                )}
+                )
+}
 
                 <div className="sales-history-modal-actions">
                   <Localized id="sales-history-detail-close">

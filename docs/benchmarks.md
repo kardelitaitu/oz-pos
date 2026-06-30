@@ -39,5 +39,33 @@ cargo bench -p oz-core -- --profile-time 5
 - Cache hit benchmarks measure the NoopCache path (no Redis). With RedisCache
   enabled, cache hit latency depends on network round-trip to the Redis server.
 - Transaction benchmarks include SQLite write to disk (WAL mode). Actual POS
-  terminals use WAL mode with synchronous=NORMAL for the best balance of safety
-  and performance.
+   terminals use WAL mode with synchronous=NORMAL for the best balance of safety
+and performance.
+
+## Flamegraph Profiling
+
+Generate flamegraphs to visualise CPU hot spots:
+
+```bash
+# Install flamegraph tool
+cargo install flamegraph
+
+# Profile a benchmark
+cargo flamegraph -p oz-core --bench barcode_lookup -- --bench
+
+# Profile the desktop app (requires sudo on Linux for perf)
+cargo flamegraph -p oz-pos-desktop
+
+# Profile with a specific workload
+cargo flamegraph -p oz-pos-desktop -- --test some_integration_test
+```
+
+### Prerequisites
+- **Linux**: `perf` (kernel.perf_event_paranoid ≤ 1)
+- **macOS**: DTrace (SIP must be disabled)
+- **Windows**: `flamegraph` relies on ETW; use `cargo flamegraph --bin oz-pos-desktop` with Administrator privileges
+
+### Interpreting
+- **Wide bars** = functions that consume significant CPU time
+- **Tall stacks** = deep call chains in hot paths
+- Red / orange = user-space code; blue / purple = kernel calls

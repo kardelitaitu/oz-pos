@@ -1,6 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use oz_core::db::Store;
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use oz_core::Money;
+use oz_core::db::Store;
 
 fn currency_usd() -> oz_core::Currency {
     "USD".parse().unwrap()

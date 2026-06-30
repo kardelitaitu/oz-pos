@@ -15,9 +15,9 @@
 //! ```
 
 use foundation::{Currency, Money};
+use oz_payment::PaymentProcessor;
 use oz_payment::drivers::mock::MockPaymentProcessor;
 use oz_payment::types::PaymentRequest;
-use oz_payment::PaymentProcessor;
 
 /// Helper: construct a USD currency.
 fn usd() -> Currency {
@@ -41,9 +41,11 @@ async fn wiremock_server_starts_and_stops() {
 
     wiremock::Mock::given(wiremock::matchers::method("POST"))
         .and(wiremock::matchers::path("/health"))
-        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "status": "ok"
-        })))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "ok"
+            })),
+        )
         .mount(&mock_server)
         .await;
 
@@ -74,10 +76,12 @@ async fn wiremock_matches_on_path_and_method() {
     // Only match POST /authorize; GET /authorize should not match.
     wiremock::Mock::given(wiremock::matchers::method("POST"))
         .and(wiremock::matchers::path("/authorize"))
-        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "result": "approved",
-            "transaction_id": "wm_txn_001"
-        })))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "result": "approved",
+                "transaction_id": "wm_txn_001"
+            })),
+        )
         .mount(&mock_server)
         .await;
 
@@ -110,7 +114,11 @@ async fn wiremock_matches_on_path_and_method() {
 
     // Two requests were received (POST matched, GET returned 404).
     let matched = mock_server.received_requests().await.unwrap_or_default();
-    assert_eq!(matched.len(), 2, "wiremock received 2 requests total (POST + GET)");
+    assert_eq!(
+        matched.len(),
+        2,
+        "wiremock received 2 requests total (POST + GET)"
+    );
 }
 
 // ── Cross-infrastructure: wiremock + MockProcessor combined ──────────
@@ -122,10 +130,12 @@ async fn wiremock_and_mock_processor_can_coexist() {
 
     wiremock::Mock::given(wiremock::matchers::method("GET"))
         .and(wiremock::matchers::path("/ping"))
-        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "service": "payment-gateway",
-            "alive": true
-        })))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "service": "payment-gateway",
+                "alive": true
+            })),
+        )
         .mount(&mock_server)
         .await;
 

@@ -258,7 +258,12 @@ pub async fn set_terminal_override(
     store.set_terminal_override(&terminal_id, &feature, enabled)?;
     drop(db);
 
-    tracing::info!(terminal_id, feature, enabled, "terminal feature override set");
+    tracing::info!(
+        terminal_id,
+        feature,
+        enabled,
+        "terminal feature override set"
+    );
     Ok(())
 }
 

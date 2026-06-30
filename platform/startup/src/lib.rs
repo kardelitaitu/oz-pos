@@ -19,6 +19,7 @@
 //! init_module_system(&state.kernel, &state.db_path)?;
 //! ```
 
+pub mod console;
 pub mod event_handlers;
 pub mod metrics;
 pub mod rate_sync;

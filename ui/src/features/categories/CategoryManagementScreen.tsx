@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Localized } from '@fluent/react';
 import {
   listCategories,
   createCategory,
@@ -124,22 +125,34 @@ export default function CategoryManagementScreen() {
   return (
     <div className="cat-mgmt">
       <div className="cat-mgmt-header">
-        <h1 className="cat-mgmt-title">Categories</h1>
-        <Button onClick={openCreate}>Add Category</Button>
+        <Localized id="categories-title">
+          <h1 className="cat-mgmt-title">Categories</h1>
+        </Localized>
+        <Localized id="categories-add">
+          <Button onClick={openCreate}>Add Category</Button>
+        </Localized>
       </div>
 
       {loading ? (
-        <p className="cat-mgmt-loading">Loading categories…</p>
+        <Localized id="categories-loading">
+          <p className="cat-mgmt-loading">Loading categories…</p>
+        </Localized>
       ) : categories.length === 0 ? (
         <Card shadow="sm">
           <div className="cat-mgmt-empty">
-            <p>No categories yet.</p>
-            <p className="cat-mgmt-empty-desc">
-              Categories group your products (e.g. Drinks, Food, Merchandise).
-            </p>
-            <Button variant="secondary" onClick={openCreate}>
-              Add your first category
-            </Button>
+            <Localized id="categories-no-categories">
+              <p>No categories yet.</p>
+            </Localized>
+            <Localized id="categories-empty-desc">
+              <p className="cat-mgmt-empty-desc">
+                Categories group your products (e.g. Drinks, Food, Merchandise).
+              </p>
+            </Localized>
+            <Localized id="categories-add-first">
+              <Button variant="secondary" onClick={openCreate}>
+                Add your first category
+              </Button>
+            </Localized>
           </div>
         </Card>
       ) : (
@@ -177,7 +190,9 @@ export default function CategoryManagementScreen() {
         <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete category">
           <div className="cat-mgmt-modal">
             <div className="cat-mgmt-modal-header">
-              <h2 className="cat-mgmt-modal-title">Delete &quot;{deleteTarget.name}&quot;?</h2>
+              <Localized id="categories-delete-confirm" vars={{ name: deleteTarget.name }}>
+                <h2 className="cat-mgmt-modal-title">Delete &quot;{deleteTarget.name}&quot;?</h2>
+              </Localized>
               <button
                 type="button"
                 className="cat-mgmt-modal-close"
@@ -188,22 +203,28 @@ export default function CategoryManagementScreen() {
               </button>
             </div>
             <div className="cat-mgmt-modal-body">
-              <p className="cat-mgmt-delete-warning">
-                Are you sure you want to delete this category? This action cannot be undone.
-                Products assigned to this category will lose their category association.
-              </p>
+              <Localized id="categories-delete-warning">
+                <p className="cat-mgmt-delete-warning">
+                  Are you sure you want to delete this category? This action cannot be undone.
+                  Products assigned to this category will lose their category association.
+                </p>
+              </Localized>
             </div>
             <div className="cat-mgmt-modal-actions">
-              <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting !== null}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                loading={deleting !== null}
-                onClick={confirmDelete}
-              >
-                Delete
-              </Button>
+              <Localized id="cancel">
+                <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting !== null}>
+                  Cancel
+                </Button>
+              </Localized>
+              <Localized id="delete">
+                <Button
+                  variant="danger"
+                  loading={deleting !== null}
+                  onClick={confirmDelete}
+                >
+                  Delete
+                </Button>
+              </Localized>
             </div>
           </div>
         </div>
@@ -214,7 +235,9 @@ export default function CategoryManagementScreen() {
         <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Add category">
           <div className="cat-mgmt-modal">
             <div className="cat-mgmt-modal-header">
-              <h2 className="cat-mgmt-modal-title">Add Category</h2>
+              <Localized id="categories-add">
+                <h2 className="cat-mgmt-modal-title">Add Category</h2>
+              </Localized>
               <button
                 type="button"
                 className="cat-mgmt-modal-close"
@@ -228,26 +251,35 @@ export default function CategoryManagementScreen() {
             <div className="cat-mgmt-modal-body">
               {/* Name input */}
               <label className="cat-mgmt-field">
-                <span className="cat-mgmt-label">Name</span>
-                <input
-                  className="cat-mgmt-input"
-                  type="text"
-                  placeholder="e.g. Bakery, Merchandise"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  ref={inputRef}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreate();
-                  }}
-                />
+                <Localized id="categories-name">
+                  <span className="cat-mgmt-label">Name</span>
+                </Localized>
+                <Localized id="categories-name-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="cat-mgmt-input"
+                    type="text"
+                    placeholder="e.g. Bakery, Merchandise"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    ref={inputRef}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreate();
+                    }}
+                  />
+                </Localized>
                 <span className="cat-mgmt-hint">
-                  Category ID will be: <code>{newName.trim() ? colourToId(newName.trim()) : '…'}</code>
+                  <Localized id="categories-id-preview">
+                    <span>Category ID will be:</span>
+                  </Localized>{' '}
+                  <code>{newName.trim() ? colourToId(newName.trim()) : '…'}</code>
                 </span>
               </label>
 
               {/* Colour swatch picker */}
               <div className="cat-mgmt-field">
-                <span className="cat-mgmt-label">Colour</span>
+                <Localized id="categories-colour">
+                  <span className="cat-mgmt-label">Colour</span>
+                </Localized>
                 <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label="Pick a colour">
                   {COLOURS.map((colour) => (
                     <button
@@ -270,7 +302,9 @@ export default function CategoryManagementScreen() {
 
               {/* Preview */}
               <div className="cat-mgmt-preview">
-                <span className="cat-mgmt-label">Preview</span>
+                <Localized id="categories-preview">
+                  <span className="cat-mgmt-label">Preview</span>
+                </Localized>
                 <span
                   className="cat-mgmt-preview-chip"
                   style={{
@@ -290,17 +324,21 @@ export default function CategoryManagementScreen() {
             </div>
 
             <div className="cat-mgmt-modal-actions">
-              <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={saving}
-                disabled={!newName.trim()}
-                onClick={handleCreate}
-              >
-                Create
-              </Button>
+              <Localized id="cancel">
+                <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>
+                  Cancel
+                </Button>
+              </Localized>
+              <Localized id="categories-create">
+                <Button
+                  variant="primary"
+                  loading={saving}
+                  disabled={!newName.trim()}
+                  onClick={handleCreate}
+                >
+                  Create
+                </Button>
+              </Localized>
             </div>
           </div>
         </div>

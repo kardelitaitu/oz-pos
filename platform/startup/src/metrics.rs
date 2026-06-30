@@ -11,7 +11,9 @@ pub mod server {
     /// Start a minimal HTTP server serving Prometheus metrics on `addr`.
     ///
     /// Returns a join handle — the server runs until the application shuts down.
-    pub async fn start_metrics_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start_metrics_server(
+        addr: SocketAddr,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let listener = TcpListener::bind(addr).await?;
         tracing::info!(addr = %addr, "Prometheus metrics endpoint started");
 

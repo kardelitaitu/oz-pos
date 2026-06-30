@@ -261,6 +261,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           Using sample data (IPC unavailable)
         </div>
       )}
+      {/* TODO: localize the fallback notice — it's a dev-only banner not shown in production */}
     </div>
   );
 }

@@ -137,29 +137,22 @@ pub mod redis_cache {
             std::thread::spawn(move || {
                 // Connect with a 5-second timeout so the shutdown signal can be
                 // checked regularly even when no messages arrive.
-                let mut conn = match client.get_connection_with_timeout(
-                    std::time::Duration::from_secs(5),
-                ) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::error!(
-                            error = %e,
-                            "failed to connect for inventory pub/sub"
-                        );
-                        return;
-                    }
-                };
+                let mut conn =
+                    match client.get_connection_with_timeout(std::time::Duration::from_secs(5)) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                "failed to connect for inventory pub/sub"
+                            );
+                            return;
+                        }
+                    };
 
                 // Set read timeout on the TCP stream so `get_message()` unblocks.
                 let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(5)));
 
-                let mut pubsub = match conn.as_pubsub() {
-                    Ok(ps) => ps,
-                    Err(e) => {
-                        tracing::error!(error = %e, "failed to create pubsub connection");
-                        return;
-                    }
-                };
+                let mut pubsub = conn.as_pubsub();
 
                 if let Err(e) = pubsub.subscribe("inventory:updates") {
                     tracing::error!(error = %e, "failed to subscribe to inventory:updates");
@@ -182,11 +175,10 @@ pub mod redis_cache {
                             if let Ok(notification) =
                                 serde_json::from_str::<serde_json::Value>(&payload)
                             {
-                                let terminal_id = notification["terminal_id"]
-                                    .as_str()
-                                    .unwrap_or("");
+                                let terminal_id =
+                                    notification["terminal_id"].as_str().unwrap_or("");
                                 // Skip own messages.
-                                if terminal_id == whoami() {
+                                if terminal_id == std::env::var("OZ_TERMINAL_ID").unwrap_or_default() {
                                     continue;
                                 }
                                 if let Some(pid) = notification["product_id"].as_str() {
@@ -215,23 +207,13 @@ pub mod redis_cache {
             Ok(tx)
         }
 
-        /// Attempt to read a stable terminal ID from the environment. Falls back
-        /// to empty string when unavailable (standalone / test mode).
-        ///
-        /// Set `OZ_TERMINAL_ID` in the environment to give each terminal a unique
-        /// identity — this is used to filter own pub/sub messages so a terminal
-        /// doesn't invalidate its own cache from its own inventory changes.
-        fn whoami() -> String {
-            std::env::var("OZ_TERMINAL_ID").unwrap_or_else(|_| String::new())
-        }
     }
 
     impl Cache for RedisCache {
         fn get_product(&self, sku: &str) -> Option<ProductWithDetails> {
             let key = format!("product:{sku}");
             let mut conn = self.conn.lock().ok()?;
-            let data: Option<String> =
-                redis::cmd("GET").arg(&key).query(&mut *conn).ok()?;
+            let data: Option<String> = redis::cmd("GET").arg(&key).query(&mut *conn).ok()?;
             data.and_then(|s| serde_json::from_str(&s).ok())
         }
 
@@ -325,10 +307,7 @@ pub mod redis_cache {
             let Ok(mut conn) = self.conn.lock() else {
                 return;
             };
-            let _: Result<(), _> = redis::cmd("PUBLISH")
-                .arg(key)
-                .arg(&msg)
-                .query(&mut *conn);
+            let _: Result<(), _> = redis::cmd("PUBLISH").arg(key).arg(&msg).query(&mut *conn);
         }
     }
 
@@ -346,7 +325,10 @@ pub mod redis_cache {
                 product: crate::Product::new(
                     "TEST-SKU",
                     "Test Product",
-                    Money { minor_units: 1000, currency: usd() },
+                    Money {
+                        minor_units: 1000,
+                        currency: usd(),
+                    },
                 ),
                 category_name: Some("Test Category".into()),
                 stock_qty: Some(42),
@@ -447,7 +429,10 @@ mod tests {
             product: crate::Product::new(
                 "SKU",
                 "N",
-                Money { minor_units: 100, currency: usd() },
+                Money {
+                    minor_units: 100,
+                    currency: usd(),
+                },
             ),
             category_name: None,
             stock_qty: None,

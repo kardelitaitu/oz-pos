@@ -368,7 +368,11 @@ impl Settings {
 
     /// Enable or disable exchange rate auto-sync.
     pub fn set_rate_sync_enabled(conn: &Connection, enabled: bool) -> Result<(), PlatformError> {
-        Self::set(conn, keys::RATE_SYNC_ENABLED, if enabled { "1" } else { "0" })
+        Self::set(
+            conn,
+            keys::RATE_SYNC_ENABLED,
+            if enabled { "1" } else { "0" },
+        )
     }
 
     /// Get the exchange rate API key.
@@ -397,7 +401,10 @@ impl Settings {
     }
 
     /// Set the base currency for exchange rate sync.
-    pub fn set_rate_sync_base_currency(conn: &Connection, currency: &str) -> Result<(), PlatformError> {
+    pub fn set_rate_sync_base_currency(
+        conn: &Connection,
+        currency: &str,
+    ) -> Result<(), PlatformError> {
         Self::set(conn, keys::RATE_SYNC_BASE_CURRENCY, currency)
     }
 }
@@ -777,20 +784,14 @@ mod tests {
     #[test]
     fn rate_sync_base_currency_default_usd() {
         let conn = fresh();
-        assert_eq!(
-            Settings::get_rate_sync_base_currency(&conn).unwrap(),
-            "USD"
-        );
+        assert_eq!(Settings::get_rate_sync_base_currency(&conn).unwrap(), "USD");
     }
 
     #[test]
     fn set_rate_sync_base_currency() {
         let conn = fresh();
         Settings::set_rate_sync_base_currency(&conn, "EUR").unwrap();
-        assert_eq!(
-            Settings::get_rate_sync_base_currency(&conn).unwrap(),
-            "EUR"
-        );
+        assert_eq!(Settings::get_rate_sync_base_currency(&conn).unwrap(), "EUR");
     }
 
     #[test]

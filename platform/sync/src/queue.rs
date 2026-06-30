@@ -161,11 +161,17 @@ impl SyncQueue {
                 let name = payload["name"].as_str().unwrap_or("Unknown");
                 let price_minor = payload["price_minor"].as_i64().unwrap_or(0);
                 let currency = payload["currency"].as_str().unwrap_or("USD");
-                let currency_parsed: oz_core::Currency = currency.parse().map_err(|e: oz_core::money::InvalidCurrencyCode| {
-                    CoreError::Internal(format!("invalid currency in sync payload: {e}"))
-                })?;
+                let currency_parsed: oz_core::Currency =
+                    currency
+                        .parse()
+                        .map_err(|e: oz_core::money::InvalidCurrencyCode| {
+                            CoreError::Internal(format!("invalid currency in sync payload: {e}"))
+                        })?;
                 if !sku.is_empty() && store.get_product(sku).ok().flatten().is_none() {
-                    let price = oz_core::Money { minor_units: price_minor, currency: currency_parsed };
+                    let price = oz_core::Money {
+                        minor_units: price_minor,
+                        currency: currency_parsed,
+                    };
                     let category_id = payload["category_id"].as_str();
                     let barcode = payload["barcode"].as_str();
                     let initial_stock = payload["initial_stock"].as_i64().unwrap_or(0);
@@ -431,8 +437,16 @@ mod tests {
         let result = queue.apply_remote(&store, &remote);
         assert!(result.is_ok(), "apply_remote should succeed");
 
-        assert_eq!(inventory_qty(&store, "COFFEE"), 48, "COFFEE should drop from 50 to 48");
-        assert_eq!(inventory_qty(&store, "BAGEL"), 29, "BAGEL should drop from 30 to 29");
+        assert_eq!(
+            inventory_qty(&store, "COFFEE"),
+            48,
+            "COFFEE should drop from 50 to 48"
+        );
+        assert_eq!(
+            inventory_qty(&store, "BAGEL"),
+            29,
+            "BAGEL should drop from 30 to 29"
+        );
     }
 
     #[test]
@@ -446,14 +460,22 @@ mod tests {
         let remote = OfflineQueueItem::new("stock.adjusted", payload);
         let result = queue.apply_remote(&store, &remote);
         assert!(result.is_ok());
-        assert_eq!(inventory_qty(&store, "COFFEE"), 60, "COFFEE should increase from 50 to 60");
+        assert_eq!(
+            inventory_qty(&store, "COFFEE"),
+            60,
+            "COFFEE should increase from 50 to 60"
+        );
 
         // Remove 5 units.
         let payload = r#"{"sku":"BAGEL","delta":-5}"#;
         let remote = OfflineQueueItem::new("stock.adjusted", payload);
         let result = queue.apply_remote(&store, &remote);
         assert!(result.is_ok());
-        assert_eq!(inventory_qty(&store, "BAGEL"), 25, "BAGEL should drop from 30 to 25");
+        assert_eq!(
+            inventory_qty(&store, "BAGEL"),
+            25,
+            "BAGEL should drop from 30 to 25"
+        );
     }
 
     #[test]

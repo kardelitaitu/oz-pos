@@ -25,10 +25,10 @@
 //! ```
 
 use foundation::{Currency, Money};
-use oz_payment::drivers::stripe::StripePaymentProcessor;
-use oz_payment::types::{PaymentMethod, PaymentRequest};
 use oz_core::PaymentSplitArg;
 use oz_payment::PaymentProcessor;
+use oz_payment::drivers::stripe::StripePaymentProcessor;
+use oz_payment::types::{PaymentMethod, PaymentRequest};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -54,9 +54,7 @@ const TEST_SECRET_KEY: &str = "sk_test_e2e_mock_key";
 /// Spawn a wiremock server with Stripe-sandbox-like behaviour.
 ///
 /// Returns `(mock_server, processor)` ready for testing.
-async fn stripe_fixture(
-    card_present: bool,
-) -> (MockServer, StripePaymentProcessor) {
+async fn stripe_fixture(card_present: bool) -> (MockServer, StripePaymentProcessor) {
     let mock_server = MockServer::start().await;
 
     let proc = StripePaymentProcessor::new_with_endpoint(
@@ -87,12 +85,16 @@ async fn full_authorize_capture_refund_lifecycle() {
         .mount(&mock_server)
         .await;
 
-    let auth = proc.authorize(&request(15, Some("E2E Test Order #1"))).await.unwrap();
+    let auth = proc
+        .authorize(&request(15, Some("E2E Test Order #1")))
+        .await
+        .unwrap();
     assert!(auth.success, "authorize should succeed");
     assert_eq!(auth.transaction_id.as_deref(), Some("pi_e2e_auth_001"));
     assert_eq!(auth.amount_charged.minor_units, 1500);
     assert_eq!(
-        auth.amount_charged.currency, usd(),
+        auth.amount_charged.currency,
+        usd(),
         "currency should be preserved"
     );
     let txn_id = auth.transaction_id.unwrap();
@@ -296,13 +298,12 @@ async fn partial_refund_after_capture() {
         .await;
 
     let partial = Money::from_major(10, usd()).unwrap();
-    let refund = proc
-        .refund(&txn_id, Some(partial))
-        .await
-        .unwrap();
+    let refund = proc.refund(&txn_id, Some(partial)).await.unwrap();
     assert!(refund.success);
-    assert_eq!(refund.amount_charged.minor_units, 1000,
-        "partial refund amount should be $10 (1000 minor)");
+    assert_eq!(
+        refund.amount_charged.minor_units, 1000,
+        "partial refund amount should be $10 (1000 minor)"
+    );
 }
 
 // ── Card-present (Terminal) payments ────────────────────────────────
@@ -325,7 +326,10 @@ async fn card_present_authorize_uses_correct_method_type() {
 
     let result = proc.authorize(&request(25, None)).await.unwrap();
     assert!(result.success);
-    assert_eq!(result.transaction_id.as_deref(), Some("pi_e2e_terminal_001"));
+    assert_eq!(
+        result.transaction_id.as_deref(),
+        Some("pi_e2e_terminal_001")
+    );
 
     // Verify the Authorization header has the correct secret key.
     let received = mock_server.received_requests().await.unwrap_or_default();
@@ -455,10 +459,7 @@ async fn authorize_handles_stripe_server_error() {
 
     let err = proc.authorize(&request(10, None)).await.unwrap_err();
     let msg = err.to_string();
-    assert!(
-        msg.contains("500"),
-        "expected HTTP 500 error, got: {msg}"
-    );
+    assert!(msg.contains("500"), "expected HTTP 500 error, got: {msg}");
 }
 
 // ── Request body verification ───────────────────────────────────────
@@ -487,13 +488,22 @@ async fn authorize_sends_description_and_metadata() {
 
     let body = std::str::from_utf8(&received[0].body).unwrap();
     // Verify all required Stripe form fields are present.
-    assert!(body.contains("amount=5000"), "body should contain amount: {body}");
-    assert!(body.contains("currency=usd"), "body should contain currency: {body}");
+    assert!(
+        body.contains("amount=5000"),
+        "body should contain amount: {body}"
+    );
+    assert!(
+        body.contains("currency=usd"),
+        "body should contain currency: {body}"
+    );
     assert!(
         body.contains("payment_method_types%5B%5D=card"),
         "body should contain payment_method_types: {body}"
     );
-    assert!(body.contains("capture_method=manual"), "body should contain capture_method: {body}");
+    assert!(
+        body.contains("capture_method=manual"),
+        "body should contain capture_method: {body}"
+    );
     assert!(
         body.contains("description=Invoice+%2312345"),
         "body should contain description: {body}"
@@ -515,11 +525,8 @@ async fn authorize_sends_description_and_metadata() {
 #[tokio::test]
 async fn network_error_returns_meaningful_message() {
     // Point at a port where nothing is listening.
-    let proc = StripePaymentProcessor::new_with_endpoint(
-        TEST_SECRET_KEY,
-        "http://127.0.0.1:1",
-        false,
-    );
+    let proc =
+        StripePaymentProcessor::new_with_endpoint(TEST_SECRET_KEY, "http://127.0.0.1:1", false);
 
     let err = proc.authorize(&request(10, None)).await.unwrap_err();
     let msg = err.to_string();

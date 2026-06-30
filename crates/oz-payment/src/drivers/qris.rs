@@ -525,10 +525,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
         }
 
         let cancel: CancelResponse = serde_json::from_str(&text).map_err(|e| {
-            PaymentError::InvalidResponse(format!(
-                "failed to parse cancel: {} — body: {}",
-                e, text
-            ))
+            PaymentError::InvalidResponse(format!("failed to parse cancel: {} — body: {}", e, text))
         })?;
 
         Ok(PaymentResult {
@@ -624,7 +621,8 @@ mod tests {
 
     #[test]
     fn qris_base_url_custom_endpoint() {
-        let proc = QrisPaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
+        let proc =
+            QrisPaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
         assert_eq!(proc.base_url(), "http://localhost:9999");
     }
 

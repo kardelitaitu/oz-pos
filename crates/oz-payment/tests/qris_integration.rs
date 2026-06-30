@@ -12,9 +12,9 @@
 //! ```
 
 use foundation::{Currency, Money};
+use oz_payment::PaymentProcessor;
 use oz_payment::drivers::qris::QrisPaymentProcessor;
 use oz_payment::types::{PaymentMethod, PaymentRequest};
-use oz_payment::PaymentProcessor;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -202,10 +202,7 @@ async fn capture_settlement() {
     let result = proc.capture("order-001").await.unwrap();
     assert!(result.success);
     assert_eq!(result.amount_charged.minor_units, 50000);
-    assert_eq!(
-        result.message.unwrap_or_default(),
-        "settlement"
-    );
+    assert_eq!(result.message.unwrap_or_default(), "settlement");
 }
 
 #[tokio::test]
@@ -440,7 +437,9 @@ async fn authorize_sends_correct_json_body() {
         serde_json::from_slice(&received[0].body).expect("request should be valid JSON");
 
     assert_eq!(body["payment_type"], "qris", "body: {body}");
-    let order_id = body["transaction_details"]["order_id"].as_str().unwrap_or("");
+    let order_id = body["transaction_details"]["order_id"]
+        .as_str()
+        .unwrap_or("");
     assert!(
         order_id.starts_with("QRIS-"),
         "order_id should start with QRIS-, got: {order_id}, body: {body}"
@@ -511,17 +510,17 @@ async fn refund_sends_correct_json_body() {
         serde_json::from_slice(&received[0].body).expect("request should be valid JSON");
 
     assert!(
-        body["refund_key"].as_str().unwrap_or("").contains("refund-order-refund-body-"),
+        body["refund_key"]
+            .as_str()
+            .unwrap_or("")
+            .contains("refund-order-refund-body-"),
         "refund_key should contain the order id, got: {body}"
     );
     assert!(
         body["amount"].is_null(),
         "amount should be null for full refund, got: {body}"
     );
-    assert_eq!(
-        body["reason"], "requested_by_merchant",
-        "body: {body}"
-    );
+    assert_eq!(body["reason"], "requested_by_merchant", "body: {body}");
 }
 
 // ── Network error ────────────────────────────────────────────────────
@@ -530,11 +529,8 @@ async fn refund_sends_correct_json_body() {
 async fn authorize_network_error() {
     // Point at a port where nothing is listening — should produce a
     // connection refused error.
-    let proc = QrisPaymentProcessor::new_with_endpoint(
-        MOCK_SERVER_KEY,
-        "http://127.0.0.1:1",
-        false,
-    );
+    let proc =
+        QrisPaymentProcessor::new_with_endpoint(MOCK_SERVER_KEY, "http://127.0.0.1:1", false);
 
     let err = proc.authorize(&request(10000)).await.unwrap_err();
     let msg = err.to_string();

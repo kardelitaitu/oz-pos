@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import { listAuditLog, type AuditEntryDto } from '@/api/audit';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -6,28 +7,24 @@ import './AuditLogScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-const ACTION_LABELS: Record<string, string> = {
-  'sale.void': 'Void Sale',
-  'sale.complete': 'Complete Sale',
-  'sale.refund': 'Refund',
-  'login': 'Staff Login',
-  'login.failed': 'Login Failed',
-  'user.create': 'Staff Created',
-  'user.update': 'Staff Updated',
-  'product.create': 'Product Created',
-  'product.update': 'Product Updated',
-  'product.delete': 'Product Deleted',
-  'stock.adjust': 'Stock Adjusted',
-  'setting.change': 'Setting Changed',
-  'system.backup': 'Backup Created',
-  'system.restore': 'Restore',
-  'system.export': 'Data Export',
-  'system.import': 'Data Import',
+const ACTION_FLUENT_IDS: Record<string, string> = {
+  'sale.void': 'audit-action-sale-void',
+  'sale.complete': 'audit-action-sale-complete',
+  'sale.refund': 'audit-action-sale-refund',
+  'login': 'audit-action-login',
+  'login.failed': 'audit-action-login-failed',
+  'user.create': 'audit-action-user-create',
+  'user.update': 'audit-action-user-update',
+  'product.create': 'audit-action-product-create',
+  'product.update': 'audit-action-product-update',
+  'product.delete': 'audit-action-product-delete',
+  'stock.adjust': 'audit-action-stock-adjust',
+  'setting.change': 'audit-action-setting-change',
+  'system.backup': 'audit-action-system-backup',
+  'system.restore': 'audit-action-system-restore',
+  'system.export': 'audit-action-system-export',
+  'system.import': 'audit-action-system-import',
 };
-
-function actionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action;
-}
 
 function outcomeBadgeClass(outcome: string): string {
   switch (outcome) {
@@ -57,6 +54,7 @@ function formatDate(iso: string): string {
 type OutcomeFilter = 'all' | 'success' | 'failure';
 
 export default function AuditLogScreen() {
+  const { l10n } = useLocalization();
   const [entries, setEntries] = useState<AuditEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,10 +133,14 @@ export default function AuditLogScreen() {
   return (
     <div className="audit-log">
       <div className="audit-log-header">
-        <h1 className="audit-log-title">Audit Log</h1>
-        <Button variant="secondary" onClick={() => load(0)} loading={loading}>
-          Refresh
-        </Button>
+        <Localized id="audit-log-title">
+          <h1 className="audit-log-title"><span>Audit Log</span></h1>
+        </Localized>
+        <Localized id="audit-log-refresh">
+          <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+            <span>Refresh</span>
+          </Button>
+        </Localized>
       </div>
 
       {/* Filters */}
@@ -156,40 +158,64 @@ export default function AuditLogScreen() {
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label="Search audit log"
           />
+          {/* Placeholder and aria-label localized via attributes — for full i18n use FTL with l10n.getString */}
         </div>
 
         <div className="audit-log-outcome-filters" role="radiogroup" aria-label="Filter by outcome">
-          {(['all', 'success', 'failure'] as OutcomeFilter[]).map((outcome) => (
-            <button
-              key={outcome}
-              type="button"
-              className={`audit-log-chip ${outcomeFilter === outcome ? 'audit-log-chip--active' : ''}`}
-              onClick={() => setOutcomeFilter(outcome)}
-              role="radio"
-              aria-checked={outcomeFilter === outcome}
-            >
-              {outcome === 'all' ? 'All' : outcome === 'success' ? 'Success' : 'Failure'}
-            </button>
-          ))}
+          {(['all', 'success', 'failure'] as OutcomeFilter[]).map((outcome) => {
+            const outcomeIds: Record<string, string> = {
+              'all': 'audit-log-filter-all',
+              'success': 'audit-log-filter-success',
+              'failure': 'audit-log-filter-failure',
+            };
+            const outcomeLabels: Record<string, string> = {
+              'all': 'All',
+              'success': 'Success',
+              'failure': 'Failure',
+            };
+            return (
+              <Localized id={outcomeIds[outcome] ?? outcome} key={outcome}>
+                <button
+                  type="button"
+                  className={`audit-log-chip ${outcomeFilter === outcome ? 'audit-log-chip--active' : ''}`}
+                  onClick={() => setOutcomeFilter(outcome)}
+                  role="radio"
+                  aria-checked={outcomeFilter === outcome}
+                >
+                  <span>{outcomeLabels[outcome]}</span>
+                </button>
+              </Localized>
+            );
+          })}
         </div>
       </div>
 
       {/* Content */}
       {loading && entries.length === 0 ? (
-        <div className="audit-log-loading">Loading audit log…</div>
+        <Localized id="audit-log-loading-text">
+          <div className="audit-log-loading"><span>Loading audit log…</span></div>
+        </Localized>
       ) : error && entries.length === 0 ? (
         <Card shadow="sm">
           <div className="audit-log-error">
             <p>{error}</p>
-            <Button variant="secondary" onClick={() => load(0)}>Retry</Button>
+            <Localized id="audit-log-retry">
+              <Button variant="secondary" onClick={() => load(0)}><span>Retry</span></Button>
+            </Localized>
           </div>
         </Card>
       ) : filteredEntries.length === 0 && !loading ? (
         <Card shadow="sm">
           <div className="audit-log-empty">
-            {searchQuery || outcomeFilter !== 'all'
-              ? 'No audit entries match the current filters.'
-              : 'No audit entries recorded yet. Entries appear when sales are completed, voided, or staff actions occur.'}
+            {searchQuery || outcomeFilter !== 'all' ? (
+              <Localized id="audit-log-empty-filtered">
+                <span>No audit entries match the current filters.</span>
+              </Localized>
+            ) : (
+              <Localized id="audit-log-empty-none">
+                <span>No audit entries recorded yet. Entries appear when sales are completed, voided, or staff actions occur.</span>
+              </Localized>
+            )}
           </div>
         </Card>
       ) : (
@@ -197,12 +223,12 @@ export default function AuditLogScreen() {
           <table className="audit-log-table" aria-label="Audit log entries">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Action</th>
-                <th>Target</th>
-                <th>User ID</th>
-                <th>Outcome</th>
-                <th>Details</th>
+                <Localized id="audit-log-col-date"><th><span>Date</span></th></Localized>
+                <Localized id="audit-log-col-action"><th><span>Action</span></th></Localized>
+                <Localized id="audit-log-col-target"><th><span>Target</span></th></Localized>
+                <Localized id="audit-log-col-user"><th><span>User ID</span></th></Localized>
+                <Localized id="audit-log-col-outcome"><th><span>Outcome</span></th></Localized>
+                <Localized id="audit-log-col-details"><th><span>Details</span></th></Localized>
               </tr>
             </thead>
             <tbody>
@@ -210,7 +236,9 @@ export default function AuditLogScreen() {
                 <tr key={entry.id}>
                   <td className="audit-log-cell-date">{formatDate(entry.created_at)}</td>
                   <td>
-                    <span className="audit-log-action-label">{actionLabel(entry.action)}</span>
+                    <Localized id={ACTION_FLUENT_IDS[entry.action] ?? entry.action}>
+                      <span className="audit-log-action-label"><span>{entry.action}</span></span>
+                    </Localized>
                     <span className="audit-log-action-key">{entry.action}</span>
                   </td>
                   <td>
@@ -246,19 +274,23 @@ export default function AuditLogScreen() {
           </table>
           {hasMore && (
             <div className="audit-log-load-more-wrap">
-              <button
-                type="button"
-                className="audit-log-load-more"
-                onClick={handleLoadMore}
-                disabled={loading}
-              >
-                {loading ? 'Loading…' : 'Load More'}
-              </button>
+              <Localized id={loading ? 'shared-loading' : 'audit-log-load-more'}>
+                <button
+                  type="button"
+                  className="audit-log-load-more"
+                  onClick={handleLoadMore}
+                  disabled={loading}
+                >
+                  <span>{loading ? 'Loading…' : 'Load More'}</span>
+                </button>
+              </Localized>
             </div>
           )}
           <div className="audit-log-footer">
             <span className="audit-log-count">
-              {filteredEntries.length} entr{filteredEntries.length === 1 ? 'y' : 'ies'}
+              <Localized id="audit-log-count" vars={{ count: filteredEntries.length }}>
+                <span>{filteredEntries.length} entr{filteredEntries.length === 1 ? 'y' : 'ies'}</span>
+              </Localized>
             </span>
           </div>
         </div>

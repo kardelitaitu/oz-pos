@@ -29,7 +29,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 rust-version = "1.88"   # axum/tower-http deps (time 0.3.47+) require ≥ 1.88
 license = "MIT"
@@ -98,6 +98,7 @@ rlua = "0.20"
 
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
+console-subscriber = "0.4"
 
 
 [profile.release]

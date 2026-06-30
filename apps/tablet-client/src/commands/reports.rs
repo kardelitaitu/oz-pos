@@ -7,8 +7,8 @@ use tauri::{State, command};
 
 use oz_core::db::Store;
 use oz_core::db::reports::{
-    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert,
-    MonthlyRevenueRow, TopProductRow, WeeklyRevenueRow,
+    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
+    TopProductRow, WeeklyRevenueRow,
 };
 
 use crate::error::AppError;

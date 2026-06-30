@@ -14,8 +14,8 @@ use tokio::sync::{Mutex, RwLock, watch};
 use oz_core::db::Store;
 use oz_core::settings::Settings;
 
-use crate::queue::SyncQueue;
 use crate::pg_transport::PgTransport;
+use crate::queue::SyncQueue;
 
 /// Default interval between PG sync cycles (60 seconds — PG sync is
 /// typically less time-sensitive than HTTP sync).
@@ -173,10 +173,12 @@ impl PgSyncDaemon {
         let mut pulled = 0usize;
         let mut sync_error: Option<String> = None;
 
-        let pg_transport = pg_config.as_ref().and_then(|(host, port, dbname, user, password)| {
-            let port_u16: u16 = port.parse().unwrap_or(5432);
-            PgTransport::new(host, port_u16, dbname, user, password).ok()
-        });
+        let pg_transport = pg_config
+            .as_ref()
+            .and_then(|(host, port, dbname, user, password)| {
+                let port_u16: u16 = port.parse().unwrap_or(5432);
+                PgTransport::new(host, port_u16, dbname, user, password).ok()
+            });
 
         if let Some(ref transport) = pg_transport {
             match transport.push_items(&pending).await {
@@ -198,8 +200,7 @@ impl PgSyncDaemon {
                                 }
                                 crate::transport::PushOutcome::Conflict(remote) => {
                                     let _ = store.mark_offline_synced(i);
-                                    let _ = store
-                                        .enqueue_offline(&remote.action, &remote.payload);
+                                    let _ = store.enqueue_offline(&remote.action, &remote.payload);
                                 }
                             }
                         }

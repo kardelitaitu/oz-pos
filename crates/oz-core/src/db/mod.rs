@@ -13,8 +13,8 @@ use rusqlite::Connection;
 
 use std::sync::Arc;
 
-use crate::cache::Cache;
 use crate::Money;
+use crate::cache::Cache;
 use crate::error::CoreError;
 
 pub mod audit;
@@ -38,8 +38,8 @@ pub mod terminals;
 
 pub use products::ProductWithDetails;
 pub use reports::{
-    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert,
-    MonthlyRevenueRow, TopProductRow, WeeklyRevenueRow,
+    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
+    TopProductRow, WeeklyRevenueRow,
 };
 pub use sales::{DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
 pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};

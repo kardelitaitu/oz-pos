@@ -135,8 +135,7 @@ impl RateSyncDaemon {
         let db_clone = db.clone();
         let (enabled, base_currency, interval_minutes) = tokio::task::spawn_blocking(move || {
             let conn = db_clone.lock().unwrap();
-            let enabled = oz_core::settings::Settings::is_rate_sync_enabled(&conn)
-                .unwrap_or(false);
+            let enabled = oz_core::settings::Settings::is_rate_sync_enabled(&conn).unwrap_or(false);
             let base = oz_core::settings::Settings::get_rate_sync_base_currency(&conn)
                 .unwrap_or_else(|_| "USD".into());
             let interval = oz_core::settings::Settings::get_rate_sync_interval(&conn)
@@ -205,13 +204,9 @@ impl RateSyncDaemon {
             let store = Store::new(&conn);
             let mut updated = 0usize;
             for (to_currency, rate) in &rates {
-                if let Err(e) = store.upsert_exchange_rate(
-                    &base_inner,
-                    to_currency,
-                    *rate,
-                    source,
-                    &date_inner,
-                ) {
+                if let Err(e) =
+                    store.upsert_exchange_rate(&base_inner, to_currency, *rate, source, &date_inner)
+                {
                     tracing::warn!(
                         from = %base_inner,
                         to = %to_currency,

@@ -110,18 +110,16 @@ impl AppState {
             .map_err(|e| AppError::Internal(format!("seeding primary store: {e}")))?;
 
         // ── Cache layer initialisation (read settings BEFORE moving conn) ──
-        let redis_url = oz_core::Settings::get_redis_url(&conn)
-            .unwrap_or_else(|_| "redis://127.0.0.1/".into());
-        let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn)
-            .unwrap_or(300);
+        let redis_url =
+            oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|_| "redis://127.0.0.1/".into());
+        let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn).unwrap_or(300);
         let cache = platform_startup::init_cache(&redis_url, cache_ttl);
 
         // ── OZ_TERMINAL_ID for multi-terminal support ───────────────
         // On subsequent launches where MultiTerminal is already enabled,
         // look up the registered terminal by hostname and set the env var
         // so the Redis pub/sub subscriber can filter its own messages.
-        let reg = oz_core::Settings::load_features(&conn)
-            .unwrap_or_default();
+        let reg = oz_core::Settings::load_features(&conn).unwrap_or_default();
         if reg.is_enabled(oz_core::Feature::MultiTerminal) {
             let device_id = std::env::var("COMPUTERNAME")
                 .or_else(|_| std::env::var("HOSTNAME"))

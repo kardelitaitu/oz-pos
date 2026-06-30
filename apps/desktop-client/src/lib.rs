@@ -21,6 +21,9 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialise tokio-console before any other tracing setup.
+    platform_startup::console::init_console_subscriber();
+
     // Initialise structured logging early so the very first line of Tauri
     // output is captured.
     oz_logging::init();

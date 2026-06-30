@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use oz_core::db::Store;
 use oz_core::{Cart, CartLine, Money, Sale, Sku};
 
@@ -33,12 +33,8 @@ fn bench_create_sale_minimal(c: &mut Criterion) {
     c.bench_function("create_sale_minimal", |b| {
         b.iter(|| {
             let mut cart = Cart::new(currency_usd());
-            cart.add_line(CartLine::new(
-                Sku::new("SKU-BENCH"),
-                1,
-                price(1500),
-            ))
-            .unwrap();
+            cart.add_line(CartLine::new(Sku::new("SKU-BENCH"), 1, price(1500)))
+                .unwrap();
             let sale = Sale::from_cart(&cart).unwrap();
             store.create_sale(black_box(&sale)).unwrap();
         });
@@ -52,12 +48,8 @@ fn bench_create_sale_with_lines(c: &mut Criterion) {
         b.iter(|| {
             let mut cart = Cart::new(currency_usd());
             for i in 0..5 {
-                cart.add_line(CartLine::new(
-                    Sku::new("SKU-BENCH"),
-                    1 + i,
-                    price(1500),
-                ))
-                .unwrap();
+                cart.add_line(CartLine::new(Sku::new("SKU-BENCH"), 1 + i, price(1500)))
+                    .unwrap();
             }
             let sale = Sale::from_cart(&cart).unwrap();
             store.create_sale(black_box(&sale)).unwrap();
@@ -72,12 +64,8 @@ fn bench_complete_checkout(c: &mut Criterion) {
         b.iter(|| {
             let mut cart = Cart::new(currency_usd());
             for _ in 0..5 {
-                cart.add_line(CartLine::new(
-                    Sku::new("SKU-BENCH"),
-                    1,
-                    price(1500),
-                ))
-                .unwrap();
+                cart.add_line(CartLine::new(Sku::new("SKU-BENCH"), 1, price(1500)))
+                    .unwrap();
             }
             let sale = Sale::from_cart(&cart).unwrap();
             store.create_sale(&sale).unwrap();

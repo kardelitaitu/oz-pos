@@ -306,7 +306,7 @@ impl Store<'_> {
 mod tests {
     use crate::db::Store;
     use crate::money::Currency;
-    use crate::{migrations, Cart, CartLine, Money, Sale, SaleStatus, Sku};
+    use crate::{Cart, CartLine, Money, Sale, SaleStatus, Sku, migrations};
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
@@ -337,8 +337,7 @@ mod tests {
             minor_units: unit_minor,
             currency: usd(),
         };
-        s.create_product(sku, sku, money, None, None, 100)
-            .unwrap();
+        s.create_product(sku, sku, money, None, None, 100).unwrap();
 
         let mut cart = Cart::new(usd());
         cart.add_line(CartLine::new(Sku::new(sku), qty, price(unit_minor)))
@@ -348,8 +347,7 @@ mod tests {
         sale.created_at = now.clone();
         sale.updated_at = now;
         s.create_sale(&sale).unwrap();
-        s.update_sale_status(&sale.id, SaleStatus::Active)
-            .unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
         s.update_sale_status(&sale.id, SaleStatus::Completed)
             .unwrap();
         sale.id
@@ -561,14 +559,11 @@ mod tests {
         sale.created_at = now.clone();
         sale.updated_at = now;
         s.create_sale(&sale).unwrap();
-        s.update_sale_status(&sale.id, SaleStatus::Active)
-            .unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
         s.update_sale_status(&sale.id, SaleStatus::Completed)
             .unwrap();
 
-        let rows = s
-            .category_breakdown("2000-01-01", "2099-12-31")
-            .unwrap();
+        let rows = s.category_breakdown("2000-01-01", "2099-12-31").unwrap();
         assert!(!rows.is_empty());
         assert_eq!(rows[0].category_name, "Beverages");
         assert_eq!(rows[0].total_minor, 700);
@@ -595,14 +590,11 @@ mod tests {
         sale.created_at = now.clone();
         sale.updated_at = now;
         s.create_sale(&sale).unwrap();
-        s.update_sale_status(&sale.id, SaleStatus::Active)
-            .unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
         s.update_sale_status(&sale.id, SaleStatus::Completed)
             .unwrap();
 
-        let rows = s
-            .category_breakdown("2000-01-01", "2099-12-31")
-            .unwrap();
+        let rows = s.category_breakdown("2000-01-01", "2099-12-31").unwrap();
         assert!(!rows.is_empty());
         assert_eq!(rows[0].category_name, "Uncategorised");
         assert_eq!(rows[0].category_id, None);

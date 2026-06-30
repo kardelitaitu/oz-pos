@@ -12,9 +12,9 @@
 //! ```
 
 use foundation::{Currency, Money};
+use oz_payment::PaymentProcessor;
 use oz_payment::drivers::square::SquarePaymentProcessor;
 use oz_payment::types::{PaymentMethod, PaymentRequest};
-use oz_payment::PaymentProcessor;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -57,7 +57,9 @@ async fn authorize_happy_path() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let result = proc.authorize(&request(15)).await.unwrap();
@@ -81,12 +83,17 @@ async fn authorize_declined() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let err = proc.authorize(&request(10)).await.unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("declined"), "expected declined error, got: {msg}");
+    assert!(
+        msg.contains("declined"),
+        "expected declined error, got: {msg}"
+    );
 }
 
 #[tokio::test]
@@ -100,7 +107,9 @@ async fn authorize_server_error() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let err = proc.authorize(&request(10)).await.unwrap_err();
@@ -119,12 +128,17 @@ async fn authorize_non_json_response() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let err = proc.authorize(&request(10)).await.unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("failed to parse"), "expected parse error, got: {msg}");
+    assert!(
+        msg.contains("failed to parse"),
+        "expected parse error, got: {msg}"
+    );
 }
 
 // ── Sale (authorize + capture via default impl) ──────────────────────
@@ -162,7 +176,9 @@ async fn sale_happy_path() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let result = proc.sale(&request(20)).await.unwrap();
@@ -190,7 +206,9 @@ async fn capture_happy_path() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let result = proc.capture("sq_capture_001").await.unwrap();
@@ -213,7 +231,9 @@ async fn capture_not_found() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let err = proc.capture("sq_missing").await.unwrap_err();
@@ -240,7 +260,9 @@ async fn refund_happy_path() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let result = proc.refund("sq_payment_001", None).await.unwrap();
@@ -264,12 +286,17 @@ async fn refund_declined() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let err = proc.refund("sq_not_completed", None).await.unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("not been completed"), "unexpected error: {msg}");
+    assert!(
+        msg.contains("not been completed"),
+        "unexpected error: {msg}"
+    );
 }
 
 // ── Void ─────────────────────────────────────────────────────────────
@@ -292,7 +319,9 @@ async fn void_happy_path() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let result = proc.void("sq_void_001").await.unwrap();
@@ -315,7 +344,9 @@ async fn void_not_found() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let err = proc.void("sq_nonexistent").await.unwrap_err();
@@ -343,7 +374,9 @@ async fn receipt_happy_path() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let receipt = proc.receipt("sq_receipt_001").await.unwrap();
@@ -367,7 +400,9 @@ async fn receipt_not_found() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let err = proc.receipt("sq_nonexistent").await.unwrap_err();
@@ -395,7 +430,9 @@ async fn authorize_sends_correct_json_body() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let req = PaymentRequest {
@@ -417,7 +454,10 @@ async fn authorize_sends_correct_json_body() {
     assert_eq!(body["amount_money"]["currency"], "USD", "body: {body}");
     assert_eq!(body["source_id"], "EXTERNAL", "body: {body}");
     assert_eq!(body["location_id"], MOCK_LOCATION_ID, "body: {body}");
-    assert!(body["idempotency_key"].as_str().unwrap_or("").len() >= 36, "body: {body}");
+    assert!(
+        body["idempotency_key"].as_str().unwrap_or("").len() >= 36,
+        "body: {body}"
+    );
     assert_eq!(body["reference_id"], "inv-001", "body: {body}");
     assert_eq!(body["note"], "Test order", "body: {body}");
 
@@ -463,7 +503,9 @@ async fn refund_sends_correct_json_body() {
         .await;
 
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, &mock_server.uri(),
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        &mock_server.uri(),
     );
 
     let _ = proc.refund("sq_to_refund", None).await.unwrap();
@@ -475,7 +517,10 @@ async fn refund_sends_correct_json_body() {
         serde_json::from_slice(&received[0].body).expect("request should be valid JSON");
 
     assert_eq!(body["payment_id"], "sq_to_refund", "body: {body}");
-    assert!(body["idempotency_key"].as_str().unwrap_or("").len() >= 36, "body: {body}");
+    assert!(
+        body["idempotency_key"].as_str().unwrap_or("").len() >= 36,
+        "body: {body}"
+    );
     assert_eq!(body["amount_money"]["amount"], 0, "body: {body}");
     assert_eq!(body["amount_money"]["currency"], "USD", "body: {body}");
 }
@@ -487,7 +532,9 @@ async fn authorize_network_error() {
     // Point at a port where nothing is listening — should produce a
     // connection refused error.
     let proc = SquarePaymentProcessor::new_with_endpoint(
-        MOCK_API_KEY, MOCK_LOCATION_ID, "http://127.0.0.1:1",
+        MOCK_API_KEY,
+        MOCK_LOCATION_ID,
+        "http://127.0.0.1:1",
     );
 
     let err = proc.authorize(&request(10)).await.unwrap_err();
