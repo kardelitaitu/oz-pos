@@ -4,6 +4,12 @@
 
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
 
+## Quick Setup
+
+```bash
+git config core.hooksPath .githooks   # enable pre-commit hook (auto cargo fmt)
+```
+
 ## Project Specific Rules
 
 - Follow the POS software framework conventions.
