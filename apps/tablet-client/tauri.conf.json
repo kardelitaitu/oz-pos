@@ -32,7 +32,7 @@
     "android": {
       "minSdkVersion": 26
     },
-    "ios": {
+    "iOS": {
       "minimumSystemVersion": "16.0"
     }
   }
