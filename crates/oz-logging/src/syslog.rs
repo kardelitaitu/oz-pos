@@ -121,7 +121,7 @@ impl<S: tracing::Subscriber> Layer<S> for SyslogLayer {
 
         // SAFETY: syslog is safe with a valid CString.
         unsafe {
-            libc::syslog(priority, "%s", c_message.as_ptr());
+            libc::syslog(priority, c"%s".as_ptr(), c_message.as_ptr());
         }
     }
 }

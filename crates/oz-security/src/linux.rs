@@ -38,7 +38,7 @@ impl LibSecretKeyring {
     }
 
     async fn open_session(&self) -> Result<OwnedObjectPath, SecurityError> {
-        let result: (Value<'_>, OwnedObjectPath) = self
+        let msg = self
             .conn
             .call_method(
                 Some(SECRET_SERVICE),
@@ -48,7 +48,8 @@ impl LibSecretKeyring {
                 &("plain", Value::new("")),
             )
             .await
-            .map_err(|e| SecurityError::KeyUnavailable(format!("OpenSession failed: {e}")))?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("OpenSession failed: {e}")))?;
+        let result: (Value<'_>, OwnedObjectPath) = msg
             .body()
             .deserialize()
             .map_err(|e| {
@@ -58,7 +59,7 @@ impl LibSecretKeyring {
     }
 
     async fn default_collection(&self) -> Result<OwnedObjectPath, SecurityError> {
-        let path: OwnedObjectPath = self
+        let msg = self
             .conn
             .call_method(
                 Some(SECRET_SERVICE),
@@ -68,7 +69,8 @@ impl LibSecretKeyring {
                 &("default",),
             )
             .await
-            .map_err(|e| SecurityError::KeyUnavailable(format!("ReadAlias failed: {e}")))?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("ReadAlias failed: {e}")))?;
+        let path: OwnedObjectPath = msg
             .body()
             .deserialize()
             .map_err(|e| {
@@ -81,7 +83,7 @@ impl LibSecretKeyring {
         &self,
         attrs: &HashMap<String, String>,
     ) -> Result<Vec<OwnedObjectPath>, SecurityError> {
-        let (unlocked, _locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = self
+        let msg = self
             .conn
             .call_method(
                 Some(SECRET_SERVICE),
@@ -91,7 +93,8 @@ impl LibSecretKeyring {
                 &(attrs,),
             )
             .await
-            .map_err(|e| SecurityError::KeyUnavailable(format!("SearchItems failed: {e}")))?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("SearchItems failed: {e}")))?;
+        let (unlocked, _locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = msg
             .body()
             .deserialize()
             .map_err(|e| {
@@ -112,7 +115,7 @@ impl Keyring for LibSecretKeyring {
 
         let session = self.rt.block_on(self.open_session())?;
 
-        let secret: (OwnedObjectPath, Vec<u8>, String) = self
+        let msg = self
             .rt
             .block_on(self.conn.call_method(
                 Some(SECRET_SERVICE),
@@ -121,7 +124,8 @@ impl Keyring for LibSecretKeyring {
                 "GetSecret",
                 &(&session,),
             ))
-            .map_err(|e| SecurityError::KeyUnavailable(format!("GetSecret failed: {e}")))?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("GetSecret failed: {e}")))?;
+        let secret: (OwnedObjectPath, Vec<u8>, String) = msg
             .body()
             .deserialize()
             .map_err(|e| {
@@ -169,7 +173,7 @@ impl Keyring for LibSecretKeyring {
         let secret: (OwnedObjectPath, Vec<u8>, String) =
             (session, value.as_bytes().to_vec(), "text/plain".to_string());
 
-        let (_item, _created): (OwnedObjectPath, bool) = self
+        let msg = self
             .rt
             .block_on(self.conn.call_method(
                 Some(SECRET_SERVICE),
@@ -178,7 +182,8 @@ impl Keyring for LibSecretKeyring {
                 "CreateItem",
                 &(properties, secret, true),
             ))
-            .map_err(|e| SecurityError::KeyUnavailable(format!("CreateItem failed: {e}")))?
+            .map_err(|e| SecurityError::KeyUnavailable(format!("CreateItem failed: {e}")))?;
+        let (_item, _created): (OwnedObjectPath, bool) = msg
             .body()
             .deserialize()
             .map_err(|e| {
