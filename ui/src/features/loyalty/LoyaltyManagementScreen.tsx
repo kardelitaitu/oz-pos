@@ -208,7 +208,7 @@ export default function LoyaltyManagementScreen() {
                     <Localized id="loyalty-lifetime-points"><th>Lifetime Points</th></Localized>
                     <Localized id="loyalty-next-tier"><th>Next Tier</th></Localized>
                     <Localized id="loyalty-points-to-next"><th>Points to Next</th></Localized>
-                    <th aria-label="Actions"> </th>
+                    <th aria-label={l10n.getString('loyalty-table-actions')}> </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -233,7 +233,7 @@ export default function LoyaltyManagementScreen() {
                           <td>{a.next_tier?.name ?? '—'}</td>
                           <td>{a.points_to_next_tier > 0 ? a.points_to_next_tier.toLocaleString() : '—'}</td>
                           <td>
-                            <button type="button" className="loyalty-expand-btn" aria-label={isExpanded ? 'Collapse' : 'Expand'} aria-expanded={isExpanded}>
+                            <button type="button" className="loyalty-expand-btn" aria-label={l10n.getString(isExpanded ? 'loyalty-collapse' : 'loyalty-expand')} aria-expanded={isExpanded}>
                               {isExpanded ? '\u25B2' : '\u25BC'}
                             </button>
                           </td>
@@ -246,15 +246,15 @@ export default function LoyaltyManagementScreen() {
                                   <h4 className="loyalty-detail-title">Recent Activity</h4>
                                 </Localized>
                                 {a.recent_transactions.length === 0 ? (
-                                  <p className="loyalty-detail-empty">No transactions yet</p>
+                                  <p className="loyalty-detail-empty"><Localized id="loyalty-no-transactions">No transactions yet</Localized></p>
                                 ) : (
                                   <table className="loyalty-txn-table" aria-label="Recent transactions">
                                     <thead>
                                       <tr>
-                                        <th>Type</th>
-                                        <th>Points</th>
-                                        <th>Description</th>
-                                        <th>Date</th>
+                                        <Localized id="loyalty-txn-type"><th>Type</th></Localized>
+                                        <Localized id="loyalty-txn-points"><th>Points</th></Localized>
+                                        <Localized id="loyalty-txn-description"><th>Description</th></Localized>
+                                        <Localized id="loyalty-txn-date"><th>Date</th></Localized>
                                       </tr>
                                     </thead>
                                     <tbody>

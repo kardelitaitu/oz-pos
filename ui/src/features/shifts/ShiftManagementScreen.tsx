@@ -4,7 +4,7 @@
 //! reconciliation details, and allows opening/closing shifts.
 
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -30,6 +30,7 @@ const fmt = (minor: number, currency = 'USD') =>
 // ── Component ───────────────────────────────────────────────────────
 
 export default function ShiftManagementScreen() {
+  const { l10n } = useLocalization();
   const { session } = useAuth();
   const userId = session?.user_id ?? '';
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
@@ -213,7 +214,7 @@ export default function ShiftManagementScreen() {
                         setError(null);
                         setShowPayoutModal(true);
                       }}
-                      aria-label="Record cash payout"
+                      aria-label={l10n.getString('shift-btn-payout-label')}
                     >
                       Record Payout
                     </button>
@@ -228,7 +229,7 @@ export default function ShiftManagementScreen() {
                         setError(null);
                         setShowCloseModal(true);
                       }}
-                      aria-label="Close active shift"
+                      aria-label={l10n.getString('shift-btn-close-label')}
                     >
                       Close Shift
                     </button>
@@ -281,7 +282,7 @@ export default function ShiftManagementScreen() {
                     <span className="shift-mgmt-stat-label">Transactions</span>
                   </Localized>
                   <span className="shift-mgmt-stat-value">
-                    {activeShift.totalSalesMinor > 0 ? 'Active' : 'None'}
+                    <Localized id={activeShift.totalSalesMinor > 0 ? 'shift-stat-active' : 'shift-stat-none'}>{activeShift.totalSalesMinor > 0 ? 'Active' : 'None'}</Localized>
                   </span>
                 </div>
               </div>
@@ -330,7 +331,7 @@ export default function ShiftManagementScreen() {
               </div>
             ) : (
               <div className="shift-mgmt-table-wrap">
-                <table className="shift-mgmt-table" aria-label="Shift history">
+                <table className="shift-mgmt-table" aria-label={l10n.getString('shift-table-label')}>
                   <thead>
                     <tr>
                       <Localized id="shift-table-status"><th>Status</th></Localized>
@@ -390,7 +391,7 @@ export default function ShiftManagementScreen() {
                                 type="button"
                                 className="shift-mgmt-view-btn"
                                 onClick={() => setShowDetailModal(s)}
-                                aria-label="View shift details"
+                                aria-label={l10n.getString('shift-btn-view')}
                               >
                                 View
                               </button>
@@ -409,7 +410,7 @@ export default function ShiftManagementScreen() {
 
       {/* ── Open Shift Modal ──────────────────────────── */}
       {showOpenModal && (
-        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Open shift">
+        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-open-label')}>
           <div className="shift-mgmt-modal">
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-open-title">
@@ -419,7 +420,7 @@ export default function ShiftManagementScreen() {
                 type="button"
                 className="shift-mgmt-modal-close"
                 onClick={() => setShowOpenModal(false)}
-                aria-label="Close"
+                aria-label={l10n.getString('close')}
                 disabled={saving}
               >
                 &times;
@@ -442,7 +443,7 @@ export default function ShiftManagementScreen() {
                     placeholder="e.g. 500 for $5.00"
                     value={openingBalance}
                     onChange={(e) => setOpeningBalance(e.target.value)}
-                    aria-label="Opening balance in minor units"
+                    aria-label={l10n.getString('shift-field-opening-balance')}
                     disabled={saving}
                   />
                 </Localized>
@@ -466,7 +467,7 @@ export default function ShiftManagementScreen() {
 
       {/* ── Payout Modal ─────────────────────────────── */}
       {showPayoutModal && activeShift && (
-        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Record cash payout">
+        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-payout-label')}>
           <div className="shift-mgmt-modal">
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-payout-title">
@@ -476,7 +477,7 @@ export default function ShiftManagementScreen() {
                 type="button"
                 className="shift-mgmt-modal-close"
                 onClick={() => setShowPayoutModal(false)}
-                aria-label="Close"
+                aria-label={l10n.getString('close')}
                 disabled={saving}
               >
                 &times;
@@ -504,7 +505,7 @@ export default function ShiftManagementScreen() {
                     placeholder="e.g. 20000 for $200.00"
                     value={payoutAmount}
                     onChange={(e) => setPayoutAmount(e.target.value)}
-                    aria-label="Payout amount in minor units"
+                    aria-label={l10n.getString('shift-field-payout-amount')}
                     disabled={saving}
                   />
                 </Localized>
@@ -521,7 +522,7 @@ export default function ShiftManagementScreen() {
                     placeholder="e.g. bank drop, manager pickup"
                     value={payoutReason}
                     onChange={(e) => setPayoutReason(e.target.value)}
-                    aria-label="Payout reason"
+                    aria-label={l10n.getString('shift-field-payout-reason')}
                     disabled={saving}
                   />
                 </Localized>
@@ -550,7 +551,7 @@ export default function ShiftManagementScreen() {
 
       {/* ── Close Shift Modal ─────────────────────────── */}
       {showCloseModal && activeShift && (
-        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Close shift">
+        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-close-label')}>
           <div className="shift-mgmt-modal shift-mgmt-modal--wide">
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-close-title">
@@ -560,7 +561,7 @@ export default function ShiftManagementScreen() {
                 type="button"
                 className="shift-mgmt-modal-close"
                 onClick={() => setShowCloseModal(false)}
-                aria-label="Close"
+                aria-label={l10n.getString('close')}
                 disabled={saving}
               >
                 &times;
@@ -636,7 +637,7 @@ export default function ShiftManagementScreen() {
                     placeholder="e.g. 15000 for $150.00"
                     value={closingBalance}
                     onChange={(e) => setClosingBalance(e.target.value)}
-                    aria-label="Closing balance in minor units"
+                    aria-label={l10n.getString('shift-field-closing-balance')}
                     disabled={saving}
                   />
                 </Localized>
@@ -654,7 +655,7 @@ export default function ShiftManagementScreen() {
                     placeholder="Any notes about this shift…"
                     value={shiftNotes}
                     onChange={(e) => setShiftNotes(e.target.value)}
-                    aria-label="Shift notes"
+                    aria-label={l10n.getString('shift-field-notes')}
                     disabled={saving}
                   />
                 </Localized>
@@ -683,7 +684,7 @@ export default function ShiftManagementScreen() {
 
       {/* ── Closed Shift Summary ──────────────────────── */}
       {closedShiftSummary && (
-        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Shift closed summary">
+        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-closed-label')}>
           <div className="shift-mgmt-modal">
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-closed-title">
@@ -771,7 +772,7 @@ export default function ShiftManagementScreen() {
 
       {/* ── Shift Detail Modal ────────────────────────── */}
       {showDetailModal && (
-        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Shift details">
+        <div className="shift-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-detail-label')}>
           <div className="shift-mgmt-modal shift-mgmt-modal--wide">
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-detail-title">
@@ -781,7 +782,7 @@ export default function ShiftManagementScreen() {
                 type="button"
                 className="shift-mgmt-modal-close"
                 onClick={() => setShowDetailModal(null)}
-                aria-label="Close"
+                aria-label={l10n.getString('close')}
               >
                 &times;
               </button>

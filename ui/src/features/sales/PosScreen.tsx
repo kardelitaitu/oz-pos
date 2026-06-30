@@ -227,15 +227,15 @@ export default function PosScreen() {
           }
           addToast({
             type: 'success',
-            message: `Bundle "${bundle.bundle.name}" added — ${expanded.length} items`,
+            message: l10n.getString('pos-bundle-expanded', { name: bundle.bundle.name, count: expanded.length }),
           });
         } else {
-          addToast({ type: 'warning', message: 'No product or bundle matches this barcode' });
+          addToast({ type: 'warning', message: l10n.getString('pos-no-barcode-match') });
         }
       } catch {
         // Silently ignore — the scanner will beep, user retries.
       }
-    }, [addProduct, addToast]),
+    }, [addProduct, addToast, l10n]),
     onError: useCallback(
       (error: string) => {
         addToast({
@@ -349,13 +349,13 @@ export default function PosScreen() {
     setClosedShiftSummary(null);
     // Enforce: cart must be empty before closing shift.
     if (lines.length > 0) {
-      setCloseShiftError('Complete or clear the current sale before closing the shift.');
+      setCloseShiftError(l10n.getString('pos-close-shift-cart-error'));
       return;
     }
     setClosingBalance('');
     setShiftNotes('');
     setShowCloseShift(true);
-  }, [lines]);
+  }, [lines, l10n]);
 
   const handleConfirmCloseShift = useCallback(async () => {
     if (!activeShift) return;
@@ -373,12 +373,12 @@ export default function PosScreen() {
       setClosedShiftSummary(closed);
       setActiveShift(null); // no longer active
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to close shift';
+      const msg = err instanceof Error ? err.message : l10n.getString('pos-close-shift-failed');
       setCloseShiftError(msg);
     } finally {
       setClosingShift(false);
     }
-  }, [activeShift, closingBalance, shiftNotes]);
+  }, [activeShift, closingBalance, shiftNotes, l10n]);
 
   const handleOpenShiftClick = useCallback(() => {
     setOpeningBalance('');

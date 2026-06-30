@@ -1,0 +1,29 @@
+# ui/src/locales/reports.ftl — Sales report
+
+sales-report-title = Sales Report
+sales-report-daily = Daily
+sales-report-weekly = Weekly
+sales-report-monthly = Monthly
+sales-report-start-date = Start
+sales-report-end-date = End
+sales-report-revenue-chart = Revenue
+sales-report-category-breakdown = By Category
+sales-report-hourly-heatmap = Busiest Hours
+sales-report-top-products = Top Products
+sales-report-total-revenue = Total:
+sales-report-total-orders = Orders:
+sales-report-export-csv = Export CSV
+sales-report-revenue-label = Revenue
+sales-report-rank = #
+top-products-name = Name
+top-products-quantity = Qty
+top-products-revenue = Revenue
+heatmap-title = Busiest Hours
+heatmap-no-data = No data
+day-sunday = Sun
+day-monday = Mon
+day-tuesday = Tue
+day-wednesday = Wed
+day-thursday = Thu
+day-friday = Fri
+day-saturday = Sat

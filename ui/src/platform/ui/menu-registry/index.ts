@@ -25,6 +25,8 @@ export interface NavItemRegistration {
   route: string;
   /** Human-readable label displayed in the sidebar. */
   label: string;
+  /** FTL i18n key for the label. Falls back to `label` when not found. */
+  i18nKey?: string;
   /** Optional SVG icon element. */
   icon?: ReactNode;
   /** Optional feature key that must be enabled for this item to appear. */

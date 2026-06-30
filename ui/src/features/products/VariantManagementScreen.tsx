@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listProductVariants,
   createProductVariant,
@@ -45,6 +45,8 @@ export default function VariantManagementScreen({ productSku, productName, onClo
   const [saving, setSaving] = useState(false);
   const [deletingSku, setDeletingSku] = useState<string | null>(null);
   const [confirmDeleteSku, setConfirmDeleteSku] = useState<string | null>(null);
+
+  const { l10n } = useLocalization();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -136,13 +138,14 @@ export default function VariantManagementScreen({ productSku, productName, onClo
   }, [confirmDeleteSku, load]);
 
   return (
+    <Localized id="variant-mgmt-overlay-aria" attrs={{ 'aria-label': true }} vars={{ name: productName }}>
     <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={`Variants for ${productName}`}>
       <div className="product-mgmt-modal" style={{ width: '640px' }}>
         <div className="product-mgmt-modal-header">
           <Localized id="variant-mgmt-title" vars={{ product: productName }}>
             <h2>Variants — {productName}</h2>
           </Localized>
-          <Localized id="variant-mgmt-modal-close">
+          <Localized id="variant-mgmt-close-aria" attrs={{ 'aria-label': true }}>
             <button
               type="button"
               className="product-mgmt-modal-close"
@@ -183,6 +186,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
             </div>
           ) : (
             <div className="product-mgmt-table-wrap">
+              <Localized id="variant-mgmt-table-aria" attrs={{ 'aria-label': true }}>
               <table className="product-mgmt-table" aria-label="Product variants">
                 <thead>
                   <tr>
@@ -191,7 +195,9 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                     <Localized id="variant-mgmt-col-price"><th>Price</th></Localized>
                     <Localized id="variant-mgmt-col-barcode"><th>Barcode</th></Localized>
                     <Localized id="variant-mgmt-col-status"><th>Status</th></Localized>
-                    <th aria-label="Actions"> </th>
+                    <Localized id="variant-mgmt-actions-aria" attrs={{ 'aria-label': true }}>
+                      <th aria-label="Actions"> </th>
+                    </Localized>
                   </tr>
                 </thead>
                 <tbody>
@@ -221,44 +227,50 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                         )}
                       </td>
                       <td className="product-mgmt-cell-actions">
-                        <button
-                          type="button"
-                          className="product-mgmt-action-btn"
-                          onClick={() => openEdit(v)}
-                          aria-label={`Edit ${v.name}`}
-                        >
-                          <Localized id="variant-mgmt-edit">
-                            <span>Edit</span>
-                          </Localized>
-                        </button>
-                        <button
-                          type="button"
-                          className="product-mgmt-action-btn product-mgmt-action-btn--danger"
-                          onClick={() => setConfirmDeleteSku(v.sku)}
-                          disabled={deletingSku === v.sku}
-                          aria-label={`Delete ${v.name}`}
-                        >
-                          <Localized id="variant-mgmt-delete">
-                            <span>Delete</span>
-                          </Localized>
-                        </button>
+                        <Localized id="variant-mgmt-edit-aria" attrs={{ 'aria-label': true }} vars={{ name: v.name }}>
+                          <button
+                            type="button"
+                            className="product-mgmt-action-btn"
+                            onClick={() => openEdit(v)}
+                            aria-label={`Edit ${v.name}`}
+                          >
+                            <Localized id="variant-mgmt-edit">
+                              <span>Edit</span>
+                            </Localized>
+                          </button>
+                        </Localized>
+                        <Localized id="variant-mgmt-delete-aria" attrs={{ 'aria-label': true }} vars={{ name: v.name }}>
+                          <button
+                            type="button"
+                            className="product-mgmt-action-btn product-mgmt-action-btn--danger"
+                            onClick={() => setConfirmDeleteSku(v.sku)}
+                            disabled={deletingSku === v.sku}
+                            aria-label={`Delete ${v.name}`}
+                          >
+                            <Localized id="variant-mgmt-delete">
+                              <span>Delete</span>
+                            </Localized>
+                          </button>
+                        </Localized>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </Localized>
             </div>
           )}
         </div>
 
         {showModal && (
+          <Localized id="variant-mgmt-dialog-aria" attrs={{ 'aria-label': true }} vars={{ mode: editingSku ? 'edit' : 'add' }}>
           <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingSku ? 'Edit variant' : 'Add variant'} style={{ zIndex: 200 }}>
             <div className="product-mgmt-modal">
               <div className="product-mgmt-modal-header">
                 <Localized id={editingSku ? 'variant-mgmt-modal-edit-title' : 'variant-mgmt-modal-add-title'}>
                   <h2>{editingSku ? 'Edit Variant' : 'Add Variant'}</h2>
                 </Localized>
-                <Localized id="variant-mgmt-modal-close">
+                <Localized id="variant-mgmt-close-aria" attrs={{ 'aria-label': true }}>
                   <button
                     type="button"
                     className="product-mgmt-modal-close"
@@ -271,98 +283,98 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               </div>
 
               <div className="product-mgmt-modal-body">
-                <label className="product-mgmt-field" htmlFor="variant-field-name" aria-label="Name *">
-                  <Localized id="variant-mgmt-field-name-required">
-                    <span className="product-mgmt-label">Name *</span>
-                  </Localized>
-                  <input
-                    className="product-mgmt-input"
-                    type="text"
-                    id="variant-field-name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="e.g. Large"
-                  />
-                </label>
-
-                <label className="product-mgmt-field" htmlFor="variant-field-sku" aria-label="SKU *">
-                  <Localized id="variant-mgmt-field-sku-required">
-                    <span className="product-mgmt-label">SKU *</span>
-                  </Localized>
-                  <input
-                    className="product-mgmt-input"
-                    type="text"
-                    id="variant-field-sku"
-                    value={form.sku}
-                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                    disabled={!!editingSku}
-                    placeholder="e.g. TEA-LARGE"
-                  />
-                </label>
-
-                <div className="product-mgmt-row">
-                  <label className="product-mgmt-field" htmlFor="variant-field-price" aria-label="Price (minor units)">
-                    <Localized id="variant-mgmt-field-price">
-                      <span className="product-mgmt-label">Price (minor units)</span>
-                    </Localized>
-                    <input
-                      className="product-mgmt-input"
-                      type="number"
-                      id="variant-field-price"
-                      min="0"
-                      value={form.priceMinor}
-                      onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
-                      placeholder="450"
-                    />
-                  </label>
-
-                  <label className="product-mgmt-field" htmlFor="variant-field-currency" aria-label="Currency">
-                    <Localized id="variant-mgmt-field-currency">
-                      <span className="product-mgmt-label">Currency</span>
-                    </Localized>
+                <label className="product-mgmt-field" htmlFor="variant-field-name">
+                  {l10n.getString('variant-mgmt-field-name-required')}
+                  <Localized id="variant-mgmt-name-placeholder" attrs={{ placeholder: true }}>
                     <input
                       className="product-mgmt-input"
                       type="text"
-                      id="variant-field-currency"
-                      value={form.currency}
-                      onChange={(e) => setForm({ ...form, currency: e.target.value })}
-                      placeholder="USD"
-                      maxLength={3}
+                      id="variant-field-name"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="e.g. Large"
                     />
-                  </label>
-                </div>
-
-                <label className="product-mgmt-field" htmlFor="variant-field-barcode" aria-label="Barcode">
-                  <Localized id="variant-mgmt-field-barcode">
-                    <span className="product-mgmt-label">Barcode</span>
                   </Localized>
-                  <input
-                    className="product-mgmt-input"
-                    type="text"
-                    id="variant-field-barcode"
-                    value={form.barcode}
-                    onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                    placeholder="4901234567890"
-                  />
+                </label>
+
+                <label className="product-mgmt-field" htmlFor="variant-field-sku">
+                  {l10n.getString('variant-mgmt-field-sku-required')}
+                  <Localized id="variant-mgmt-sku-placeholder" attrs={{ placeholder: true }}>
+                    <input
+                      className="product-mgmt-input"
+                      type="text"
+                      id="variant-field-sku"
+                      value={form.sku}
+                      onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                      disabled={!!editingSku}
+                      placeholder="e.g. TEA-LARGE"
+                    />
+                  </Localized>
                 </label>
 
                 <div className="product-mgmt-row">
-                  <label className="product-mgmt-field" htmlFor="variant-field-sort" aria-label="Sort order">
-                    <Localized id="variant-mgmt-field-sort-order">
-                      <span className="product-mgmt-label">Sort order</span>
+                  <label className="product-mgmt-field" htmlFor="variant-field-price">
+                    {l10n.getString('variant-mgmt-field-price')}
+                    <Localized id="variant-mgmt-price-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className="product-mgmt-input"
+                        type="number"
+                        id="variant-field-price"
+                        min="0"
+                        value={form.priceMinor}
+                        onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
+                        placeholder="450"
+                      />
                     </Localized>
-                    <input
-                      className="product-mgmt-input"
-                      type="number"
-                      id="variant-field-sort"
-                      min="0"
-                      value={form.sortOrder}
-                      onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
-                      placeholder="0"
-                    />
                   </label>
 
-                  <label className="product-mgmt-field" htmlFor="variant-field-active" aria-label="Active" style={{ justifyContent: 'flex-end', paddingBottom: 'var(--space-1)' }}>
+                  <label className="product-mgmt-field" htmlFor="variant-field-currency">
+                    {l10n.getString('variant-mgmt-field-currency')}
+                    <Localized id="variant-mgmt-currency-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className="product-mgmt-input"
+                        type="text"
+                        id="variant-field-currency"
+                        value={form.currency}
+                        onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                        placeholder="USD"
+                        maxLength={3}
+                      />
+                    </Localized>
+                  </label>
+                </div>
+
+                <label className="product-mgmt-field" htmlFor="variant-field-barcode">
+                  {l10n.getString('variant-mgmt-field-barcode')}
+                  <Localized id="variant-mgmt-barcode-placeholder" attrs={{ placeholder: true }}>
+                    <input
+                      className="product-mgmt-input"
+                      type="text"
+                      id="variant-field-barcode"
+                      value={form.barcode}
+                      onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                      placeholder="4901234567890"
+                    />
+                  </Localized>
+                </label>
+
+                <div className="product-mgmt-row">
+                  <label className="product-mgmt-field" htmlFor="variant-field-sort">
+                    {l10n.getString('variant-mgmt-field-sort-order')}
+                    <Localized id="variant-mgmt-sort-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className="product-mgmt-input"
+                        type="number"
+                        id="variant-field-sort"
+                        min="0"
+                        value={form.sortOrder}
+                        onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
+                        placeholder="0"
+                      />
+                    </Localized>
+                  </label>
+
+                  <label className="product-mgmt-field" htmlFor="variant-field-active" style={{ justifyContent: 'flex-end', paddingBottom: 'var(--space-1)' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                       <input
                         type="checkbox"
@@ -370,9 +382,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                         checked={form.isActive}
                         onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
                       />
-                      <Localized id="variant-mgmt-field-active">
-                        <span className="product-mgmt-label" style={{ marginBottom: 0 }}>Active</span>
-                      </Localized>
+                      {l10n.getString('variant-mgmt-field-active')}
                     </span>
                   </label>
                 </div>
@@ -395,9 +405,11 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               </div>
             </div>
           </div>
+        </Localized>
         )}
 
         {confirmDeleteSku && (
+          <Localized id="variant-mgmt-delete-confirm-aria" attrs={{ 'aria-label': true }}>
           <div className="product-mgmt-overlay" role="alertdialog" aria-modal="true" aria-label="Delete confirmation" style={{ zIndex: 200 }}>
             <div className="product-mgmt-modal" style={{ width: '380px' }}>
               <div className="product-mgmt-modal-header">
@@ -431,9 +443,11 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               </div>
             </div>
           </div>
+          </Localized>
         )}
       </div>
     </div>
+    </Localized>
   );
 }
 

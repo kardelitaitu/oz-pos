@@ -1,0 +1,34 @@
+# ui/src/locales/loyalty.ftl — Loyalty program
+
+loyalty-title = Loyalty
+loyalty-accounts = Accounts
+loyalty-tiers = Tiers
+loyalty-points = Points
+loyalty-lifetime-points = Lifetime Points
+loyalty-tier = Tier
+loyalty-customer = Customer
+loyalty-no-accounts = No loyalty accounts yet
+loyalty-next-tier = Next Tier
+loyalty-points-to-next = Points to Next
+loyalty-recent-transactions = Recent Activity
+loyalty-earn = Earn
+loyalty-redeem = Redeem
+loyalty-adjust = Adjust
+loyalty-points-value = Points Value
+loyalty-redeem-at-checkout = Redeem at Checkout
+loyalty-available-points = Available Points
+loyalty-enter-points = Enter points to redeem
+loyalty-validation-error = Please fill in all fields correctly
+loyalty-tier-name = Name
+loyalty-tier-min-points = Min Points
+loyalty-tier-ppu = Points/Unit
+loyalty-tier-multiplier = Multiplier
+loyalty-tier-colour = Colour
+loyalty-table-actions = Actions
+loyalty-expand = Expand
+loyalty-collapse = Collapse
+loyalty-no-transactions = No transactions yet
+loyalty-txn-type = Type
+loyalty-txn-points = Points
+loyalty-txn-description = Description
+loyalty-txn-date = Date

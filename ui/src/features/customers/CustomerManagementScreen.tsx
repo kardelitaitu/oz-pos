@@ -129,7 +129,7 @@ export default function CustomerManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load]);
+  }, [form, editingId, closeModal, load, l10n]);
 
   // ── Delete ─────────────────────────────────────────────────────
 

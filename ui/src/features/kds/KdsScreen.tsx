@@ -1,18 +1,19 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
 const STATUS_LABELS: Record<KdsStatus, string> = {
-  pending: 'Pending',
-  preparing: 'Preparing',
-  ready: 'Ready',
-  served: 'Served',
-  cancelled: 'Cancelled',
+  pending: 'kds-pending',
+  preparing: 'kds-preparing',
+  ready: 'kds-ready',
+  served: 'kds-served',
+  cancelled: 'kds-cancelled',
 };
 
 export default function KdsScreen() {
+  const { l10n } = useLocalization();
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,14 +48,16 @@ export default function KdsScreen() {
     <div className="kds" role="region" aria-label="Kitchen Display System">
       <div className="kds-header">
         <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
-        <span className="kds-order-count">{orders.length} orders</span>
+        <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}>{orders.length} orders</Localized></span>
       </div>
       {error && <p className="kds-error">{error}</p>}
       <div className="kds-columns">
         {(['pending', 'preparing', 'ready'] as KdsStatus[]).map((status) => (
           <div key={status} className={`kds-column kds-column--${status}`}>
             <h2 className="kds-column-title">
-              {STATUS_LABELS[status]}
+              <Localized id={STATUS_LABELS[status]}>
+                <span>{status}</span>
+              </Localized>
               <span className="kds-column-count">{grouped(status).length}</span>
             </h2>
             <div className="kds-tickets">
@@ -66,7 +69,7 @@ export default function KdsScreen() {
                     key={order.id}
                     className="kds-ticket"
                     onClick={() => advanceStatus(order)}
-                    aria-label={`Order ${order.display_number}, tap to advance`}
+                    aria-label={l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })}
                   >
                     <div className="kds-ticket-header">
                       <span className="kds-ticket-number">#{order.display_number}</span>

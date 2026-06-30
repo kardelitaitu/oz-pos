@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import { getNavItems } from '@/platform/ui/menu-registry';
 import './tablet.css';
 
@@ -36,6 +37,7 @@ export default function TabletAppLayout({
   enabledFeatures,
   userRole,
 }: TabletAppLayoutProps) {
+  const { l10n } = useLocalization();
   const navItems = getNavItems(enabledFeatures, userRole).slice(0, 7); // max 7 tabs for bottom nav
 
   return (
@@ -49,7 +51,7 @@ export default function TabletAppLayout({
         </main>
 
         {/* ── Bottom tab bar ────────────────────────── */}
-        <div className="tablet-tab-bar" role="tablist" aria-label="Navigation tabs">
+        <div className="tablet-tab-bar" role="tablist" aria-label={l10n.getString('nav-tablist-aria')}>
           {navItems.map((item) => (
             <button
               key={item.route}
@@ -62,14 +64,14 @@ export default function TabletAppLayout({
               }
               onClick={() => onNavigate(item.route)}
               aria-selected={route === item.route}
-              aria-label={item.label}
+              aria-label={l10n.getString(item.i18nKey ?? item.label) ?? item.label}
             >
               {item.icon && (
                 <span className="tablet-tab-icon" aria-hidden="true">
                   {item.icon}
                 </span>
               )}
-              <span className="tablet-tab-label">{item.label}</span>
+              <span className="tablet-tab-label"><Localized id={item.i18nKey ?? item.label}>{item.label}</Localized></span>
             </button>
           ))}
         </div>

@@ -3,15 +3,33 @@
 # Product Lookup
 product-lookup-title = Products
 product-lookup-dev-fallback = Using sample data (IPC unavailable)
-product-lookup-search-placeholder = Search products…
-product-lookup-barcode-placeholder = Scan barcode…
+product-lookup-search-placeholder =
+    .placeholder = Search products…
+product-lookup-search-aria =
+    .aria-label = Search for products by name, SKU, or barcode
+product-lookup-barcode-placeholder =
+    .placeholder = Scan barcode…
+product-lookup-barcode-aria =
+    .aria-label = Enter or scan a barcode
 product-lookup-barcode-scan = Scan
+product-lookup-scan-btn-aria =
+    .aria-label = Submit the entered barcode
 product-lookup-no-results = No products found
 product-lookup-loading = Loading products…
 product-lookup-add = Add to cart
 product-lookup-in-stock = In stock
 product-lookup-out-of-stock = Out of stock
 product-lookup-all-categories = All Categories
+product-lookup-categories-aria =
+    .aria-label = Filter by category
+product-lookup-grid-aria =
+    .aria-label = Product search results
+product-lookup-card-aria =
+    .aria-label = { $name } — { $price }. SKU: { $sku }. { $stock }
+product-lookup-bundle-added = Bundle "{ $name }" added — { $count } items
+product-lookup-no-match = No product or bundle matches this barcode
+product-lookup-uncategorised = Uncategorised
+product-lookup-error-load = Failed to load products
 
 # Product Management
 product-mgmt-title = Products
@@ -52,6 +70,31 @@ product-mgmt-field-stock = Initial stock
 product-mgmt-btn-cancel = Cancel
 product-mgmt-btn-create = Create
 product-mgmt-btn-update = Update
+product-mgmt-table-aria =
+    .aria-label = Product catalog
+product-mgmt-actions-aria =
+    .aria-label = Actions
+product-mgmt-variants = Variants
+product-mgmt-variants-aria =
+    .aria-label = Variants for { $name }
+product-mgmt-modal-aria =
+    .aria-label = { $mode ->
+        [add] Add product
+       *[edit] Edit product
+    }
+product-mgmt-modal-close-aria =
+    .aria-label = Close
+product-mgmt-sku-placeholder =
+    .placeholder = e.g. LATTE
+product-mgmt-name-placeholder =
+    .placeholder = e.g. Caffè Latte
+product-mgmt-price-placeholder =
+    .placeholder = 450
+product-mgmt-barcode-placeholder =
+    .placeholder = 4901234567890
+product-mgmt-stock-placeholder =
+    .placeholder = 0
+product-mgmt-no-category = — No category —
 
 # Product Variants
 variant-mgmt-title = Variants — { $product }
@@ -78,6 +121,9 @@ variant-mgmt-delete-confirm-confirm = Delete
 variant-mgmt-modal-add-title = Add Variant
 variant-mgmt-modal-edit-title = Edit Variant
 variant-mgmt-modal-close = Close
+variant-mgmt-close = Close
+variant-mgmt-close-aria =
+    .aria-label = Close
 variant-mgmt-field-name-required = Name *
 variant-mgmt-field-sku-required = SKU *
 variant-mgmt-field-price = Price (minor units)
@@ -88,6 +134,31 @@ variant-mgmt-field-active = Active
 variant-mgmt-btn-cancel = Cancel
 variant-mgmt-btn-create = Create
 variant-mgmt-btn-update = Update
+variant-mgmt-overlay-aria =
+    .aria-label = Variants for { $name }
+variant-mgmt-dialog-aria =
+    .aria-label = { $mode ->
+        [add] Add variant
+       *[edit] Edit variant
+    }
+variant-mgmt-table-aria =
+    .aria-label = Product variants
+variant-mgmt-actions-aria =
+    .aria-label = Actions
+variant-mgmt-name-placeholder =
+    .placeholder = e.g. Large
+variant-mgmt-sku-placeholder =
+    .placeholder = e.g. TEA-LARGE
+variant-mgmt-price-placeholder =
+    .placeholder = 450
+variant-mgmt-currency-placeholder =
+    .placeholder = USD
+variant-mgmt-barcode-placeholder =
+    .placeholder = 4901234567890
+variant-mgmt-sort-placeholder =
+    .placeholder = 0
+variant-mgmt-delete-confirm-aria =
+    .aria-label = Delete confirmation
 variant-mgmt-error-load = Failed to load variants
 variant-mgmt-error-save = Failed to save variant
 variant-mgmt-error-delete = Failed to delete variant

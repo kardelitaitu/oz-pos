@@ -1,8 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 import PaymentModal from '@/features/sales/PaymentModal';
 import type { Money, CartLine, Sku, LineId } from '@/types/domain';
+
+function renderWithFluent(ui: React.ReactElement) {
+  return render(withFluent(ui, salesFtl));
+}
 
 const usd = (minor: number): Money => ({ minor_units: minor, currency: 'USD' });
 
@@ -46,7 +52,7 @@ beforeEach(() => {
 
 describe('PaymentModal', () => {
   it('renders total due and payment method options when open', () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -65,7 +71,7 @@ describe('PaymentModal', () => {
   });
 
   it('does not render when closed', () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open={false}
         lineItems={[lineItem()]}
@@ -80,7 +86,7 @@ describe('PaymentModal', () => {
   });
 
   it('shows change preview for cash payment', async () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -100,7 +106,7 @@ describe('PaymentModal', () => {
   });
 
   it('shows insufficient amount warning when tendered < total', async () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -120,7 +126,7 @@ describe('PaymentModal', () => {
   });
 
   it('disables Complete Sale when tendered < total', async () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -140,7 +146,7 @@ describe('PaymentModal', () => {
   });
 
   it('enables Complete Sale when tendered >= total', async () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -160,7 +166,7 @@ describe('PaymentModal', () => {
   });
 
   it('calls printSalesReceipt on complete', async () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -182,7 +188,7 @@ describe('PaymentModal', () => {
 
   it('calls onComplete after sale done', async () => {
     const onComplete = vi.fn();
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -207,7 +213,7 @@ describe('PaymentModal', () => {
   });
 
   it('shows change due in done state for cash', async () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
@@ -228,7 +234,7 @@ describe('PaymentModal', () => {
   });
 
   it('shows sale complete state for card and prints receipt', async () => {
-    render(
+    renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}

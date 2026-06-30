@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import { startSale, addLine, completeSale, setCartDiscount, printSalesReceipt, getSale, type SetCartDiscountArgs, type PaymentSplitArg } from '@/api/sales';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
@@ -43,6 +44,7 @@ export default function PaymentModal({
   onComplete,
   onClose,
 }: PaymentModalProps) {
+  const { l10n } = useLocalization();
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [otherLabel, setOtherLabel] = useState('');
   const [tendered, setTendered] = useState('');
@@ -439,7 +441,7 @@ export default function PaymentModal({
   if (!open) return null;
 
   return (
-    <div className="payment-overlay" role="dialog" aria-modal="true" aria-label="Payment">
+    <div className="payment-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria')}>
       <QrisQrDisplay
         amount={total.minor_units}
         currency={total.currency}
@@ -452,46 +454,58 @@ export default function PaymentModal({
       <div className="payment-modal">
         {done ? (
           <div className="payment-done">
-            <h2 className="payment-done-title">Sale Complete</h2>
+            <Localized id="payment-done-title">
+              <h2 className="payment-done-title">Sale Complete</h2>
+            </Localized>
             {changeDue && (
               <div className="payment-change">
-                <span className="payment-change-label">Change due</span>
+                <Localized id="payment-change-label">
+                  <span className="payment-change-label">Change due</span>
+                </Localized>
                 <span className="payment-change-amount">
                   {formatMoney(changeDue)}
                 </span>
               </div>
             )}
-            <p className="payment-done-note">Receipt printed</p>
+            <Localized id="payment-done-receipt">
+              <p className="payment-done-note">Receipt printed</p>
+            </Localized>
           </div>
         ) : (
           <>
             <div className="payment-header">
-              <h2 className="payment-title">Complete Sale</h2>
+              <Localized id="payment-title">
+                <h2 className="payment-title">Complete Sale</h2>
+              </Localized>
               <button
                 type="button"
                 className="payment-close"
                 onClick={onClose}
-                aria-label="Cancel payment"
+                aria-label={l10n.getString('payment-close-aria')}
               >
                 &times;
               </button>
             </div>
 
             <div className="payment-total-row">
-              <span className="payment-total-label">Total Due</span>
+              <Localized id="payment-total-due">
+                <span className="payment-total-label">Total Due</span>
+              </Localized>
               <span className="payment-total-amount">{formatMoney(total)}</span>
             </div>
 
             {multiCurrency && (
               <div className="payment-currency-selector">
-                <label htmlFor="payment-currency-select" aria-label="Charge currency">
-                  <span className="payment-currency-label">Charge Currency</span>
+                <label htmlFor="payment-currency-select" aria-label={l10n.getString('payment-currency-aria')}>
+                  <Localized id="payment-currency-label">
+                    <span className="payment-currency-label">Charge Currency</span>
+                  </Localized>
                   <select
                     id="payment-currency-select"
                     className="payment-currency-select"
                     value={selectedCurrency}
                     onChange={(e) => setSelectedCurrency(e.target.value)}
-                    aria-label="Select charge currency"
+                    aria-label={l10n.getString('payment-currency-select-aria')}
                   >
                     {currencies.length === 0 && (
                       <option value={total.currency}>{total.currency}</option>
@@ -507,40 +521,54 @@ export default function PaymentModal({
             )}
 
             {selectedCurrency !== total.currency && exchangeRateInfo && (
-              <div className="payment-exchange-notice" aria-label="Exchange rate information">
+              <div className="payment-exchange-notice" aria-label={l10n.getString('payment-exchange-aria')}>
                 <div className="payment-exchange-row">
-                  <span>Exchange rate</span>
+                  <Localized id="payment-exchange-rate">
+                    <span>Exchange rate</span>
+                  </Localized>
                   <span>
                     1 {exchangeRateInfo.from_currency} = {exchangeRateInfo.rate.toFixed(6)} {exchangeRateInfo.to_currency}
                   </span>
                 </div>
                 <div className="payment-exchange-row">
-                  <span>Rate source</span>
-                  <span>{exchangeRateInfo.source || 'manual'}</span>
+                  <Localized id="payment-rate-source">
+                    <span>Rate source</span>
+                  </Localized>
+                  <span>{exchangeRateInfo.source || l10n.getString('payment-rate-source-manual')}</span>
                 </div>
                 <div className="payment-exchange-row">
-                  <span>Rate timestamp</span>
+                  <Localized id="payment-rate-timestamp">
+                    <span>Rate timestamp</span>
+                  </Localized>
                   <span>{exchangeRateInfo.effective_date}</span>
                 </div>
               </div>
             )}
 
             {selectedCurrency !== total.currency && (
-              <div className="payment-receipt-currency" aria-label="Receipt currency information">
+              <div className="payment-receipt-currency" aria-label={l10n.getString('payment-receipt-currency-aria')}>
                 <div className="payment-receipt-currency-row">
-                  <span>Charged in</span>
+                  <Localized id="payment-charged-in">
+                    <span>Charged in</span>
+                  </Localized>
                   <span>{selectedCurrency}</span>
                 </div>
                 <div className="payment-receipt-currency-row">
-                  <span>Default currency</span>
+                  <Localized id="payment-default-currency">
+                    <span>Default currency</span>
+                  </Localized>
                   <span>{baseCurrency}</span>
                 </div>
                 <div className="payment-receipt-currency-row">
-                  <span>Base amount</span>
+                  <Localized id="payment-base-amount">
+                    <span>Base amount</span>
+                  </Localized>
                   <span>{formatMoney(total)}</span>
                 </div>
                 <div className="payment-receipt-currency-row">
-                  <span>Charge amount</span>
+                  <Localized id="payment-charge-amount">
+                    <span>Charge amount</span>
+                  </Localized>
                   <span>
                     {formatMoney({
                       minor_units: Math.round(total.minor_units * (exchangeRateInfo?.rate ?? 1)),
@@ -554,7 +582,9 @@ export default function PaymentModal({
             {!splitMode && (
               <>
                 <fieldset className="payment-methods">
-                  <legend className="payment-section-title">Payment Method</legend>
+                  <Localized id="payment-method-label">
+                    <legend className="payment-section-title">Payment Method</legend>
+                  </Localized>
                   <div className="payment-method-options">
                     {(['cash', 'card', 'qris'] as const).map((m) => (
                       <label key={m} className="payment-method-label">
@@ -566,7 +596,7 @@ export default function PaymentModal({
                           onChange={() => setMethod(m)}
                         />
                         <span className="payment-method-name">
-                          {m === 'cash' ? 'Cash' : m === 'card' ? 'Card' : 'QRIS'}
+                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : l10n.getString('payment-method-qris')}
                         </span>
                       </label>
                     ))}
@@ -578,18 +608,20 @@ export default function PaymentModal({
                         checked={method === 'other'}
                         onChange={() => setMethod('other')}
                       />
-                      <input
-                        type="text"
-                        className="payment-other-input"
-                        placeholder="Other..."
-                        value={otherLabel}
-                        onChange={(e) => {
-                          setMethod('other');
-                          setOtherLabel(e.target.value);
-                        }}
-                        disabled={method !== 'other'}
-                        aria-label="Other payment method name"
-                      />
+                      <Localized id="payment-other-placeholder" attrs={{ placeholder: true }}>
+                        <input
+                          type="text"
+                          className="payment-other-input"
+                          placeholder="Other..."
+                          value={otherLabel}
+                          onChange={(e) => {
+                            setMethod('other');
+                            setOtherLabel(e.target.value);
+                          }}
+                          disabled={method !== 'other'}
+                          aria-label={l10n.getString('payment-other-aria')}
+                        />
+                      </Localized>
                     </label>
                   </div>
                 </fieldset>
@@ -597,16 +629,20 @@ export default function PaymentModal({
                 {method === 'cash' && (
                   <div className="payment-cash-section">
                     <label className="payment-tendered-label">
-                      <span>Amount Tendered</span>
-                      <input
-                        type="text"
-                        className="payment-tendered-input"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={tendered}
-                        onChange={(e) => setTendered(e.target.value)}
-                        aria-label="Amount tendered"
-                      />
+                      <Localized id="payment-amount-tendered">
+                        <span>Amount Tendered</span>
+                      </Localized>
+                      <Localized id="payment-tendered-placeholder" attrs={{ placeholder: true }}>
+                        <input
+                          type="text"
+                          className="payment-tendered-input"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={tendered}
+                          onChange={(e) => setTendered(e.target.value)}
+                          aria-label={l10n.getString('payment-tendered-aria')}
+                        />
+                      </Localized>
                     </label>
 
                     <div className="payment-quick-cash">
@@ -619,7 +655,7 @@ export default function PaymentModal({
                             type="button"
                             className="payment-quick-btn"
                             onClick={() => setTendered(quickVal.toFixed(2))}
-                            aria-label={`Tender $${quickVal.toFixed(2)}`}
+                            aria-label={l10n.getString('payment-quick-tender-aria', { amount: quickVal.toFixed(2) })}
                           >
                             ${quickVal}
                           </button>
@@ -629,21 +665,25 @@ export default function PaymentModal({
                         type="button"
                         className="payment-quick-btn"
                         onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
-                        aria-label="Tend exact amount"
+                        aria-label={l10n.getString('payment-tender-exact-aria')}
                       >
-                        Exact
+                        <Localized id="payment-tender-exact">
+                          <span>Exact</span>
+                        </Localized>
                       </button>
                     </div>
 
                     {tendered.length > 0 && (
                       <div className="payment-change-preview">
-                        <span className="payment-change-label">Change</span>
+                        <Localized id="payment-change">
+                          <span className="payment-change-label">Change</span>
+                        </Localized>
                         <span
                           className={`payment-change-amount ${!sufficient ? 'payment-change-insufficient' : ''}`}
                         >
                           {sufficient
                             ? formatMoney(change!)
-                            : 'Insufficient amount'}
+                            : l10n.getString('payment-insufficient')}
                         </span>
                       </div>
                     )}
@@ -652,17 +692,21 @@ export default function PaymentModal({
 
                 {method === 'qris' && (
                   <div className="payment-qris-section">
-                    <p className="payment-qris-description">
-                      Generate a QRIS QR code for the customer to scan with their payment app.
-                    </p>
+                    <Localized id="payment-qris-description">
+                      <p className="payment-qris-description">
+                        Generate a QRIS QR code for the customer to scan with their payment app.
+                      </p>
+                    </Localized>
                     <button
                       type="button"
                       className="payment-qris-btn"
                       onClick={handleQrPay}
                       disabled={processing}
-                      aria-label="Generate QRIS QR code"
+                      aria-label={l10n.getString('payment-qris-btn-aria')}
                     >
-                      Pay with QR
+                      <Localized id="payment-qris-pay">
+                        <span>Pay with QR</span>
+                      </Localized>
                     </button>
                   </div>
                 )}
@@ -672,23 +716,29 @@ export default function PaymentModal({
             {splitMode && (
               <div className="payment-split-section">
                 <div className="payment-split-header">
-                  <span className="payment-section-title">Split Payments</span>
+                  <Localized id="payment-split-title">
+                    <span className="payment-section-title">Split Payments</span>
+                  </Localized>
                   <div className="payment-split-actions">
                     <button
                       type="button"
                       className="payment-split-btn"
                       onClick={autoSplitEvenly}
-                      aria-label="Split evenly"
+                      aria-label={l10n.getString('payment-split-evenly-aria')}
                     >
-                      Split Evenly
+                      <Localized id="payment-split-evenly">
+                        <span>Split Evenly</span>
+                      </Localized>
                     </button>
                     <button
                       type="button"
                       className="payment-split-btn"
                       onClick={addSplit}
-                      aria-label="Add split"
+                      aria-label={l10n.getString('payment-split-add-aria')}
                     >
-                      + Add Split
+                      <Localized id="payment-split-add">
+                        <span>+ Add Split</span>
+                      </Localized>
                     </button>
                   </div>
                 </div>
@@ -706,7 +756,7 @@ export default function PaymentModal({
                               checked={s.method === m}
                               onChange={() => updateSplit(s.id, { method: m, otherLabel: '' })}
                             />
-                            <span>{m === 'cash' ? 'Cash' : 'Card'}</span>
+                            <span>{m === 'cash' ? l10n.getString('payment-split-method-cash') : l10n.getString('payment-split-method-card')}</span>
                           </label>
                         ))}
                         <label className="payment-split-radio-label">
@@ -717,35 +767,39 @@ export default function PaymentModal({
                             checked={s.method === 'other'}
                             onChange={() => updateSplit(s.id, { method: 'other' })}
                           />
-                          <input
-                            type="text"
-                            className="payment-split-other-input"
-                            placeholder="Other"
-                            value={s.otherLabel}
-                            onChange={(e) => updateSplit(s.id, { otherLabel: e.target.value })}
-                            disabled={s.method !== 'other'}
-                            aria-label="Other payment method name"
-                          />
+                          <Localized id="payment-split-other-placeholder" attrs={{ placeholder: true }}>
+                            <input
+                              type="text"
+                              className="payment-split-other-input"
+                              placeholder="Other"
+                              value={s.otherLabel}
+                              onChange={(e) => updateSplit(s.id, { otherLabel: e.target.value })}
+                              disabled={s.method !== 'other'}
+                              aria-label={l10n.getString('payment-split-other-aria')}
+                            />
+                          </Localized>
                         </label>
                       </div>
                       <div className="payment-split-amount-group">
                         <span className="payment-split-currency">$</span>
-                        <input
-                          type="text"
-                          className="payment-split-amount-input"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                          value={s.amountMinor}
-                          onChange={(e) => updateSplit(s.id, { amountMinor: e.target.value })}
-                          aria-label="Split amount"
-                        />
+                        <Localized id="payment-split-amount-placeholder" attrs={{ placeholder: true }}>
+                          <input
+                            type="text"
+                            className="payment-split-amount-input"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={s.amountMinor}
+                            onChange={(e) => updateSplit(s.id, { amountMinor: e.target.value })}
+                            aria-label={l10n.getString('payment-split-amount-aria')}
+                          />
+                        </Localized>
                       </div>
                       <button
                         type="button"
                         className="payment-split-remove"
                         onClick={() => removeSplit(s.id)}
                         disabled={splits.length <= 1}
-                        aria-label="Remove split"
+                        aria-label={l10n.getString('payment-split-remove-aria')}
                       >
                         &times;
                       </button>
@@ -754,7 +808,9 @@ export default function PaymentModal({
                 </div>
 
                 <div className="payment-split-remaining">
-                  <span className="payment-split-remaining-label">Remaining</span>
+                  <Localized id="payment-split-remaining">
+                    <span className="payment-split-remaining-label">Remaining</span>
+                  </Localized>
                   <span
                     className={`payment-split-remaining-amount ${
                       splitTotals.remaining !== 0n ? 'payment-split-remaining-positive' : ''
@@ -776,21 +832,25 @@ export default function PaymentModal({
                   checked={splitMode}
                   onChange={(e) => setSplitMode(e.target.checked)}
                 />
-                <span>Split payment across methods</span>
+                {l10n.getString('payment-split-toggle')}
               </label>
             </div>
 
             <div className="payment-actions">
-              <Button variant="ghost" onClick={onClose} disabled={processing}>
-                Cancel
-              </Button>
+              <Localized id="payment-cancel">
+                <Button variant="ghost" onClick={onClose} disabled={processing}>
+                  Cancel
+                </Button>
+              </Localized>
               <Button
                 variant="primary"
                 loading={processing}
                 disabled={!canComplete}
                 onClick={complete}
               >
-                Complete Sale
+                <Localized id="payment-complete">
+                  <span>Complete Sale</span>
+                </Localized>
               </Button>
             </div>
           </>

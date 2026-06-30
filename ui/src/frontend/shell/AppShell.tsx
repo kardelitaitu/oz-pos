@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout, { type AppRoute } from './AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
@@ -89,7 +90,7 @@ export default function AppShell() {
           fontSize: 'var(--text-base)',
         }}
       >
-        Loading…
+        <Localized id="shared-loading">Loading&hellip;</Localized>
       </div>
     );
   }

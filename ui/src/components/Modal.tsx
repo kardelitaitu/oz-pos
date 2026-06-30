@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useId, type ReactNode } from 'react';
+import { useLocalization } from '@fluent/react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export function Modal({
   footer,
   showCloseButton = true,
 }: ModalProps) {
+  const { l10n } = useLocalization();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -142,7 +144,7 @@ export function Modal({
               type="button"
               className="modal-close-btn"
               onClick={onClose}
-              aria-label="Close dialog"
+               aria-label={l10n.getString('modal-close-aria')}
             >
               {/* X icon */}
               <svg

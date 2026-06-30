@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { useLocalization } from '@fluent/react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 let toastCounter = 0;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const { l10n } = useLocalization();
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const removeToast = useCallback((id: string) => {
@@ -53,7 +55,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               type="button"
               className="toast__dismiss"
               onClick={() => removeToast(t.id)}
-              aria-label="Dismiss"
+              aria-label={l10n.getString('toast-dismiss-aria')}
             >
               &times;
             </button>

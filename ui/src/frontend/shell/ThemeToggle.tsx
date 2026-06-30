@@ -10,17 +10,16 @@ export default function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <button
-      type="button"
-      onClick={toggleTheme}
-      aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-      className="theme-toggle"
-      data-testid="theme-toggle"
-    >
-      <Localized id="theme-toggle-label">
-        <span className="sr-only">Toggle theme</span>
-      </Localized>
-
+    <Localized id="theme-toggle-aria" attrs={{ 'aria-label': true }} vars={{ mode: theme === 'light' ? 'dark' : 'light' }}>
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="theme-toggle"
+        data-testid="theme-toggle"
+      >
+        <Localized id="theme-toggle-label">
+          <span className="sr-only">Toggle theme</span>
+        </Localized>
       {theme === 'light' ? (
         /* Moon icon (click to go dark) */
         <svg
@@ -61,5 +60,6 @@ export default function ThemeToggle() {
         </svg>
       )}
     </button>
+    </Localized>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import type { Update } from '@tauri-apps/plugin-updater';
 import './UpdateBanner.css';
 
@@ -66,6 +67,7 @@ function useUpdateCheck(): UpdateState {
  * the top of the content area with an "Install" action.
  */
 export default function UpdateBanner() {
+  const { l10n } = useLocalization();
   const { info: update, instance: updateInstance } = useUpdateCheck();
   const [dismissed, setDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -108,8 +110,8 @@ export default function UpdateBanner() {
           <polyline points="17 6 23 6 23 12" />
         </svg>
         <span className="update-banner-text">
-          <strong>Update available:</strong>{' '}
-          {update.version ? `v${update.version}` : 'New version'}
+          <Localized id="update-banner-title"><strong>Update available:</strong></Localized>{' '}
+          {update.version ? `v${update.version}` : l10n.getString('update-banner-new-version')}
           {update.notes && <span className="update-banner-notes"> — {update.notes}</span>}
         </span>
       </div>
@@ -119,15 +121,15 @@ export default function UpdateBanner() {
           className="update-banner-btn update-banner-btn--primary"
           onClick={handleInstall}
           disabled={installing}
-          aria-label={installing ? 'Installing update…' : 'Download and install update'}
+          aria-label={l10n.getString(installing ? 'update-banner-installing-aria' : 'update-banner-install-aria')}
         >
-          {installing ? 'Installing…' : 'Install'}
+          {l10n.getString(installing ? 'update-banner-installing' : 'update-banner-install')}
         </button>
         <button
           type="button"
           className="update-banner-btn update-banner-btn--dismiss"
           onClick={() => setDismissed(true)}
-          aria-label="Dismiss update notification"
+          aria-label={l10n.getString('update-banner-dismiss-aria')}
         >
           <svg
             width="14"

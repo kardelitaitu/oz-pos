@@ -47,6 +47,18 @@ staff-role-select-default = Select a role…
 staff-btn-cancel = Cancel
 staff-btn-update = Update
 staff-btn-create = Create
+staff-error-username-required = Username is required
+staff-error-display-name-required = Display name is required
+staff-error-role-required = Please select a role
+staff-error-pin-length = PIN must be at least 4 characters
+staff-error-save-failed = Failed to save staff member
+staff-table-aria = Staff members
+staff-field-username-aria =
+    .aria-label = Username
+staff-field-name-aria =
+    .aria-label = Display Name
+staff-field-pin-aria =
+    .aria-label = PIN
 staff-error-generic = { $message }
 
 # ── Staff Login ──────────────────────────────────────────────────────────

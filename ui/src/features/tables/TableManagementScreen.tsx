@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { listTables, updateTableStatus, releaseTable, type Table } from '@/api/tables';
 import './TableManagementScreen.css';
 
@@ -11,6 +11,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function TableManagementScreen() {
+  const { l10n } = useLocalization();
   const [tables, setTables] = useState<Table[]>([]);
   const [selected, setSelected] = useState<Table | null>(null);
   const [section, setSection] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export default function TableManagementScreen() {
   };
 
   return (
-    <div className="tables" role="region" aria-label="Table management">
+    <div className="tables" role="region" aria-label={l10n.getString('tables-management-label')}>
       <h1 className="tables-title"><Localized id="tables-title">Table Management</Localized></h1>
       <div className="tables-sections">
         <button className={`tables-section-btn ${section === null ? 'active' : ''}`}
@@ -42,7 +43,7 @@ export default function TableManagementScreen() {
             onClick={() => setSection(s)}>{s}</button>
         ))}
       </div>
-      <div className="tables-floorplan" role="list" aria-label="Floor plan">
+      <div className="tables-floorplan" role="list" aria-label={l10n.getString('tables-floorplan-label')}>
         {tables.map((t) => (
           <button key={t.id} className="tables-table"
             onClick={() => setSelected(t)}
@@ -52,7 +53,7 @@ export default function TableManagementScreen() {
               width: `${t.width}%`, height: `${t.height}%`,
               backgroundColor: STATUS_COLORS[t.status] ?? '#6b7280',
             }}
-            aria-label={`${t.name}, ${t.status}`}
+            aria-label={l10n.getString('tables-table-label', { name: t.name, status: t.status })}
           >
             <span className="tables-table-name">{t.name}</span>
             <span className="tables-table-status">{t.status}</span>
@@ -60,14 +61,14 @@ export default function TableManagementScreen() {
         ))}
       </div>
       {selected && (
-        <div className="tables-detail" role="dialog" aria-label="Table detail">
+        <div className="tables-detail" role="dialog" aria-label={l10n.getString('tables-detail-label')}>
           <h2>{selected.name}</h2>
-          <p>Capacity: {selected.capacity}</p>
-          <p>Status: {selected.status}</p>
-          <p>Section: {selected.section || '—'}</p>
+          <p><Localized id="tables-capacity-label" vars={{ capacity: selected.capacity }}>Capacity: {selected.capacity}</Localized></p>
+          <p><Localized id="tables-status-label" vars={{ status: selected.status }}>Status: {selected.status}</Localized></p>
+          <p><Localized id="tables-section-label" vars={{ section: selected.section || '—' }}>Section: {selected.section || '—'}</Localized></p>
           <div className="tables-detail-actions">
             <button onClick={() => { statusAction(selected); setSelected(null); }}>
-              {selected.status === 'occupied' ? 'Release' : 'Mark Available'}
+              <Localized id={selected.status === 'occupied' ? 'tables-release' : 'tables-mark-available'}>{selected.status === 'occupied' ? 'Release' : 'Mark Available'}</Localized>
             </button>
             <button onClick={() => setSelected(null)}><Localized id="close">Close</Localized></button>
           </div>

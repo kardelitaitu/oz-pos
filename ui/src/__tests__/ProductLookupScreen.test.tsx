@@ -17,8 +17,8 @@ const wrap = (children: React.ReactNode) =>
 describe('ProductLookupScreen', () => {
   it('renders the search bar and barcode input', () => {
     render(wrap(<ProductLookupScreen />));
-    expect(screen.getByRole('searchbox', { name: /search products/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/barcode input/i)).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: /search for products/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/enter or scan a barcode/i)).toBeInTheDocument();
   });
 
   it('renders category filter chips after loading', async () => {
@@ -40,7 +40,7 @@ describe('ProductLookupScreen', () => {
 
   it('renders all products in the grid by default', async () => {
     render(wrap(<ProductLookupScreen />));
-    const list = await screen.findByRole('list', { name: /products/i });
+    const list = await screen.findByRole('list', { name: /product search results/i });
     // 18 sample products
     const items = within(list).getAllByRole('listitem');
     expect(items.length).toBe(18);
@@ -48,15 +48,15 @@ describe('ProductLookupScreen', () => {
 
   async function waitForProducts() {
     // Wait for the async IPC fallback to load sample products.
-    await screen.findByRole('list', { name: /products/i });
+    await screen.findByRole('list', { name: /product search results/i });
   }
 
   it('filters products by search query (name)', async () => {
     render(wrap(<ProductLookupScreen />));
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search products/i });
+    const search = screen.getByRole('searchbox', { name: /search for products/i });
     await userEvent.type(search, 'Latte');
-    const list = screen.getByRole('list', { name: /products/i });
+    const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     // "Caffè Latte", "Matcha Latte"
     expect(items.length).toBe(2);
@@ -67,9 +67,9 @@ describe('ProductLookupScreen', () => {
   it('filters products by search query (SKU)', async () => {
     render(wrap(<ProductLookupScreen />));
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search products/i });
+    const search = screen.getByRole('searchbox', { name: /search for products/i });
     await userEvent.type(search, 'ESPR');
-    const list = screen.getByRole('list', { name: /products/i });
+    const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     expect(items.length).toBe(1);
     expect(screen.getByText(/Espresso Shot/)).toBeInTheDocument();
@@ -78,10 +78,10 @@ describe('ProductLookupScreen', () => {
   it('filters products by search query (barcode)', async () => {
     render(wrap(<ProductLookupScreen />));
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search products/i });
+    const search = screen.getByRole('searchbox', { name: /search for products/i });
     // Search for barcode "4901234567904" (Orange Juice)
     await userEvent.type(search, '7904');
-    const list = screen.getByRole('list', { name: /products/i });
+    const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     expect(items.length).toBe(1);
     expect(screen.getByText(/Orange Juice/)).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('ProductLookupScreen', () => {
   it('shows empty state when no products match', async () => {
     render(wrap(<ProductLookupScreen />));
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search products/i });
+    const search = screen.getByRole('searchbox', { name: /search for products/i });
     await userEvent.type(search, 'zzzznotfound');
     expect(screen.getByText(/no products found/i)).toBeInTheDocument();
   });
@@ -101,7 +101,7 @@ describe('ProductLookupScreen', () => {
     const foodChip = screen.getByRole('radio', { name: /^Food$/ });
     await userEvent.click(foodChip);
 
-    const list = screen.getByRole('list', { name: /products/i });
+    const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     // 10 food items (Bagel, Bagel-S, Croissant, Blueberry Muffin, Chocolate Muffin,
     // Chicken Sandwich, Veggie Sandwich, Cookie, Brownie, Banana Muffin)
@@ -118,7 +118,7 @@ describe('ProductLookupScreen', () => {
     // Then back to All
     await userEvent.click(screen.getByRole('radio', { name: /all categories/i }));
 
-    const list = screen.getByRole('list', { name: /products/i });
+    const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     expect(items.length).toBe(18);
   });
@@ -145,7 +145,7 @@ describe('ProductLookupScreen', () => {
     expect(outOfStock.length).toBeGreaterThanOrEqual(2); // Brownie + Chocolate Muffin
 
     // All 18 cards have buttons (disabled for out-of-stock)
-    const productButtons = screen.getAllByRole('button', { name: /—/ });
+    const productButtons = screen.getAllByRole('button', { name: /sku:/i });
     expect(productButtons.length).toBe(18);
 
     // 2 buttons should be disabled (out of stock)
@@ -158,7 +158,7 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const addBtn = screen.getByRole('button', { name: /caffè latte —/i });
+    const addBtn = screen.getByRole('button', { name: /caffè latte.*sku: latte/i });
     await userEvent.click(addBtn);
 
     expect(handler).toHaveBeenCalledTimes(1);
@@ -172,7 +172,7 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const cardBtn = screen.getByRole('button', { name: /caffè latte —/i });
+    const cardBtn = screen.getByRole('button', { name: /caffè latte.*sku: latte/i });
     cardBtn.focus();
     await userEvent.keyboard('{Enter}');
 
@@ -184,7 +184,7 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const barcodeInput = screen.getByLabelText(/barcode input/i);
+    const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
     await userEvent.type(barcodeInput, '4901234567890{Enter}');
 
     expect(handler).toHaveBeenCalledTimes(1);
@@ -197,10 +197,10 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const barcodeInput = screen.getByLabelText(/barcode input/i);
+    const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
     await userEvent.type(barcodeInput, '4901234567904');
 
-    const scanBtn = screen.getByRole('button', { name: /submit barcode/i });
+    const scanBtn = screen.getByRole('button', { name: /submit the entered barcode/i });
     await userEvent.click(scanBtn);
 
     expect(handler).toHaveBeenCalledTimes(1);
@@ -213,7 +213,7 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const barcodeInput = screen.getByLabelText(/barcode input/i);
+    const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
     await userEvent.type(barcodeInput, '0000000000000');
     await userEvent.keyboard('{Enter}');
 
@@ -225,7 +225,7 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const barcodeInput = screen.getByLabelText(/barcode input/i);
+    const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
     await userEvent.type(barcodeInput, '4901234567890{Enter}');
 
     expect(barcodeInput).toHaveValue('');
@@ -253,7 +253,7 @@ describe('ProductLookupScreen', () => {
       ),
     );
 
-    const barcodeInput = screen.getByLabelText(/barcode input/i);
+    const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
     await userEvent.type(barcodeInput, '0000000000000{Enter}');
 
     // The catch block silently swallows the ScannerError.

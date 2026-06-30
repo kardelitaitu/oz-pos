@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Localized } from '@/components/Localized';
+import { Localized, useLocalization } from '@fluent/react';
 import { listProducts, listCategories } from '@/api/products';
 import type { ProductDto, CategoryDto } from '@/api/products';
 import './KioskScreen.css';
@@ -12,6 +12,7 @@ interface CartItem {
 }
 
 export default function KioskScreen() {
+  const { l10n } = useLocalization();
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -81,7 +82,7 @@ export default function KioskScreen() {
 
   if (idle) {
     return (
-      <div className="kiosk-attract" role="button" aria-label="Kiosk attract screen" tabIndex={0} onClick={resetIdle} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') resetIdle(); }}>
+      <div className="kiosk-attract" role="button" aria-label={l10n.getString('kiosk-attract-label')} tabIndex={0} onClick={resetIdle} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') resetIdle(); }}>
         <div className="kiosk-attract-content">
           <h1 className="kiosk-attract-title">OZ-POS</h1>
           <p className="kiosk-attract-subtitle"><Localized id="kiosk-tap-to-start">Tap to start</Localized></p>
@@ -92,7 +93,7 @@ export default function KioskScreen() {
 
   if (checkout) {
     return (
-      <div className="kiosk-checkout" role="region" aria-label="Checkout">
+      <div className="kiosk-checkout" role="region" aria-label={l10n.getString('kiosk-section-checkout')}>
         <h2><Localized id="kiosk-checkout-title">Checkout</Localized></h2>
         <div className="kiosk-checkout-items">
           {cart.map((c) => (
@@ -110,10 +111,10 @@ export default function KioskScreen() {
           alert('Payment processed! (simulated)');
           setCart([]);
           setCheckout(false);
-        }} aria-label="Pay">
+        }} aria-label={l10n.getString('kiosk-pay')}>
           <Localized id="kiosk-pay">Pay</Localized>
         </button>
-        <button className="kiosk-checkout-back" onClick={() => setCheckout(false)} aria-label="Back">
+        <button className="kiosk-checkout-back" onClick={() => setCheckout(false)} aria-label={l10n.getString('back')}>
           <Localized id="back">Back</Localized>
         </button>
       </div>
@@ -121,8 +122,8 @@ export default function KioskScreen() {
   }
 
   return (
-    <div className="kiosk" role="region" aria-label="Self-service kiosk">
-      <div className="kiosk-categories" role="tablist" aria-label="Categories">
+    <div className="kiosk" role="region" aria-label={l10n.getString('kiosk-section-kiosk')}>
+      <div className="kiosk-categories" role="tablist" aria-label={l10n.getString('kiosk-section-categories')}>
         <button
           className={`kiosk-cat-chip ${activeCategory === null ? 'active' : ''}`}
           onClick={() => setActiveCategory(null)}
@@ -144,33 +145,33 @@ export default function KioskScreen() {
         ))}
       </div>
 
-      <div className="kiosk-grid" role="list" aria-label="Products">
+      <div className="kiosk-grid" role="list" aria-label={l10n.getString('kiosk-section-products')}>
         {filtered.map((p) => (
           <button
             key={p.sku}
             className="kiosk-product-card"
             onClick={() => addToCart(p)}
-            aria-label={`${p.name}, $${(p.price.minor_units / 100).toFixed(2)}`}
+            aria-label={l10n.getString('kiosk-product-label', { name: p.name, price: `$${(p.price.minor_units / 100).toFixed(2)}` })}
           >
             <span className="kiosk-product-name">{p.name}</span>
             <span className="kiosk-product-price">${(p.price.minor_units / 100).toFixed(2)}</span>
             {p.stock_qty !== null && p.stock_qty <= 5 && (
-              <span className="kiosk-stock-badge">{p.stock_qty} left</span>
+              <span className="kiosk-stock-badge"><Localized id="kiosk-stock-left" vars={{ count: p.stock_qty }}>{p.stock_qty} left</Localized></span>
             )}
           </button>
         ))}
       </div>
 
       {cart.length > 0 && (
-        <div className="kiosk-cart" role="region" aria-label="Cart">
+        <div className="kiosk-cart" role="region" aria-label={l10n.getString('kiosk-section-cart')}>
           <div className="kiosk-cart-items">
             {cart.map((c) => (
               <div key={c.product.sku} className="kiosk-cart-item">
                 <span className="kiosk-cart-name">{c.product.name}</span>
                 <div className="kiosk-cart-controls">
-                  <button onClick={() => updateQty(c.product.sku, -1)} aria-label="Decrease">&minus;</button>
+                  <button onClick={() => updateQty(c.product.sku, -1)} aria-label={l10n.getString('kiosk-decrease')}>&minus;</button>
                   <span>{c.qty}</span>
-                  <button onClick={() => updateQty(c.product.sku, 1)} aria-label="Increase">+</button>
+                  <button onClick={() => updateQty(c.product.sku, 1)} aria-label={l10n.getString('kiosk-increase')}>+</button>
                 </div>
                 <span className="kiosk-cart-price">${((c.product.price.minor_units * c.qty) / 100).toFixed(2)}</span>
               </div>
@@ -180,7 +181,7 @@ export default function KioskScreen() {
             <span><Localized id="kiosk-total">Total</Localized></span>
             <span>${(totalMinor / 100).toFixed(2)}</span>
           </div>
-          <button className="kiosk-checkout-btn" onClick={() => setCheckout(true)} aria-label="Checkout">
+          <button className="kiosk-checkout-btn" onClick={() => setCheckout(true)} aria-label={l10n.getString('kiosk-checkout')}>
             <Localized id="kiosk-checkout">Checkout</Localized>
           </button>
         </div>

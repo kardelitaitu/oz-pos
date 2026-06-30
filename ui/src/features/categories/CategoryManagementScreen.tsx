@@ -170,15 +170,17 @@ export default function CategoryManagementScreen() {
                   <span className="cat-mgmt-card-id">{cat.id}</span>
                   <span className="cat-mgmt-card-colour">{cat.colour}</span>
                 </div>
-                <button
-                  type="button"
-                  className="cat-mgmt-delete-btn"
-                  onClick={() => setDeleteTarget({ id: cat.id, name: cat.name })}
-                  disabled={deleting === cat.id}
-                  aria-label={`Delete category ${cat.name}`}
-                >
-                  &times;
-                </button>
+                <Localized id="category-delete-aria" attrs={{ 'aria-label': true }} vars={{ name: cat.name }}>
+                  <button
+                    type="button"
+                    className="cat-mgmt-delete-btn"
+                    onClick={() => setDeleteTarget({ id: cat.id, name: cat.name })}
+                    disabled={deleting === cat.id}
+                    aria-label={`Delete category ${cat.name}`}
+                  >
+                    &times;
+                  </button>
+                </Localized>
               </div>
             </Card>
           ))}
@@ -187,20 +189,23 @@ export default function CategoryManagementScreen() {
 
       {/* ── Delete confirmation modal ──────────────────────── */}
       {deleteTarget && (
+        <Localized id="category-delete-dialog-aria" attrs={{ 'aria-label': true }}>
         <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete category">
           <div className="cat-mgmt-modal">
             <div className="cat-mgmt-modal-header">
               <Localized id="categories-delete-confirm" vars={{ name: deleteTarget.name }}>
                 <h2 className="cat-mgmt-modal-title">Delete &quot;{deleteTarget.name}&quot;?</h2>
               </Localized>
-              <button
-                type="button"
-                className="cat-mgmt-modal-close"
-                onClick={() => setDeleteTarget(null)}
-                aria-label="Close"
-              >
-                &times;
-              </button>
+              <Localized id="close" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="cat-mgmt-modal-close"
+                  onClick={() => setDeleteTarget(null)}
+                  aria-label="Close"
+                >
+                  &times;
+                </button>
+              </Localized>
             </div>
             <div className="cat-mgmt-modal-body">
               <Localized id="categories-delete-warning">
@@ -228,6 +233,7 @@ export default function CategoryManagementScreen() {
             </div>
           </div>
         </div>
+        </Localized>
       )}
 
       {/* ── Create modal ──────────────────────────────── */}
@@ -238,14 +244,16 @@ export default function CategoryManagementScreen() {
               <Localized id="categories-add">
                 <h2 className="cat-mgmt-modal-title">Add Category</h2>
               </Localized>
-              <button
-                type="button"
-                className="cat-mgmt-modal-close"
-                onClick={() => setShowModal(false)}
-                aria-label="Close"
-              >
-                &times;
-              </button>
+              <Localized id="close" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="cat-mgmt-modal-close"
+                  onClick={() => setShowModal(false)}
+                  aria-label="Close"
+                >
+                  &times;
+                </button>
+              </Localized>
             </div>
 
             <div className="cat-mgmt-modal-body">
@@ -280,24 +288,27 @@ export default function CategoryManagementScreen() {
                 <Localized id="categories-colour">
                   <span className="cat-mgmt-label">Colour</span>
                 </Localized>
+                <Localized id="category-colour-picker-aria" attrs={{ 'aria-label': true }}>
                 <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label="Pick a colour">
                   {COLOURS.map((colour) => (
-                    <button
-                      key={colour}
-                      type="button"
-                      role="radio"
-                      aria-checked={newColour === colour}
-                      className={
-                        newColour === colour
-                          ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
-                          : 'cat-mgmt-colour-swatch'
-                      }
-                      style={{ background: colour }}
-                      onClick={() => setNewColour(colour)}
-                      aria-label={`Select colour ${colour}`}
-                    />
+                    <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={newColour === colour}
+                        className={
+                          newColour === colour
+                            ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
+                            : 'cat-mgmt-colour-swatch'
+                        }
+                        style={{ background: colour }}
+                        onClick={() => setNewColour(colour)}
+                        aria-label={`Select colour ${colour}`}
+                      />
+                    </Localized>
                   ))}
                 </div>
+                </Localized>
               </div>
 
               {/* Preview */}
@@ -312,7 +323,7 @@ export default function CategoryManagementScreen() {
                     color: '#fff',
                   }}
                 >
-                  {newName.trim() || 'Category Name'}
+                  {newName.trim() || <Localized id="category-name-fallback"><span>Category Name</span></Localized>}
                 </span>
               </div>
 

@@ -5,6 +5,13 @@
 # Design system showcase
 ds-title = Design System
 theme-toggle-label = Toggle theme
+theme-toggle-aria =
+    .aria-label = Switch to { $mode } mode
+theme-toggle-aria =
+    .aria-label = Switch to { $mode ->
+        [dark] dark
+       *[light] light
+    } mode
 
 # Badge
 badge-default = Badge
@@ -36,6 +43,20 @@ error-state-retry = Retry
 # Navigation
 nav-inventory = Inventory
 
+# Common / Global
+cancel = Cancel
+save = Save
+delete = Delete
+edit = Edit
+close = Close
+loading = Loading…
+print = Print
+back = Back
+retry = Retry
+search = Search
+no-results = No results found
+error-occurred = An error occurred
+
 # Audit Log
 audit-log-title = Audit Log
 audit-log-load-more = Load More
@@ -59,6 +80,96 @@ audit-log-count = { $count } entr{ $count ->
   *[other] ies
 }
 
+# Update Banner
+update-banner-title = Update available
+update-banner-new-version = New version
+update-banner-install = Install
+update-banner-installing = Installing…
+update-banner-install-aria = Download and install update
+update-banner-installing-aria = Installing update…
+update-banner-dismiss-aria = Dismiss update notification
+
+# Toast
+toast-dismiss-aria = Dismiss notification
+toast-notifications-aria = Notifications
+
+# Modal
+modal-close-aria = Close dialog
+
+# Permission Denied
+permission-denied-title = Access Denied
+permission-denied-desc = { $action } requires a { $requiredRole } role.
+permission-denied-current = You are logged in as { $displayName } ({ $roleName }).
+permission-denied-go-back = Go back
+
+# Store Switcher
+store-switcher-select = Select Store
+store-switcher-current-aria = Current store: { $name }. Click to switch.
+store-switcher-list-aria = Stores
+store-switcher-primary = · Primary
+
+# Gateway Status
+gateway-status-online-aria = { $name } online
+gateway-status-offline-aria = { $name } offline
+
+# Role Badge
+role-badge-logged-in-aria = Logged in as { $displayName }, { $roleName }
+role-badge-logout-aria = Log out { $displayName }
+role-badge-logout-title = Log out
+
+# Language Selector
+language-selector-label = Language
+language-selector-select-aria = Select language
+
+# Locale labels
+locale-en = English
+locale-id = Bahasa Indonesia
+locale-th = ภาษาไทย
+
+# Navigation
+nav-pos-terminal = POS Terminal
+nav-kds = KDS
+nav-products = Products
+nav-stock-adjust = Stock Adjust
+nav-sales-history = Sales History
+nav-dashboard = Dashboard
+nav-eod-report = EOD Report
+nav-orders = Orders
+nav-tax-rates = Tax Rates
+nav-exchange-rates = Exchange Rates
+nav-categories = Categories
+nav-customers = Customers
+nav-loyalty = Loyalty
+nav-staff = Staff
+nav-terminals = Terminals
+nav-stores = Stores
+nav-features = Features
+nav-data = Data
+nav-audit-log = Audit Log
+nav-offline-queue = Offline Queue
+nav-shifts = Shifts
+nav-bundles = Bundles
+nav-settings = Settings
+nav-dashboard-report = Dashboard
+nav-sales-report = Sales Report
+nav-inventory-report = Inventory Report
+nav-design-system = Design System
+nav-kiosk = Kiosk
+nav-tables = Tables
+nav-promotions = Promotions
+nav-pos = POS
+nav-stock = Stock
+nav-history = History
+nav-reports = Reports
+nav-section-app = App
+nav-sidebar-collapse = Collapse sidebar
+nav-sidebar-expand = Expand sidebar
+nav-main-aria = Main navigation
+nav-tablist-aria = Navigation tabs
+
+# Shell
+shell-loading = Loading…
+
 # Audit Action Labels
 audit-action-sale-void = Void Sale
 audit-action-sale-complete = Complete Sale
@@ -76,3 +187,7 @@ audit-action-system-backup = Backup Created
 audit-action-system-restore = Restore
 audit-action-system-export = Data Export
 audit-action-system-import = Data Import
+audit-log-table-label = Audit log entries
+audit-log-search-placeholder = Search actions, targets, or users…
+audit-log-search-label = Search audit log
+audit-log-filter-label = Filter by outcome

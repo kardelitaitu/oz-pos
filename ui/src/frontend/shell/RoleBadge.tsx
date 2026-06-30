@@ -1,3 +1,4 @@
+import { useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import './RoleBadge.css';
 
@@ -9,6 +10,7 @@ import './RoleBadge.css';
  * Clicking the badge opens a logout confirmation.
  */
 export default function RoleBadge() {
+  const { l10n } = useLocalization();
   const { session, logout } = useAuth();
 
   if (!session) return null;
@@ -25,7 +27,7 @@ export default function RoleBadge() {
   const variant = roleVariant();
 
   return (
-    <div className="role-badge" aria-label={`Logged in as ${session.display_name}, ${session.role_name}`}>
+    <div className="role-badge" aria-label={l10n.getString('role-badge-logged-in-aria', { displayName: session.display_name, roleName: session.role_name })}>
       <div className="role-badge-avatar">
         {session.display_name.charAt(0).toUpperCase()}
       </div>
@@ -39,8 +41,8 @@ export default function RoleBadge() {
         type="button"
         className="role-badge-logout"
         onClick={logout}
-        aria-label={`Log out ${session.display_name}`}
-        title="Log out"
+        aria-label={l10n.getString('role-badge-logout-aria', { displayName: session.display_name })}
+        title={l10n.getString('role-badge-logout-title')}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

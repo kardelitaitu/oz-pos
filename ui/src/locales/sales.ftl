@@ -22,13 +22,90 @@ pos-login-required-title = Login Required
 pos-login-required-message = Please log in to use the POS.
 
 # Bundle Expansion
-pos-bundle-expanded = Bundle added: { $count } item{ $count ->
-  [one] 
-  *[other] s
-} to cart
+pos-bundle-expanded =
+    { $count ->
+        [one] Bundle "{ $name }" added — 1 item to cart
+       *[other] Bundle "{ $name }" added — { $count } items to cart
+    }
+pos-no-barcode-match = No product or bundle matches this barcode
+pos-close-shift-cart-error = Complete or clear the current sale before closing the shift.
+pos-close-shift-failed = Failed to close shift
 
 # Scanner
 pos-scanner-error = Scanner error: { $detail }
+
+# Payment Modal
+payment-dialog-aria =
+    .aria-label = Payment
+payment-title = Complete Sale
+payment-close-aria =
+    .aria-label = Cancel payment
+payment-done-title = Sale Complete
+payment-change-label = Change due
+payment-done-receipt = Receipt printed
+payment-total-due = Total Due
+payment-currency-aria =
+    .aria-label = Charge currency
+payment-currency-label = Charge Currency
+payment-currency-select-aria =
+    .aria-label = Select charge currency
+payment-exchange-aria =
+    .aria-label = Exchange rate information
+payment-exchange-rate = Exchange rate
+payment-rate-source = Rate source
+payment-rate-timestamp = Rate timestamp
+payment-rate-source-manual = manual
+payment-receipt-currency-aria =
+    .aria-label = Receipt currency information
+payment-charged-in = Charged in
+payment-default-currency = Default currency
+payment-base-amount = Base amount
+payment-charge-amount = Charge amount
+payment-method-label = Payment Method
+payment-method-cash = Cash
+payment-method-card = Card
+payment-method-qris = QRIS
+payment-other-placeholder =
+    .placeholder = Other...
+payment-other-aria =
+    .aria-label = Other payment method name
+payment-amount-tendered = Amount Tendered
+payment-tendered-placeholder =
+    .placeholder = 0.00
+payment-tendered-aria =
+    .aria-label = Amount tendered
+payment-quick-tender-aria = Tender { $amount }
+payment-tender-exact-aria = Tend exact amount
+payment-tender-exact = Exact
+payment-change = Change
+payment-insufficient = Insufficient amount
+payment-qris-description = Generate a QRIS QR code for the customer to scan with their payment app.
+payment-qris-btn-aria =
+    .aria-label = Generate QRIS QR code
+payment-qris-pay = Pay with QR
+payment-split-title = Split Payments
+payment-split-evenly-aria =
+    .aria-label = Split evenly
+payment-split-evenly = Split Evenly
+payment-split-add-aria =
+    .aria-label = Add split
+payment-split-add = + Add Split
+payment-split-method-cash = Cash
+payment-split-method-card = Card
+payment-split-other-placeholder =
+    .placeholder = Other
+payment-split-other-aria =
+    .aria-label = Other payment method name
+payment-split-amount-aria =
+    .aria-label = Split amount
+payment-split-amount-placeholder =
+    .placeholder = 0.00
+payment-split-remove-aria =
+    .aria-label = Remove split
+payment-split-remaining = Remaining
+payment-split-toggle = Split payment across methods
+payment-cancel = Cancel
+payment-complete = Complete Sale
 
 # Sales History
 sales-history-title = Sales History
@@ -93,6 +170,21 @@ sales-history-void-progress = Voiding…
 sales-history-detail-loading = Loading…
 sales-history-action-view = View
 sales-history-action-void = Void
+sales-history-void-aria =
+    .aria-label = Void order { $id }
+sales-history-void-reason-placeholder =
+    .placeholder = e.g. Customer cancellation
+sales-history-void-default-reason = Voided from sales history
+sales-history-void-error = Failed to void order
+
+# Sales History export
+sales-history-export-id = Sale ID
+sales-history-export-date = Date
+sales-history-export-total = Total
+sales-history-export-items = Items
+sales-history-export-status = Status
+sales-history-export-payment = Payment
+sales-history-export-cashier = Cashier
 
 # Sales Dashboard
 sales-dashboard-title = Sales Dashboard
@@ -288,3 +380,64 @@ eod-summary-voided-sales = Voided Sales
 eod-summary-voided-value = Voided Value
 eod-summary-discounts = Sales with Discounts
 eod-summary-payment-methods = Payment Methods Used
+
+pos-cart-add-discount = + Add Discount
+pos-cart-apply = Apply
+pos-cart-cancel = Cancel
+pos-cart-clear = Clear
+pos-cart-discount-label = Discount ({ $label })
+pos-cart-hold = Hold
+pos-cart-label-placeholder =
+    .placeholder = Label (optional)
+pos-cart-lock = Lock
+pos-cart-lock-aria =
+    .aria-label = Lock terminal and log out
+pos-cart-lock-title = Lock terminal
+pos-cart-pct-placeholder =
+    .placeholder = %
+pos-cart-removed = Removed { $name }
+pos-cart-subtotal = Subtotal
+pos-cart-undo = Undo
+pos-close-shift-counted-label = Counted cash in drawer (minor units)
+pos-close-shift-counted-placeholder =
+    .placeholder = e.g. 15000 for $150.00
+pos-close-shift-notes-label = Notes (optional)
+pos-close-shift-notes-placeholder =
+    .placeholder = Any notes about this shift…
+pos-close-shift-opened = Opened
+pos-close-shift-opening-balance = Opening balance
+pos-close-shift-title = Close Shift
+pos-held-empty = No held orders.
+pos-held-orders = Held Orders
+pos-held-resume = Resume
+pos-hold-cancel = Cancel
+pos-hold-desc = Enter a name for this held order so you can find it later.
+pos-hold-label-placeholder =
+    .placeholder = e.g. Customer waiting for manager
+pos-hold-title = Hold Current Order
+pos-login-desc = Please log in to use the POS.
+pos-login-required = Login Required
+pos-open-shift-balance-label = Opening balance (minor units)
+pos-open-shift-balance-placeholder =
+    .placeholder = e.g. 500 for $5.00
+pos-open-shift-title = Open Shift
+pos-shift-card-sales = Card Sales
+pos-shift-cash-sales = Cash Sales
+pos-shift-closed-title = Shift Closed
+pos-shift-counted = Counted
+pos-shift-difference = Difference
+pos-shift-expected-cash = Expected Cash
+pos-shift-header-close = Close Shift
+pos-shift-header-close-aria =
+    .aria-label = Close current shift
+pos-shift-header-open = Open Shift
+pos-shift-header-open-aria =
+    .aria-label = Open a new shift
+pos-shift-loading = Loading shift…
+pos-shift-no-active = No active shift
+pos-shift-notes = Notes
+pos-shift-open-since = Shift open since { $time }
+pos-shift-summary-done = Done
+pos-shift-total-sales = Total Sales
+pos-shift-over = Over
+pos-shift-short = Short

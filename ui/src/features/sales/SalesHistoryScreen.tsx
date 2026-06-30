@@ -99,7 +99,7 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
                   onVoid(sale);
                   setRevealed(false);
                 }}
-                aria-label={`Void order ${sale.id}`}
+                aria-label={l10n.getString('sales-history-void-aria', { id: sale.id })}
               >
                 <span>Void</span>
               </button>
@@ -112,6 +112,7 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
 }
 
 export default function SalesHistoryScreen() {
+  const { l10n } = useLocalization();
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
@@ -198,17 +199,17 @@ export default function SalesHistoryScreen() {
       await voidSale({
         saleId: voidTarget.id,
         userId: session?.user_id ?? 'unknown',
-        reason: voidReason || 'Voided from sales history',
+        reason: voidReason || l10n.getString('sales-history-void-default-reason'),
       });
       setVoidTarget(null);
       setVoidReason('');
       load();
     } catch (err) {
-      setVoidError(err instanceof Error ? err.message : 'Failed to void order');
+      setVoidError(err instanceof Error ? err.message : l10n.getString('sales-history-void-error'));
     } finally {
       setVoiding(false);
     }
-  }, [voidTarget, voidReason, session, load]);
+  }, [voidTarget, voidReason, session, load, l10n]);
 
   // ── Client-side filtering + sorting ────────────────────────────
   const filteredSales = useMemo(() => {
@@ -319,7 +320,7 @@ export default function SalesHistoryScreen() {
         total: { minorUnits: detail.total.minor_units, currency: detail.total.currency },
         payments: [
           {
-            method: detail.paymentMethod ?? 'Unknown',
+            method: detail.paymentMethod ?? l10n.getString('sales-history-export-payment'),
             amount: { minorUnits: detail.total.minor_units, currency: detail.total.currency },
             change: detail.tenderedMinor !== null
               ? { minorUnits: Math.max(0, detail.tenderedMinor - detail.total.minor_units), currency: detail.total.currency }
@@ -332,7 +333,7 @@ export default function SalesHistoryScreen() {
     } finally {
       setPrinting(false);
     }
-  }, [detail]);
+  }, [detail, l10n]);
 
   // ── Refund handlers ──────────────────────────────────────────
   const openRefund = useCallback(() => {
@@ -372,7 +373,15 @@ export default function SalesHistoryScreen() {
   }, [staff]);
 
   const handleExportCsv = useCallback(() => {
-    const headers = ['Sale ID', 'Date', 'Total', 'Items', 'Status', 'Payment', 'Cashier'];
+    const headers = [
+      l10n.getString('sales-history-export-id'),
+      l10n.getString('sales-history-export-date'),
+      l10n.getString('sales-history-export-total'),
+      l10n.getString('sales-history-export-items'),
+      l10n.getString('sales-history-export-status'),
+      l10n.getString('sales-history-export-payment'),
+      l10n.getString('sales-history-export-cashier'),
+    ];
     // Export ALL filtered results, not just current page.
     const rows = filteredSales.map((s) => [
       s.id,
@@ -391,7 +400,7 @@ export default function SalesHistoryScreen() {
     a.download = `sales-export-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredSales, cashierName]);
+  }, [filteredSales, cashierName, l10n]);
 
   return (
     <div className="sales-history">
@@ -719,15 +728,17 @@ export default function SalesHistoryScreen() {
                     <span>Reason for void</span>
                   </label>
                 </Localized>
-                <input
-                  id="sh-void-reason"
-                  type="text"
-                  className="sales-history-void-input"
-                  placeholder="e.g. Customer cancellation"
-                  value={voidReason}
-                  onChange={(e) => setVoidReason(e.target.value)}
-                  aria-label="Void reason"
-                />
+                <Localized id="sales-history-void-reason-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    id="sh-void-reason"
+                    type="text"
+                    className="sales-history-void-input"
+                    placeholder="e.g. Customer cancellation"
+                    value={voidReason}
+                    onChange={(e) => setVoidReason(e.target.value)}
+                    aria-label="Void reason"
+                  />
+                </Localized>
               </div>
 
               {voidError && (

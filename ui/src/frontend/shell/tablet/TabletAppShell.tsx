@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import TabletAppLayout from './TabletAppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
@@ -91,7 +92,7 @@ export default function TabletAppShell() {
           fontSize: 'var(--text-base)',
         }}
       >
-        Loading&hellip;
+        <Localized id="shared-loading">Loading&hellip;</Localized>
       </div>
     );
   }

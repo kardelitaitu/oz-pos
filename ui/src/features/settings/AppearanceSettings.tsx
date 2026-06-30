@@ -57,21 +57,25 @@ export function AppearanceSettings() {
             <Localized id="appearance-primary-colour">Primary Colour</Localized>
           </label>
           <div className="appearance-colour-row">
-            <input
-              id="brand-colour"
-              type="color"
-              value={colour}
-              onChange={(e) => applyColour(e.target.value)}
-              aria-label="Primary colour picker"
-              className="appearance-colour-picker"
-            />
-            <input
-              type="text"
-              value={colour}
-              onChange={(e) => applyColour(e.target.value)}
-              className="appearance-colour-hex settings-input"
-              aria-label="Colour hex value"
-            />
+            <Localized id="appearance-primary-colour-picker-aria" attrs={{ 'aria-label': true }}>
+              <input
+                id="brand-colour"
+                type="color"
+                value={colour}
+                onChange={(e) => applyColour(e.target.value)}
+                aria-label="Primary colour picker"
+                className="appearance-colour-picker"
+              />
+            </Localized>
+            <Localized id="appearance-colour-hex-aria" attrs={{ 'aria-label': true }}>
+              <input
+                type="text"
+                value={colour}
+                onChange={(e) => applyColour(e.target.value)}
+                className="appearance-colour-hex settings-input"
+                aria-label="Colour hex value"
+              />
+            </Localized>
           </div>
         </div>
 
@@ -81,15 +85,19 @@ export function AppearanceSettings() {
           </span>
           <div className="appearance-logo-row">
             {logoPath && (
-              <img
-                src={`file://${logoPath}`}
-                alt="Store logo"
-                className="appearance-logo-preview"
-              />
+              <Localized id="appearance-logo-alt" attrs={{ alt: true }}>
+                <img
+                  src={`file://${logoPath}`}
+                  alt="Store logo"
+                  className="appearance-logo-preview"
+                />
+              </Localized>
             )}
-            <Button variant="secondary" onClick={handlePickLogo} aria-label="Pick logo file">
-              <Localized id="appearance-choose-logo">Choose Logo</Localized>
-            </Button>
+            <Localized id="appearance-choose-logo-aria" attrs={{ 'aria-label': true }}>
+              <Button variant="secondary" onClick={handlePickLogo} aria-label="Pick logo file">
+                <Localized id="appearance-choose-logo">Choose Logo</Localized>
+              </Button>
+            </Localized>
             {logoPath && <span className="appearance-logo-path">{logoPath}</span>}
           </div>
         </div>
@@ -116,15 +124,17 @@ export function AppearanceSettings() {
             style={{ '--preview-colour': colour } as React.CSSProperties}
           >
             <span className="appearance-preview-text" style={{ color: colour }}>
-              {storeName || 'OZ-POS'}
+              {storeName ? storeName : <Localized id="appearance-store-name-fallback"><span>OZ-POS</span></Localized>}
             </span>
           </div>
         </div>
 
         <div className="settings-actions">
-          <Button variant="primary" onClick={save} disabled={saving} aria-label="Save appearance">
-            <Localized id="save">Save</Localized>
-          </Button>
+          <Localized id="appearance-save-aria" attrs={{ 'aria-label': true }}>
+            <Button variant="primary" onClick={save} disabled={saving} aria-label="Save appearance">
+              <Localized id="save">Save</Localized>
+            </Button>
+          </Localized>
         </div>
       </div>
     </Card>

@@ -32,6 +32,6 @@ export function getAvailableLocales(): LocaleCode[] {
 }
 
 export function getLocaleLabel(locale: LocaleCode): string {
-  const labels: Record<LocaleCode, string> = { en: 'English', id: 'Bahasa Indonesia', th: 'ภาษาไทย' };
+  const labels: Record<LocaleCode, string> = { en: 'locale-en', id: 'locale-id', th: 'locale-th' };
   return labels[locale];
 }

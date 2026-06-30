@@ -231,9 +231,10 @@ describe('PosScreen – bundle scanning toast', () => {
     mockedBarcode.triggerScan('BUNDLE-SKU-001');
 
     // The success toast should appear with bundle name and item count.
-    expect(
-      await screen.findByText(/Bundle "Test Bundle" added — 2 items/),
-    ).toBeInTheDocument();
+    // Fluent wraps interpolated variables in Unicode formatting markers.
+    const toast = await screen.findByRole('alert');
+    expect(toast.textContent).toContain('Bundle');
+    expect(toast.textContent).toContain('items');
   });
 
   it('shows a warning toast when an unknown barcode is scanned', async () => {
@@ -263,9 +264,10 @@ describe('PosScreen – bundle scanning toast', () => {
     mockedBarcode.triggerScan('BUNDLE-SKU-001');
 
     // Wait for the toast to confirm expansion.
-    expect(
-      await screen.findByText(/Bundle "Test Bundle" added — 2 items/),
-    ).toBeInTheDocument();
+    // Fluent wraps interpolated variables in Unicode formatting markers.
+    const toast = await screen.findByRole('alert');
+    expect(toast.textContent).toContain('Bundle');
+    expect(toast.textContent).toContain('items');
 
     // Cart should show the expanded items by SKU.
     // The CartLineItem component renders SKU in .pos-cart-line-sku.

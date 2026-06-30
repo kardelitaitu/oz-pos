@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listStaff,
   listRoles,
@@ -32,6 +32,7 @@ const EMPTY_FORM: FormData = {
 // ── Component ───────────────────────────────────────────────────────
 
 export default function StaffManagementScreen() {
+  const { l10n } = useLocalization();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,17 +98,17 @@ export default function StaffManagementScreen() {
       const displayName = form.displayName.trim();
 
       if (!username) {
-        setError('Username is required');
+        setError(l10n.getString('staff-error-username-required'));
         setSaving(false);
         return;
       }
       if (!displayName) {
-        setError('Display name is required');
+        setError(l10n.getString('staff-error-display-name-required'));
         setSaving(false);
         return;
       }
       if (!form.roleId) {
-        setError('Please select a role');
+        setError(l10n.getString('staff-error-role-required'));
         setSaving(false);
         return;
       }
@@ -122,7 +123,7 @@ export default function StaffManagementScreen() {
         });
       } else {
         if (!form.pin || form.pin.length < 4) {
-          setError('PIN must be at least 4 characters');
+          setError(l10n.getString('staff-error-pin-length'));
           setSaving(false);
           return;
         }
@@ -137,11 +138,11 @@ export default function StaffManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save staff member');
+      setError(err instanceof Error ? err.message : l10n.getString('staff-error-save-failed'));
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load]);
+  }, [form, editingId, closeModal, load, l10n]);
 
   // ── Deactivate / Reactivate ────────────────────────────────────
 
@@ -214,7 +215,7 @@ export default function StaffManagementScreen() {
         </Card>
       ) : (
         <div className="staff-mgmt-table-wrap">
-          <table className="staff-mgmt-table" aria-label="Staff members">
+          <table className="staff-mgmt-table" aria-label={l10n.getString('staff-table-aria')}>
             <thead>
               <tr>
                 <Localized id="staff-col-name"><th>Name</th></Localized>
@@ -308,7 +309,7 @@ export default function StaffManagementScreen() {
 
               <div className="staff-mgmt-modal-body">
                 {/* Username */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-username" aria-label="Username">
+                <label className="staff-mgmt-field" htmlFor="staff-field-username" aria-label={l10n.getString('staff-field-username-aria')}>
                   <Localized id="staff-field-username-label">
                     <span className="staff-mgmt-label">Username *</span>
                   </Localized>
@@ -327,7 +328,7 @@ export default function StaffManagementScreen() {
                 </label>
 
                 {/* Display name */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-name" aria-label="Display Name">
+                <label className="staff-mgmt-field" htmlFor="staff-field-name" aria-label={l10n.getString('staff-field-name-aria')}>
                   <Localized id="staff-field-name-label">
                     <span className="staff-mgmt-label">Display Name *</span>
                   </Localized>
@@ -345,7 +346,7 @@ export default function StaffManagementScreen() {
                 </label>
 
                 {/* PIN */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-pin" aria-label="PIN">
+                <label className="staff-mgmt-field" htmlFor="staff-field-pin" aria-label={l10n.getString('staff-field-pin-aria')}>
                   <Localized id={isEditing ? 'staff-field-pin-edit-label' : 'staff-field-pin-label'}>
                     <span className="staff-mgmt-label">
                       {isEditing ? 'New PIN (leave blank to keep current)' : 'PIN * (4+ characters)'}

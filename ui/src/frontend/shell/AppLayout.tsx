@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import RoleBadge from './RoleBadge';
 import ThemeToggle from './ThemeToggle';
 import UpdateBanner from './UpdateBanner';
@@ -41,6 +42,7 @@ export interface AppLayoutProps {
  * instead of using a hardcoded list.
  */
 export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole }: AppLayoutProps) {
+  const { l10n } = useLocalization();
   const navItems = getNavItems(enabledFeatures, userRole);
   const stripeStatus = useGatewayStatus();
 
@@ -58,7 +60,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
   return (
     <div className="app-layout">
       {/* ── Sidebar ──────────────────────────────── */}
-      <aside className={`app-sidebar${sidebarCollapsed ? ' collapsed' : ''}`} aria-label="Main navigation">
+      <aside className={`app-sidebar${sidebarCollapsed ? ' collapsed' : ''}`} aria-label={l10n.getString('nav-main-aria')}>
         <div className="app-sidebar-header">
           <span className="app-sidebar-logo">OZ-POS</span>
         </div>
@@ -74,7 +76,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
         </div>
 
         <nav className="app-sidebar-nav">
-          <span className="app-sidebar-section-label">App</span>
+          <Localized id="nav-section-app"><span className="app-sidebar-section-label">App</span></Localized>
 
           {navItems.map((item) => (
             <button
@@ -87,12 +89,12 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
               }
               onClick={() => onNavigate(item.route)}
               aria-current={route === item.route ? 'page' : undefined}
-              aria-label={item.label}
+              aria-label={l10n.getString(item.i18nKey ?? item.label) ?? item.label}
             >
               {item.icon && (
                 <span className="app-nav-icon">{item.icon}</span>
               )}
-              {item.label}
+              <Localized id={item.i18nKey ?? item.label}>{item.label}</Localized>
             </button>
           ))}
         </nav>
@@ -113,7 +115,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
               type="button"
               className="sidebar-toggle"
               onClick={toggleSidebar}
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')}
               aria-expanded={!sidebarCollapsed}
             >
               {sidebarCollapsed ? (

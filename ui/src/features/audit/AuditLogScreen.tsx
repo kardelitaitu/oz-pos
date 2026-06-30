@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { listAuditLog, type AuditEntryDto } from '@/api/audit';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -54,6 +54,7 @@ function formatDate(iso: string): string {
 type OutcomeFilter = 'all' | 'success' | 'failure';
 
 export default function AuditLogScreen() {
+  const { l10n } = useLocalization();
   const [entries, setEntries] = useState<AuditEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,15 +153,14 @@ export default function AuditLogScreen() {
           <input
             type="search"
             className="audit-log-search"
-            placeholder="Search actions, targets, or users…"
+            placeholder={l10n.getString('audit-log-search-placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search audit log"
+            aria-label={l10n.getString('audit-log-search-label')}
           />
-          {/* Placeholder and aria-label localized via attributes — for full i18n use FTL with l10n.getString */}
         </div>
 
-        <div className="audit-log-outcome-filters" role="radiogroup" aria-label="Filter by outcome">
+        <div className="audit-log-outcome-filters" role="radiogroup" aria-label={l10n.getString('audit-log-filter-label')}>
           {(['all', 'success', 'failure'] as OutcomeFilter[]).map((outcome) => {
             const outcomeIds: Record<string, string> = {
               'all': 'audit-log-filter-all',
@@ -219,7 +219,7 @@ export default function AuditLogScreen() {
         </Card>
       ) : (
         <div className="audit-log-table-wrap">
-          <table className="audit-log-table" aria-label="Audit log entries">
+          <table className="audit-log-table" aria-label={l10n.getString('audit-log-table-label')}>
             <thead>
               <tr>
                 <Localized id="audit-log-col-date"><th><span>Date</span></th></Localized>

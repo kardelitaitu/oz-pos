@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { printSalesReceipt } from '@/api/sales';
 import { getLowStockAlerts, type LowStockAlert } from '@/api/reports';
 import { Card } from '@/components/Card';
@@ -8,6 +8,7 @@ import { Spinner } from '@/components/Spinner';
 import './InventoryReportScreen.css';
 
 export default function InventoryReportScreen() {
+  const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<LowStockAlert[]>([]);
@@ -22,7 +23,12 @@ export default function InventoryReportScreen() {
   }, [threshold]);
 
   const exportCsv = () => {
-    const headers = ['SKU', 'Product', 'Current Stock', 'Threshold'];
+    const headers = [
+      l10n.getString('inv-report-csv-header-sku'),
+      l10n.getString('inv-report-csv-header-product'),
+      l10n.getString('inv-report-csv-header-stock'),
+      l10n.getString('inv-report-csv-header-threshold'),
+    ];
     const rows = items.map((i) =>
       [i.sku, `"${i.name}"`, i.current_qty, i.threshold].join(','),
     );
@@ -55,21 +61,23 @@ export default function InventoryReportScreen() {
   if (loading) {
     return (
       <div className="inventory-report">
-        <Spinner aria-label="Loading inventory report" />
+        <Spinner aria-label={l10n.getString('inv-report-loading-aria')} />
       </div>
     );
   }
 
   return (
-    <div className="inventory-report" role="region" aria-label="Inventory Report">
+    <div className="inventory-report" role="region" aria-label={l10n.getString('inv-report-region-aria')}>
       <div className="inventory-report-header">
-        <Localized id="inventory-report-title">
+        <Localized id="inv-report-title">
           <h1 className="inventory-report-title">Inventory Report</h1>
         </Localized>
         <div className="inventory-report-controls">
-          <label htmlFor="threshold-input" className="inventory-report-label">
-            <Localized id="inventory-report-threshold">Threshold</Localized>
-          </label>
+          <Localized id="inv-report-threshold">
+            <label htmlFor="threshold-input" className="inventory-report-label">
+              Threshold
+            </label>
+          </Localized>
           <input
             id="threshold-input"
             type="number"
@@ -77,21 +85,21 @@ export default function InventoryReportScreen() {
             value={threshold}
             onChange={(e) => setThreshold(Number(e.target.value))}
             className="inventory-report-input"
-            aria-label="Stock threshold"
+            aria-label={l10n.getString('inv-report-threshold-aria')}
           />
           <Button
             variant="secondary"
             onClick={printReport}
-            aria-label="Print report"
+            aria-label={l10n.getString('inv-report-print-aria')}
           >
             <Localized id="print">Print</Localized>
           </Button>
           <Button
             variant="secondary"
             onClick={exportCsv}
-            aria-label="Export CSV"
+            aria-label={l10n.getString('inv-report-export-aria')}
           >
-            <Localized id="inventory-report-export-csv">Export CSV</Localized>
+            <Localized id="inv-report-export-csv">Export CSV</Localized>
           </Button>
         </div>
       </div>
@@ -102,18 +110,18 @@ export default function InventoryReportScreen() {
         <div className="inventory-report-table">
           <div className="inventory-report-table-header">
             <span>
-              <Localized id="inventory-report-sku">SKU</Localized>
+              <Localized id="inv-report-sku">SKU</Localized>
             </span>
             <span>
-              <Localized id="inventory-report-product">Product</Localized>
+              <Localized id="inv-report-product">Product</Localized>
             </span>
             <span>
-              <Localized id="inventory-report-current-stock">Stock</Localized>
+              <Localized id="inv-report-current-stock">Stock</Localized>
             </span>
           </div>
           {items.length === 0 ? (
             <div className="inventory-report-empty">
-              <Localized id="no-results">
+              <Localized id="inv-report-no-results">
                 <p>No results found</p>
               </Localized>
             </div>

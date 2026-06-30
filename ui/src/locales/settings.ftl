@@ -153,7 +153,11 @@ settings-field-paper-width = Paper width
 settings-field-language = Language
 settings-field-footer = Receipt footer
 settings-toggle-show-currency = Show currency symbol on amounts
+settings-toggle-show-currency-aria =
+    .aria-label = Show currency symbol on amounts
 settings-toggle-show-tax = Show tax line on receipts
+settings-toggle-show-tax-aria =
+    .aria-label = Show tax line on receipts
 settings-btn-save = Save
 settings-saved = Saved!
 settings-section-sync = Cloud Sync
@@ -164,15 +168,37 @@ settings-sync-enabled-aria = Toggle cloud sync
 settings-sync-sync-now = Sync Now
 settings-sync-syncing = Syncing…
 settings-sync-result = Last sync: { $synced } synced, { $failed } failed
+settings-store-name-placeholder = OZ-POS Store
+settings-address-placeholder = 123 Main Street
+settings-tax-id-placeholder = 12-3456789
+settings-footer-placeholder = Thank you for shopping!
+settings-server-url-placeholder = https://api.example.com
+settings-api-key-placeholder = Enter API key
+settings-api-key-masked = ••••••••
+settings-btn-save-aria =
+    .aria-label = { $state ->
+        [saved] Saved!
+       *[save] Save settings
+    }
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
 
 # Appearance / Brand settings
 settings-appearance = Appearance
 appearance-primary-colour = Primary Colour
+appearance-primary-colour-picker-aria =
+    .aria-label = Primary colour picker
+appearance-colour-hex-aria =
+    .aria-label = Colour hex value
 appearance-logo = Store Logo
+appearance-logo-alt = Store logo
 appearance-choose-logo = Choose Logo
+appearance-choose-logo-aria =
+    .aria-label = Pick logo file
 appearance-store-name = Display Store Name
+appearance-store-name-fallback = OZ-POS
 appearance-preview = Preview
+appearance-save-aria =
+    .aria-label = Save appearance
 
 # Settings option labels
 settings-decimal-separator-dot = 1.00 (dot)
@@ -180,6 +206,17 @@ settings-decimal-separator-comma = 1,00 (comma)
 settings-decimal-separator-none = 1 (none)
 settings-paper-width-standard = 80 mm (standard)
 settings-paper-width-narrow = 58 mm (narrow)
+
+# Category Management
+category-delete-aria =
+    .aria-label = Delete category { $name }
+category-delete-dialog-aria =
+    .aria-label = Delete category
+category-colour-picker-aria =
+    .aria-label = Pick a colour
+category-colour-swatch-aria =
+    .aria-label = Select colour { $colour }
+category-name-fallback = Category Name
 
 # Data Management Screen
 data-mgmt-title = Data Management

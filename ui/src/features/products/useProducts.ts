@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocalization } from '@fluent/react';
 import { listProducts, type ProductDto } from '@/api/products';
 import { type Product, type Sku } from '@/types/domain';
 
@@ -28,11 +29,11 @@ const SAMPLE_PRODUCTS: Product[] = [
 // ── DTO → Product mapper ────────────────────────────────────────────
 
 /** Map a `ProductDto` from IPC to the front-end `Product` type. */
-function dtoToProduct(dto: ProductDto): Product {
+function dtoToProduct(dto: ProductDto, uncategorisedLabel: string): Product {
   return {
     sku: dto.sku as Sku,
     name: dto.name,
-    category: dto.category ?? 'Uncategorised',
+    category: dto.category ?? uncategorisedLabel,
     price: {
       minor_units: dto.price.minor_units,
       currency: dto.price.currency,
@@ -70,6 +71,7 @@ export interface UseProductsResult {
  * ```
  */
 export function useProducts(): UseProductsResult {
+  const { l10n } = useLocalization();
   const [products, setProducts] = useState<Product[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,8 @@ export function useProducts(): UseProductsResult {
         const dtos = await listProducts();
         if (cancelled) return;
         if (dtos.length > 0) {
-          setProducts(dtos.map(dtoToProduct));
+          const uncategorisedLabel = l10n.getString('product-lookup-uncategorised');
+          setProducts(dtos.map(dto => dtoToProduct(dto, uncategorisedLabel)));
           setUsingFallback(false);
         } else {
           // Empty DB from backend — use samples as a development fallback.
@@ -93,7 +96,7 @@ export function useProducts(): UseProductsResult {
       } catch (err) {
         // IPC unavailable — fall back to sample data
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Failed to load products');
+        setError(err instanceof Error ? err.message : l10n.getString('product-lookup-error-load'));
         setProducts(SAMPLE_PRODUCTS);
         setUsingFallback(true);
       } finally {
@@ -106,7 +109,7 @@ export function useProducts(): UseProductsResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [l10n]);
 
   // Derive categories from products (memoized).
   const categories = useMemo(() => {

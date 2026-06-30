@@ -74,17 +74,27 @@ describe('ThemeToggle', () => {
     render(wrap(<ThemeToggle />));
     const button = screen.getByTestId('theme-toggle');
     // Initially light → aria-label says "Switch to dark mode".
-    expect(button).toHaveAttribute('aria-label', 'Switch to dark mode');
+    // Fluent wraps interpolated variables in Unicode formatting markers.
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/Switch to .+dark.+ mode/),
+    );
   });
 
   it('aria-label updates after toggling theme', async () => {
     render(wrap(<ThemeToggle />));
     const button = screen.getByTestId('theme-toggle');
-    expect(button).toHaveAttribute('aria-label', 'Switch to dark mode');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/Switch to .+dark.+ mode/),
+    );
 
     await userEvent.click(button);
 
-    expect(button).toHaveAttribute('aria-label', 'Switch to light mode');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/Switch to .+light.+ mode/),
+    );
   });
 
   // ── Interaction ────────────────────────────────────────────────

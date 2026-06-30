@@ -7,6 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { useLocalization } from '@fluent/react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ function ToastItem({
   toast: Toast;
   onDismiss: (id: string) => void;
 }) {
+  const { l10n } = useLocalization();
   const { id, type, message, duration = 4000 } = toast;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -104,7 +106,7 @@ function ToastItem({
         type="button"
         className="toast__dismiss"
         onClick={() => onDismiss(id)}
-        aria-label="Dismiss notification"
+        aria-label={l10n.getString('toast-dismiss-aria')}
       >
         <svg
           width="12"
@@ -132,10 +134,11 @@ function ToastContainer({
   toasts: Toast[];
   onDismiss: (id: string) => void;
 }) {
+  const { l10n } = useLocalization();
   if (toasts.length === 0) return null;
 
   return (
-    <div className="toast-container" aria-label="Notifications">
+    <div className="toast-container" aria-label={l10n.getString('toast-notifications-aria')}>
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
       ))}

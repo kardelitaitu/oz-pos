@@ -10,6 +10,7 @@ cancel = Cancel
 delete = Delete
 edit = Edit
 close = Close
+    .aria-label = Close
 search = Search
 filter = Filter
 confirm = Confirm

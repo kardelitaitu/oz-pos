@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listTerminals,
   registerTerminal,
@@ -50,6 +50,7 @@ function formatDate(iso: string): string {
 // ── Component ───────────────────────────────────────────────────────
 
 export default function TerminalManagementScreen() {
+  const { l10n } = useLocalization();
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,11 +80,11 @@ export default function TerminalManagementScreen() {
       const data = await listTerminals();
       setTerminals(data);
     } catch {
-      setError('Failed to load terminals');
+      setError(l10n.getString('terminal-error-load'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -122,13 +123,13 @@ export default function TerminalManagementScreen() {
         const data = await listTerminalOverrides(editingId);
         if (!cancelled) setOverrides(data);
       } catch {
-        if (!cancelled) setOverridesError('Failed to load feature overrides');
+        if (!cancelled) setOverridesError(l10n.getString('terminal-error-overrides-load'));
       } finally {
         if (!cancelled) setOverridesLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [editingId]);
+  }, [editingId, l10n]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -165,10 +166,10 @@ export default function TerminalManagementScreen() {
         const data = await listTerminalOverrides(editingId);
         setOverrides(data);
       } catch {
-        setOverridesError('Failed to update feature override');
+        setOverridesError(l10n.getString('terminal-error-override-update'));
       }
     },
-    [editingId],
+    [editingId, l10n],
   );
 
   const handleResetOverrides = useCallback(async () => {
@@ -181,9 +182,9 @@ export default function TerminalManagementScreen() {
       await Promise.all(promises);
       setOverrides([]);
     } catch {
-      setOverridesError('Failed to reset overrides');
+      setOverridesError(l10n.getString('terminal-error-override-reset'));
     }
-  }, [editingId, overrides]);
+  }, [editingId, overrides, l10n]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -193,12 +194,12 @@ export default function TerminalManagementScreen() {
       const deviceId = form.deviceId.trim();
 
       if (!name) {
-        setError('Name is required');
+        setError(l10n.getString('terminal-error-name-required'));
         setSaving(false);
         return;
       }
       if (!deviceId) {
-        setError('Device ID is required');
+        setError(l10n.getString('terminal-error-device-id-required'));
         setSaving(false);
         return;
       }
@@ -223,11 +224,11 @@ export default function TerminalManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save terminal');
+      setError(err instanceof Error ? err.message : l10n.getString('terminal-error-save'));
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load]);
+  }, [form, editingId, closeModal, load, l10n]);
 
   // ── Delete ─────────────────────────────────────────────────────
 
@@ -306,7 +307,9 @@ export default function TerminalManagementScreen() {
                 <Localized id="terminal-status"><th>Status</th></Localized>
                 <Localized id="terminal-last-seen"><th>Last Seen</th></Localized>
                 <Localized id="terminal-created"><th>Created</th></Localized>
-                <th aria-label="Actions"> </th>
+                <Localized id="terminal-col-actions" attrs={{ "aria-label": true }}>
+                  <th aria-label="Actions"> </th>
+                </Localized>
               </tr>
             </thead>
             <tbody>
@@ -320,7 +323,7 @@ export default function TerminalManagementScreen() {
                         <span className="terminal-mgmt-status-active">Active</span>
                       </Localized>
                     ) : (
-                      <Localized id="terminal-status">
+                      <Localized id="terminal-is-inactive">
                         <span className="terminal-mgmt-status-inactive">Inactive</span>
                       </Localized>
                     )}
@@ -371,19 +374,21 @@ export default function TerminalManagementScreen() {
                 <Localized id={isEditing ? 'terminal-edit-title' : 'terminal-register-title'}>
                   <h2>{isEditing ? 'Edit Terminal' : 'Register New Terminal'}</h2>
                 </Localized>
-                <button
-                  type="button"
-                  className="terminal-mgmt-modal-close"
-                  onClick={closeModal}
-                  aria-label="Close"
-                >
-                  &times;
-                </button>
+                <Localized id="terminal-modal-close" attrs={{ "aria-label": true }}>
+                  <button
+                    type="button"
+                    className="terminal-mgmt-modal-close"
+                    onClick={closeModal}
+                    aria-label="Close"
+                  >
+                    &times;
+                  </button>
+                </Localized>
               </div>
 
               <div className="terminal-mgmt-modal-body">
                 {/* Name */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-name" aria-label="Terminal name">
+                <label className="terminal-mgmt-field" htmlFor="terminal-field-name" aria-label={l10n.getString('terminal-field-name-aria')}>
                   <Localized id="terminal-name-label">
                     <span className="terminal-mgmt-label">Terminal name</span>
                   </Localized>
@@ -401,7 +406,7 @@ export default function TerminalManagementScreen() {
                 </label>
 
                 {/* Device ID */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-device-id" aria-label="Device identifier">
+                <label className="terminal-mgmt-field" htmlFor="terminal-field-device-id" aria-label={l10n.getString('terminal-field-device-id-aria')}>
                   <Localized id="terminal-device-id-label">
                     <span className="terminal-mgmt-label">Device identifier</span>
                   </Localized>
@@ -420,7 +425,7 @@ export default function TerminalManagementScreen() {
 
                 {/* Secret — only for register */}
                 {!isEditing && (
-                  <label className="terminal-mgmt-field" htmlFor="terminal-field-secret" aria-label="Shared secret">
+                  <label className="terminal-mgmt-field" htmlFor="terminal-field-secret" aria-label={l10n.getString('terminal-field-secret-aria')}>
                     <Localized id="terminal-secret-label">
                       <span className="terminal-mgmt-label">Optional shared secret for sync authentication</span>
                     </Localized>
@@ -436,7 +441,7 @@ export default function TerminalManagementScreen() {
                 )}
 
                 {/* Metadata */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-metadata" aria-label="JSON metadata">
+                <label className="terminal-mgmt-field" htmlFor="terminal-field-metadata" aria-label={l10n.getString('terminal-field-metadata-aria')}>
                   <Localized id="terminal-metadata-label">
                     <span className="terminal-mgmt-label">Optional JSON metadata</span>
                   </Localized>
@@ -470,11 +475,15 @@ export default function TerminalManagementScreen() {
                 {/* Feature Overrides — edit mode only */}
                 {isEditing && (
                   <div className="terminal-mgmt-feature-overrides">
-                    <h3 className="terminal-mgmt-feature-overrides-title">
-                      Feature Overrides
-                    </h3>
+                    <Localized id="terminal-feature-overrides">
+                      <h3 className="terminal-mgmt-feature-overrides-title">
+                        Feature Overrides
+                      </h3>
+                    </Localized>
                     {overridesLoading ? (
-                      <p className="terminal-mgmt-loading">Loading overrides…</p>
+                      <Localized id="terminal-loading-overrides">
+                        <p className="terminal-mgmt-loading">Loading overrides…</p>
+                      </Localized>
                     ) : (
                       <div className="terminal-mgmt-feature-grid">
                         {Object.entries(FEATURES).map(([_, featureKey]) => {
@@ -491,9 +500,11 @@ export default function TerminalManagementScreen() {
                               <span className="terminal-mgmt-feature-name">
                                 {featureKey}
                                 {isOverridden && (
-                                  <span className="terminal-mgmt-feature-badge">
-                                    overridden
-                                  </span>
+                                  <Localized id="terminal-overridden">
+                                    <span className="terminal-mgmt-feature-badge">
+                                      overridden
+                                    </span>
+                                  </Localized>
                                 )}
                               </span>
                               <label>
@@ -504,7 +515,7 @@ export default function TerminalManagementScreen() {
                                   onChange={() =>
                                     handleToggleOverride(featureKey, ov ?? false)
                                   }
-                                  aria-label={`Override ${featureKey}`}
+                                  aria-label={l10n.getString('terminal-override-aria', { feature: featureKey })}
                                 />
                               </label>
                             </div>
@@ -519,9 +530,11 @@ export default function TerminalManagementScreen() {
                     )}
                     {overrides.length > 0 && (
                       <div className="terminal-mgmt-reset-overrides">
-                        <Button variant="ghost" size="sm" onClick={handleResetOverrides}>
-                          Reset all overrides
-                        </Button>
+                        <Localized id="terminal-reset-overrides">
+                          <Button variant="ghost" size="sm" onClick={handleResetOverrides}>
+                            Reset all overrides
+                          </Button>
+                        </Localized>
                       </div>
                     )}
                   </div>
@@ -564,20 +577,23 @@ export default function TerminalManagementScreen() {
 
       {/* ── Delete Confirmation Modal ────────────────────────────── */}
       {deleteTarget && (
-        <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete terminal">
-          <div className="terminal-mgmt-modal">
-            <div className="terminal-mgmt-modal-header">
+        <Localized id="terminal-delete-aria" attrs={{ "aria-label": true }}>
+          <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete terminal">
+            <div className="terminal-mgmt-modal">
+              <div className="terminal-mgmt-modal-header">
               <Localized id="terminal-delete-title">
                 <h2>Delete Terminal</h2>
               </Localized>
-              <button
-                type="button"
-                className="terminal-mgmt-modal-close"
-                onClick={closeDelete}
-                aria-label="Close"
-              >
+              <Localized id="terminal-modal-close" attrs={{ "aria-label": true }}>
+                <button
+                  type="button"
+                  className="terminal-mgmt-modal-close"
+                  onClick={closeDelete}
+                  aria-label="Close"
+                >
                 &times;
               </button>
+              </Localized>
             </div>
 
             <div className="terminal-mgmt-modal-body">
@@ -604,6 +620,7 @@ export default function TerminalManagementScreen() {
             </div>
           </div>
         </div>
+        </Localized>
       )}
     </div>
   );

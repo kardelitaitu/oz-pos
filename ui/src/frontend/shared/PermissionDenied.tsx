@@ -1,3 +1,4 @@
+import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import './PermissionDenied.css';
 
@@ -26,15 +27,21 @@ export default function PermissionDenied({ action, requiredRole, onDismiss }: Pe
           </svg>
         </div>
 
-        <h2 className="permission-denied-title">Access Denied</h2>
+        <h2 className="permission-denied-title">
+          <Localized id="permission-denied-title">Access Denied</Localized>
+        </h2>
 
         <p className="permission-denied-desc">
-          <strong>{action}</strong> requires a <strong>{requiredRole}</strong> role.
+          <Localized id="permission-denied-desc" vars={{ action, requiredRole }}>
+            <span><strong>{action}</strong> requires a <strong>{requiredRole}</strong> role.</span>
+          </Localized>
         </p>
 
         {session && (
           <p className="permission-denied-current">
-            You are logged in as <strong>{session.display_name}</strong> ({session.role_name}).
+            <Localized id="permission-denied-current" vars={{ displayName: session.display_name, roleName: session.role_name }}>
+              <span>You are logged in as <strong>{session.display_name}</strong> ({session.role_name}).</span>
+            </Localized>
           </p>
         )}
 
@@ -44,7 +51,7 @@ export default function PermissionDenied({ action, requiredRole, onDismiss }: Pe
             className="permission-denied-btn"
             onClick={onDismiss}
           >
-            Go back
+            <Localized id="permission-denied-go-back">Go back</Localized>
           </button>
         )}
       </div>
