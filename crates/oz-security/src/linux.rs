@@ -49,12 +49,9 @@ impl LibSecretKeyring {
             )
             .await
             .map_err(|e| SecurityError::KeyUnavailable(format!("OpenSession failed: {e}")))?;
-        let result: (Value<'_>, OwnedObjectPath) = msg
-            .body()
-            .deserialize()
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!("OpenSession body deserialize failed: {e}"))
-            })?;
+        let result: (Value<'_>, OwnedObjectPath) = msg.body().deserialize().map_err(|e| {
+            SecurityError::KeyUnavailable(format!("OpenSession body deserialize failed: {e}"))
+        })?;
         Ok(result.1)
     }
 
@@ -70,12 +67,9 @@ impl LibSecretKeyring {
             )
             .await
             .map_err(|e| SecurityError::KeyUnavailable(format!("ReadAlias failed: {e}")))?;
-        let path: OwnedObjectPath = msg
-            .body()
-            .deserialize()
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!("ReadAlias body deserialize failed: {e}"))
-            })?;
+        let path: OwnedObjectPath = msg.body().deserialize().map_err(|e| {
+            SecurityError::KeyUnavailable(format!("ReadAlias body deserialize failed: {e}"))
+        })?;
         Ok(path)
     }
 
@@ -94,10 +88,8 @@ impl LibSecretKeyring {
             )
             .await
             .map_err(|e| SecurityError::KeyUnavailable(format!("SearchItems failed: {e}")))?;
-        let (unlocked, _locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = msg
-            .body()
-            .deserialize()
-            .map_err(|e| {
+        let (unlocked, _locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) =
+            msg.body().deserialize().map_err(|e| {
                 SecurityError::KeyUnavailable(format!("SearchItems body deserialize failed: {e}"))
             })?;
         Ok(unlocked)
@@ -125,12 +117,9 @@ impl Keyring for LibSecretKeyring {
                 &(&session,),
             ))
             .map_err(|e| SecurityError::KeyUnavailable(format!("GetSecret failed: {e}")))?;
-        let secret: (OwnedObjectPath, Vec<u8>, String) = msg
-            .body()
-            .deserialize()
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!("GetSecret body deserialize failed: {e}"))
-            })?;
+        let secret: (OwnedObjectPath, Vec<u8>, String) = msg.body().deserialize().map_err(|e| {
+            SecurityError::KeyUnavailable(format!("GetSecret body deserialize failed: {e}"))
+        })?;
 
         let s = String::from_utf8(secret.1).map_err(|e| {
             SecurityError::KeyUnavailable(format!("secret is not valid UTF-8: {e}"))
@@ -183,12 +172,9 @@ impl Keyring for LibSecretKeyring {
                 &(properties, secret, true),
             ))
             .map_err(|e| SecurityError::KeyUnavailable(format!("CreateItem failed: {e}")))?;
-        let (_item, _created): (OwnedObjectPath, bool) = msg
-            .body()
-            .deserialize()
-            .map_err(|e| {
-                SecurityError::KeyUnavailable(format!("CreateItem body deserialize failed: {e}"))
-            })?;
+        let (_item, _created): (OwnedObjectPath, bool) = msg.body().deserialize().map_err(|e| {
+            SecurityError::KeyUnavailable(format!("CreateItem body deserialize failed: {e}"))
+        })?;
 
         Ok(())
     }
