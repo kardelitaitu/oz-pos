@@ -9,6 +9,12 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - *(none yet)*
 
+## [0.0.3] — 2026-06-30
+
+### Added
+- Pre-commit hook (auto `cargo fmt --all`)
+- CI fixes for cross-platform compilation (macOS keychain, Linux libudev+zbus, Windows Tauri)
+
 ## [0.0.2] — 2026-06-30
 
 ### Added
@@ -85,6 +91,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.3
 [0.0.2]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.2
 [0.0.1]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.1

@@ -14,7 +14,7 @@ git config core.hooksPath .githooks   # enable pre-commit hook (auto cargo fmt)
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.1`.** Never change the version number
+- **Version is locked at `0.0.3`.** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
