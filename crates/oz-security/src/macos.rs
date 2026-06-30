@@ -32,10 +32,10 @@ impl Keyring for MacOsKeychain {
                 })?;
                 Ok(Some(s))
             }
-            Err(e) if e.code() == -128 => {
-                // errSecItemNotFound = -25300 on macOS, but security-framework
-                // may use -128 (errSecUnimplemented) or -25300.
-                // We handle both common not-found codes gracefully.
+            Err(e) if e.code() < 0 => {
+                // errSecItemNotFound = -25300, errSecUnimplemented = -128.
+                // The security-framework crate can surface either code;
+                // check the string description as a fallback.
                 if format!("{e:?}").contains("item not found")
                     || format!("{e:?}").contains("-25300")
                     || format!("{e:?}").contains("-128")

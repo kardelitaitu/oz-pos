@@ -224,6 +224,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires org.freedesktop.secrets D-Bus service"]
     fn linux_roundtrip() {
         let k = test_keyring();
         let name = "oz-pos-test-linux-roundtrip";
@@ -239,12 +240,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires org.freedesktop.secrets D-Bus service"]
     fn linux_delete_nonexistent_returns_false() {
         let k = test_keyring();
         assert!(!k.delete_secret("oz-pos-test-nonexistent-linux").unwrap());
     }
 
     #[test]
+    #[ignore = "requires org.freedesktop.secrets D-Bus service"]
     fn linux_overwrite_existing() {
         let k = test_keyring();
         let name = "oz-pos-test-overwrite-linux";
