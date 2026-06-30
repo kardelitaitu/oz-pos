@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use foundation::Barcode;
+
 use crate::{Money, Sku};
 
 /// A product in the store's inventory.
@@ -38,7 +40,7 @@ pub struct Product {
 
     /// Optional machine-readable barcode (EAN-13, UPC-A, etc.).
     /// Unique when present; two products can share a `None` barcode.
-    pub barcode: Option<String>,
+    pub barcode: Option<Barcode>,
 
     /// ISO-8601 creation timestamp.
     pub created_at: String,
@@ -82,8 +84,8 @@ impl Product {
 
     /// Set the barcode (builder-style).
     #[must_use]
-    pub fn with_barcode(mut self, barcode: impl Into<String>) -> Self {
-        self.barcode = Some(barcode.into());
+    pub fn with_barcode(mut self, barcode: Barcode) -> Self {
+        self.barcode = Some(barcode);
         self
     }
 }
@@ -153,24 +155,31 @@ mod tests {
 
     #[test]
     fn builder_sets_barcode() {
-        let p = Product::new("SKU", "Widget", test_price()).with_barcode("5901234123457");
-        assert_eq!(p.barcode, Some("5901234123457".into()));
+        let p = Product::new("SKU", "Widget", test_price())
+            .with_barcode(Barcode::new("5901234123457").unwrap());
+        assert_eq!(
+            p.barcode,
+            Some(Barcode::new("5901234123457").unwrap())
+        );
     }
 
     #[test]
     fn builder_chains() {
         let p = Product::new("SKU", "Widget", test_price())
             .with_category("cat-tools")
-            .with_barcode("5901234123457");
+            .with_barcode(Barcode::new("5901234123457").unwrap());
         assert_eq!(p.category_id, Some("cat-tools".into()));
-        assert_eq!(p.barcode, Some("5901234123457".into()));
+        assert_eq!(
+            p.barcode,
+            Some(Barcode::new("5901234123457").unwrap())
+        );
     }
 
     #[test]
     fn serde_roundtrip() {
         let p = Product::new("COFFEE", "Espresso", test_price())
             .with_category("cat-drinks")
-            .with_barcode("5901234123457");
+            .with_barcode(Barcode::new("5901234123457").unwrap());
         let json = serde_json::to_string(&p).unwrap();
         let back: Product = serde_json::from_str(&json).unwrap();
         assert_eq!(back, p);

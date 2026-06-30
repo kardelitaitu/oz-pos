@@ -111,6 +111,7 @@ impl Store<'_> {
 pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Product> {
     let sku_str: String = row.get("sku")?;
     let cur_str: String = row.get("currency")?;
+    let barcode_raw: Option<String> = row.get("barcode")?;
     Ok(crate::Product {
         id: row.get("id")?,
         sku: crate::Sku::new(sku_str),
@@ -120,7 +121,7 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
             currency: cur_str.parse().expect("valid currency in database"),
         },
         category_id: row.get("category_id")?,
-        barcode: row.get("barcode")?,
+        barcode: barcode_raw.and_then(|s| foundation::Barcode::new(&s).ok()),
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })

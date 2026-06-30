@@ -26,12 +26,12 @@ pub mod percentage;
 pub mod sku;
 pub mod validation;
 
+pub use barcode::Barcode;
 pub use cart::{Cart, CartError, CartId, CartLine};
 pub use constants::{
     BASIS_POINTS_DENOMINATOR, DEFAULT_CURRENCY_CODE, MAX_DISCOUNT_PERCENT, MAX_NAME_LENGTH,
     MAX_SKU_LENGTH, PIN_MIN_LENGTH,
 };
-pub use barcode::Barcode;
 pub use contact::{Email, Phone};
 pub use enums::{InvalidTransition, PaymentMethod, SaleStatus};
 pub use errors::{ConflictError, NotFoundError, ValidationError};

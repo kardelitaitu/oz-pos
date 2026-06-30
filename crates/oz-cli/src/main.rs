@@ -671,7 +671,10 @@ mod tests {
             Some("+1-555-0100"),
             None,
         );
-        assert!(result.is_ok(), "valid email and phone should pass: {result:?}");
+        assert!(
+            result.is_ok(),
+            "valid email and phone should pass: {result:?}"
+        );
     }
 
     // ── User CRUD ─────────────────────────────────────────────────────

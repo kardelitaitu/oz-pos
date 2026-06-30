@@ -5,6 +5,7 @@
 //! implements `foundation::contracts::DomainEvent` for use with
 //! the kernel's `EventBus`.
 
+use foundation::Barcode;
 use foundation::contracts::DomainEvent;
 
 /// Published when a sale is completed at the POS.
@@ -69,7 +70,7 @@ pub struct ProductCreated {
     /// Optional category id.
     pub category_id: Option<String>,
     /// Optional barcode.
-    pub barcode: Option<String>,
+    pub barcode: Option<Barcode>,
     /// Initial stock quantity.
     pub initial_stock: i64,
 }

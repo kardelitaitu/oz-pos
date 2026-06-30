@@ -205,7 +205,7 @@ impl Store<'_> {
             name: name.trim().to_owned(),
             price,
             category_id: category_id.map(|s| s.to_owned()),
-            barcode: barcode.map(|s| s.to_owned()),
+            barcode: barcode.and_then(|s| foundation::Barcode::new(s).ok()),
             created_at: now.clone(),
             updated_at: now,
         })
@@ -612,13 +612,14 @@ impl Store<'_> {
             _ => None,
         };
 
+        let barcode_raw: Option<String> = row.get("barcode")?;
         Ok(ProductVariant {
             id: row.get("id")?,
             parent_sku: row.get("parent_sku")?,
             name: row.get("name")?,
             sku: row.get("sku")?,
             price,
-            barcode: row.get("barcode")?,
+            barcode: barcode_raw.and_then(|s| foundation::Barcode::new(&s).ok()),
             sort_order: row.get("sort_order")?,
             is_active: row.get::<_, i64>("is_active")? != 0,
             created_at: row.get("created_at")?,
@@ -769,7 +770,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(p.category_id.as_deref(), Some("cat-drinks"));
-        assert_eq!(p.barcode.as_deref(), Some("1234567890123"));
+        assert_eq!(
+            p.barcode.as_ref().map(|b| b.as_str()),
+            Some("1234567890123")
+        );
         let qty = store(&conn).get_stock(&p.id).unwrap();
         assert_eq!(qty, 5);
     }
@@ -1165,7 +1169,10 @@ mod tests {
 
         // Verify price and barcode on first variant.
         assert_eq!(variants[0].price.unwrap().minor_units, 800);
-        assert_eq!(variants[0].barcode.as_deref(), Some("sm-barcode"));
+        assert_eq!(
+            variants[0].barcode.as_ref().map(|b| b.as_str()),
+            Some("sm-barcode")
+        );
         assert!(variants[0].is_active);
     }
 

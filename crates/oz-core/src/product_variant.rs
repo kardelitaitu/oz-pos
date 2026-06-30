@@ -1,7 +1,9 @@
 //! Product variant domain type — size/colour/flavour per parent product.
 
-use crate::Money;
+use foundation::Barcode;
 use serde::{Deserialize, Serialize};
+
+use crate::Money;
 
 /// A product variant linked to a parent product via `parent_sku`.
 ///
@@ -20,7 +22,7 @@ pub struct ProductVariant {
     /// Optional price override. `None` means use parent product's price.
     pub price: Option<Money>,
     /// Optional barcode (unique when present).
-    pub barcode: Option<String>,
+    pub barcode: Option<Barcode>,
     /// Display order within the variant list (ascending).
     pub sort_order: i64,
     /// Whether this variant is available for sale.
@@ -65,8 +67,8 @@ impl ProductVariant {
 
     /// Set the barcode (builder-style).
     #[must_use]
-    pub fn with_barcode(mut self, barcode: impl Into<String>) -> Self {
-        self.barcode = Some(barcode.into());
+    pub fn with_barcode(mut self, barcode: Barcode) -> Self {
+        self.barcode = Some(barcode);
         self
     }
 
@@ -117,10 +119,13 @@ mod tests {
     fn builder_methods() {
         let v = ProductVariant::new("TEA", "Green", "TEA-GREEN")
             .with_price(test_price())
-            .with_barcode("4901234567890")
+            .with_barcode(Barcode::new("4901234567890").unwrap())
             .with_sort_order(1);
         assert_eq!(v.price, Some(test_price()));
-        assert_eq!(v.barcode, Some("4901234567890".into()));
+        assert_eq!(
+            v.barcode,
+            Some(Barcode::new("4901234567890").unwrap())
+        );
         assert_eq!(v.sort_order, 1);
     }
 
@@ -128,7 +133,7 @@ mod tests {
     fn serde_roundtrip() {
         let v = ProductVariant::new("TEA", "Green", "TEA-GREEN")
             .with_price(test_price())
-            .with_barcode("4901234567890")
+            .with_barcode(Barcode::new("4901234567890").unwrap())
             .with_sort_order(2);
         let json = serde_json::to_string(&v).unwrap();
         let back: ProductVariant = serde_json::from_str(&json).unwrap();
