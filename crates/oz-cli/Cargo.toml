@@ -11,6 +11,7 @@ name = "oz"
 path = "src/main.rs"
 
 [dependencies]
+foundation = { workspace = true }
 oz-core = { workspace = true }
 oz-hal = { workspace = true }
 oz-lua = { workspace = true }

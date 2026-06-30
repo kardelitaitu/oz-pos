@@ -293,7 +293,10 @@ fn update_customer_preserves_loyalty_and_spending() {
         )
         .unwrap();
     assert_eq!(updated.name, "Alice Smith");
-    assert_eq!(updated.email.as_deref(), Some("alice.smith@example.com"));
+    assert_eq!(
+        updated.email.as_ref().map(|e| e.as_str()),
+        Some("alice.smith@example.com")
+    );
     assert_eq!(
         updated.loyalty_points, 150,
         "loyalty points preserved after contact update"
@@ -404,10 +407,13 @@ fn email_and_phone_are_nullable_in_list() {
     let customers = s.list_customers().unwrap();
     let bob = customers.iter().find(|c| c.name == "Bob").unwrap();
     assert!(bob.email.is_none(), "Bob has no email");
-    assert_eq!(bob.phone.as_deref(), Some("+1-555-0102"));
+    assert_eq!(bob.phone.as_ref().map(|p| p.as_str()), Some("+1-555-0102"));
 
     let carol = customers.iter().find(|c| c.name == "Carol").unwrap();
-    assert_eq!(carol.email.as_deref(), Some("carol@example.com"));
+    assert_eq!(
+        carol.email.as_ref().map(|e| e.as_str()),
+        Some("carol@example.com")
+    );
     assert!(carol.phone.is_none(), "Carol has no phone");
 }
 

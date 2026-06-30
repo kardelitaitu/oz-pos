@@ -600,6 +600,80 @@ mod tests {
         assert!(customers.iter().any(|c| c.name == "Alice"));
     }
 
+    #[test]
+    fn run_customer_create_rejects_invalid_email() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_create(&store, "Alice", Some("notanemail"), None, None);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("must contain exactly one '@'"),
+            "expected '@' error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn run_customer_create_rejects_empty_email() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_create(&store, "Alice", Some(""), None, None);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("must not be empty"),
+            "expected empty error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn run_customer_create_rejects_invalid_phone() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_create(&store, "Alice", None, Some("no-digits-here"), None);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("at least one digit"),
+            "expected digit error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn run_customer_create_rejects_empty_phone() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_create(&store, "Alice", None, Some(""), None);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("must not be empty"),
+            "expected empty error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn run_customer_create_accepts_none_phone_and_email() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_create(&store, "Alice", None, None, None);
+        assert!(result.is_ok(), "None email/phone should pass validation");
+    }
+
+    #[test]
+    fn run_customer_create_accepts_valid_email_and_phone() {
+        let conn = setup_in_memory_db();
+        let store = make_store(&conn);
+        let result = run_customer_create(
+            &store,
+            "Bob",
+            Some("bob@example.com"),
+            Some("+1-555-0100"),
+            None,
+        );
+        assert!(result.is_ok(), "valid email and phone should pass: {result:?}");
+    }
+
     // ── User CRUD ─────────────────────────────────────────────────────
 
     fn seed_role(conn: &Connection, id: &str, name: &str) {
@@ -1537,8 +1611,8 @@ fn run_customer_list(store: &Store<'_>) -> Result<()> {
     println!("{:-<40} {:-<24} {:-<30} {:-<16}", "", "", "", "");
 
     for c in &customers {
-        let email = c.email.as_deref().unwrap_or("-");
-        let phone = c.phone.as_deref().unwrap_or("-");
+        let email = c.email.as_ref().map(|e| e.as_str()).unwrap_or("-");
+        let phone = c.phone.as_ref().map(|p| p.as_str()).unwrap_or("-");
         println!("{:<40} {:<24} {:<30} {:<16}", c.id, c.name, email, phone);
     }
 
@@ -1550,8 +1624,14 @@ fn run_customer_get(store: &Store<'_>, id: &str) -> Result<()> {
         Some(c) => {
             println!("ID:      {}", c.id);
             println!("Name:    {}", c.name);
-            println!("Email:   {}", c.email.as_deref().unwrap_or("(none)"));
-            println!("Phone:   {}", c.phone.as_deref().unwrap_or("(none)"));
+            println!(
+                "Email:   {}",
+                c.email.as_ref().map(|e| e.as_str()).unwrap_or("(none)")
+            );
+            println!(
+                "Phone:   {}",
+                c.phone.as_ref().map(|p| p.as_str()).unwrap_or("(none)")
+            );
             println!("Points:  {}", c.loyalty_points);
             println!("Spent:   {} {}", c.total_spent_minor, c.currency);
             println!("Notes:   {}", c.notes);
@@ -1572,6 +1652,13 @@ fn run_customer_create(
     phone: Option<&str>,
     notes: Option<&str>,
 ) -> Result<()> {
+    if let Some(e) = email {
+        foundation::Email::new(e).map_err(|e| anyhow::anyhow!("{}", e.message))?;
+    }
+    if let Some(p) = phone {
+        foundation::Phone::new(p).map_err(|e| anyhow::anyhow!("{}", e.message))?;
+    }
+
     match store.create_customer(name, email, phone, notes) {
         Ok(c) => {
             println!("Created customer: {} ({})", c.name, c.id);
@@ -2191,16 +2278,18 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
                         |_| Ok(()),
                     )
                     .is_ok();
+                let email_str = cust.email.map(|e| e.to_string());
+                let phone_str = cust.phone.map(|p| p.to_string());
                 if exists {
                     tx.execute(
                         "UPDATE customers SET name = ?1, email = ?2, phone = ?3, notes = ?4, updated_at = ?5 WHERE id = ?6",
-                        rusqlite::params![cust.name, cust.email, cust.phone, cust.notes, now, cust.id],
+                        rusqlite::params![cust.name, email_str, phone_str, cust.notes, now, cust.id],
                     )?;
                 } else {
                     tx.execute(
                         "INSERT INTO customers (id, name, email, phone, notes, loyalty_points, total_spent_minor, currency, created_at, updated_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, 'USD', ?6, ?7)",
-                        rusqlite::params![cust.id, cust.name, cust.email, cust.phone, cust.notes, now, now],
+                        rusqlite::params![cust.id, cust.name, email_str, phone_str, cust.notes, now, now],
                     )?;
                 }
                 total += 1;

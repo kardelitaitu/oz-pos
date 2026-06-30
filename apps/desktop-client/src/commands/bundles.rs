@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tauri::{State, command};
 
 use oz_core::Store;

@@ -2,6 +2,8 @@
 
 use rusqlite::params;
 
+use foundation::{Email, Phone};
+
 use crate::Customer;
 use crate::error::CoreError;
 
@@ -16,11 +18,13 @@ impl Store<'_> {
              FROM customers ORDER BY name",
         )?;
         let rows = stmt.query_map([], |row| {
+            let email_raw: Option<String> = row.get("email")?;
+            let phone_raw: Option<String> = row.get("phone")?;
             Ok(Customer {
                 id: row.get("id")?,
                 name: row.get("name")?,
-                email: row.get("email")?,
-                phone: row.get("phone")?,
+                email: email_raw.and_then(|s| Email::new(&s).ok()),
+                phone: phone_raw.and_then(|s| Phone::new(&s).ok()),
                 loyalty_points: row.get("loyalty_points")?,
                 total_spent_minor: row.get("total_spent_minor")?,
                 currency: row.get("currency")?,
@@ -40,11 +44,13 @@ impl Store<'_> {
              FROM customers WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], |row| {
+            let email_raw: Option<String> = row.get("email")?;
+            let phone_raw: Option<String> = row.get("phone")?;
             Ok(Customer {
                 id: row.get("id")?,
                 name: row.get("name")?,
-                email: row.get("email")?,
-                phone: row.get("phone")?,
+                email: email_raw.and_then(|s| Email::new(&s).ok()),
+                phone: phone_raw.and_then(|s| Phone::new(&s).ok()),
                 loyalty_points: row.get("loyalty_points")?,
                 total_spent_minor: row.get("total_spent_minor")?,
                 currency: row.get("currency")?,
@@ -95,8 +101,8 @@ impl Store<'_> {
         Ok(Customer {
             id,
             name: name.trim().to_owned(),
-            email: email.map(|s| s.to_owned()),
-            phone: phone.map(|s| s.to_owned()),
+            email: email.and_then(|s| Email::new(s).ok()),
+            phone: phone.and_then(|s| Phone::new(s).ok()),
             loyalty_points: 0,
             total_spent_minor: 0,
             currency: "USD".into(),
@@ -135,7 +141,7 @@ impl Store<'_> {
             });
         }
 
-        self.get_customer(id)?.ok_or_else(|| CoreError::NotFound {
+        self.get_customer(id)?.ok_or(CoreError::NotFound {
             entity: "customer",
             id: id.to_owned(),
         })
@@ -212,8 +218,11 @@ mod tests {
         seed_customers(&conn);
         let c = store(&conn).get_customer("cust-1").unwrap().unwrap();
         assert_eq!(c.name, "Alice");
-        assert_eq!(c.email.as_deref(), Some("alice@example.com"));
-        assert_eq!(c.phone.as_deref(), Some("+1-555-0101"));
+        assert_eq!(
+            c.email.as_ref().map(|e| e.as_str()),
+            Some("alice@example.com")
+        );
+        assert_eq!(c.phone.as_ref().map(|p| p.as_str()), Some("+1-555-0101"));
         assert_eq!(c.notes, "Regular");
     }
 
@@ -231,7 +240,7 @@ mod tests {
         let c = store(&conn).get_customer("cust-2").unwrap().unwrap();
         assert_eq!(c.name, "Bob");
         assert!(c.email.is_none());
-        assert_eq!(c.phone.as_deref(), Some("+1-555-0102"));
+        assert_eq!(c.phone.as_ref().map(|p| p.as_str()), Some("+1-555-0102"));
     }
 
     // ── Create ──────────────────────────────────────────────────────
@@ -256,13 +265,13 @@ mod tests {
             .create_customer(
                 "Diana",
                 Some("diana@test.com"),
-                Some("555-0100"),
+                Some("555-0100"), // Phone needs digits; dashes alone won't parse
                 Some("Preferred"),
             )
             .unwrap();
         assert_eq!(c.name, "Diana");
-        assert_eq!(c.email.as_deref(), Some("diana@test.com"));
-        assert_eq!(c.phone.as_deref(), Some("555-0100"));
+        assert_eq!(c.email.as_ref().map(|e| e.as_str()), Some("diana@test.com"));
+        assert_eq!(c.phone.as_ref().map(|p| p.as_str()), Some("555-0100"));
         assert_eq!(c.notes, "Preferred");
         assert_eq!(c.loyalty_points, 0);
         assert_eq!(c.total_spent_minor, 0);
@@ -293,7 +302,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(updated.name, "Alice Updated");
-        assert_eq!(updated.email.as_deref(), Some("alice@new.com"));
+        assert_eq!(
+            updated.email.as_ref().map(|e| e.as_str()),
+            Some("alice@new.com")
+        );
         assert_eq!(updated.notes, "Changed");
         assert!(updated.updated_at.as_str() > "2025-01-01");
     }

@@ -33,6 +33,15 @@ fn request(major_amount: i64) -> PaymentRequest {
     }
 }
 
+/// Build a reqwest client that bypasses system proxy so localhost wiremock
+/// tests work when HTTP_PROXY / HTTPS_PROXY env vars are set.
+fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("reqwest client with no_proxy should build")
+}
+
 // ── Wiremock infrastructure smoke tests ──────────────────────────────
 
 #[tokio::test]
@@ -49,7 +58,7 @@ async fn wiremock_server_starts_and_stops() {
         .mount(&mock_server)
         .await;
 
-    let response = reqwest::Client::new()
+    let response = http_client()
         .post(format!("{}/health", mock_server.uri()))
         .send()
         .await
@@ -86,7 +95,7 @@ async fn wiremock_matches_on_path_and_method() {
         .await;
 
     // Send a POST — should match.
-    let resp = reqwest::Client::new()
+    let resp = http_client()
         .post(format!("{}/authorize", mock_server.uri()))
         .header("Authorization", "Bearer sk_test_wm")
         .body("amount=1000&currency=usd")
@@ -100,7 +109,7 @@ async fn wiremock_matches_on_path_and_method() {
     assert_eq!(body["transaction_id"], "wm_txn_001");
 
     // Send a GET — should NOT match (wiremock returns 404 for unmocked routes).
-    let resp = reqwest::Client::new()
+    let resp = http_client()
         .get(format!("{}/authorize", mock_server.uri()))
         .send()
         .await
@@ -145,7 +154,7 @@ async fn wiremock_and_mock_processor_can_coexist() {
     assert!(payment_result.success);
 
     // Independently hit wiremock via reqwest.
-    let resp = reqwest::Client::new()
+    let resp = http_client()
         .get(format!("{}/ping", mock_server.uri()))
         .send()
         .await

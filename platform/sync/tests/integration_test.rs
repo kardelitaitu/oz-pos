@@ -474,7 +474,7 @@ async fn relay_handle_pull(
 }
 
 /// Spawn a relay server and return (port, state, handle).
-pub async fn spawn_relay_server() -> (u16, RelayServerState, tokio::task::JoinHandle<()>) {
+async fn spawn_relay_server() -> (u16, RelayServerState, tokio::task::JoinHandle<()>) {
     let state = RelayServerState::new();
     let app = Router::new()
         .route("/api/sync/push", post(relay_handle_push))

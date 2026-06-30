@@ -395,16 +395,18 @@ pub async fn import_data(
                         |_| Ok(()),
                     )
                     .is_ok();
+                let email_str = cust.email.map(|e| e.to_string());
+                let phone_str = cust.phone.map(|p| p.to_string());
                 if exists {
                     let _ = tx.execute(
                         "UPDATE customers SET name = ?1, email = ?2, phone = ?3, notes = ?4, updated_at = ?5 WHERE id = ?6",
-                        rusqlite::params![cust.name, cust.email, cust.phone, cust.notes, now, cust.id],
+                        rusqlite::params![cust.name, email_str, phone_str, cust.notes, now, cust.id],
                     );
                 } else {
                     let _ = tx.execute(
                         "INSERT INTO customers (id, name, email, phone, notes, loyalty_points, total_spent_minor, currency, created_at, updated_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                        rusqlite::params![cust.id, cust.name, cust.email, cust.phone, cust.notes, 0i64, 0i64, "USD", now, now],
+                        rusqlite::params![cust.id, cust.name, email_str, phone_str, cust.notes, 0i64, 0i64, "USD", now, now],
                     );
                 }
                 customers_imported += 1;

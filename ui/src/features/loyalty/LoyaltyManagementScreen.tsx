@@ -4,7 +4,6 @@ import {
   listLoyaltyAccounts,
   listLoyaltyTiers,
   updateLoyaltyTier,
-  getPointsValue,
   type LoyaltyAccountWithDetails,
   type LoyaltyTier,
 } from '@/api/loyalty';
@@ -34,7 +33,6 @@ export default function LoyaltyManagementScreen() {
   const [tierForm, setTierForm] = useState<TierFormData>({
     name: '', min_points: '', points_per_unit: '', earn_multiplier: '', colour: '',
   });
-  const [saving, setSaving] = useState(false);
   const [savingTier, setSavingTier] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

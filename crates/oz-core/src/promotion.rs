@@ -29,6 +29,7 @@ impl PromotionType {
     }
 
     /// Parse a promotion type from its database string representation.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "percentage" => Some(Self::Percentage),

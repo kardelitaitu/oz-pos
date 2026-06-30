@@ -124,6 +124,10 @@ pub const ALL: &[Migration] = &[
         sql: include_str!("../migrations/029_promotions.sql"),
     },
     Migration {
+        id: "030_product_bundles.sql",
+        sql: include_str!("../migrations/030_product_bundles.sql"),
+    },
+    Migration {
         id: "031_loyalty.sql",
         sql: include_str!("../migrations/031_loyalty.sql"),
     },

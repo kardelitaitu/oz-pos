@@ -67,7 +67,7 @@ export default function MultiStoreDashboardScreen() {
   const onlineTerminals = terminals.filter((t) => isOnline(t.lastSeenAt)).length;
 
   const getTerminalCount = useCallback(
-    (storeId: string) => {
+    (_storeId: string) => {
       return terminals.length;
     },
     [terminals],

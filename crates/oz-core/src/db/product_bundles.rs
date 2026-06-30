@@ -258,13 +258,18 @@ mod tests {
         conn.pragma_update(None, "journal_mode", "WAL").unwrap();
         migrations::run(&mut conn).unwrap();
 
-        // Seed a product so FK constraints are satisfied.
+        // Seed products so FK constraints are satisfied.
         conn.execute_batch(
             "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
              VALUES ('p1', 'ITEM-A', 'Item A', 100, 'USD', 'now', 'now'),
                     ('p2', 'ITEM-B', 'Item B', 200, 'USD', 'now', 'now'),
                     ('p3', 'ITEM-C', 'Item C', 150, 'USD', 'now', 'now'),
-                    ('p4', 'BUNDLE1', 'Bundle One', 0, 'USD', 'now', 'now')",
+                    ('p4', 'BUNDLE1', 'Bundle One', 0, 'USD', 'now', 'now'),
+                    ('p5', 'B-Gift Box', 'Gift Box Bundle', 0, 'USD', 'now', 'now'),
+                    ('p6', 'B-Hamper', 'Hamper Bundle', 0, 'USD', 'now', 'now'),
+                    ('p7', 'B-Sampler', 'Sampler Bundle', 0, 'USD', 'now', 'now'),
+                    ('p8', 'B-Edit Me', 'Edit Me Bundle', 0, 'USD', 'now', 'now'),
+                    ('p9', 'B-Delete Me', 'Delete Me Bundle', 0, 'USD', 'now', 'now')",
         )
         .unwrap();
 

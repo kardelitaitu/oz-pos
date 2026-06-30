@@ -28,7 +28,7 @@ use crate::money::Money;
 ///
 /// The inner value is stored as [`u8`] because percentages never exceed
 /// 100, making the type smaller and cheaper than `i64`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Percentage(u8);
 
 impl Serialize for Percentage {
@@ -99,12 +99,6 @@ impl Percentage {
     #[must_use]
     pub fn hundred() -> Self {
         Self(100)
-    }
-}
-
-impl Default for Percentage {
-    fn default() -> Self {
-        Self(0)
     }
 }
 

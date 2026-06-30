@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use foundation::{Email, Phone};
+
 /// A repeat buyer tracked by the POS.
 ///
 /// # Schema mapping
@@ -21,10 +23,10 @@ pub struct Customer {
     pub name: String,
 
     /// Optional email address.
-    pub email: Option<String>,
+    pub email: Option<Email>,
 
     /// Optional phone number.
-    pub phone: Option<String>,
+    pub phone: Option<Phone>,
 
     /// Accumulated loyalty points.
     pub loyalty_points: i64,
@@ -74,15 +76,15 @@ impl Customer {
 
     /// Set the email address (builder-style).
     #[must_use]
-    pub fn with_email(mut self, email: impl Into<String>) -> Self {
-        self.email = Some(email.into());
+    pub fn with_email(mut self, email: Email) -> Self {
+        self.email = Some(email);
         self
     }
 
     /// Set the phone number (builder-style).
     #[must_use]
-    pub fn with_phone(mut self, phone: impl Into<String>) -> Self {
-        self.phone = Some(phone.into());
+    pub fn with_phone(mut self, phone: Phone) -> Self {
+        self.phone = Some(phone);
         self
     }
 }
@@ -90,6 +92,7 @@ impl Customer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use foundation::{Email, Phone};
 
     #[test]
     fn new_customer() {
@@ -111,28 +114,28 @@ mod tests {
 
     #[test]
     fn builder_sets_email() {
-        let c = Customer::new("Bob").with_email("bob@example.com");
-        assert_eq!(c.email, Some("bob@example.com".into()));
+        let c = Customer::new("Bob").with_email(Email::new("bob@example.com").unwrap());
+        assert_eq!(c.email, Some(Email::new("bob@example.com").unwrap()));
     }
 
     #[test]
     fn builder_sets_phone() {
-        let c = Customer::new("Bob").with_phone("+1-555-0100");
-        assert_eq!(c.phone, Some("+1-555-0100".into()));
+        let c = Customer::new("Bob").with_phone(Phone::new("+1-555-0100").unwrap());
+        assert_eq!(c.phone, Some(Phone::new("+1-555-0100").unwrap()));
     }
 
     #[test]
     fn builder_chains() {
         let c = Customer::new("Bob")
-            .with_email("bob@example.com")
-            .with_phone("+1-555-0100");
-        assert_eq!(c.email, Some("bob@example.com".into()));
-        assert_eq!(c.phone, Some("+1-555-0100".into()));
+            .with_email(Email::new("bob@example.com").unwrap())
+            .with_phone(Phone::new("+1-555-0100").unwrap());
+        assert_eq!(c.email, Some(Email::new("bob@example.com").unwrap()));
+        assert_eq!(c.phone, Some(Phone::new("+1-555-0100").unwrap()));
     }
 
     #[test]
     fn serde_roundtrip() {
-        let c = Customer::new("Alice").with_email("alice@example.com");
+        let c = Customer::new("Alice").with_email(Email::new("alice@example.com").unwrap());
         let json = serde_json::to_string(&c).unwrap();
         let back: Customer = serde_json::from_str(&json).unwrap();
         assert_eq!(back, c);

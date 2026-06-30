@@ -52,7 +52,6 @@ export default function TableManagementScreen() {
               width: `${t.width}%`, height: `${t.height}%`,
               backgroundColor: STATUS_COLORS[t.status] ?? '#6b7280',
             }}
-            role="listitem"
             aria-label={`${t.name}, ${t.status}`}
           >
             <span className="tables-table-name">{t.name}</span>

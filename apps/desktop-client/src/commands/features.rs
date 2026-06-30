@@ -165,12 +165,12 @@ pub async fn set_feature(
             );
         } else {
             // Terminal already registered — ensure env var is set.
-            if std::env::var("OZ_TERMINAL_ID").is_err() {
-                if let Some(existing) = store.get_terminal_by_device_id(&device_id)? {
-                    // SAFETY: single-threaded toggle, value is stable.
-                    unsafe {
-                        std::env::set_var("OZ_TERMINAL_ID", existing.id);
-                    }
+            if std::env::var("OZ_TERMINAL_ID").is_err()
+                && let Some(existing) = store.get_terminal_by_device_id(&device_id)?
+            {
+                // SAFETY: single-threaded toggle, value is stable.
+                unsafe {
+                    std::env::set_var("OZ_TERMINAL_ID", existing.id);
                 }
             }
         }

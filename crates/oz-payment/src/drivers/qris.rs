@@ -188,6 +188,7 @@ impl QrisPaymentProcessor {
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
+            .no_proxy()
             .build()
             .expect("valid reqwest client");
 

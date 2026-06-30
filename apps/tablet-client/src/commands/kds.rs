@@ -5,8 +5,8 @@
 
 use tauri::{State, command};
 
+use oz_core::KdsOrder;
 use oz_core::db::Store;
-use oz_core::{CreateKdsOrderInput, KdsOrder};
 
 use crate::error::AppError;
 use crate::state::AppState;

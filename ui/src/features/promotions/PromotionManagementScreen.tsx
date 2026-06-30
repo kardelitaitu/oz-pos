@@ -245,12 +245,12 @@ export default function PromotionManagementScreen() {
               <div className="promo-mgmt-form">
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-name"><span>Name</span></Localized>
-                  <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                  <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required aria-label="Name" />
                 </label>
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-type"><span>Type</span></Localized>
-                  <select value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })}>
+                  <select value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label="Type">
                     {PROMO_TYPES.map((t) => (
                       <option key={t} value={t}>
                         <Localized id={PROMO_TYPE_LABELS[t]!}><span>{t}</span></Localized>
@@ -261,47 +261,47 @@ export default function PromotionManagementScreen() {
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-value"><span>Value</span></Localized>
-                  <input type="number" value={form.value_minor} onChange={(e) => setForm({ ...form, value_minor: parseInt(e.target.value) || 0 })} />
+                  <input type="number" value={form.value_minor} onChange={(e) => setForm({ ...form, value_minor: parseInt(e.target.value) || 0 })} aria-label="Value" />
                 </label>
 
                 {form.promo_type === 'buy_x_get_y' && (
                   <>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-min-qty"><span>Min Qty</span></Localized>
-                      <input type="number" value={form.min_qty ?? ''} onChange={(e) => setForm({ ...form, min_qty: e.target.value ? parseInt(e.target.value) : null })} />
+                      <input type="number" value={form.min_qty ?? ''} onChange={(e) => setForm({ ...form, min_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label="Min Qty" />
                     </label>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-trigger-sku"><span>Trigger SKU</span></Localized>
-                      <input type="text" value={form.trigger_sku ?? ''} onChange={(e) => setForm({ ...form, trigger_sku: e.target.value || null })} />
+                      <input type="text" value={form.trigger_sku ?? ''} onChange={(e) => setForm({ ...form, trigger_sku: e.target.value || null })} aria-label="Trigger SKU" />
                     </label>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-reward-sku"><span>Reward SKU</span></Localized>
-                      <input type="text" value={form.reward_sku ?? ''} onChange={(e) => setForm({ ...form, reward_sku: e.target.value || null })} />
+                      <input type="text" value={form.reward_sku ?? ''} onChange={(e) => setForm({ ...form, reward_sku: e.target.value || null })} aria-label="Reward SKU" />
                     </label>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-reward-qty"><span>Reward Qty</span></Localized>
-                      <input type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm({ ...form, reward_qty: e.target.value ? parseInt(e.target.value) : null })} />
+                      <input type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm({ ...form, reward_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label="Reward Qty" />
                     </label>
                   </>
                 )}
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-starts-at"><span>Starts At</span></Localized>
-                  <input type="datetime-local" value={form.starts_at ? form.starts_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} />
+                  <input type="datetime-local" value={form.starts_at ? form.starts_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label="Starts At" />
                 </label>
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-ends-at"><span>Ends At</span></Localized>
-                  <input type="datetime-local" value={form.ends_at ? form.ends_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null })} />
+                  <input type="datetime-local" value={form.ends_at ? form.ends_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label="Ends At" />
                 </label>
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-min-order"><span>Min Order</span></Localized>
-                  <input type="number" value={form.min_order_minor} onChange={(e) => setForm({ ...form, min_order_minor: parseInt(e.target.value) || 0 })} />
+                  <input type="number" value={form.min_order_minor} onChange={(e) => setForm({ ...form, min_order_minor: parseInt(e.target.value) || 0 })} aria-label="Min Order" />
                 </label>
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-category"><span>Category</span></Localized>
-                  <input type="text" value={form.category_id ?? ''} onChange={(e) => setForm({ ...form, category_id: e.target.value || null })} />
+                  <input type="text" value={form.category_id ?? ''} onChange={(e) => setForm({ ...form, category_id: e.target.value || null })} aria-label="Category" />
                 </label>
               </div>
             </div>
