@@ -8,7 +8,7 @@ use crate::error::SecurityError;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
 use zbus::Connection;
-use zvariant::{OwnedObjectPath, Value};
+use zbus::zvariant::{OwnedObjectPath, Value};
 
 const SECRET_SERVICE: &str = "org.freedesktop.secrets";
 const SECRET_PATH: &str = "/org/freedesktop/secrets";
@@ -50,6 +50,7 @@ impl LibSecretKeyring {
             .await
             .map_err(|e| SecurityError::KeyUnavailable(format!("OpenSession failed: {e}")))?
             .body()
+            .deserialize()
             .map_err(|e| {
                 SecurityError::KeyUnavailable(format!("OpenSession body deserialize failed: {e}"))
             })?;
@@ -69,6 +70,7 @@ impl LibSecretKeyring {
             .await
             .map_err(|e| SecurityError::KeyUnavailable(format!("ReadAlias failed: {e}")))?
             .body()
+            .deserialize()
             .map_err(|e| {
                 SecurityError::KeyUnavailable(format!("ReadAlias body deserialize failed: {e}"))
             })?;
@@ -91,6 +93,7 @@ impl LibSecretKeyring {
             .await
             .map_err(|e| SecurityError::KeyUnavailable(format!("SearchItems failed: {e}")))?
             .body()
+            .deserialize()
             .map_err(|e| {
                 SecurityError::KeyUnavailable(format!("SearchItems body deserialize failed: {e}"))
             })?;
@@ -120,6 +123,7 @@ impl Keyring for LibSecretKeyring {
             ))
             .map_err(|e| SecurityError::KeyUnavailable(format!("GetSecret failed: {e}")))?
             .body()
+            .deserialize()
             .map_err(|e| {
                 SecurityError::KeyUnavailable(format!("GetSecret body deserialize failed: {e}"))
             })?;
@@ -139,9 +143,9 @@ impl Keyring for LibSecretKeyring {
 
         let items = self.rt.block_on(self.search_items(&attrs))?;
         for item_path in &items {
-            let _: Result<(), _> = self
+            let _ = self
                 .rt
-                .block_on(self.conn.call_method::<(), _, ()>(
+                .block_on(self.conn.call_method(
                     Some(SECRET_SERVICE),
                     item_path,
                     Some(ITEM_IFACE),
@@ -176,6 +180,7 @@ impl Keyring for LibSecretKeyring {
             ))
             .map_err(|e| SecurityError::KeyUnavailable(format!("CreateItem failed: {e}")))?
             .body()
+            .deserialize()
             .map_err(|e| {
                 SecurityError::KeyUnavailable(format!("CreateItem body deserialize failed: {e}"))
             })?;
@@ -193,7 +198,7 @@ impl Keyring for LibSecretKeyring {
 
         for item_path in &items {
             self.rt
-                .block_on(self.conn.call_method::<(), _, ()>(
+                .block_on(self.conn.call_method(
                     Some(SECRET_SERVICE),
                     item_path,
                     Some(ITEM_IFACE),

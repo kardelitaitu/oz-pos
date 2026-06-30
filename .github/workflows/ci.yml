@@ -66,6 +66,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
       - run: cargo run -p oz-cli -- migrate
       - run: cargo run -p oz-cli -- migrate
       - name: Clean up the local DB the smoke test created
