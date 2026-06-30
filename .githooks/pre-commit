@@ -1,0 +1,17 @@
+#!/bin/bash
+# .githooks/pre-commit — auto-format Rust code before every commit.
+set -e
+
+# Run cargo fmt, capturing output if it fails
+if ! cargo fmt --all 2>/dev/null; then
+    echo "error: cargo fmt failed — aborting commit." >&2
+    exit 1
+fi
+
+# Re-stage any files that cargo fmt modified
+CHANGED=$(git diff --name-only)
+if [ -n "$CHANGED" ]; then
+    echo "cargo fmt applied changes to:"
+    echo "$CHANGED"
+    git add $CHANGED
+fi
