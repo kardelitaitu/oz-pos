@@ -1662,19 +1662,14 @@ fn run_customer_create(
         foundation::Phone::new(p).map_err(|e| anyhow::anyhow!("{}", e.message))?;
     }
 
-    match store.create_customer(name, email, phone, notes) {
-        Ok(c) => {
-            println!("Created customer: {} ({})", c.name, c.id);
-        }
-        Err(CoreError::Validation { message, .. }) => {
-            eprintln!("Validation error: {message}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let c = store
+        .create_customer(name, email, phone, notes)
+        .map_err(|e| match &e {
+            CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
+            _ => anyhow::anyhow!("Error: {e}"),
+        })?;
+
+    println!("Created customer: {} ({})", c.name, c.id);
     Ok(())
 }
 
@@ -1850,7 +1845,11 @@ fn run_product_get(store: &Store<'_>, sku: &str) -> Result<()> {
             );
             println!(
                 "Barcode:      {}",
-                p.product.barcode.as_deref().unwrap_or("(none)")
+                p.product
+                    .barcode
+                    .as_ref()
+                    .map(|b| b.as_str())
+                    .unwrap_or("(none)")
             );
             match p.stock_qty {
                 Some(q) => println!("Stock:        {q}"),
@@ -2234,7 +2233,7 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 tx.execute(
                     "UPDATE products SET name = ?1, price_minor = ?2, currency = ?3, category_id = ?4, barcode = ?5, updated_at = ?6 WHERE sku = ?7",
-                    rusqlite::params![product.name, product.price.minor_units, cur_str, product.category_id, product.barcode, now, product.sku.to_string()],
+                    rusqlite::params![product.name, product.price.minor_units, cur_str, product.category_id, product.barcode.as_ref().map(|b| b.as_str()), now, product.sku.to_string()],
                 )?;
             } else {
                 let cur_str =
@@ -2243,7 +2242,7 @@ fn run_import_ozpkg(conn: &Connection, input: &str, password: &str, dry_run: boo
                 tx.execute(
                     "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                    rusqlite::params![product.id, product.sku.to_string(), product.name, product.price.minor_units, cur_str, product.category_id, product.barcode, now, now],
+                    rusqlite::params![product.id, product.sku.to_string(), product.name, product.price.minor_units, cur_str, product.category_id, product.barcode.as_ref().map(|b| b.as_str()), now, now],
                 )?;
             }
             total += 1;

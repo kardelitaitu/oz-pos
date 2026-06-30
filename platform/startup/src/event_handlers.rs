@@ -481,7 +481,7 @@ mod tests {
             price_minor: 499,
             currency: "USD".into(),
             category_id: Some("cat-goods".into()),
-            barcode: Some("123456789".into()),
+            barcode: Some(foundation::Barcode::new("123456789").unwrap()),
             initial_stock: 20,
         };
 

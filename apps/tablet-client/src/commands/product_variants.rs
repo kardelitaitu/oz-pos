@@ -54,7 +54,7 @@ impl From<ProductVariant> for ProductVariantDto {
                     currency: cur_str,
                 }
             }),
-            barcode: v.barcode,
+            barcode: v.barcode.map(|b| b.to_string()),
             sort_order: v.sort_order,
             is_active: v.is_active,
             created_at: v.created_at,
@@ -147,8 +147,10 @@ pub async fn create_product_variant(
     if let Some(p) = price {
         variant = variant.with_price(p);
     }
-    if let Some(barcode) = args.barcode {
-        variant = variant.with_barcode(barcode);
+    if let Some(ref barcode) = args.barcode {
+        let parsed = foundation::Barcode::new(barcode)
+            .map_err(|e| AppError::Invalid(e.message.to_string()))?;
+        variant = variant.with_barcode(parsed);
     }
     if let Some(order) = args.sort_order {
         variant = variant.with_sort_order(order);
@@ -210,8 +212,10 @@ pub async fn update_product_variant(
             currency,
         });
     }
-    if let Some(barcode) = args.barcode {
-        variant.barcode = Some(barcode);
+    if let Some(ref barcode) = args.barcode {
+        let parsed = foundation::Barcode::new(barcode)
+            .map_err(|e| AppError::Invalid(e.message.to_string()))?;
+        variant.barcode = Some(parsed);
     }
     if let Some(order) = args.sort_order {
         variant.sort_order = order;

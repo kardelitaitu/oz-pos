@@ -315,7 +315,7 @@ pub async fn import_data(
                     &product.name,
                     product.price,
                     product.category_id.as_deref(),
-                    product.barcode.as_deref(),
+                    product.barcode.as_ref().map(|b| b.as_str()),
                 )?;
             } else {
                 store.create_product(
@@ -323,7 +323,7 @@ pub async fn import_data(
                     &product.name,
                     product.price,
                     product.category_id.as_deref(),
-                    product.barcode.as_deref(),
+                    product.barcode.as_ref().map(|b| b.as_str()),
                     0,
                 )?;
             }

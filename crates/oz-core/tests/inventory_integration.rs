@@ -5,6 +5,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
+use foundation::Barcode;
 use oz_core::{Currency, Money, ProductVariant, Store, migrations};
 use rusqlite::Connection;
 
@@ -372,12 +373,12 @@ fn variant_duplicate_barcode_rejected() {
     seed_product(&conn, "pv-bc", "VARIANT-BARCODE", "Barcode Test", 0);
     let s = store(&conn);
 
-    let v1 =
-        ProductVariant::new("VARIANT-BARCODE", "First", "VB-001").with_barcode("1234567890123");
+    let v1 = ProductVariant::new("VARIANT-BARCODE", "First", "VB-001")
+        .with_barcode(Barcode::new("1234567890123").unwrap());
     s.create_product_variant(&v1).unwrap();
 
-    let v2 =
-        ProductVariant::new("VARIANT-BARCODE", "Second", "VB-002").with_barcode("1234567890123");
+    let v2 = ProductVariant::new("VARIANT-BARCODE", "Second", "VB-002")
+        .with_barcode(Barcode::new("1234567890123").unwrap());
     let result = s.create_product_variant(&v2);
     assert!(result.is_err(), "duplicate barcode should be rejected");
 }
@@ -405,18 +406,21 @@ fn variant_update_barcode() {
     seed_product(&conn, "pv-ub", "VARIANT-UPDATE-BC", "Update Barcode", 0);
     let s = store(&conn);
 
-    let v =
-        ProductVariant::new("VARIANT-UPDATE-BC", "Original", "VUB-001").with_barcode("old-barcode");
+    let v = ProductVariant::new("VARIANT-UPDATE-BC", "Original", "VUB-001")
+        .with_barcode(Barcode::new("old-barcode").unwrap());
     s.create_product_variant(&v).unwrap();
 
     let updated = ProductVariant {
-        barcode: Some("new-barcode".into()),
+        barcode: Some(Barcode::new("new-barcode").unwrap()),
         ..v
     };
     s.update_product_variant(&updated).unwrap();
 
     let loaded = s.get_product_variant("VUB-001").unwrap().unwrap();
-    assert_eq!(loaded.barcode.as_deref(), Some("new-barcode"));
+    assert_eq!(
+        loaded.barcode.as_ref().map(|b| b.as_str()),
+        Some("new-barcode")
+    );
 }
 
 #[test]

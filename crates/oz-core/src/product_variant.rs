@@ -122,10 +122,7 @@ mod tests {
             .with_barcode(Barcode::new("4901234567890").unwrap())
             .with_sort_order(1);
         assert_eq!(v.price, Some(test_price()));
-        assert_eq!(
-            v.barcode,
-            Some(Barcode::new("4901234567890").unwrap())
-        );
+        assert_eq!(v.barcode, Some(Barcode::new("4901234567890").unwrap()));
         assert_eq!(v.sort_order, 1);
     }
 

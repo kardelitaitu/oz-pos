@@ -157,10 +157,7 @@ mod tests {
     fn builder_sets_barcode() {
         let p = Product::new("SKU", "Widget", test_price())
             .with_barcode(Barcode::new("5901234123457").unwrap());
-        assert_eq!(
-            p.barcode,
-            Some(Barcode::new("5901234123457").unwrap())
-        );
+        assert_eq!(p.barcode, Some(Barcode::new("5901234123457").unwrap()));
     }
 
     #[test]
@@ -169,10 +166,7 @@ mod tests {
             .with_category("cat-tools")
             .with_barcode(Barcode::new("5901234123457").unwrap());
         assert_eq!(p.category_id, Some("cat-tools".into()));
-        assert_eq!(
-            p.barcode,
-            Some(Barcode::new("5901234123457").unwrap())
-        );
+        assert_eq!(p.barcode, Some(Barcode::new("5901234123457").unwrap()));
     }
 
     #[test]

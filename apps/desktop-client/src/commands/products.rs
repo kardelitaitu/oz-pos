@@ -131,7 +131,7 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
                     minor_units: pwd.product.price.minor_units,
                     currency: cur_str,
                 },
-                barcode: pwd.product.barcode,
+                barcode: pwd.product.barcode.as_ref().map(|b| b.to_string()),
                 in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
                 stock_qty: pwd.stock_qty,
                 tax_rate_ids: store
@@ -178,7 +178,7 @@ pub async fn lookup_by_barcode(
                 minor_units: pwd.product.price.minor_units,
                 currency: cur_str,
             },
-            barcode: pwd.product.barcode,
+            barcode: pwd.product.barcode.as_ref().map(|b| b.to_string()),
             in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
             stock_qty: pwd.stock_qty,
             tax_rate_ids,
@@ -247,7 +247,10 @@ pub async fn create_product(
             price_minor: args.price_minor,
             currency: args.currency.clone(),
             category_id: args.category_id.clone(),
-            barcode: args.barcode.clone(),
+            barcode: args
+                .barcode
+                .as_ref()
+                .and_then(|s| foundation::Barcode::new(s).ok()),
             initial_stock: args.initial_stock,
         };
 
@@ -379,6 +382,9 @@ mod tests {
         assert_eq!(latte.category.as_deref(), Some("Drinks"));
         assert_eq!(latte.price.minor_units, 450);
         assert_eq!(latte.barcode.as_deref(), Some("4901234567890"));
+        // Also verify BROWNIE has a barcode.
+        let brownie = products.iter().find(|p| p.sku == "BROWNIE").unwrap();
+        assert_eq!(brownie.barcode.as_deref(), Some("4901234567906"));
         assert!(latte.in_stock);
 
         // Check BROWNIE (has no inventory row).
