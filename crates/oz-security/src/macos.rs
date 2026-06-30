@@ -53,7 +53,7 @@ impl Keyring for MacOsKeychain {
     }
 
     fn set_secret(&self, name: &str, value: &str) -> Result<(), SecurityError> {
-        set_generic_password("OZ-POS", name, value)
+        set_generic_password("OZ-POS", name, value.as_bytes())
             .map_err(|e| SecurityError::KeyUnavailable(format!("set_generic_password failed: {e}")))
     }
 
