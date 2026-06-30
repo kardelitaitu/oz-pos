@@ -39,7 +39,7 @@ impl EventHandler<SaleCompleted> for SaleSyncEnqueuer {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("sync enqueuer: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("sync enqueuer: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         let payload = serde_json::json!({
@@ -59,7 +59,7 @@ impl EventHandler<SaleCompleted> for SaleSyncEnqueuer {
                     error = %e,
                     "sync enqueuer: failed to enqueue completed sale"
                 );
-                format!("sync enqueuer: enqueue_offline failed: {e}")
+                anyhow::anyhow!("sync enqueuer: enqueue_offline failed: {e}")
             })?;
 
         info!(
@@ -96,7 +96,7 @@ impl EventHandler<ProductCreated> for InventorySyncEnqueuer {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("inv sync enqueuer: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("inv sync enqueuer: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         let payload = serde_json::json!({
@@ -118,7 +118,7 @@ impl EventHandler<ProductCreated> for InventorySyncEnqueuer {
                     error = %e,
                     "inv sync enqueuer: failed to enqueue product.created"
                 );
-                format!("inv sync enqueuer: enqueue_offline failed: {e}")
+                anyhow::anyhow!("inv sync enqueuer: enqueue_offline failed: {e}")
             })?;
 
         info!(
@@ -135,7 +135,7 @@ impl EventHandler<StockAdjusted> for InventorySyncEnqueuer {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("inv sync enqueuer: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("inv sync enqueuer: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         let payload = serde_json::json!({
@@ -154,7 +154,7 @@ impl EventHandler<StockAdjusted> for InventorySyncEnqueuer {
                     error = %e,
                     "inv sync enqueuer: failed to enqueue stock.adjusted"
                 );
-                format!("inv sync enqueuer: enqueue_offline failed: {e}")
+                anyhow::anyhow!("inv sync enqueuer: enqueue_offline failed: {e}")
             })?;
 
         info!(
@@ -189,7 +189,7 @@ impl EventHandler<SaleCompleted> for AuditLogHandler {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("audit handler: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("audit handler: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         let details = serde_json::json!({
@@ -215,7 +215,7 @@ impl EventHandler<SaleCompleted> for AuditLogHandler {
                 error = %e,
                 "audit handler: failed to log sale.completed"
             );
-            format!("audit handler: log_audit failed: {e}")
+            anyhow::anyhow!("audit handler: log_audit failed: {e}")
         })?;
 
         info!(
@@ -233,7 +233,7 @@ impl EventHandler<StockAdjusted> for AuditLogHandler {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("audit handler: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("audit handler: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         let details = serde_json::json!({
@@ -259,7 +259,7 @@ impl EventHandler<StockAdjusted> for AuditLogHandler {
                 error = %e,
                 "audit handler: failed to log stock.adjusted"
             );
-            format!("audit handler: log_audit failed: {e}")
+            anyhow::anyhow!("audit handler: log_audit failed: {e}")
         })?;
 
         info!(
@@ -279,7 +279,7 @@ impl EventHandler<ProductCreated> for AuditLogHandler {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("audit handler: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("audit handler: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         let details = serde_json::json!({
@@ -306,7 +306,7 @@ impl EventHandler<ProductCreated> for AuditLogHandler {
                 error = %e,
                 "audit handler: failed to log product.created"
             );
-            format!("audit handler: log_audit failed: {e}")
+            anyhow::anyhow!("audit handler: log_audit failed: {e}")
         })?;
 
         info!(

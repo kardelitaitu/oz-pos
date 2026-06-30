@@ -73,6 +73,14 @@ settings-sync-syncing = Syncing…
 settings-sync-result = Last sync: { $synced } synced, { $failed } failed
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
 
+# Appearance / Brand settings
+settings-appearance = Appearance
+appearance-primary-colour = Primary Colour
+appearance-logo = Store Logo
+appearance-choose-logo = Choose Logo
+appearance-store-name = Display Store Name
+appearance-preview = Preview
+
 # Settings option labels
 settings-decimal-separator-dot = 1.00 (dot)
 settings-decimal-separator-comma = 1,00 (comma)

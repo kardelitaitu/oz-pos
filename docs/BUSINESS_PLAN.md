@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-**OZ-POS** is a modular, high-performance, and offline-first Point-of-Sale (POS) software framework built using Rust and Tauri v2. 
+**OZ-POS** is a modular, high-performance, and offline-first Point-of-Sale (POS) software framework built using Rust and Tauri v2.
 Unlike legacy cloud-reliant POS systems, OZ-POS utilizes a local-first architecture (SQLite edge databases coupled with an asynchronous cloud sync daemon) to provide sub-millisecond barcode scan latency and 100% uptime, even during internet outages.
 
 ### Mission Statement
@@ -41,6 +41,8 @@ graph TD
 | **Free Major Version Upgrades** | — (Paid: IDR 1.500.000) | ✓ | ✓ | ✓ |
 
 ### 2.2 Tier Details
+All tiers include a **3‑month free trial** with limited functionality: offline‑only operation, no cloud‑sync, and no integrated payment gateways. This allows merchants to evaluate the platform risk‑free before committing to a paid plan. During the free trial, merchants cannot import existing databases or user‑settings; a fresh local store is created.
+
 
 #### 1 Time Tier (Local-First Perpetual License)
 *   **Pricing:** **IDR 3.500.000 / terminal** (One-Time Payment)

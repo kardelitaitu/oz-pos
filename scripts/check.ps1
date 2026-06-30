@@ -51,7 +51,8 @@ function Step {
 }
 
 # --- Rust (mirrors CI rust job) -------------------------------------------
-Step -Name "cargo fmt" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
+Step -Name "cargo fmt (format)" -ScriptBlock { cargo fmt --all }
+Step -Name "cargo fmt (check)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
 
 $Packages = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).packages.name
 

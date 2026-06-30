@@ -11,6 +11,8 @@ use oz_core::{Money, Store};
 
 use oz_core::events::{ProductCreated, StockAdjusted};
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -35,12 +37,8 @@ pub async fn adjust_stock(
     args: AdjustStockArgs,
     state: State<'_, AppState>,
 ) -> Result<i64, AppError> {
-    if args.sku.trim().is_empty() {
-        return Err(AppError::Invalid("SKU must not be empty".into()));
-    }
-    if args.reason.trim().is_empty() {
-        return Err(AppError::Invalid("reason must not be empty".into()));
-    }
+    validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("reason", &args.reason).map_err(|e| AppError::Invalid(e.to_string()))?;
     if args.delta == 0 {
         return Err(AppError::Invalid("delta must be non-zero".into()));
     }
@@ -157,9 +155,7 @@ pub async fn lookup_by_barcode(
     barcode: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ProductDto>, AppError> {
-    if barcode.trim().is_empty() {
-        return Err(AppError::Invalid("barcode must not be empty".into()));
-    }
+    validate_not_empty("barcode", &barcode).map_err(|e| AppError::Invalid(e.to_string()))?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let pwd = store.lookup_product_with_details_by_barcode(&barcode)?;

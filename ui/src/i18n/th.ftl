@@ -392,8 +392,55 @@ shift-report-voids = การยกเลิก
 shift-report-refunds = การคืนเงิน
 shift-report-total = รวม:
 
+# ── Loyalty ──
+loyalty-title = สะสมแต้ม
+loyalty-accounts = บัญชี
+loyalty-tiers = ระดับ
+loyalty-points = แต้ม
+loyalty-lifetime-points = แต้มสะสมตลอดอายุ
+loyalty-tier = ระดับ
+loyalty-customer = ลูกค้า
+loyalty-no-accounts = ยังไม่มีบัญชีสะสมแต้ม
+loyalty-next-tier = ระดับถัดไป
+loyalty-points-to-next = แต้มที่ต้องใช้อัปเกรด
+loyalty-recent-transactions = กิจกรรมล่าสุด
+loyalty-earn = รับ
+loyalty-redeem = ใช้
+loyalty-adjust = ปรับปรุง
+loyalty-points-value = มูลค่าแต้ม
+loyalty-redeem-at-checkout = ใช้แต้มที่ชำระเงิน
+loyalty-available-points = แต้มที่มี
+loyalty-enter-points = ป้อนแต้มที่ต้องการใช้
+loyalty-validation-error = กรุณากรอกข้อมูลทุกช่องให้ถูกต้อง
+loyalty-tier-name = ชื่อ
+loyalty-tier-min-points = แต้มขั้นต่ำ
+loyalty-tier-ppu = แต้ม/หน่วย
+loyalty-tier-multiplier = ตัวคูณ
+loyalty-tier-colour = สี
+
 reports-sales = รายงานการขาย
 reports-inventory = รายงานสต็อก
 reports-top-products = สินค้าขายดี
 reports-hourly-heatmap = ชั่วโมงที่คึกคัก
 reports-export-csv = ส่งออก CSV
+
+# ── Kiosk Mode ──
+kiosk-tap-to-start = แตะเพื่อเริ่ม
+kiosk-all = ทั้งหมด
+kiosk-checkout = ชำระเงิน
+kiosk-checkout-title = ชำระเงิน
+kiosk-total = รวม
+kiosk-pay = ชำระเงิน
+kiosk-return = กลับไปเมนู
+
+# ── Kitchen Display System ──
+kds-title = จอแสดงผลครัว
+kds-pending = รอดำเนินการ
+kds-preparing = กำลังเตรียม
+kds-ready = พร้อมเสิร์ฟ
+kds-served = เสิร์ฟแล้ว
+kds-order-number = คำสั่งซื้อ #
+kds-items = { $count } รายการ
+kds-notes = หมายเหตุ
+kds-tap-to-advance = แตะเพื่อดำเนินการต่อ
+kds-no-orders = ยังไม่มีคำสั่งซื้อ

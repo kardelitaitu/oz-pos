@@ -8,6 +8,8 @@ use tauri::{State, command};
 
 use oz_core::{Store, Terminal, TerminalFeatureOverride};
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -100,9 +102,7 @@ pub async fn get_terminal(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<TerminalDto>, AppError> {
-    if id.trim().is_empty() {
-        return Err(AppError::Invalid("id must not be empty".into()));
-    }
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -118,12 +118,9 @@ pub async fn register_terminal(
     args: RegisterTerminalArgs,
     state: State<'_, AppState>,
 ) -> Result<RegisterTerminalResult, AppError> {
-    if args.name.trim().is_empty() {
-        return Err(AppError::Invalid("name must not be empty".into()));
-    }
-    if args.device_id.trim().is_empty() {
-        return Err(AppError::Invalid("device_id must not be empty".into()));
-    }
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("device_id", &args.device_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let mut terminal = Terminal::new(args.name, args.device_id);
     if let Some(secret) = args.terminal_secret {
@@ -148,9 +145,7 @@ pub async fn update_terminal(
     args: UpdateTerminalArgs,
     state: State<'_, AppState>,
 ) -> Result<UpdateTerminalResult, AppError> {
-    if args.id.trim().is_empty() {
-        return Err(AppError::Invalid("id must not be empty".into()));
-    }
+    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -160,15 +155,12 @@ pub async fn update_terminal(
         .ok_or_else(|| AppError::Invalid(format!("terminal '{}' not found", args.id)))?;
 
     if let Some(name) = args.name {
-        if name.trim().is_empty() {
-            return Err(AppError::Invalid("name must not be empty".into()));
-        }
+        validate_not_empty("name", &name).map_err(|e| AppError::Invalid(e.to_string()))?;
         terminal.name = name;
     }
     if let Some(device_id) = args.device_id {
-        if device_id.trim().is_empty() {
-            return Err(AppError::Invalid("device_id must not be empty".into()));
-        }
+        validate_not_empty("device_id", &device_id)
+            .map_err(|e| AppError::Invalid(e.to_string()))?;
         terminal.device_id = device_id;
     }
     if let Some(secret) = args.terminal_secret {
@@ -191,9 +183,7 @@ pub async fn update_terminal(
 /// Update a terminal's last_seen_at timestamp (heartbeat).
 #[command]
 pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
-    if id.trim().is_empty() {
-        return Err(AppError::Invalid("id must not be empty".into()));
-    }
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -207,9 +197,7 @@ pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(),
 /// Delete a terminal by id.
 #[command]
 pub async fn delete_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
-    if id.trim().is_empty() {
-        return Err(AppError::Invalid("id must not be empty".into()));
-    }
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -226,9 +214,8 @@ pub async fn list_terminal_overrides(
     terminal_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TerminalFeatureOverride>, AppError> {
-    if terminal_id.trim().is_empty() {
-        return Err(AppError::Invalid("terminal_id must not be empty".into()));
-    }
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -246,12 +233,9 @@ pub async fn set_terminal_override(
     enabled: bool,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    if terminal_id.trim().is_empty() {
-        return Err(AppError::Invalid("terminal_id must not be empty".into()));
-    }
-    if feature.trim().is_empty() {
-        return Err(AppError::Invalid("feature must not be empty".into()));
-    }
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -274,12 +258,9 @@ pub async fn delete_terminal_override(
     feature: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    if terminal_id.trim().is_empty() {
-        return Err(AppError::Invalid("terminal_id must not be empty".into()));
-    }
-    if feature.trim().is_empty() {
-        return Err(AppError::Invalid("feature must not be empty".into()));
-    }
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);

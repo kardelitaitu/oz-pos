@@ -9,7 +9,10 @@ use std::fmt::Debug;
 pub type ModuleId = &'static str;
 
 /// The result type used by module lifecycle operations.
-pub type ModuleResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+///
+/// Uses [`anyhow::Error`] so that callers can chain errors with
+/// [`.context()`](anyhow::Context) and downcast when needed.
+pub type ModuleResult<T = ()> = Result<T, anyhow::Error>;
 
 /// A deployable feature module.
 ///
@@ -303,7 +306,7 @@ mod tests {
     fn module_result_type_alias_is_result() {
         let ok: ModuleResult = Ok(());
         assert!(ok.is_ok());
-        let err: ModuleResult = Err("test error".into());
+        let err: ModuleResult = Err(anyhow::anyhow!("test error"));
         assert!(err.is_err());
     }
 }

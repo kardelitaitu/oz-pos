@@ -11,6 +11,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::money::{Currency, Money};
+use crate::percentage::Percentage;
 use crate::sku::{LineId, Sku};
 
 /// Unique identifier for a cart.
@@ -64,13 +65,7 @@ impl CartLine {
     /// Returns `None` on `i64` overflow.
     #[must_use]
     pub fn total(&self) -> Option<Money> {
-        self.unit_price
-            .minor_units
-            .checked_mul(self.qty)
-            .map(|minor_units| Money {
-                minor_units,
-                currency: self.unit_price.currency,
-            })
+        self.unit_price.checked_mul(self.qty)
     }
 }
 
@@ -82,8 +77,6 @@ pub enum CartError {
     CurrencyMismatch { cart: String, line: String },
     #[error("sku not in cart: {0}")]
     SkuNotInCart(String),
-    #[error("invalid discount percentage: {0} (must be 0-100)")]
-    InvalidDiscount(i64),
 }
 
 /// An open cart scoped to a single currency.
@@ -93,7 +86,7 @@ pub struct Cart {
     currency: Currency,
     lines: Vec<CartLine>,
     #[serde(default)]
-    discount_percent: i64,
+    discount_percent: Percentage,
     #[serde(default)]
     discount_label: Option<String>,
 }
@@ -106,7 +99,7 @@ impl Cart {
             id: CartId::new(),
             currency,
             lines: Vec::new(),
-            discount_percent: 0,
+            discount_percent: Percentage::zero(),
             discount_label: None,
         }
     }
@@ -129,21 +122,23 @@ impl Cart {
     }
     #[must_use]
     pub fn discount_percent(&self) -> i64 {
-        self.discount_percent
+        self.discount_percent.get() as i64
     }
     #[must_use]
     pub fn discount_label(&self) -> Option<&str> {
         self.discount_label.as_deref()
     }
 
-    /// Set a cart-level discount. `percent` must be 0-100.
-    pub fn set_discount(&mut self, percent: i64, label: Option<String>) -> Result<(), CartError> {
-        if !(0..=100).contains(&percent) {
-            return Err(CartError::InvalidDiscount(percent));
-        }
+    /// Get the discount as a [`Percentage`] value.
+    #[must_use]
+    pub fn discount_percentage(&self) -> Percentage {
+        self.discount_percent
+    }
+
+    /// Set a cart-level percentage discount.
+    pub fn set_discount(&mut self, percent: Percentage, label: Option<String>) {
         self.discount_percent = percent;
-        self.discount_label = if percent == 0 { None } else { label };
-        Ok(())
+        self.discount_label = if percent.get() == 0 { None } else { label };
     }
 
     /// Append a line. Returns `Err` on currency mismatch.
@@ -179,13 +174,8 @@ impl Cart {
             let t = line.total()?;
             acc = acc.checked_add(t)?;
         }
-        if self.discount_percent > 0 {
-            let discount_multiplier = 100 - self.discount_percent;
-            let discounted = acc.minor_units.checked_mul(discount_multiplier)? / 100;
-            acc = Money {
-                minor_units: discounted,
-                currency: self.currency,
-            };
+        if self.discount_percent.get() > 0 {
+            acc = self.discount_percent.complement_apply_to(acc)?;
         }
         Some(acc)
     }
@@ -193,7 +183,7 @@ impl Cart {
     /// The discount amount in minor units, or 0 if no discount.
     #[must_use]
     pub fn discount_amount(&self) -> Option<Money> {
-        if self.discount_percent == 0 {
+        if self.discount_percent.get() == 0 {
             return Some(Money::zero(self.currency));
         }
         let mut subtotal = Money::zero(self.currency);
@@ -201,11 +191,7 @@ impl Cart {
             let t = line.total()?;
             subtotal = subtotal.checked_add(t)?;
         }
-        let discounted = subtotal.minor_units.checked_mul(self.discount_percent)? / 100;
-        Some(Money {
-            minor_units: discounted,
-            currency: self.currency,
-        })
+        self.discount_percent.apply_to(subtotal)
     }
 }
 
@@ -376,7 +362,7 @@ mod tests {
     #[test]
     fn set_discount_valid_range() {
         let mut cart = Cart::new(usd());
-        cart.set_discount(10, Some("VIP 10% off".into())).unwrap();
+        cart.set_discount(Percentage::new(10).unwrap(), Some("VIP 10% off".into()));
         assert_eq!(cart.discount_percent(), 10);
         assert_eq!(cart.discount_label(), Some("VIP 10% off"));
     }
@@ -384,23 +370,10 @@ mod tests {
     #[test]
     fn set_discount_zero_clears_label() {
         let mut cart = Cart::new(usd());
-        cart.set_discount(10, Some("sale".into())).unwrap();
-        cart.set_discount(0, None).unwrap();
+        cart.set_discount(Percentage::new(10).unwrap(), Some("sale".into()));
+        cart.set_discount(Percentage::zero(), None);
         assert_eq!(cart.discount_percent(), 0);
         assert!(cart.discount_label().is_none());
-    }
-
-    #[test]
-    fn set_discount_invalid_rejected() {
-        let mut cart = Cart::new(usd());
-        assert!(matches!(
-            cart.set_discount(-1, None),
-            Err(CartError::InvalidDiscount(-1))
-        ));
-        assert!(matches!(
-            cart.set_discount(101, None),
-            Err(CartError::InvalidDiscount(101))
-        ));
     }
 
     #[test]
@@ -416,7 +389,7 @@ mod tests {
         ))
         .unwrap();
         // 2 x 1000 = 2000, with 10% discount = 1800
-        cart.set_discount(10, None).unwrap();
+        cart.set_discount(Percentage::new(10).unwrap(), None);
         assert_eq!(cart.total().unwrap().minor_units, 1800);
     }
 
@@ -433,7 +406,7 @@ mod tests {
         ))
         .unwrap();
         // 3 x 500 = 1500, with 10% discount = 150 discount
-        cart.set_discount(10, Some("10%".into())).unwrap();
+        cart.set_discount(Percentage::new(10).unwrap(), Some("10%".into()));
         assert_eq!(cart.discount_amount().unwrap().minor_units, 150);
     }
 
@@ -456,7 +429,7 @@ mod tests {
         ))
         .unwrap();
         // Setting a discount on an overflowing subtotal should propagate the overflow
-        cart.set_discount(50, None).unwrap();
+        cart.set_discount(Percentage::new(50).unwrap(), None);
         assert!(cart.discount_amount().is_none());
         assert!(cart.total().is_none());
     }
@@ -544,17 +517,6 @@ mod tests {
     fn cart_error_display_sku_not_in_cart() {
         let err = CartError::SkuNotInCart("XYZ".into());
         assert_eq!(err.to_string(), "sku not in cart: XYZ");
-    }
-
-    #[test]
-    fn cart_error_display_invalid_discount() {
-        let err = CartError::InvalidDiscount(150);
-        let msg = err.to_string();
-        assert!(msg.contains("150"), "msg should contain 150, got: {msg}");
-        assert!(
-            msg.contains("discount"),
-            "msg should contain discount, got: {msg}"
-        );
     }
 
     #[test]

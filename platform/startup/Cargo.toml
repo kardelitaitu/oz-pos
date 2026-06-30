@@ -7,6 +7,7 @@ license.workspace = true
 description = "Shared application startup logic: module registration, event wiring, background sync daemon for desktop and tablet Tauri clients."
 
 [dependencies]
+anyhow = { workspace = true }
 foundation = { workspace = true }
 oz-core = { workspace = true }
 modules-crm = { workspace = true }

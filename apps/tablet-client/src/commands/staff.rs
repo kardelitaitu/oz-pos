@@ -9,6 +9,8 @@ use oz_core::auth::hash_pin;
 use oz_core::db::Store;
 use oz_core::{Role, User};
 
+use foundation::{validate_min_length, validate_not_empty};
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -96,20 +98,11 @@ pub async fn create_staff(
     let username = args.username.trim().to_lowercase();
     let display_name = args.display_name.trim();
 
-    if username.is_empty() {
-        return Err(AppError::Invalid("username must not be empty".into()));
-    }
-    if display_name.is_empty() {
-        return Err(AppError::Invalid("display name must not be empty".into()));
-    }
-    if args.pin.len() < 4 {
-        return Err(AppError::Invalid(
-            "PIN must be at least 4 characters".into(),
-        ));
-    }
-    if args.role_id.is_empty() {
-        return Err(AppError::Invalid("role must be selected".into()));
-    }
+    validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("display_name", display_name)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_min_length("pin", &args.pin, 4).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("role_id", &args.role_id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let pin_hash =
         hash_pin(&args.pin).map_err(|e| AppError::Internal(format!("hashing PIN: {e}")))?;

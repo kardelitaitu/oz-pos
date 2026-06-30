@@ -5,6 +5,8 @@ use tauri::{State, command};
 
 use oz_core::db::Store;
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -57,9 +59,10 @@ pub async fn create_exchange_rate(
     args: CreateExchangeRateArgs,
     state: State<'_, AppState>,
 ) -> Result<ExchangeRateDto, AppError> {
-    if args.from_currency.trim().is_empty() || args.to_currency.trim().is_empty() {
-        return Err(AppError::Invalid("Currency codes must not be empty".into()));
-    }
+    validate_not_empty("from_currency", &args.from_currency)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("to_currency", &args.to_currency)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
     if args.rate <= 0.0 {
         return Err(AppError::Invalid("Rate must be positive".into()));
     }

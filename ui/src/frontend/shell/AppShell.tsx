@@ -111,6 +111,18 @@ export default function AppShell() {
   const PageComponent = pageRegistration?.component ?? null;
   const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole);
 
+  // Fullscreen pages (e.g. Kiosk mode) render without AppLayout wrapper.
+  if (pageRegistration?.fullscreen) {
+    return pageDenied ? (
+      <PermissionDenied
+        action={pageRegistration!.label}
+        requiredRole={pageRegistration!.requiredRole!}
+      />
+    ) : PageComponent ? (
+      <PageComponent />
+    ) : null;
+  }
+
   return (
     <AppLayout
       route={currentRoute}

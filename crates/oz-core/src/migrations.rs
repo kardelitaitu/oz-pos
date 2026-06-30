@@ -119,6 +119,22 @@ pub const ALL: &[Migration] = &[
         id: "028_terminal_feature_overrides.sql",
         sql: include_str!("../migrations/028_terminal_feature_overrides.sql"),
     },
+    Migration {
+        id: "029_promotions.sql",
+        sql: include_str!("../migrations/029_promotions.sql"),
+    },
+    Migration {
+        id: "031_loyalty.sql",
+        sql: include_str!("../migrations/031_loyalty.sql"),
+    },
+    Migration {
+        id: "032_kds_orders.sql",
+        sql: include_str!("../migrations/032_kds_orders.sql"),
+    },
+    Migration {
+        id: "033_tables.sql",
+        sql: include_str!("../migrations/033_tables.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -241,6 +257,12 @@ mod tests {
             "cash_payouts",
             "store_profiles",
             "terminal_feature_overrides",
+            "promotions",
+            "promotion_applications",
+            "loyalty_tiers",
+            "loyalty_accounts",
+            "loyalty_transactions",
+            "tables",
         ];
 
         for table in &expected_tables {

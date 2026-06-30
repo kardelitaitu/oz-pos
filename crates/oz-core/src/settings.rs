@@ -349,6 +349,50 @@ impl Settings {
             conn, password,
         )?)
     }
+
+    // ── Brand / White-label ─────────────────────────────────────
+
+    /// Get the primary brand colour (hex).
+    pub fn get_brand_primary_colour(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_brand_primary_colour(
+            conn,
+        )?)
+    }
+
+    /// Set the primary brand colour.
+    pub fn set_brand_primary_colour(conn: &Connection, colour: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_brand_primary_colour(
+            conn, colour,
+        )?)
+    }
+
+    /// Get the filesystem path to the store logo.
+    pub fn get_brand_logo_path(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_brand_logo_path(
+            conn,
+        )?)
+    }
+
+    /// Set the filesystem path to the store logo.
+    pub fn set_brand_logo_path(conn: &Connection, path: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_brand_logo_path(
+            conn, path,
+        )?)
+    }
+
+    /// Get the brand store display name.
+    pub fn get_brand_store_name(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_brand_store_name(
+            conn,
+        )?)
+    }
+
+    /// Set the brand store display name.
+    pub fn set_brand_store_name(conn: &Connection, name: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_brand_store_name(
+            conn, name,
+        )?)
+    }
 }
 
 // ── Feature flags (oz-core specific) ─────────────────────────────────

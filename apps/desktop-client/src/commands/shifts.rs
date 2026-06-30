@@ -8,6 +8,8 @@ use tauri::{State, command};
 use oz_core::db::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 use oz_core::{CashPayout, Shift, Store};
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -104,9 +106,7 @@ pub async fn close_shift(
     notes: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ShiftDto, AppError> {
-    if id.trim().is_empty() {
-        return Err(AppError::Invalid("id must not be empty".into()));
-    }
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -123,9 +123,7 @@ pub async fn get_active_shift(
     user_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ShiftDto>, AppError> {
-    if user_id.trim().is_empty() {
-        return Err(AppError::Invalid("user_id must not be empty".into()));
-    }
+    validate_not_empty("user_id", &user_id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -152,9 +150,7 @@ pub async fn get_shift(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ShiftDto>, AppError> {
-    if id.trim().is_empty() {
-        return Err(AppError::Invalid("id must not be empty".into()));
-    }
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -266,9 +262,7 @@ pub async fn create_cash_payout(
     args: CreateCashPayoutArgs,
     state: State<'_, AppState>,
 ) -> Result<CashPayoutDto, AppError> {
-    if args.shift_id.trim().is_empty() {
-        return Err(AppError::Invalid("shift_id must not be empty".into()));
-    }
+    validate_not_empty("shift_id", &args.shift_id).map_err(|e| AppError::Invalid(e.to_string()))?;
     if args.amount_minor <= 0 {
         return Err(AppError::Invalid("amount_minor must be > 0".into()));
     }
@@ -288,9 +282,7 @@ pub async fn get_shift_report(
     shift_id: String,
     state: State<'_, AppState>,
 ) -> Result<ShiftReportDto, AppError> {
-    if shift_id.trim().is_empty() {
-        return Err(AppError::Invalid("shift_id must not be empty".into()));
-    }
+    validate_not_empty("shift_id", &shift_id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);

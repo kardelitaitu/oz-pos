@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Localized, useLocalization } from '@fluent/react';
+import { Localized } from '@fluent/react';
 import { listAuditLog, type AuditEntryDto } from '@/api/audit';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -54,7 +54,6 @@ function formatDate(iso: string): string {
 type OutcomeFilter = 'all' | 'success' | 'failure';
 
 export default function AuditLogScreen() {
-  const { l10n } = useLocalization();
   const [entries, setEntries] = useState<AuditEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +113,7 @@ export default function AuditLogScreen() {
       items = items.filter(
         (e) =>
           e.action.toLowerCase().includes(q) ||
-          actionLabel(e.action).toLowerCase().includes(q) ||
+          (ACTION_FLUENT_IDS[e.action] ?? '').toLowerCase().includes(q) ||
           (e.target_type ?? '').toLowerCase().includes(q) ||
           (e.target_id ?? '').toLowerCase().includes(q) ||
           e.user_id.toLowerCase().includes(q),

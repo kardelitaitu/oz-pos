@@ -11,6 +11,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
+use foundation::Percentage;
 use oz_core::db::Store;
 use oz_core::events::{SaleCompleted, SaleCompletedLine};
 use oz_core::{Cart, CartId, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
@@ -40,16 +41,18 @@ pub async fn set_cart_discount(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     if !(0..=100).contains(&args.percent) {
-        return Err(AppError::Invalid(
-            "discount percent must be between 0 and 100".into(),
-        ));
+        return Err(AppError::Invalid(format!(
+            "discount percent must be between 0 and 100, got {}",
+            args.percent
+        )));
     }
+    // SAFETY: args.percent is validated 0..=100 above, so the unwrap is safe.
+    let percent = Percentage::new(args.percent as u8).unwrap();
     let mut carts = state.carts.lock().await;
     let cart = carts
         .get_mut(&args.cart_id)
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
-    cart.set_discount(args.percent, args.label)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    cart.set_discount(percent, args.label);
     tracing::info!(cart_id = %args.cart_id, percent = %args.percent, "cart discount set");
     Ok(())
 }
@@ -208,8 +211,15 @@ pub async fn complete_sale(
                 .map_err(|e| AppError::Internal(e.to_string()))?
             {
                 let label = discount.label.clone().unwrap_or_else(|| "Lua Rule".into());
-                cart.set_discount(discount.percent, Some(label))
-                    .map_err(|e| AppError::Invalid(e.to_string()))?;
+                if !(0..=100).contains(&discount.percent) {
+                    return Err(AppError::Invalid(format!(
+                        "Lua returned invalid discount percent: {}",
+                        discount.percent
+                    )));
+                }
+                // SAFETY: discount.percent is validated 0..=100 above.
+                let lua_pct = Percentage::new(discount.percent as u8).unwrap();
+                cart.set_discount(lua_pct, Some(label));
             }
         }
     }

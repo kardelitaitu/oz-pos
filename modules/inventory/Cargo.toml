@@ -7,6 +7,7 @@ license.workspace = true
 description = "OZ-POS Inventory Module: product catalog, stock management, variants, categories."
 
 [dependencies]
+anyhow = { workspace = true }
 foundation = { workspace = true }
 oz-core = { workspace = true }
 rusqlite = { workspace = true }

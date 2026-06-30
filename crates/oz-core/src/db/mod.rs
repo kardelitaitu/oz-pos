@@ -20,9 +20,14 @@ use crate::error::CoreError;
 pub mod audit;
 pub mod cash_payouts;
 pub mod customers;
+pub mod kds;
+pub mod loyalty;
 pub mod offline;
 pub mod payments;
+/// CRUD for product bundles (group selling).
+pub mod product_bundles;
 pub mod products;
+pub mod promotions;
 pub mod refunds;
 pub mod reports;
 pub mod sales;
@@ -30,6 +35,8 @@ pub mod settings;
 pub mod shifts;
 pub mod staff;
 pub mod store_profiles;
+/// CRUD for restaurant tables (floor plan, status management).
+pub mod tables;
 pub mod tax;
 pub mod terminal_overrides;
 pub mod terminals;

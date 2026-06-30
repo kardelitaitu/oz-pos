@@ -20,22 +20,28 @@ import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import ProductManagementScreen from '@/features/products/ProductManagementScreen';
+import BundleManagementScreen from '@/features/products/BundleManagementScreen';
 import CategoryManagementScreen from '@/features/categories/CategoryManagementScreen';
 import InventoryAdjustmentScreen from '@/features/inventory/InventoryAdjustmentScreen';
 import SettingsPage from '@/features/settings/SettingsPage';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import DataManagementScreen from '@/features/settings/DataManagementScreen';
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
+import LoyaltyManagementScreen from '@/features/loyalty/LoyaltyManagementScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
 import { MultiStoreDashboardScreen } from '@/features/stores';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
+import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import DashboardScreen from '@/features/reports/DashboardScreen';
 import SalesReportScreen from '@/features/reports/SalesReportScreen';
 import InventoryReportScreen from '@/features/reports/InventoryReportScreen';
 import DesignSystem from '@/features/design/DesignSystem';
+import KdsScreen from '@/features/kds/KdsScreen';
+import KioskScreen from '@/features/kiosk/KioskScreen';
+import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import { registerSalesWidgets } from '@/features/sales/widgets';
 
 // ── Register dashboard widgets ────────────────────────────────────
@@ -59,6 +65,10 @@ function icon(path: string, ...children: ReactNode[]) {
 
 registerPage({ route: 'sales', component: PosScreen, label: 'POS Terminal', feature: 'simple-retail' });
 registerNavItem({ route: 'sales', label: 'POS Terminal', feature: 'simple-retail', icon: icon('M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', <polyline points="3.29 7 12 12 20.71 7" />) });
+
+registerPage({ route: 'kds', component: KdsScreen, label: 'KDS', feature: 'kds' });
+registerNavItem({ route: 'kds', label: 'KDS', feature: 'kds',
+  icon: icon('M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 5h6') });
 
 registerPage({ route: 'products', component: ProductLookupScreen, label: 'Products' });
 registerNavItem({ route: 'products', label: 'Products', icon: icon('M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z') });
@@ -93,6 +103,10 @@ registerNavItem({ route: 'categories', label: 'Categories', feature: 'categories
 registerPage({ route: 'customers', component: CustomerManagementScreen, label: 'Customers' });
 registerNavItem({ route: 'customers', label: 'Customers', icon: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', <circle cx="9" cy="7" r="4" />) });
 
+registerPage({ route: 'loyalty', component: LoyaltyManagementScreen, label: 'Loyalty', requiredRole: 'manager' });
+registerNavItem({ route: 'loyalty', label: 'Loyalty', requiredRole: 'manager',
+  icon: icon('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z') });
+
 registerPage({ route: 'staff', component: StaffManagementScreen, label: 'Staff', requiredRole: 'manager' });
 registerNavItem({ route: 'staff', label: 'Staff', requiredRole: 'manager', icon: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', <circle cx="9" cy="7" r="4" />, <path d="M23 21v-2a4 4 0 0 0-3-3.87" />, <path d="M16 3.13a4 4 0 0 1 0 7.75" />) });
 
@@ -117,6 +131,10 @@ registerNavItem({ route: 'offline-queue', label: 'Offline Queue', requiredRole: 
 registerPage({ route: 'shifts', component: ShiftManagementScreen, label: 'Shifts', requiredRole: 'manager' });
 registerNavItem({ route: 'shifts', label: 'Shifts', requiredRole: 'manager', icon: icon('M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6', <line x1="12" y1="1" x2="12" y2="23" />) });
 
+registerPage({ route: 'bundles', component: BundleManagementScreen, label: 'Bundles', requiredRole: 'manager' });
+registerNavItem({ route: 'bundles', label: 'Bundles', requiredRole: 'manager',
+  icon: icon('M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z') });
+
 registerPage({ route: 'settings', component: SettingsPage, label: 'Settings', requiredRole: 'manager' });
 registerNavItem({ route: 'settings', label: 'Settings', requiredRole: 'manager', icon: icon('M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42') });
 
@@ -134,6 +152,18 @@ registerNavItem({ route: 'inventory-report', label: 'Inventory Report', required
 
 registerPage({ route: 'design', component: DesignSystem, label: 'Design System' });
 registerNavItem({ route: 'design', label: 'Design System', icon: icon('M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />) });
+
+registerPage({ route: 'kiosk', component: KioskScreen, label: 'Kiosk', feature: 'self-service-kiosk', fullscreen: true });
+registerNavItem({ route: 'kiosk', label: 'Kiosk', feature: 'self-service-kiosk',
+  icon: icon('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z') });
+
+registerPage({ route: 'tables', component: TableManagementScreen, label: 'Tables', feature: 'tables' });
+registerNavItem({ route: 'tables', label: 'Tables', feature: 'tables',
+  icon: icon('M3 3h7v7H3V3zm11 0h7v7h-7V3zM3 14h7v7H3v-7zm11 0h7v7h-7v-7z') });
+
+registerPage({ route: 'promotions', component: PromotionManagementScreen, label: 'Promotions', requiredRole: 'manager' });
+registerNavItem({ route: 'promotions', label: 'Promotions', requiredRole: 'manager',
+  icon: icon('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z') });
 
 // ── Root App component ──────────────────────────────────────────────
 

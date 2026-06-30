@@ -9,6 +9,8 @@ use tauri::{State, command};
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -44,9 +46,7 @@ pub async fn staff_login(
     state: State<'_, AppState>,
 ) -> Result<StaffLoginResult, AppError> {
     let username = args.username.trim().to_lowercase();
-    if username.is_empty() {
-        return Err(AppError::Invalid("username must not be empty".into()));
-    }
+    validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);

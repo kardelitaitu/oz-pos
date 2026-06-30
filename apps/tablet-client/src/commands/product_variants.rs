@@ -9,6 +9,8 @@ use tauri::{State, command};
 
 use oz_core::{Money, ProductVariant, Store};
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -69,9 +71,7 @@ pub async fn list_product_variants(
     parent_sku: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<ProductVariantDto>, AppError> {
-    if parent_sku.trim().is_empty() {
-        return Err(AppError::Invalid("parent_sku must not be empty".into()));
-    }
+    validate_not_empty("parent_sku", &parent_sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -90,9 +90,7 @@ pub async fn get_product_variant(
     sku: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ProductVariantDto>, AppError> {
-    if sku.trim().is_empty() {
-        return Err(AppError::Invalid("sku must not be empty".into()));
-    }
+    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -127,15 +125,10 @@ pub async fn create_product_variant(
     args: CreateProductVariantArgs,
     state: State<'_, AppState>,
 ) -> Result<CreateProductVariantResult, AppError> {
-    if args.parent_sku.trim().is_empty() {
-        return Err(AppError::Invalid("parent_sku must not be empty".into()));
-    }
-    if args.name.trim().is_empty() {
-        return Err(AppError::Invalid("name must not be empty".into()));
-    }
-    if args.sku.trim().is_empty() {
-        return Err(AppError::Invalid("sku must not be empty".into()));
-    }
+    validate_not_empty("parent_sku", &args.parent_sku)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let price = match (args.price_minor, args.currency) {
         (Some(minor), Some(cur_str)) => {
@@ -194,9 +187,7 @@ pub async fn update_product_variant(
     args: UpdateProductVariantArgs,
     state: State<'_, AppState>,
 ) -> Result<UpdateProductVariantResult, AppError> {
-    if args.sku.trim().is_empty() {
-        return Err(AppError::Invalid("sku must not be empty".into()));
-    }
+    validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -207,9 +198,7 @@ pub async fn update_product_variant(
         .ok_or_else(|| AppError::Invalid(format!("variant '{}' not found", args.sku)))?;
 
     if let Some(name) = args.name {
-        if name.trim().is_empty() {
-            return Err(AppError::Invalid("name must not be empty".into()));
-        }
+        validate_not_empty("name", &name).map_err(|e| AppError::Invalid(e.to_string()))?;
         variant.name = name;
     }
     if let (Some(minor), Some(cur_str)) = (args.price_minor, args.currency) {
@@ -246,9 +235,7 @@ pub async fn delete_product_variant(
     sku: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    if sku.trim().is_empty() {
-        return Err(AppError::Invalid("sku must not be empty".into()));
-    }
+    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);

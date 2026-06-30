@@ -178,7 +178,9 @@ pub mod redis_cache {
                                 let terminal_id =
                                     notification["terminal_id"].as_str().unwrap_or("");
                                 // Skip own messages.
-                                if terminal_id == std::env::var("OZ_TERMINAL_ID").unwrap_or_default() {
+                                if terminal_id
+                                    == std::env::var("OZ_TERMINAL_ID").unwrap_or_default()
+                                {
                                     continue;
                                 }
                                 if let Some(pid) = notification["product_id"].as_str() {
@@ -206,7 +208,6 @@ pub mod redis_cache {
 
             Ok(tx)
         }
-
     }
 
     impl Cache for RedisCache {

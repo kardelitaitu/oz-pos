@@ -415,3 +415,72 @@ reports-inventory = Inventory Report
 reports-top-products = Top Products
 reports-hourly-heatmap = Hourly Heatmap
 reports-export-csv = Export CSV
+
+# ── Loyalty ──
+loyalty-title = Loyalty
+loyalty-accounts = Accounts
+loyalty-tiers = Tiers
+loyalty-points = Points
+loyalty-lifetime-points = Lifetime Points
+loyalty-tier = Tier
+loyalty-customer = Customer
+loyalty-no-accounts = No loyalty accounts yet
+loyalty-next-tier = Next Tier
+loyalty-points-to-next = Points to Next Tier
+loyalty-recent-transactions = Recent Activity
+loyalty-earn = Earn
+loyalty-redeem = Redeem
+loyalty-adjust = Adjust
+loyalty-points-value = Points Value
+loyalty-redeem-at-checkout = Redeem at Checkout
+loyalty-available-points = Available Points
+loyalty-enter-points = Enter points to redeem
+loyalty-validation-error = Please fill in all fields correctly
+loyalty-tier-name = Name
+loyalty-tier-min-points = Min Points
+loyalty-tier-ppu = Points/Unit
+loyalty-tier-multiplier = Multiplier
+loyalty-tier-colour = Colour
+
+# ── Promotions ──
+promotions-title = Promotions
+promotions-add = Add Promotion
+promotions-edit = Edit Promotion
+promotions-delete = Delete Promotion
+promotions-name = Name
+promotions-type = Type
+promotions-value = Value
+promotions-active = Active
+promotions-percentage = Percentage
+promotions-fixed-amount = Fixed Amount
+promotions-buy-x-get-y = Buy X Get Y
+promotions-starts-at = Starts At
+promotions-ends-at = Ends At
+promotions-min-order = Min Order
+promotions-trigger-sku = Trigger SKU
+promotions-reward-sku = Reward SKU
+promotions-reward-qty = Reward Qty
+promotions-min-qty = Min Qty
+promotions-category = Category
+promotions-no-promotions = No promotions yet
+
+# ── Kiosk Mode ──
+kiosk-tap-to-start = Tap to start
+kiosk-all = All
+kiosk-checkout = Checkout
+kiosk-checkout-title = Checkout
+kiosk-total = Total
+kiosk-pay = Pay
+kiosk-return = Return to Menu
+
+# ── Kitchen Display System ──
+kds-title = Kitchen Display
+kds-pending = Pending
+kds-preparing = Preparing
+kds-ready = Ready
+kds-served = Served
+kds-order-number = Order #
+kds-items = { $count } items
+kds-notes = Notes
+kds-tap-to-advance = Tap to advance
+kds-no-orders = No orders yet

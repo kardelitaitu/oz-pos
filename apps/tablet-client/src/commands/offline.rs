@@ -8,6 +8,8 @@ use tauri::{State, command};
 
 use oz_core::{OfflineQueueItem, Store};
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -72,12 +74,8 @@ pub async fn enqueue_offline(
     args: EnqueueOfflineArgs,
     state: State<'_, AppState>,
 ) -> Result<OfflineQueueItemDto, AppError> {
-    if args.action.trim().is_empty() {
-        return Err(AppError::Invalid("action must not be empty".into()));
-    }
-    if args.payload.trim().is_empty() {
-        return Err(AppError::Invalid("payload must not be empty".into()));
-    }
+    validate_not_empty("action", &args.action).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("payload", &args.payload).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -169,9 +167,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
 /// Delete a processed offline queue item.
 #[command]
 pub async fn delete_offline_item(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
-    if id.trim().is_empty() {
-        return Err(AppError::Invalid("id must not be empty".into()));
-    }
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);

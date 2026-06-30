@@ -45,7 +45,7 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("crm handler: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("crm handler: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         // Fetch the current customer record.
@@ -65,14 +65,16 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
         customer.total_spent_minor = customer
             .total_spent_minor
             .checked_add(event.total_minor)
-            .ok_or_else(|| format!("total_spent_minor overflow for customer {customer_id}"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("total_spent_minor overflow for customer {customer_id}")
+            })?;
 
         // Award 1 loyalty point per full 100 minor units spent.
         let points_earned = event.total_minor / 100;
         customer.loyalty_points = customer
             .loyalty_points
             .checked_add(points_earned)
-            .ok_or_else(|| format!("loyalty_points overflow for customer {customer_id}"))?;
+            .ok_or_else(|| anyhow::anyhow!("loyalty_points overflow for customer {customer_id}"))?;
 
         // Persist the update. Use update_customer to save changes, but we need
         // to preserve the existing fields. update_customer only takes specific args,

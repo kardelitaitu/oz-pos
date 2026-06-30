@@ -35,6 +35,8 @@ export interface PageRegistration {
   requiredRole?: RequiredRole;
   /** Optional SVG icon element for nav items. */
   icon?: React.ReactNode;
+  /** When true, the page renders fullscreen without sidebar or topbar. */
+  fullscreen?: boolean;
 }
 
 // ── Registry ───────────────────────────────────────────────────────

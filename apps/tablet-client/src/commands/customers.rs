@@ -8,6 +8,8 @@ use tauri::{State, command};
 use oz_core::Customer;
 use oz_core::db::Store;
 
+use foundation::validate_not_empty;
+
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -79,15 +81,12 @@ pub async fn create_customer(
     args: CreateCustomerArgs,
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
-    let name = args.name.trim();
-    if name.is_empty() {
-        return Err(AppError::Invalid("customer name must not be empty".into()));
-    }
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let customer = store.create_customer(
-        name,
+        args.name.trim(),
         args.email.as_deref(),
         args.phone.as_deref(),
         args.notes.as_deref(),
@@ -112,16 +111,13 @@ pub async fn update_customer(
     args: UpdateCustomerArgs,
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
-    let name = args.name.trim();
-    if name.is_empty() {
-        return Err(AppError::Invalid("customer name must not be empty".into()));
-    }
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let customer = store.update_customer(
         &args.id,
-        name,
+        args.name.trim(),
         args.email.as_deref(),
         args.phone.as_deref(),
         args.notes.as_deref(),

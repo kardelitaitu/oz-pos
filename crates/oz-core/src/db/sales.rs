@@ -1038,7 +1038,10 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let mut cart = make_cart();
-        cart.set_discount(10, Some("Loyalty".into())).unwrap();
+        cart.set_discount(
+            foundation::Percentage::new(10).unwrap(),
+            Some("Loyalty".into()),
+        );
         let sale = Sale::from_cart(&cart).unwrap();
         // Add user_id to the sale.
         let sale_with_user = Sale {
@@ -1056,7 +1059,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let mut cart = make_cart();
-        cart.set_discount(15, Some("VIP".into())).unwrap();
+        cart.set_discount(foundation::Percentage::new(15).unwrap(), Some("VIP".into()));
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 

@@ -81,11 +81,10 @@ impl EventBus {
         let wrapped: HandlerFn = Box::new(move |event: &dyn Any| -> ModuleResult {
             match event.downcast_ref::<E>() {
                 Some(typed) => handler.handle(typed),
-                None => Err(format!(
+                None => Err(anyhow::anyhow!(
                     "event bus type mismatch: expected {}, got unknown type",
                     std::any::type_name::<E>(),
-                )
-                .into()),
+                )),
             }
         });
 
@@ -236,7 +235,7 @@ mod tests {
 
     impl EventHandler<TestEvent> for FailingHandler {
         fn handle(&self, _event: &TestEvent) -> ModuleResult {
-            Err("handler deliberately failed".into())
+            Err(anyhow::anyhow!("handler deliberately failed"))
         }
     }
 

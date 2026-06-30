@@ -24,6 +24,7 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
+import { AppearanceSettings } from './AppearanceSettings';
 import './SettingsPage.css';
 
 /**
@@ -212,6 +213,9 @@ export default function SettingsPage() {
           </label>
         </div>
       </Card>
+
+      {/* ── Appearance section ──────────────────── */}
+      <AppearanceSettings />
 
       {/* ── Receipt section ───────────────────────── */}
       <Card

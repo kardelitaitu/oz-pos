@@ -18,6 +18,7 @@ import customersFtl from './customers.ftl?raw';
 import taxFtl from './tax.ftl?raw';
 import currencyFtl from './currency.ftl?raw';
 import inventoryFtl from './inventory.ftl?raw';
+import tablesFtl from './tables.ftl?raw';
 import terminalsFtl from './terminals.ftl?raw';
 import offlineFtl from './offline.ftl?raw';
 
@@ -31,6 +32,7 @@ const ALL_FTL = [
   taxFtl,
   currencyFtl,
   inventoryFtl,
+  tablesFtl,
   terminalsFtl,
   offlineFtl,
 ].join('\n');

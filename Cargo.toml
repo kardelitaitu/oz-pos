@@ -5,6 +5,7 @@ members = [
     "crates/oz-core",
     "crates/oz-hal",
     "crates/oz-lua",
+    "crates/oz-plugin",
     "crates/oz-security",
     "crates/oz-payment",
     "crates/oz-reporting",
@@ -43,6 +44,7 @@ oz-api = { path = "crates/oz-api" }
 oz-core = { path = "crates/oz-core" }
 oz-hal = { path = "crates/oz-hal" }
 oz-lua = { path = "crates/oz-lua" }
+oz-plugin = { path = "crates/oz-plugin" }
 oz-security = { path = "crates/oz-security" }
 oz-payment = { path = "crates/oz-payment" }
 oz-reporting = { path = "crates/oz-reporting" }
@@ -69,6 +71,7 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
+toml = "0.8"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -80,6 +83,7 @@ clap = { version = "4", features = ["derive"] }
 embedded-hal = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+walkdir = "2"
 axum = { version = "0.8", features = ["macros"] }
 jsonwebtoken = "9"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
@@ -95,6 +99,8 @@ rand = "0.8"
 tracing-appender = "0.2"
 reqwest = { version = "0.12", features = ["json", "blocking"] }
 rlua = "0.20"
+
+regex = "1"
 
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -1631,6 +1631,8 @@ dependencies = [
 name = "foundation"
 version = "0.0.2"
 dependencies = [
+ "anyhow",
+ "regex",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -3044,6 +3046,7 @@ dependencies = [
 name = "modules-crm"
 version = "0.0.2"
 dependencies = [
+ "anyhow",
  "chrono",
  "foundation",
  "oz-core",
@@ -3070,6 +3073,7 @@ dependencies = [
 name = "modules-inventory"
 version = "0.0.2"
 dependencies = [
+ "anyhow",
  "chrono",
  "foundation",
  "oz-core",
@@ -3084,6 +3088,7 @@ dependencies = [
 name = "modules-reporting"
 version = "0.0.2"
 dependencies = [
+ "anyhow",
  "chrono",
  "foundation",
  "oz-core",
@@ -3759,6 +3764,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oz-plugin"
+version = "0.0.2"
+dependencies = [
+ "oz-core",
+ "oz-lua",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "toml 0.8.2",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
 name = "oz-pos-app"
 version = "0.0.2"
 dependencies = [
@@ -4033,6 +4052,7 @@ dependencies = [
 name = "platform-kernel"
 version = "0.0.2"
 dependencies = [
+ "anyhow",
  "foundation",
  "serde",
  "serde_json",
@@ -4044,6 +4064,7 @@ dependencies = [
 name = "platform-startup"
 version = "0.0.2"
 dependencies = [
+ "anyhow",
  "chrono",
  "console-subscriber",
  "foundation",

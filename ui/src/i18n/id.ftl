@@ -391,8 +391,55 @@ shift-report-voids = Batal
 shift-report-refunds = Pengembalian
 shift-report-total = Total:
 
+# ── Loyalty ──
+loyalty-title = Loyalitas
+loyalty-accounts = Akun
+loyalty-tiers = Tingkatan
+loyalty-points = Poin
+loyalty-lifetime-points = Poin Seumur Hidup
+loyalty-tier = Tingkatan
+loyalty-customer = Pelanggan
+loyalty-no-accounts = Belum ada akun loyalitas
+loyalty-next-tier = Tingkat Berikutnya
+loyalty-points-to-next = Poin ke Tingkat Berikutnya
+loyalty-recent-transactions = Aktivitas Terbaru
+loyalty-earn = Dapatkan
+loyalty-redeem = Tukarkan
+loyalty-adjust = Sesuaikan
+loyalty-points-value = Nilai Poin
+loyalty-redeem-at-checkout = Tukarkan di Kasir
+loyalty-available-points = Poin Tersedia
+loyalty-enter-points = Masukkan poin untuk ditukarkan
+loyalty-validation-error = Harap isi semua bidang dengan benar
+loyalty-tier-name = Nama
+loyalty-tier-min-points = Poin Minimal
+loyalty-tier-ppu = Poin/Unit
+loyalty-tier-multiplier = Pengali
+loyalty-tier-colour = Warna
+
 reports-sales = Laporan Penjualan
 reports-inventory = Laporan Stok
 reports-top-products = Produk Terlaris
 reports-hourly-heatmap = Jam Tersibuk
 reports-export-csv = Ekspor CSV
+
+# ── Kiosk Mode ──
+kiosk-tap-to-start = Ketuk untuk memulai
+kiosk-all = Semua
+kiosk-checkout = Pembayaran
+kiosk-checkout-title = Pembayaran
+kiosk-total = Total
+kiosk-pay = Bayar
+kiosk-return = Kembali ke Menu
+
+# ── Kitchen Display System ──
+kds-title = Tampilan Dapur
+kds-pending = Tertunda
+kds-preparing = Disiapkan
+kds-ready = Siap
+kds-served = Tersaji
+kds-order-number = Pesanan #
+kds-items = { $count } item
+kds-notes = Catatan
+kds-tap-to-advance = Ketuk untuk lanjut
+kds-no-orders = Belum ada pesanan

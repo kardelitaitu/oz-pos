@@ -36,7 +36,7 @@ impl EventHandler<SaleCompleted> for InventoryStockHandler {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("inventory handler: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("inventory handler: db lock failed: {e}"))?;
         let store = Store::new(&conn);
 
         for line in &event.line_items {

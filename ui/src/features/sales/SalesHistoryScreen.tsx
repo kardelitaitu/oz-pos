@@ -176,7 +176,6 @@ export default function SalesHistoryScreen() {
   const [voidReason, setVoidReason] = useState('');
   const [voiding, setVoiding] = useState(false);
   const [voidError, setVoidError] = useState<string | null>(null);
-  const { l10n: _screenL10n } = useLocalization();
 
   const handleOpenVoid = useCallback((sale: SaleListItem) => {
     setVoidTarget(sale);

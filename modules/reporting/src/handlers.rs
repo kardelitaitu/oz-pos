@@ -33,7 +33,7 @@ impl SaleCompletedReporter {
     }
 
     /// Ensure the `report_sales` table exists.
-    fn ensure_table(&self, conn: &Connection) -> Result<(), String> {
+    fn ensure_table(&self, conn: &Connection) -> Result<(), anyhow::Error> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS report_sales (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,8 +44,7 @@ impl SaleCompletedReporter {
                 line_items  TEXT    NOT NULL DEFAULT '[]',
                 created_at  TEXT    NOT NULL
             );",
-        )
-        .map_err(|e| format!("reporting handler: failed to create report_sales table: {e}"))?;
+        )?;
         Ok(())
     }
 }
@@ -55,7 +54,7 @@ impl EventHandler<SaleCompleted> for SaleCompletedReporter {
         let conn = self
             .db
             .lock()
-            .map_err(|e| format!("reporting handler: db lock failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("reporting handler: db lock failed: {e}"))?;
 
         // Ensure the report table exists (lazy creation).
         self.ensure_table(&conn)?;
@@ -63,8 +62,9 @@ impl EventHandler<SaleCompleted> for SaleCompletedReporter {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         // Serialize line items to JSON for storage.
-        let line_items_json = serde_json::to_string(&event.line_items)
-            .map_err(|e| format!("reporting handler: failed to serialize line items: {e}"))?;
+        let line_items_json = serde_json::to_string(&event.line_items).map_err(|e| {
+            anyhow::anyhow!("reporting handler: failed to serialize line items: {e}")
+        })?;
 
         conn.execute(
             "INSERT INTO report_sales (sale_id, total_minor, currency, customer_id, line_items, created_at)

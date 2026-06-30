@@ -440,7 +440,7 @@ mod tests {
 
         fn on_load(&mut self) -> ModuleResult {
             if self.fail_load {
-                return Err("load failed".into());
+                return Err(anyhow::anyhow!("load failed"));
             }
             self.load_called.store(true, Ordering::SeqCst);
             Ok(())
@@ -448,7 +448,7 @@ mod tests {
 
         fn on_start(&mut self) -> ModuleResult {
             if self.fail_start {
-                return Err("start failed".into());
+                return Err(anyhow::anyhow!("start failed"));
             }
             self.start_called.store(true, Ordering::SeqCst);
             Ok(())
@@ -456,7 +456,7 @@ mod tests {
 
         fn on_stop(&mut self) -> ModuleResult {
             if self.fail_stop {
-                return Err("stop failed".into());
+                return Err(anyhow::anyhow!("stop failed"));
             }
             self.stop_called.store(true, Ordering::SeqCst);
             Ok(())
@@ -491,7 +491,7 @@ mod tests {
 
         fn start(&mut self) -> ModuleResult {
             if self.fail_start {
-                return Err("service start failed".into());
+                return Err(anyhow::anyhow!("service start failed"));
             }
             self.start_called.store(true, Ordering::SeqCst);
             Ok(())
@@ -499,7 +499,7 @@ mod tests {
 
         fn stop(&mut self) -> ModuleResult {
             if self.fail_stop {
-                return Err("service stop failed".into());
+                return Err(anyhow::anyhow!("service stop failed"));
             }
             self.stop_called.store(true, Ordering::SeqCst);
             Ok(())

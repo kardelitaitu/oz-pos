@@ -125,6 +125,14 @@ pub mod keys {
     /// Redis cache TTL in seconds. Default `300`.
     pub const REDIS_CACHE_TTL: &str = "redis.cache_ttl";
 
+    // ── Brand / White-label settings ────────────────────────────
+    /// Primary brand colour (hex). Default `"#10b981"`.
+    pub const BRAND_PRIMARY_COLOUR: &str = "brand.primary_colour";
+    /// Filesystem path to the store logo image.
+    pub const BRAND_LOGO_PATH: &str = "brand.logo_path";
+    /// Store display name for the header. Default `""`.
+    pub const BRAND_STORE_NAME: &str = "brand.store_name";
+
     // ── Exchange Rate Auto-Sync settings ─────────────────────────
     /// Whether exchange rate auto-sync is enabled. `"1"` or `"0"`. Default `"0"`.
     pub const RATE_SYNC_ENABLED: &str = "rate_sync.enabled";
@@ -357,6 +365,38 @@ impl Settings {
     /// Set the Redis cache TTL in seconds.
     pub fn set_redis_cache_ttl(conn: &Connection, ttl: u64) -> Result<(), PlatformError> {
         Self::set(conn, keys::REDIS_CACHE_TTL, &ttl.to_string())
+    }
+
+    // ── Brand / White-label ─────────────────────────────────────
+
+    /// Get the primary brand colour (hex). Defaults to `"#10b981"`.
+    pub fn get_brand_primary_colour(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::BRAND_PRIMARY_COLOUR)?.unwrap_or_else(|| "#10b981".into()))
+    }
+
+    /// Set the primary brand colour.
+    pub fn set_brand_primary_colour(conn: &Connection, colour: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::BRAND_PRIMARY_COLOUR, colour)
+    }
+
+    /// Get the filesystem path to the store logo.
+    pub fn get_brand_logo_path(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::BRAND_LOGO_PATH)
+    }
+
+    /// Set the filesystem path to the store logo.
+    pub fn set_brand_logo_path(conn: &Connection, path: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::BRAND_LOGO_PATH, path)
+    }
+
+    /// Get the brand store display name.
+    pub fn get_brand_store_name(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::BRAND_STORE_NAME)?.unwrap_or_default())
+    }
+
+    /// Set the brand store display name.
+    pub fn set_brand_store_name(conn: &Connection, name: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::BRAND_STORE_NAME, name)
     }
 
     // ── Exchange Rate Auto-Sync ────────────────────────────────────
@@ -828,5 +868,8 @@ mod tests {
         assert!(!keys::RATE_SYNC_API_KEY.is_empty());
         assert!(!keys::RATE_SYNC_INTERVAL.is_empty());
         assert!(!keys::RATE_SYNC_BASE_CURRENCY.is_empty());
+        assert!(!keys::BRAND_PRIMARY_COLOUR.is_empty());
+        assert!(!keys::BRAND_LOGO_PATH.is_empty());
+        assert!(!keys::BRAND_STORE_NAME.is_empty());
     }
 }

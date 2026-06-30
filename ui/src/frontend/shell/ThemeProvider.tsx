@@ -7,6 +7,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
+import { getBrandSettings } from '@/api/branding';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -89,6 +90,20 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Load brand settings and apply custom accent colour.
+  useEffect(() => {
+    getBrandSettings()
+      .then((s) => {
+        if (s.primary_colour) {
+          document.documentElement.style.setProperty(
+            '--color-accent',
+            s.primary_colour,
+          );
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const toggleTheme = useCallback(() => {

@@ -7,6 +7,7 @@ license.workspace = true
 description = "OZ-POS module system kernel: lifecycle management, dependency resolution, manifest parsing."
 
 [dependencies]
+anyhow = { workspace = true }
 foundation = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

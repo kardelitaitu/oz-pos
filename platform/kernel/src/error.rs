@@ -43,7 +43,7 @@ pub enum KernelError {
         operation: &'static str,
         /// The underlying error.
         #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        source: anyhow::Error,
     },
 
     /// A service lifecycle operation failed.
@@ -55,7 +55,7 @@ pub enum KernelError {
         operation: &'static str,
         /// The underlying error.
         #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        source: anyhow::Error,
     },
 
     /// No modules are registered.
@@ -144,7 +144,7 @@ mod tests {
         let err = KernelError::LifecycleError {
             module: "inventory",
             operation: "start",
-            source: "disk full".into(),
+            source: anyhow::anyhow!("disk full"),
         };
         let msg = err.to_string();
         assert!(
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn lifecycle_error_source() {
-        let inner: Box<dyn std::error::Error + Send + Sync> = "underlying cause".into();
+        let inner = anyhow::anyhow!("underlying cause");
         let err = KernelError::LifecycleError {
             module: "test",
             operation: "load",
@@ -179,7 +179,7 @@ mod tests {
         let err = KernelError::ServiceError {
             service: "sync-engine",
             operation: "stop",
-            source: "timeout".into(),
+            source: anyhow::anyhow!("timeout"),
         };
         let msg = err.to_string();
         assert!(
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn service_error_source() {
-        let inner: Box<dyn std::error::Error + Send + Sync> = "connection refused".into();
+        let inner = anyhow::anyhow!("connection refused");
         let err = KernelError::ServiceError {
             service: "api",
             operation: "start",
