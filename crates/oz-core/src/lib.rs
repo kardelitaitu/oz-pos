@@ -16,13 +16,81 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod audit;
+pub mod auth;
+pub mod cache;
 pub mod cart;
+pub mod cash_payout;
+pub mod category;
+pub mod customer;
+pub mod db;
 pub mod error;
+pub mod events;
+pub mod exchange_rate;
+pub mod features;
+pub mod inventory;
+pub mod kds;
+/// Loyalty program — points, tiers, and redemption.
+pub mod loyalty;
 pub mod migrations;
 pub mod money;
+pub mod offline;
+pub mod ozpkg;
+pub mod payment;
+pub mod product;
+/// Product bundles — sell multiple SKUs as one item.
+pub mod product_bundle;
+pub mod product_variant;
+pub mod promotion;
+pub mod refund;
+pub mod sale;
+pub mod settings;
+pub mod shift;
 pub mod sku;
+pub mod store_profile;
+pub mod sync_client;
+/// Restaurant table management — floor plan positions and statuses.
+pub mod table;
+pub mod tax_rate;
+pub mod terminal;
+pub mod terminal_override;
+pub mod user;
 
+pub use audit::AuditEntry;
+#[cfg(feature = "cache-redis")]
+pub use cache::redis_cache::RedisCache;
+pub use cache::{Cache, NoopCache, create_cache};
 pub use cart::{Cart, CartError, CartId, CartLine};
+pub use cash_payout::CashPayout;
+pub use category::Category;
+pub use customer::Customer;
+pub use db::reports::{
+    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
+    TopProductRow, WeeklyRevenueRow,
+};
+pub use db::{ProductWithDetails, Store};
 pub use error::CoreError;
+pub use features::{Feature, FeatureRegistry};
+pub use foundation;
+pub use foundation::{InvalidTransition, SaleStatus};
+pub use inventory::Inventory;
+pub use kds::{CreateKdsOrderInput, KdsOrder, KdsStatus};
+pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
 pub use money::{Currency, Money};
+pub use offline::{OfflineQueueItem, OfflineQueueStatus};
+pub use payment::{Payment, PaymentSplitArg};
+pub use product::Product;
+pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
+pub use product_variant::ProductVariant;
+pub use promotion::{Promotion, PromotionApplication, PromotionType};
+pub use refund::{Refund, RefundLine};
+pub use sale::{Sale, SaleLine};
+pub use settings::Settings;
+pub use shift::Shift;
 pub use sku::{LineId, Sku};
+pub use store_profile::StoreProfile;
+pub use sync_client::{SyncAttemptResult, SyncConfig, sync_pending, sync_pending_async};
+pub use table::{Table, TableStatus};
+pub use terminal::Terminal;
+pub use terminal_override::TerminalFeatureOverride;
+pub use user::{Role, User, builtin_roles, seed_users};

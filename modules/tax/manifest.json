@@ -1,0 +1,11 @@
+{
+  "id": "tax",
+  "name": "Tax",
+  "version": "1.0.0",
+  "description": "Tax configuration module: tax rate CRUD, product and category tax assignments, tax calculation.",
+  "dependencies": [],
+  "permissions": [
+    "tax:view",
+    "tax:edit"
+  ]
+}

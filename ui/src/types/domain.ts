@@ -18,8 +18,27 @@ export interface Money {
 export interface CartLine {
   readonly id: LineId;
   readonly sku: Sku;
+  /** Display name of the product (set at add time, may be absent from IPC). */
+  readonly name?: string;
   readonly qty: number;
   readonly unit_price: Money;
+}
+
+/**
+ * A product that can be sold in the store.
+ * Mirrors the product domain model from the backend.
+ */
+export interface Product {
+  readonly sku: Sku;
+  readonly name: string;
+  readonly category: string;
+  readonly price: Money;
+  /** Barcode (EAN-13, UPC-A, etc.) if available. */
+  readonly barcode: string | null;
+  /** Whether the product is currently in stock. */
+  readonly inStock: boolean;
+  /** Current stock quantity, or null if tracking is disabled. */
+  readonly stockQty: number | null;
 }
 
 /** Mirrors `AppError` in `src-tauri/src/error.rs`. */

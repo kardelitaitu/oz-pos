@@ -4,10 +4,19 @@
 
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
 
+## Quick Setup
+
+```bash
+git config core.hooksPath .githooks   # enable pre-commit hook (auto cargo fmt)
+```
+
 ## Project Specific Rules
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
+- **Version is locked at `0.0.1`.** Never change the version number
+  (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
+  or anywhere else) unless the user explicitly asks you to bump it.
 
 ### Rust Standards
 - Format all Rust code with `rustfmt` before committing.
@@ -31,6 +40,8 @@
 ### Git & Branch Policy
 - Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
 - All PRs must pass the CI pipeline (lint, test, build) before merging.
+- CI only triggers on the `main` branch (push + pull_request). Feature-branch
+  pushes do not run CI; open a PR targeting `main` to validate changes.
 - Never commit secrets, `.env` files, or SQLite database files.
 
 > [!NOTE]

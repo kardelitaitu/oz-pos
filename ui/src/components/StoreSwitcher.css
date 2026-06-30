@@ -1,0 +1,106 @@
+.store-switcher {
+  position: relative;
+}
+
+.store-switcher-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out);
+  white-space: nowrap;
+}
+
+.store-switcher-trigger:hover {
+  background: var(--color-bg-elevated);
+}
+
+.store-switcher-trigger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.store-switcher-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.store-switcher-chevron {
+  transition: transform var(--duration-150) var(--ease-out);
+  color: var(--color-fg-tertiary);
+}
+
+.store-switcher-chevron--open {
+  transform: rotate(180deg);
+}
+
+.store-switcher-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 200px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown, 50);
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+}
+
+.store-switcher-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+
+.store-switcher-option:hover {
+  background: var(--color-bg-surface);
+}
+
+.store-switcher-option:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.store-switcher-option--active {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-active);
+  font-weight: var(--font-weight-semibold);
+}
+
+.store-switcher-option--active:hover {
+  background: var(--color-accent-subtle);
+}
+
+.store-switcher-option-name {
+  font-weight: var(--font-weight-medium);
+}
+
+.store-switcher-option-meta {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+.store-switcher-option--active .store-switcher-option-meta {
+  color: var(--color-accent-active);
+}

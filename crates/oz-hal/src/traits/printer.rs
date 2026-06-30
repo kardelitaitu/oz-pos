@@ -14,6 +14,16 @@ pub trait ReceiptPrinter: Send + Sync {
     /// etc.) and slicing the paper at the end.
     async fn print_receipt(&self, body: &str) -> Result<(), HalError>;
 
+    /// Print raw bytes directly to the device (e.g. pre-formatted
+    /// ESC/POS commands from the receipt builder). The default
+    /// implementation converts bytes lossily to a string and delegates
+    /// to [`print_receipt`] — real drivers override this to send the
+    /// exact byte sequence.
+    async fn print_raw(&self, data: &[u8]) -> Result<(), HalError> {
+        let body = String::from_utf8_lossy(data);
+        self.print_receipt(&body).await
+    }
+
     /// Feed `n` blank lines after the receipt, then cut. Most drivers
     /// implement this as the standard ESC/POS sequence; a no-op default
     /// is provided for printers that don't expose a cutter.

@@ -1,0 +1,17 @@
+[package]
+name = "platform-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS platform core: database migrations, connection pool, auth, RBAC, settings."
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+rusqlite = { workspace = true }
+tracing = { workspace = true }
+argon2 = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

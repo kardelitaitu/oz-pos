@@ -10,3 +10,5 @@ description = "Embedded Lua scripting runtime for OZ-POS — lets merchants cust
 oz-core = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+rlua = { workspace = true }

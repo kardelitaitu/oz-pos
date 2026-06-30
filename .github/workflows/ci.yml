@@ -31,14 +31,18 @@ jobs:
             .
             src-tauri -> target
 
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+
       - name: Format check
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features --exclude oz-pos-app -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --exclude oz-pos-app --exclude oz-pos-tablet -- -D warnings
 
       - name: Test
-        run: cargo test --workspace --all-features --exclude oz-pos-app
+        run: cargo test --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet
 
   ui:
     name: UI
@@ -62,10 +66,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # The `migrate` subcommand takes no flags. The second run
-      # exercises the idempotency branch.
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
       - run: cargo run -p oz-cli -- migrate
       - run: cargo run -p oz-cli -- migrate
       - name: Clean up the local DB the smoke test created
-        # WAL mode creates sidecar files; remove them all.
         run: rm -f oz-pos.db oz-pos.db-wal oz-pos.db-shm

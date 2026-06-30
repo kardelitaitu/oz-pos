@@ -16,3 +16,40 @@
 pub mod error;
 
 pub use error::CliError;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subcommand_error_display() {
+        let err = CliError::Subcommand("migrate", "failed".into());
+        assert_eq!(err.to_string(), "subcommand `migrate` failed: failed");
+    }
+
+    #[test]
+    fn open_database_error_display() {
+        let inner = rusqlite::Error::InvalidParameterName("x".into());
+        let err = CliError::OpenDatabase(inner);
+        assert!(err.to_string().contains("could not open database"));
+    }
+
+    #[test]
+    fn args_error_display() {
+        let err = CliError::Args("missing <sku>".into());
+        assert_eq!(err.to_string(), "invalid arguments: missing <sku>");
+    }
+
+    #[test]
+    fn error_is_debug() {
+        let err = CliError::Args("test".into());
+        assert!(!format!("{err:?}").is_empty());
+    }
+
+    #[test]
+    fn open_database_from_rusqlite() {
+        let inner = rusqlite::Error::InvalidParameterName("foo".into());
+        let err: CliError = inner.into();
+        assert!(err.to_string().contains("could not open database"));
+    }
+}

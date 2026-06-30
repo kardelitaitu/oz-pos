@@ -1,0 +1,37 @@
+[package]
+name = "platform-startup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared application startup logic: module registration, event wiring, background sync daemon for desktop and tablet Tauri clients."
+
+[dependencies]
+anyhow = { workspace = true }
+foundation = { workspace = true }
+oz-core = { workspace = true }
+modules-crm = { workspace = true }
+modules-inventory = { workspace = true }
+modules-settings = { workspace = true }
+modules-tax = { workspace = true }
+modules-sales = { workspace = true }
+modules-staff = { workspace = true }
+modules-reporting = { workspace = true }
+modules-terminal = { workspace = true }
+modules-currency = { workspace = true }
+platform-kernel = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+console-subscriber = { workspace = true, optional = true }
+
+[features]
+default = []
+console = ["dep:console-subscriber"]
+
+[dev-dependencies]
+tempfile = "3"

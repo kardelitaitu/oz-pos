@@ -1,0 +1,153 @@
+.multi-store-dashboard {
+  padding: var(--space-6) var(--space-8);
+}
+
+.multi-store-dashboard-header {
+  margin-bottom: var(--space-6);
+}
+
+.multi-store-dashboard-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+  color: var(--color-fg);
+}
+
+.multi-store-dashboard-loading {
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-base);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.multi-store-dashboard-error {
+  padding: var(--space-8);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-fg-secondary);
+}
+
+/* ── Stat cards ──────────────────────────────────────── */
+
+.multi-store-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.multi-store-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+}
+
+.multi-store-stat-value {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent);
+  line-height: 1;
+}
+
+.multi-store-stat-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ── Section title ────────────────────────────────────── */
+
+.multi-store-section-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--space-4);
+  color: var(--color-fg);
+}
+
+/* ── Store card grid ──────────────────────────────────── */
+
+.multi-store-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.multi-store-card {
+  transition: box-shadow var(--duration-150) var(--ease-out);
+}
+
+.multi-store-card--primary {
+  border-color: var(--color-accent);
+  border-width: 2px;
+}
+
+.multi-store-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.multi-store-card-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.multi-store-card-badge {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-active);
+  background: var(--color-accent-subtle);
+  padding: var(--space-0_5) var(--space-2);
+  border-radius: var(--radius-full);
+}
+
+.multi-store-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.multi-store-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.multi-store-card-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  font-weight: var(--font-weight-medium);
+}
+
+.multi-store-card-value {
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  font-weight: var(--font-weight-medium);
+  text-align: right;
+}
+
+.multi-store-card-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  width: 100%;
+}
+
+/* ── Terminal section ─────────────────────────────────── */
+
+.multi-store-terminal-section {
+  margin-top: var(--space-4);
+}

@@ -14,6 +14,10 @@ pub enum CoreError {
     #[error("database error: {0}")]
     Db(#[from] rusqlite::Error),
 
+    /// A platform infrastructure error.
+    #[error("platform error: {0}")]
+    Platform(#[from] platform_core::PlatformError),
+
     /// Adding two [`crate::Money`] values overflowed `i64`.
     #[error("money overflow: {left} {currency} + {right}")]
     MoneyOverflow {
@@ -37,4 +41,26 @@ pub enum CoreError {
         /// The id that was looked up.
         id: String,
     },
+
+    /// A uniqueness constraint was violated (duplicate SKU, name, etc.).
+    #[error("conflict: {entity} already exists ({field})")]
+    Conflict {
+        /// The entity type (e.g. "product", "category").
+        entity: &'static str,
+        /// The field that triggered the conflict (e.g. "sku", "name").
+        field: &'static str,
+    },
+
+    /// A value failed input validation.
+    #[error("validation error on {field}: {message}")]
+    Validation {
+        /// The field that failed validation.
+        field: &'static str,
+        /// Human-readable description of the failure.
+        message: String,
+    },
+
+    /// An unexpected internal error (serialization, crypto, I/O, etc.).
+    #[error("internal error: {0}")]
+    Internal(String),
 }

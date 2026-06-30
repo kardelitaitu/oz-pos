@@ -24,7 +24,7 @@ OZ-POS uses Tauri v2 to bridge Rust and a React/TypeScript front-end. The IPC bo
 | # | Rule | Why |
 |---|------|-----|
 | 1 | **Rust commands live in `src-tauri/src/commands/<feature>.rs`.** | One folder, one feature, easy to find. |
-| 2 | **All commands are registered in `src-tauri/src/main.rs`.** | No hidden registration in sub-modules. |
+| 2 | **All commands are registered in `src-tauri/src/lib.rs`.** | Registration lives next to `Builder::default()` in the `invoke_handler!` list. |
 | 3 | **Front-end calls go through `ui/src/api/pos.ts`.** Components never call `invoke()` directly. |
 | 4 | **Every command is `async fn` and returns `Result<T, AppError>`.** | Errors are typed on both sides; no stringified blobs. |
 | 5 | **Every command takes its dependencies via `tauri::State<...>`.** | No globals, no thread-locals. |
@@ -106,7 +106,7 @@ pub async fn add_line(
 
 ---
 
-## Registering in `main.rs`
+## Registering in `lib.rs`
 
 ```rust
 // src-tauri/src/main.rs
@@ -114,8 +114,6 @@ pub async fn add_line(
 mod commands;
 mod error;
 mod state;
-
-use commands::{sales, inventory, payments, hardware, reports};
 
 fn main() {
     oz_pos_lib::run();

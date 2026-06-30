@@ -1,0 +1,11 @@
+{
+  "id": "terminal",
+  "name": "Terminal",
+  "version": "1.0.0",
+  "description": "Terminal management module: POS device registration, heartbeat/ping tracking, device configuration.",
+  "dependencies": [],
+  "permissions": [
+    "terminal:view",
+    "terminal:edit"
+  ]
+}

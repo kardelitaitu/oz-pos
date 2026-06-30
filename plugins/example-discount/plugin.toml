@@ -1,0 +1,14 @@
+[plugin]
+name = "example-discount"
+version = "1.0.0"
+description = "Example: applies 10% discount on Tuesdays"
+author = "OZ-POS"
+license = "MIT"
+
+[capabilities]
+scripts = ["discount.lua"]
+hooks = ["sale.before_complete"]
+
+[permissions]
+allow_network = false
+allow_filesystem = false

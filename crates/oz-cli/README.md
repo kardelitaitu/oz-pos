@@ -1,34 +1,30 @@
 # oz-cli
 
-Command-line tools for OZ-POS — migrations, backup, export, smoke tests. The `oz` binary is the maintenance surface a merchant or operator runs from a terminal.
+CLI tool for OZ-POS maintenance — migrations, backup, export, and data CRUD.
 
 ## Subcommands
 
-- `oz migrate` — apply pending SQL migrations to the local database
-- `oz backup --output <path>` — snapshot the local SQLite store
-- `oz export <kind>` — write a CSV report (`daily-summary`, `sales-by-hour`, ...)
-- `oz --help` / `oz --version`
+| Command | Description |
+|---------|-------------|
+| `oz migrate` | Apply pending SQL migrations |
+| `oz init-db [--preset <preset>]` | Seed DB with settings, feature presets (simple-retail, restaurant, full-store, custom), 39 currencies, 3 default roles, and an admin user |
+| `oz product list\|get\|create\|update\|delete` | Full product CRUD (SKU, name, price in minor units, category, barcode) |
+| `oz category list\|get\|create\|delete` | Category CRUD (id, name, hex colour) |
+| `oz inventory get\|adjust` | Stock query by SKU; signed-delta adjustment |
+| `oz sale list\|get [--format text\|json]\|update-status` | Sale listing, detail view, status transitions (pending, active, completed, voided) |
+| `oz customer list\|get\|create` | Customer CRUD (name, email, phone, notes) |
+| `oz user list\|get\|create` | User CRUD (username, pin_hash, display_name, role_id) |
+| `oz backup --output <path>` | Online SQLite backup to a file |
+| `oz restore --input <path>` | Restore DB from a backup file (file copy) |
+| `oz export <daily-summary\|sales-by-hour>` | CSV report written to stdout |
+| `oz export-ozpkg --output <path> --password <pw>` | Encrypted `.ozpkg` export (Argon2id + AES-256-GCM); `--types` selects data kinds |
+| `oz import-ozpkg --input <path> --password <pw>` | Decrypt and inspect a `.ozpkg` file; `--dry-run` reads metadata without writing |
+| `oz --version` | Print version |
 
-## Public API (library)
+## Notes
 
-- [`CliError`](src/error.rs) — `thiserror`-based error type, shared by `main.rs` and the subcommand modules.
+- DB path defaults to `./oz-pos.db`; use `--db <path>` (global flag) to override.
+- Prices and monetary values are `i64` minor units (e.g. `350` for $3.50).
+- `oz import-ozpkg` currently supports dry-run inspection only; write logic is pending.
 
-## Example
-
-```bash
-# Show version
-oz --version
-
-# Apply migrations
-oz migrate
-
-# Snapshot the local DB
-oz backup --output /var/backups/oz-$(date +%F).db
-
-# Export a daily report
-oz export daily-summary
-```
-
-## Status
-
-Scaffold only. Subcommands return `not yet implemented (scaffold)` until the corresponding crate lands its real implementation.
+> last audited 28-06-26 by docs-auditor

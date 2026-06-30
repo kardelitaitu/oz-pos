@@ -1,119 +1,105 @@
 # OZ-POS
 
-> *"Pay no attention to the man behind the curtain."* — The Wizard of Oz
+A modular Point-of-Sale framework built with Rust + Tauri v2.
 
-**OZ-POS** is a magical, modular Point-of-Sale software framework built with Rust and Tauri v2. Like the wizard behind the curtain, it silently powers fast, reliable checkout experiences — while merchants and developers only see effortless simplicity.
-
-The name **OZ** embodies four pillars:
-
-| | Pillar | Meaning |
-|-|--------|---------|
-| 🧙 | **Magical** | Complex operations feel effortless — barcodes, payments, encryption, sync |
-| 🧵 | **Small Core** | Lean `oz-core` crate; every feature is a composable module |
-| ♾️ | **Limitless** | Scales from a single warung to a nationwide chain — no rewrite |
-| 📈 | **Scalable** | Horizontal scaling, cloud sync, multi-store — built in from day one |
-
----
-
-## What is OZ-POS?
-
-A high-performance POS framework for retail stores, restaurants, and any merchant environment. It runs on Windows PCs, Linux PCs, Android tablets, and iPads with full barcode scanner support, offline-first operation, and optional cloud sync.
-
----
-
-## Key Features
-
-- **Barcode Support** – USB, Bluetooth, and serial barcode scanners via a unified HAL
-- **Multi-Currency** – Integer-based money handling with ISO-4217 currency codes
-- **Offline-First** – SQLite on-device storage; cloud sync is optional
-- **Extensible** – Embedded Lua scripting for custom business rules and promotions
-- **Cross-Platform** – Windows, Linux, Android, iPad from a single codebase
-- **Cloud Optional** – On-features cloud DB, analytics, and backup add-ons
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Core Engine | Rust |
-| UI | Tauri v2 + React + TypeScript |
-| Scripting | Lua (via `rlua`) |
-| Local DB | SQLite (`rusqlite`) |
-| Cloud DB | PostgreSQL / CockroachDB (optional) |
-| Cache | Redis (optional) |
-| Build | Cargo + Vite + GitHub Actions |
-
----
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Directory layout and module responsibilities |
-| [WHITEPAPER.md](./docs/WHITEPAPER.md) | Design rationale, tech choices, database strategy |
-| [ROADMAP.md](./docs/ROADMAP.md) | Phased milestones and planned features |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution workflow, branch policy, PR checklist |
-| [docs/QUICKSTART.md](./docs/QUICKSTART.md) | First-time local setup and build |
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Rust stable toolchain (`rustup install stable`)
-- Node.js >= 18
-- Tauri v2 prerequisites ([see Tauri docs](https://tauri.app/v2/guides/))
-
-### Build & Run
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/kardelitaitu/oz-pos.git
-cd oz-pos
-
-# 2. Build Rust workspace
-cargo build --workspace
-
-# 3. Install front-end dependencies
-cd ui && npm install
-
-# 4. Run in development mode
-npm run dev   # launches Tauri dev window
-```
-
-### Run on Android / iPad
-
-```bash
-# Android (requires Android SDK)
-cargo tauri android dev
-
-# iOS/iPadOS (requires Xcode on macOS)
-cargo tauri ios dev
-```
-
----
-
-## Project Structure
+## Architecture
 
 ```
 oz-pos/
-├─ src/          # Rust crates (core, hal, lua, security, logging, payment, reporting, perf, cli)
-├─ ui/           # React + TypeScript front-end
-├─ migrations/   # SQL migration files
-├─ docs/         # Additional documentation
-└─ .github/      # CI/CD workflows
+├── apps/
+│   ├── desktop-client/     # Tauri v2 shell: IPC commands, app state, plugins
+│   │   └── src/commands/   # 65+ Tauri commands grouped by domain
+│   └── tablet-client/      # Tablet-optimised Tauri shell
+├── crates/
+│   ├── oz-cli/             # CLI tool (backup, export/import .ozpkg, migrations)
+│   ├── oz-core/            # Domain models, SQLite Store, migrations, settings
+│   │   ├── src/db/         # Store facade — typed CRUD per entity
+│   │   └── src/ozpkg/      # Encrypted .ozpkg export/import (Argon2id + AES-256-GCM)
+│   ├── oz-hal/             # Hardware Abstraction Layer (printer, scanner, drawer, display)
+│   ├── oz-logging/         # Structured logging (console, file, syslog, eventlog)
+│   ├── oz-lua/             # Lua scripting engine (rlua — discount, tax, validation)
+│   ├── oz-payment/         # Payment gateway integrations (Stripe, mock)
+│   ├── oz-reporting/       # Report generation (EOD, sales summaries)
+│   └── oz-security/        # TLS config, PAN masking, platform keychains
+├── foundation/             # Shared primitives: Money, SKU, Cart, contracts
+├── modules/                # Pluggable domain modules (CRM, inventory, tax, etc.)
+├── platform/               # Kernel, event bus, sync engine, startup
+├── ui/                     # React 18 + TypeScript + Vite
+│   └── src/
+│       ├── api/            # Per-domain invoke() wrappers — no invoke() in components
+│       ├── frontend/
+│       │   ├── shared/     # Button, Card, Modal, Badge, Toast, Spinner, etc.
+│       │   ├── shell/      # AppLayout, RoleBadge, ThemeProvider, ThemeToggle
+│       │   └── themes/     # Design tokens, reset, components CSS
+│       ├── features/       # 15+ screen components by domain
+│       ├── locales/        # Fluent (.ftl) files — 280+ IDs
+│       └── __tests__/      # Vitest + testing-library (122 tests, 12 files)
+├── docs/
+│   ├── ROADMAP.md          # Phased delivery plan (Phase 3 complete)
+│   ├── decisions/          # Architecture decision records
+│   └── specs/              # Module manifest format, PCI-DSS checklist
+├── scripts/examples/       # Example Lua business rule scripts
+└── packaging/              # MSI, .deb, .AppImage build configs
 ```
 
-See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for the full directory tree.
+## Foundation
 
----
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Backend | Rust | Domain logic, DB access, hardware control |
+| Frontend | React 18 + TS + Vite | POS UI |
+| Shell | Tauri v2 | IPC bridge, native window, updater |
+| DB | SQLite (rusqlite) | On-device persistence, 25 migrations |
+| i18n | @fluent/react | All UI strings in `.ftl` files |
+| Hardware HAL | oz-hal traits | USB/TCP/BT/serial/mock drivers for printer, scanner, drawer, display |
+| Money | i64 minor units | Never f64 — `Currency`, `Money` structs |
+| Export | .ozpkg format | Argon2id + AES-256-GCM + zstd encrypted snapshots |
 
-## License
+## Quick Start
 
-MIT License. See `LICENSE` for details.
+```bash
+git clone https://github.com/kardelitaitu/oz-pos.git
+cd oz-pos
+cargo build --workspace
+cd ui && npm install && cd ..
+cd apps/desktop-client && cargo tauri dev
+```
 
----
+### Key scripts (ui/)
 
-*Built with Rust, Tauri v2, and a love for reliable software.*
+| Command | Action |
+|---------|--------|
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run test` | `vitest run` (122 tests, 12 files) |
+| `npm run lint` | ESLint + jsx-a11y |
+
+### Key scripts (root)
+
+| Command | Action |
+|---------|--------|
+| `cargo clippy --all-targets` | Rust lint |
+| `cargo test --workspace` | Rust tests (400+) |
+
+## Backend Conventions
+
+- **Money**: `i64 minor_units` + `Currency` — never `f32`/`f64`
+- **DB writes**: always inside `rusqlite` transactions
+- **Errors**: `thiserror` for libs, `anyhow` for app code
+- **Clippy**: must pass `-- -D warnings` before merge
+- **Migrations**: `.sql` files in `crates/oz-core/migrations/` registered in `migrations.rs`
+
+## Frontend Conventions
+
+- **No `invoke()` in components** — use per-domain `api/*.ts` wrappers
+- **No hardcoded strings** — all text goes through `@fluent/react`
+- **Accessibility**: every interactive element has an `aria-label`
+- **Money display**: `formatMoney()` from `ui/src/locales/test-utils.tsx`
+- **Tests**: every feature screen has a corresponding `__tests__/` file
+
+## Status
+
+**Phase 3 (Transactions & Staff) complete.** 25 migrations, 65+ IPC commands, 15+ screen components, 122 front-end tests, 400+ Rust tests.
+
+See [ROADMAP.md](./docs/ROADMAP.md) for the phased delivery plan.
+
+> last audited 30-06-26 by docs-auditor

@@ -23,7 +23,7 @@ export default defineConfig({
         watch: {
             // Tell vite to ignore watching `src-tauri` so the Rust change
             // watcher doesn't trigger a Vite reload.
-            ignored: ['**/src-tauri/**'],
+            ignored: ['**/apps/**'],
         },
     },
     test: {

@@ -1,0 +1,11 @@
+{
+  "id": "settings",
+  "name": "Settings",
+  "version": "1.0.0",
+  "description": "Store configuration module: store info, receipt formatting, feature flags, sync settings, setup wizard.",
+  "dependencies": [],
+  "permissions": [
+    "settings:view",
+    "settings:edit"
+  ]
+}

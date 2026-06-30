@@ -1,0 +1,16 @@
+[package]
+name = "modules-staff"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS Staff Module: user management, role management, authentication, and session handling."
+
+[dependencies]
+foundation = { workspace = true }
+oz-core = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+platform-kernel = { workspace = true }

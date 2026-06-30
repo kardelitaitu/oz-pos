@@ -1,0 +1,17 @@
+[package]
+name = "modules-currency"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS Currency/Exchange Module: ISO-4217 currencies, exchange rates, multi-currency support."
+
+[dependencies]
+foundation = { workspace = true }
+oz-core = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+platform-kernel = { workspace = true }

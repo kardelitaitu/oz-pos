@@ -7,14 +7,39 @@ license.workspace = true
 description = "Domain types for OZ-POS: money, currency, cart, sale, inventory."
 
 [dependencies]
+foundation = { workspace = true }
+platform-core = { workspace = true }
 serde = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+chrono = { workspace = true }
 tracing = { workspace = true }
+argon2 = { workspace = true }
+aes-gcm = { workspace = true }
+zstd = { workspace = true }
+aead = { workspace = true }
+rand = { workspace = true }
+hex = "0.4"
+serde_json = { workspace = true }
+redis = { version = "0.27", optional = true }
+
+[features]
+default = ["sync-http"]
+sync-http = ["reqwest"]
+cache-redis = ["dep:redis"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
-# Used by SerDe round-trip tests in money.rs and sku.rs to verify
-# the wire format produces bare strings ("USD", "COFFEE") rather
-# than arrays or objects. Not a runtime dep.
-serde_json = { workspace = true }
+criterion = { workspace = true }
+proptest = "1"
+
+[[bench]]
+name = "barcode_lookup"
+harness = false
+
+[[bench]]
+name = "transaction_commit"
+harness = false

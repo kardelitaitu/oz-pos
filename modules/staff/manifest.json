@@ -1,0 +1,12 @@
+{
+  "id": "staff",
+  "name": "Staff",
+  "version": "1.0.0",
+  "description": "Staff Management module: user CRUD, role management, authentication, and session handling.",
+  "dependencies": [],
+  "permissions": [
+    "staff:view",
+    "staff:edit",
+    "staff:auth"
+  ]
+}

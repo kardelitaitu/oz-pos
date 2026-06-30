@@ -1,0 +1,217 @@
+//! Event handlers for the Reporting module.
+//!
+//! These handlers respond to domain events published on the kernel
+//! event bus. Each handler holds a reference to the shared database
+//! connection so it can perform side effects atomically.
+
+use std::sync::{Arc, Mutex};
+
+use foundation::contracts::{EventHandler, ModuleResult};
+use oz_core::events::SaleCompleted;
+use rusqlite::Connection;
+use tracing::info;
+
+/// Handler that captures sale data when a sale completes.
+///
+/// For each `sale.completed` event, this handler inserts a row into
+/// the `report_sales` table with the sale ID, total, currency,
+/// customer ID (if any), and timestamp. This populates the report
+/// data store so that downstream reporting queries (daily summaries,
+/// hourly trends, exports) can operate without hitting the live
+/// sales tables.
+///
+/// If the table does not exist yet, the handler creates it lazily.
+#[derive(Debug)]
+pub struct SaleCompletedReporter {
+    db: Arc<Mutex<Connection>>,
+}
+
+impl SaleCompletedReporter {
+    /// Create a new handler with a shared database connection.
+    pub fn new(db: Arc<Mutex<Connection>>) -> Self {
+        Self { db }
+    }
+
+    /// Ensure the `report_sales` table exists.
+    fn ensure_table(&self, conn: &Connection) -> Result<(), anyhow::Error> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS report_sales (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id     TEXT    NOT NULL,
+                total_minor INTEGER NOT NULL,
+                currency    TEXT    NOT NULL,
+                customer_id TEXT,
+                line_items  TEXT    NOT NULL DEFAULT '[]',
+                created_at  TEXT    NOT NULL
+            );",
+        )?;
+        Ok(())
+    }
+}
+
+impl EventHandler<SaleCompleted> for SaleCompletedReporter {
+    fn handle(&self, event: &SaleCompleted) -> ModuleResult {
+        let conn = self
+            .db
+            .lock()
+            .map_err(|e| anyhow::anyhow!("reporting handler: db lock failed: {e}"))?;
+
+        // Ensure the report table exists (lazy creation).
+        self.ensure_table(&conn)?;
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Serialize line items to JSON for storage.
+        let line_items_json = serde_json::to_string(&event.line_items).map_err(|e| {
+            anyhow::anyhow!("reporting handler: failed to serialize line items: {e}")
+        })?;
+
+        conn.execute(
+            "INSERT INTO report_sales (sale_id, total_minor, currency, customer_id, line_items, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                event.sale_id,
+                event.total_minor,
+                event.currency,
+                event.customer_id,
+                line_items_json,
+                now,
+            ],
+        )?;
+
+        info!(
+            sale_id = %event.sale_id,
+            total_minor = event.total_minor,
+            currency = %event.currency,
+            "reporting handler: sale recorded for reporting"
+        );
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oz_core::events::SaleCompletedLine;
+    use oz_core::migrations;
+    use platform_kernel::EventBus;
+
+    fn fresh_db() -> Arc<Mutex<Connection>> {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        migrations::run(&mut conn).unwrap();
+        Arc::new(Mutex::new(conn))
+    }
+
+    #[test]
+    fn handler_records_sale_in_report_table() {
+        let db = fresh_db();
+        let handler = SaleCompletedReporter::new(db.clone());
+
+        let event = SaleCompleted {
+            sale_id: "sale-1".into(),
+            line_items: vec![SaleCompletedLine {
+                sku: "COFFEE".into(),
+                qty: 2,
+                unit_price_minor: 350,
+                tax_minor: 0,
+                tax_rate_id: None,
+            }],
+            total_minor: 700,
+            currency: "USD".into(),
+            customer_id: Some("cust-1".into()),
+        };
+
+        handler.handle(&event).unwrap();
+
+        // Verify the row was inserted.
+        let conn = db.lock().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM report_sales", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let (sale_id, total_minor, currency, customer_id): (String, i64, String, Option<String>) =
+            conn.query_row(
+                "SELECT sale_id, total_minor, currency, customer_id FROM report_sales WHERE sale_id = ?1",
+                ["sale-1"],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(sale_id, "sale-1");
+        assert_eq!(total_minor, 700);
+        assert_eq!(currency, "USD");
+        assert_eq!(customer_id, Some("cust-1".into()));
+    }
+
+    #[test]
+    fn handler_records_multiple_sales() {
+        let db = fresh_db();
+        let handler = SaleCompletedReporter::new(db.clone());
+
+        let event1 = SaleCompleted {
+            sale_id: "sale-a".into(),
+            line_items: vec![],
+            total_minor: 100,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        let event2 = SaleCompleted {
+            sale_id: "sale-b".into(),
+            line_items: vec![],
+            total_minor: 200,
+            currency: "EUR".into(),
+            customer_id: Some("cust-2".into()),
+        };
+
+        handler.handle(&event1).unwrap();
+        handler.handle(&event2).unwrap();
+
+        let conn = db.lock().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM report_sales", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn handler_works_with_event_bus() {
+        let db = fresh_db();
+        let bus = EventBus::new();
+        let handler = SaleCompletedReporter::new(db.clone());
+        bus.subscribe("sale.completed", Box::new(handler));
+
+        let event = SaleCompleted {
+            sale_id: "sale-3".into(),
+            line_items: vec![SaleCompletedLine {
+                sku: "TEA".into(),
+                qty: 1,
+                unit_price_minor: 250,
+                tax_minor: 0,
+                tax_rate_id: None,
+            }],
+            total_minor: 250,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        bus.publish(&event).unwrap();
+
+        let conn = db.lock().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM report_sales", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let total: i64 = conn
+            .query_row(
+                "SELECT total_minor FROM report_sales WHERE sale_id = ?1",
+                ["sale-3"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(total, 250);
+    }
+}

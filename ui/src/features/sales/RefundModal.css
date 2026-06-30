@@ -1,0 +1,205 @@
+.refund-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.refund-modal {
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 560px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.refund-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.refund-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.refund-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 4px;
+  color: var(--text-secondary, #666);
+}
+
+.refund-sale-info {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 6px;
+}
+
+.refund-section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.refund-lines {
+  margin-bottom: 1rem;
+}
+
+.refund-line {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  margin-bottom: 0.25rem;
+}
+
+.refund-line-selected {
+  background: var(--bg-success-light, #f0fdf4);
+  border-color: var(--color-success, #22c55e);
+}
+
+.refund-line-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  cursor: pointer;
+}
+
+.refund-line-sku {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #666);
+}
+
+.refund-line-name {
+  font-size: 0.9rem;
+}
+
+.refund-line-qty {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.refund-qty-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  background: var(--bg-primary, #fff);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refund-qty-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.refund-qty-value {
+  min-width: 1.5rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.refund-line-total {
+  margin-left: 0.5rem;
+  font-weight: 600;
+  min-width: 4rem;
+  text-align: right;
+}
+
+.refund-details {
+  margin-bottom: 1rem;
+}
+
+.refund-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.refund-input {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.refund-error {
+  color: var(--color-danger, #ef4444);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-danger-light, #fef2f2);
+  border-radius: 6px;
+}
+
+.refund-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-top: 2px solid var(--border-color, #e0e0e0);
+  margin-bottom: 1rem;
+}
+
+.refund-total-label {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.refund-total-amount {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-danger, #ef4444);
+}
+
+.refund-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.refund-done {
+  text-align: center;
+  padding: 2rem;
+}
+
+.refund-done-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.refund-done-amount {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-danger, #ef4444);
+  margin: 0 0 1.5rem;
+}

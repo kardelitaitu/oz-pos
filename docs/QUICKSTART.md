@@ -8,7 +8,7 @@ This guide gets OZ-POS building and running on your machine in under 15 minutes.
 
 | Tool | Version | Why |
 |------|---------|-----|
-| **Rust** | 1.85+ stable (`rustup install stable`) | The workspace uses edition 2024, which requires Rust 1.85+ |
+| **Rust** | 1.88+ stable (`rustup install stable`) | The workspace uses edition 2024 and axum/tower-http deps that require rustc ≥ 1.88 |
 | **Node.js** | 18 or 20 LTS | Tauri v2 webview (React 18 + TypeScript) |
 | **Tauri v2 prerequisites** | Per [Tauri docs](https://tauri.app/v2/guides/) | WebView2 on Windows, webkit2gtk on Linux, etc. |
 | **SQLite** | 3.x (bundled via `rusqlite`) | Local persistence — no separate install needed |
@@ -97,7 +97,7 @@ oz-pos/
 │   └── src/commands/           # Tauri commands (one folder per feature)
 ├── ui/                         # React + TypeScript front-end
 │   └── src/api/pos.ts          # the ONLY place that calls invoke()
-├── migrations/                 # SQL migration files
+├── crates/oz-core/migrations/  # SQL migration files
 ├── docs/                       # project documentation
 ├── .agents/skills/             # agent skills (read these when contributing)
 └── .github/workflows/          # CI pipelines
@@ -151,7 +151,7 @@ All green? Open the PR.
 
 ## Troubleshooting
 
-### "error: package `oz-core v0.1.0` cannot be built because it requires rustc 1.85 or newer"
+### "error: package `oz-core v0.0.1` cannot be built because it requires rustc 1.88 or newer"
 
 You're on an old Rust. Update:
 
