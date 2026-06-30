@@ -157,15 +157,59 @@ pub async fn lookup_by_barcode(
 ) -> Result<Option<ProductDto>, AppError> {
     validate_not_empty("barcode", &barcode).map_err(|e| AppError::Invalid(e.to_string()))?;
     let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let pwd = store.lookup_product_with_details_by_barcode(&barcode)?;
+    let _store = Store::new(&db);
+    let result = run_lookup_by_barcode(&db, &barcode);
+    drop(db);
+    result
+}
+
+/// Business logic for barcode lookup (extracted for testing).
+fn run_lookup_by_barcode(
+    conn: &rusqlite::Connection,
+    barcode: &str,
+) -> Result<Option<ProductDto>, AppError> {
+    let store = Store::new(conn);
+    let pwd = store.lookup_product_with_details_by_barcode(barcode)?;
+    map_pwd_to_dto(&store, pwd)
+}
+
+/// Look up a single product by SKU.
+///
+/// Returns the product DTO or `null` when no match is found.
+#[command]
+pub async fn lookup_product_by_sku(
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ProductDto>, AppError> {
+    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+    let db = state.db.lock().await;
+    let _store = Store::new(&db);
+    let result = run_lookup_product_by_sku(&db, &sku);
+    drop(db);
+    result
+}
+
+/// Business logic for SKU lookup (extracted for testing).
+fn run_lookup_product_by_sku(
+    conn: &rusqlite::Connection,
+    sku: &str,
+) -> Result<Option<ProductDto>, AppError> {
+    let store = Store::new(conn);
+    let pwd = store.get_product(sku)?;
+    map_pwd_to_dto(&store, pwd)
+}
+
+/// Shared mapping from `ProductWithDetails` to `ProductDto`.
+fn map_pwd_to_dto(
+    store: &Store<'_>,
+    pwd: Option<oz_core::db::ProductWithDetails>,
+) -> Result<Option<ProductDto>, AppError> {
     let tax_rate_ids = match pwd {
         Some(ref p) => store
             .get_product_tax_rates(p.product.sku.as_str())
             .unwrap_or_default(),
         None => vec![],
     };
-    drop(db);
     Ok(pwd.map(|pwd| {
         let cur_str = std::str::from_utf8(&pwd.product.price.currency.0)
             .unwrap_or("USD")
@@ -390,5 +434,102 @@ mod tests {
         // Check BROWNIE (has no inventory row).
         let brownie = products.iter().find(|p| p.sku == "BROWNIE").unwrap();
         assert!(!brownie.in_stock);
+    }
+
+    // ── Barcode lookup integration tests ─────────────────────────────
+
+    #[test]
+    fn lookup_by_barcode_found() {
+        let conn = fresh_conn();
+        conn.execute_batch(
+            "INSERT INTO categories (id, name, colour) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4');
+             INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
+                ('p1', 'LATTE', 'Caffè Latte', 450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty) VALUES ('p1', 50);",
+        )
+        .unwrap();
+
+        let result = run_lookup_by_barcode(&conn, "4901234567890").unwrap();
+        let dto = result.expect("expected product for known barcode");
+        assert_eq!(dto.sku, "LATTE");
+        assert_eq!(dto.name, "Caffè Latte");
+        assert_eq!(dto.category.as_deref(), Some("Drinks"));
+        assert_eq!(dto.price.minor_units, 450);
+        assert_eq!(dto.barcode.as_deref(), Some("4901234567890"));
+        assert!(dto.in_stock);
+        assert_eq!(dto.stock_qty, Some(50));
+    }
+
+    #[test]
+    fn lookup_by_barcode_not_found() {
+        let conn = fresh_conn();
+        let result = run_lookup_by_barcode(&conn, "0000000000000").unwrap();
+        assert!(result.is_none(), "unknown barcode should return None");
+    }
+
+    #[test]
+    fn lookup_by_barcode_returns_product_without_barcode() {
+        // A product with no barcode stored (NULL in DB) should NOT be
+        // returned when looking up a barcode — confirm the DB query works.
+        let conn = fresh_conn();
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, barcode, created_at, updated_at) VALUES
+                ('p1', 'TEA', 'Green Tea', 275, 'USD', NULL, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let result = run_lookup_by_barcode(&conn, "2750000000000").unwrap();
+        assert!(result.is_none(), "no match for random barcode");
+    }
+
+    // ── SKU lookup integration tests ─────────────────────────────────
+
+    #[test]
+    fn lookup_product_by_sku_found() {
+        let conn = fresh_conn();
+        conn.execute_batch(
+            "INSERT INTO categories (id, name, colour) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4');
+             INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
+                ('p1', 'LATTE', 'Caffè Latte', 450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty) VALUES ('p1', 50);",
+        )
+        .unwrap();
+
+        let result = run_lookup_product_by_sku(&conn, "LATTE").unwrap();
+        let dto = result.expect("expected product for known SKU");
+        assert_eq!(dto.sku, "LATTE");
+        assert_eq!(dto.name, "Caffè Latte");
+        assert_eq!(dto.category.as_deref(), Some("Drinks"));
+        assert_eq!(dto.price.minor_units, 450);
+        assert_eq!(dto.barcode.as_deref(), Some("4901234567890"));
+        assert!(dto.in_stock);
+        assert_eq!(dto.stock_qty, Some(50));
+    }
+
+    #[test]
+    fn lookup_product_by_sku_not_found() {
+        let conn = fresh_conn();
+        let result = run_lookup_product_by_sku(&conn, "NO-SUCH-SKU").unwrap();
+        assert!(result.is_none(), "unknown SKU should return None");
+    }
+
+    #[test]
+    fn lookup_product_by_sku_without_stock() {
+        let conn = fresh_conn();
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, barcode, created_at, updated_at) VALUES
+                ('p1', 'UNSTOCKED', 'Unstocked Item', 199, 'USD', NULL, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let result = run_lookup_product_by_sku(&conn, "UNSTOCKED").unwrap();
+        let dto = result.expect("expected product for known SKU without stock");
+        assert_eq!(dto.sku, "UNSTOCKED");
+        assert_eq!(dto.name, "Unstocked Item");
+        assert_eq!(dto.price.minor_units, 199);
+        assert!(!dto.in_stock);
+        assert_eq!(dto.stock_qty, None);
     }
 }

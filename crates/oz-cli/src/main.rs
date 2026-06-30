@@ -1292,7 +1292,7 @@ fn run_export(conn: &Connection, kind: &str) -> Result<()> {
         other => {
             eprintln!("unknown export kind '{other}'");
             eprintln!("available kinds: daily-summary, sales-by-hour");
-            std::process::exit(1);
+            return Err(anyhow::anyhow!("unknown export kind '{other}'"));
         }
     }
 
@@ -1347,40 +1347,27 @@ fn run_category_get(store: &Store<'_>, id: &str) -> Result<()> {
 }
 
 fn run_category_create(store: &Store<'_>, id: &str, name: &str, colour: &str) -> Result<()> {
-    match store.create_category(id, name, colour) {
-        Ok(cat) => {
-            println!("Created category: {} ({})", cat.name, cat.id);
-        }
-        Err(CoreError::Validation { message, .. }) => {
-            eprintln!("Validation error: {message}");
-            std::process::exit(1);
-        }
-        Err(CoreError::Conflict { entity, field }) => {
-            eprintln!("Conflict: {entity} already exists ({field})");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let cat = store
+        .create_category(id, name, colour)
+        .map_err(|e| match &e {
+            CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
+            CoreError::Conflict { entity, field } => {
+                anyhow::anyhow!("Conflict: {entity} already exists ({field})")
+            }
+            _ => anyhow::anyhow!("Error: {e}"),
+        })?;
+
+    println!("Created category: {} ({})", cat.name, cat.id);
     Ok(())
 }
 
 fn run_category_delete(store: &Store<'_>, id: &str) -> Result<()> {
-    match store.delete_category(id) {
-        Ok(()) => {
-            println!("Deleted category: {id}");
-        }
-        Err(CoreError::NotFound { .. }) => {
-            eprintln!("Category not found: {id}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    store.delete_category(id).map_err(|e| match &e {
+        CoreError::NotFound { .. } => anyhow::anyhow!("Category not found: {id}"),
+        _ => anyhow::anyhow!("Error: {e}"),
+    })?;
+
+    println!("Deleted category: {id}");
     Ok(())
 }
 
@@ -1414,25 +1401,14 @@ fn run_inventory_get(store: &Store<'_>, sku: &str) -> Result<()> {
 }
 
 fn run_inventory_adjust(store: &Store<'_>, sku: &str, delta: i64) -> Result<()> {
-    match store.adjust_stock(sku, delta) {
-        Ok(new_qty) => {
-            let verb = if delta >= 0 { "restocked" } else { "sold" };
-            println!("Stock {verb} for {sku} (delta: {delta:+}) — new qty: {new_qty}");
-        }
-        Err(CoreError::NotFound { .. }) => {
-            eprintln!("Product not found: {sku}");
-            std::process::exit(1);
-        }
-        Err(CoreError::Validation { message, .. }) => {
-            eprintln!("Validation error: {message}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let new_qty = store.adjust_stock(sku, delta).map_err(|e| match &e {
+        CoreError::NotFound { .. } => anyhow::anyhow!("Product not found: {sku}"),
+        CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
+        _ => anyhow::anyhow!("Error: {e}"),
+    })?;
 
+    let verb = if delta >= 0 { "restocked" } else { "sold" };
+    println!("Stock {verb} for {sku} (delta: {delta:+}) — new qty: {new_qty}");
     Ok(())
 }
 
@@ -1555,24 +1531,13 @@ fn run_sale_update_status(store: &Store<'_>, id: &str, status_str: &str) -> Resu
         )
     })?;
 
-    match store.update_sale_status(id, to) {
-        Ok(sale) => {
-            println!("Sale {id} status updated to {:?}", sale.status);
-        }
-        Err(CoreError::NotFound { .. }) => {
-            eprintln!("Sale not found: {id}");
-            std::process::exit(1);
-        }
-        Err(CoreError::Validation { message, .. }) => {
-            eprintln!("Validation error: {message}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let sale = store.update_sale_status(id, to).map_err(|e| match &e {
+        CoreError::NotFound { .. } => anyhow::anyhow!("Sale not found: {id}"),
+        CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
+        _ => anyhow::anyhow!("Error: {e}"),
+    })?;
 
+    println!("Sale {id} status updated to {:?}", sale.status);
     Ok(())
 }
 
@@ -1740,23 +1705,17 @@ fn run_user_create(
     display_name: &str,
     role_id: &str,
 ) -> Result<()> {
-    match store.create_user(username, pin_hash, display_name, role_id) {
-        Ok(u) => {
-            println!("Created user: {} ({})", u.display_name, u.username);
-        }
-        Err(CoreError::Validation { message, .. }) => {
-            eprintln!("Validation error: {message}");
-            std::process::exit(1);
-        }
-        Err(CoreError::Conflict { entity, field }) => {
-            eprintln!("Conflict: {entity} already exists ({field})");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let u = store
+        .create_user(username, pin_hash, display_name, role_id)
+        .map_err(|e| match &e {
+            CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
+            CoreError::Conflict { entity, field } => {
+                anyhow::anyhow!("Conflict: {entity} already exists ({field})")
+            }
+            _ => anyhow::anyhow!("Error: {e}"),
+        })?;
+
+    println!("Created user: {} ({})", u.display_name, u.username);
     Ok(())
 }
 
@@ -1880,28 +1839,21 @@ fn run_product_create(
         currency,
     };
 
-    match store.create_product(sku, name, money, None, None, 0) {
-        Ok(product) => {
-            println!(
-                "Created product: {} ({})",
-                product.name,
-                product.sku.as_str()
-            );
-        }
-        Err(CoreError::Validation { message, .. }) => {
-            eprintln!("Validation error: {message}");
-            std::process::exit(1);
-        }
-        Err(CoreError::Conflict { entity, field }) => {
-            eprintln!("Conflict: {entity} already exists ({field})");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let product = store
+        .create_product(sku, name, money, None, None, 0)
+        .map_err(|e| match &e {
+            CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
+            CoreError::Conflict { entity, field } => {
+                anyhow::anyhow!("Conflict: {entity} already exists ({field})")
+            }
+            _ => anyhow::anyhow!("Error: {e}"),
+        })?;
 
+    println!(
+        "Created product: {} ({})",
+        product.name,
+        product.sku.as_str()
+    );
     Ok(())
 }
 
@@ -1926,46 +1878,29 @@ fn run_product_update(
     let cat = category_id.and_then(|s| if s.is_empty() { None } else { Some(s) });
     let bar = barcode.and_then(|s| if s.is_empty() { None } else { Some(s) });
 
-    match store.update_product(sku, name, money, cat, bar) {
-        Ok(product) => {
-            println!(
-                "Updated product: {} ({})",
-                product.name,
-                product.sku.as_str()
-            );
-        }
-        Err(CoreError::NotFound { .. }) => {
-            eprintln!("Product not found: {sku}");
-            std::process::exit(1);
-        }
-        Err(CoreError::Validation { message, .. }) => {
-            eprintln!("Validation error: {message}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let product = store
+        .update_product(sku, name, money, cat, bar)
+        .map_err(|e| match &e {
+            CoreError::NotFound { .. } => anyhow::anyhow!("Product not found: {sku}"),
+            CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
+            _ => anyhow::anyhow!("Error: {e}"),
+        })?;
 
+    println!(
+        "Updated product: {} ({})",
+        product.name,
+        product.sku.as_str()
+    );
     Ok(())
 }
 
 fn run_product_delete(store: &Store<'_>, sku: &str) -> Result<()> {
-    match store.delete_product(sku) {
-        Ok(()) => {
-            println!("Deleted product: {sku}");
-        }
-        Err(CoreError::NotFound { .. }) => {
-            eprintln!("Product not found: {sku}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    store.delete_product(sku).map_err(|e| match &e {
+        CoreError::NotFound { .. } => anyhow::anyhow!("Product not found: {sku}"),
+        _ => anyhow::anyhow!("Error: {e}"),
+    })?;
 
+    println!("Deleted product: {sku}");
     Ok(())
 }
 

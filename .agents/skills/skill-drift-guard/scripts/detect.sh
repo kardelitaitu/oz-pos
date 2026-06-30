@@ -208,7 +208,7 @@ if should_run audit-date; then
       continue
     fi
     py_cmd="python3"
-    if ! command -v python3 >/dev/null 2>&1; then
+    if ! command -v python3 2>/dev/null; then
       py_cmd="python"
     fi
     age="$($py_cmd -c "

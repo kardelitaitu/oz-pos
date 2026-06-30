@@ -140,6 +140,7 @@ pub fn run() {
             commands::products::update_product,
             commands::products::delete_product,
             commands::products::lookup_by_barcode,
+            commands::products::lookup_product_by_sku,
             commands::products::adjust_stock,
             commands::promotions::list_promotions,
             commands::promotions::get_promotion,

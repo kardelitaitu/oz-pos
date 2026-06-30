@@ -95,7 +95,7 @@ export default function DashboardScreen() {
       <div className="dashboard-kpi-row">
         <Card shadow="sm" className="dashboard-kpi">
           <Localized id="dashboard-today-revenue">
-            <span className="dashboard-kpi-label">Today's Revenue</span>
+            <span className="dashboard-kpi-label">Today&apos;s Revenue</span>
           </Localized>
           <span className="dashboard-kpi-value">
             {fmtCurrency(todayRevenue, todayCurrency)}
@@ -157,7 +157,6 @@ export default function DashboardScreen() {
         ) : (
           <ul
             className="dashboard-low-stock-list"
-            role="list"
             aria-label="Low stock alerts"
           >
             {lowStock.map((item) => (

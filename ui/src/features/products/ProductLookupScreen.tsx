@@ -1,6 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useToast } from '@/components/Toast';
 import { Localized } from '@/components/Localized';
 import { formatMoney, type Product } from '@/types/domain';
+import { lookupProductBySku } from '@/api/products';
+import { lookupBundleBySku } from '@/api/bundles';
+import { expandBundleItems } from '@/features/sales/bundleExpansion';
 import { useProducts } from './useProducts';
 import './ProductLookupScreen.css';
 
@@ -76,6 +80,7 @@ function PackageIcon() {
  * ```
  */
 export default function ProductLookupScreen({ onAddProduct }: ProductLookupScreenProps) {
+  const { addToast } = useToast();
   const { products, categories, loading, usingFallback } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -110,16 +115,43 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
     return results;
   }, [searchQuery, activeCategory, products]);
 
-  // Handle barcode scan submission
-  const handleBarcodeScan = useCallback(() => {
+  // Handle barcode scan submission with bundle expansion fallback
+  const handleBarcodeScan = useCallback(async () => {
     if (!barcodeInput.trim()) return;
-    const barcode = barcodeInput.trim();
-    const found = products.find((p) => p.barcode === barcode);
+    const code = barcodeInput.trim();
+    const found = products.find((p) => p.barcode === code);
     if (found && found.inStock) {
       onAddProduct?.(found);
+      setBarcodeInput('');
+      return;
+    }
+
+    // Fall back to bundle SKU expansion with proportional pricing.
+    try {
+      const bundle = await lookupBundleBySku(code);
+      if (bundle && bundle.bundle.active) {
+        const expanded = await expandBundleItems(
+          bundle.items,
+          bundle.bundle.currency,
+          bundle.bundle.bundle_price_minor,
+          lookupProductBySku,
+        );
+        for (const item of expanded) {
+          // Add once per quantity — onAddProduct uses default qty=1.
+          for (let i = 0; i < item.qty; i++) {
+            onAddProduct?.(item.product);
+          }
+        }
+        addToast({
+          type: 'success',
+          message: `Bundle "${bundle.bundle.name}" added — ${expanded.length} items`,
+        });
+      }
+    } catch {
+      // If bundle lookup fails, silently ignore.
     }
     setBarcodeInput('');
-  }, [barcodeInput, onAddProduct, products]);
+  }, [barcodeInput, onAddProduct, products, addToast]);
 
   // Handle Enter key in barcode input
   const handleBarcodeKeyDown = useCallback(

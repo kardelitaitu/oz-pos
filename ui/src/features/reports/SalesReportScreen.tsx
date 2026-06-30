@@ -46,6 +46,8 @@ type ViewMode = 'daily' | 'weekly' | 'monthly';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+type RevenueRow = DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow;
+
 function fmtCurrency(minor: number, currency: string): string {
   return new Intl.NumberFormat('en', {
     style: 'currency',
@@ -71,25 +73,23 @@ export default function SalesReportScreen() {
   const [startDate, setStartDate] = useState(monthAgo());
   const [endDate, setEndDate] = useState(today());
 
-  const [revenueData, setRevenueData] = useState<
-    DailyRevenueRow[] | WeeklyRevenueRow[] | MonthlyRevenueRow[]
-  >([]);
+  const [revenueData, setRevenueData] = useState<RevenueRow[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductRow[]>([]);
   const [heatmap, setHeatmap] = useState<HourlyHeatmapRow[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<
     CategoryBreakdownRow[]
   >([]);
 
-  const currency =
+  const currency: string =
     revenueData.length > 0
-      ? ((revenueData[0] as any).currency ?? 'USD')
+      ? (revenueData[0] as RevenueRow).currency
       : 'USD';
 
   const fetchData = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    let revenuePromise: Promise<any>;
+    let revenuePromise: Promise<RevenueRow[]>;
     switch (view) {
       case 'daily':
         revenuePromise = getDailyRevenue(startDate, endDate);
@@ -143,14 +143,15 @@ export default function SalesReportScreen() {
 
   const exportCsv = () => {
     const headers = ['Period', 'Revenue', 'Currency', 'Orders'];
-    const rows = revenueData.map((r: any) =>
-      [
-        r.date ?? r.week_start ?? r.month,
-        ((r.total_minor ?? 0) / 100).toFixed(2),
-        r.currency ?? 'USD',
-        r.sale_count ?? 0,
-      ].join(','),
-    );
+    const rows = revenueData.map((r) => {
+      const period = 'date' in r ? r.date : 'week_start' in r ? r.week_start : r.month;
+      return [
+        period,
+        (r.total_minor / 100).toFixed(2),
+        r.currency,
+        r.sale_count,
+      ].join(',');
+    });
     const csv = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -162,8 +163,8 @@ export default function SalesReportScreen() {
   };
 
   const printReport = async () => {
-    const totalMinor = (revenueData as any[]).reduce(
-      (s: number, r: any) => s + (r.total_minor ?? 0),
+    const totalMinor = revenueData.reduce(
+      (s: number, r) => s + r.total_minor,
       0,
     );
 
@@ -183,7 +184,7 @@ export default function SalesReportScreen() {
   };
 
   if (loading) {
-    return (
+  return (
       <div className="sales-report">
         <Spinner aria-label="Loading sales report" />
       </div>
@@ -192,12 +193,12 @@ export default function SalesReportScreen() {
 
   const revenueKey =
     view === 'daily' ? 'date' : view === 'weekly' ? 'week_start' : 'month';
-  const totalRevenue = (revenueData as any[]).reduce(
-    (s: number, r: any) => s + (r.total_minor ?? 0),
+  const totalRevenue = revenueData.reduce(
+    (s: number, r) => s + r.total_minor,
     0,
   );
-  const totalOrders = (revenueData as any[]).reduce(
-    (s: number, r: any) => s + (r.sale_count ?? 0),
+  const totalOrders = revenueData.reduce(
+    (s: number, r) => s + r.sale_count,
     0,
   );
 
@@ -284,14 +285,14 @@ export default function SalesReportScreen() {
           <h2 className="sales-report-section-title">Revenue</h2>
         </Localized>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={revenueData as any}>
+          <BarChart data={revenueData as unknown as Record<string, unknown>[]}>
             <XAxis
               dataKey={revenueKey}
               tick={{ fontSize: 12 }}
             />
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip
-              formatter={(value: any) => fmtCurrency(Number(value), currency)}
+                  formatter={(value: unknown) => fmtCurrency(Number(value), currency)}
             />
             <Bar
               dataKey="total_minor"
@@ -334,8 +335,8 @@ export default function SalesReportScreen() {
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
-                  label={({ category_name, percentage }: any) =>
-                    `${category_name} ${Number(percentage).toFixed(0)}%`
+                  label={(...args: unknown[]) =>
+                    `${String((args[0] as Record<string, unknown>)['category_name'] ?? '')} ${Number((args[0] as Record<string, unknown>)['percentage']).toFixed(0)}%`
                   }
                 >
                   {categoryBreakdown.map((_, i) => (
@@ -346,7 +347,7 @@ export default function SalesReportScreen() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: any) => fmtCurrency(Number(value), currency)}
+              formatter={(value: unknown) => fmtCurrency(Number(value), currency)}
                 />
                 <Legend />
               </PieChart>

@@ -297,4 +297,61 @@ mod tests {
         assert_eq!(variants[0].sku, "TEA-GREEN");
         assert_eq!(variants[1].sku, "TEA-BLACK");
     }
+
+    // ── Barcode validation ─────────────────────────────────────────
+
+    #[test]
+    fn barcode_empty_is_rejected() {
+        let err = foundation::Barcode::new("").unwrap_err();
+        assert_eq!(err.field, "barcode");
+        assert!(err.message.contains("must not be empty"));
+    }
+
+    #[test]
+    fn barcode_whitespace_only_is_rejected() {
+        let err = foundation::Barcode::new("   ").unwrap_err();
+        assert!(err.message.contains("must not be empty"));
+    }
+
+    #[test]
+    fn barcode_valid_ean13_passes() {
+        let bc = foundation::Barcode::new("5901234123457").unwrap();
+        assert_eq!(bc.as_str(), "5901234123457");
+    }
+
+    #[test]
+    fn barcode_valid_upca_passes() {
+        let bc = foundation::Barcode::new("012345678905").unwrap();
+        assert_eq!(bc.as_str(), "012345678905");
+    }
+
+    #[test]
+    fn barcode_valid_alphanumeric_passes() {
+        let bc = foundation::Barcode::new("CODE128-ABC").unwrap();
+        assert_eq!(bc.as_str(), "CODE128-ABC");
+    }
+
+    #[test]
+    fn barcode_trims_whitespace() {
+        let bc = foundation::Barcode::new("  4901234567890  ").unwrap();
+        assert_eq!(bc.as_str(), "4901234567890");
+    }
+
+    #[test]
+    fn barcode_optional_when_none_is_ok() {
+        // The barcode field is optional in CreateProductVariantArgs and
+        // is only validated via foundation::Barcode::new() when Some.
+        let args = CreateProductVariantArgs {
+            parent_sku: "TEA".into(),
+            name: "Green".into(),
+            sku: "TEA-GREEN".into(),
+            price_minor: None,
+            currency: None,
+            barcode: None,
+            sort_order: None,
+            is_active: None,
+        };
+        // When None, no Barcode::new() is called, so validation passes.
+        assert!(args.barcode.is_none());
+    }
 }

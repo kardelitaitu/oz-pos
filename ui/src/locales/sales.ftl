@@ -21,6 +21,12 @@ pos-cart-pay = Charge { $amount }
 pos-login-required-title = Login Required
 pos-login-required-message = Please log in to use the POS.
 
+# Bundle Expansion
+pos-bundle-expanded = Bundle added: { $count } item{ $count ->
+  [one] 
+  *[other] s
+} to cart
+
 # Sales History
 sales-history-title = Sales History
 sales-history-loading = Loading sales…

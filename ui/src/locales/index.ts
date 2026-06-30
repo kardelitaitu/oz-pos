@@ -21,6 +21,7 @@ import inventoryFtl from './inventory.ftl?raw';
 import tablesFtl from './tables.ftl?raw';
 import terminalsFtl from './terminals.ftl?raw';
 import offlineFtl from './offline.ftl?raw';
+import bundlesFtl from './bundles.ftl?raw';
 
 const ALL_FTL = [
   sharedFtl,
@@ -35,6 +36,7 @@ const ALL_FTL = [
   tablesFtl,
   terminalsFtl,
   offlineFtl,
+  bundlesFtl,
 ].join('\n');
 
 let _bundle: ReactLocalization | null = null;

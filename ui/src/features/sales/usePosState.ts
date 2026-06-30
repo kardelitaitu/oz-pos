@@ -22,13 +22,17 @@ export function usePosState() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountLabel, setDiscountLabel] = useState('');
 
-  /** Add a product to the cart, or increment qty if already present. */
-  const addProduct = useCallback((product: Product) => {
+  /**
+   * Add a product to the cart, or increment qty if already present.
+   * @param product The product to add.
+   * @param qty Quantity to add (defaults to 1). Used for bundle expansion.
+   */
+  const addProduct = useCallback((product: Product, qty: number = 1) => {
     setLines((prev) => {
       const existing = prev.find((l) => l.sku === product.sku);
       if (existing) {
         return prev.map((l) =>
-          l.id === existing.id ? { ...l, qty: l.qty + 1 } : l,
+          l.id === existing.id ? { ...l, qty: l.qty + qty } : l,
         );
       }
       return [
@@ -37,7 +41,7 @@ export function usePosState() {
           id: genLineId(),
           sku: product.sku,
           name: product.name,
-          qty: 1,
+          qty,
           unit_price: product.price,
         },
       ];

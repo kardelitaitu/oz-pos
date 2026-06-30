@@ -313,6 +313,7 @@ export default function CustomerManagementScreen() {
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                       placeholder="e.g. Jane Smith"
                       autoComplete="name"
+                      aria-label="Name"
                     />
                   </Localized>
                 </label>
@@ -330,6 +331,7 @@ export default function CustomerManagementScreen() {
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       placeholder="jane@example.com"
                       autoComplete="email"
+                      aria-label="Email"
                     />
                   </Localized>
                 </label>
@@ -347,6 +349,7 @@ export default function CustomerManagementScreen() {
                       onChange={(e) => setForm({ ...form, phone: e.target.value })}
                       placeholder="+1-555-0100"
                       autoComplete="tel"
+                      aria-label="Phone"
                     />
                   </Localized>
                 </label>
@@ -362,6 +365,7 @@ export default function CustomerManagementScreen() {
                       value={form.notes}
                       onChange={(e) => setForm({ ...form, notes: e.target.value })}
                       placeholder="Preferences, special notes…"
+                      aria-label="Notes"
                       rows={3}
                     />
                   </Localized>

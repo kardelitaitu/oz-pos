@@ -5,7 +5,8 @@
 
 $ErrorActionPreference = "Stop"
 
-Set-Location (Split-Path -Parent $PSCommandPath) | Set-Location ..
+Set-Location (Split-Path -Parent $PSCommandPath)
+Set-Location ..
 
 $totalStart = Get-Date
 $script:stepCounter = 1
@@ -74,9 +75,16 @@ Step -Name "migration idempotency" -RetryCommand "cargo run -p oz-cli -- migrate
 Remove-Item -LiteralPath "oz-pos.db", "oz-pos.db-wal", "oz-pos.db-shm" -ErrorAction Ignore
 
 # --- Skill drift guard (extra local guard; CI doesn't run this) -----------
-if (Get-Command "bash" -ErrorAction SilentlyContinue) {
-    Step -Name "skill-drift-guard" -RetryCommand "bash .agents/skills/skill-drift-guard/scripts/detect.sh --report" -ScriptBlock {
-        bash .agents/skills/skill-drift-guard/scripts/detect.sh --report
+$gitBash = if (Test-Path "C:\Program Files\Git\bin\bash.exe") {
+    "C:\Program Files\Git\bin\bash.exe"
+} elseif (Get-Command "bash" -ErrorAction SilentlyContinue) {
+    (Get-Command "bash").Source
+} else {
+    $null
+}
+if ($gitBash) {
+    Step -Name "skill-drift-guard" -RetryCommand "& '$gitBash' .agents/skills/skill-drift-guard/scripts/detect.sh --report" -ScriptBlock {
+        & "C:\Program Files\Git\bin\bash.exe" .agents/skills/skill-drift-guard/scripts/detect.sh --report
     }
 } else {
     Write-Host "SKIP skill-drift-guard (bash not available)"

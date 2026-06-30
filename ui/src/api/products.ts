@@ -48,10 +48,13 @@ export const updateProduct = (args: UpdateProductArgs): Promise<{ sku: string }>
 export const deleteProduct = (sku: string): Promise<void> =>
   invoke('delete_product', { args: { sku } });
 
-// ── Barcode Lookup ────────────────────────────────────────────────
+// ── Barcode / SKU Lookup ───────────────────────────────────────────
 
 export const lookupByBarcode = (barcode: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_by_barcode', { barcode });
+
+export const lookupProductBySku = (sku: string): Promise<ProductDto | null> =>
+  invoke<ProductDto | null>('lookup_product_by_sku', { sku });
 
 // ── Inventory Adjustment ──────────────────────────────────────────
 

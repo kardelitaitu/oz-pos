@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
+import { useToast } from '@/components/Toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Localized } from '@/components/Localized';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
@@ -11,7 +12,9 @@ import {
   deleteHeldCart,
   type HeldCartRow,
 } from '@/api/sales';
-import { lookupByBarcode } from '@/api/products';
+import { lookupByBarcode, lookupProductBySku } from '@/api/products';
+import { lookupBundleBySku } from '@/api/bundles';
+import { expandBundleItems } from './bundleExpansion';
 import type { BarcodeScannedPayload } from '@/api/hardware';
 import { usePosState } from './usePosState';
 import { useBarcodeScanner } from './useBarcodeScanner';
@@ -179,6 +182,7 @@ export default function PosScreen() {
     resetCart,
     setLines,
   } = usePosState();
+  const { addToast } = useToast();
   const { session, logout } = useAuth();
   const userId = session.user_id;
   const [showPayment, setShowPayment] = useState(false);
@@ -190,7 +194,9 @@ export default function PosScreen() {
   useBarcodeScanner({
     onProductFound: useCallback(async (payload: BarcodeScannedPayload) => {
       try {
-        const dto = await lookupByBarcode(payload.code);
+        const code = payload.code;
+        // 1. Try product barcode lookup first.
+        const dto = await lookupByBarcode(code);
         if (dto) {
           const product: Product = {
             sku: dto.sku as Sku,
@@ -202,11 +208,31 @@ export default function PosScreen() {
             stockQty: dto.stock_qty,
           };
           addProduct(product);
+          return;
         }
+
+        // 2. Fall back to bundle SKU expansion with proportional pricing.
+        const bundle = await lookupBundleBySku(code);
+        if (bundle && bundle.bundle.active) {
+          const expanded = await expandBundleItems(
+            bundle.items,
+            bundle.bundle.currency,
+            bundle.bundle.bundle_price_minor,
+            lookupProductBySku,
+          );
+          for (const item of expanded) {
+            addProduct(item.product, item.qty);
+          }
+          addToast({
+            type: 'success',
+            message: `Bundle "${bundle.bundle.name}" added — ${expanded.length} items`,
+          });
+        }
+        // If neither product nor bundle matched, silently ignore.
       } catch {
         // Silently ignore — the scanner will beep, user retries.
       }
-    }, [addProduct]),
+    }, [addProduct, addToast]),
   });
 
   const handlePay = useCallback(() => {
