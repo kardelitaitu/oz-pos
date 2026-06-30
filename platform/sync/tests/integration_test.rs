@@ -428,6 +428,330 @@ async fn multiple_items_are_all_pushed_and_synced() {
     server.handle.abort();
 }
 
+// ── Cross-terminal acceptance tests ─────────────────────────────────
+//
+// These tests simulate two terminals sharing inventory through a common
+// cloud sync server. They verify the acceptance criterion:
+// "Cloud sync: a product updated on terminal A appears on terminal B
+//  within 5 seconds."
+
+/// Smarter test server that stores pushed items and returns them on pull.
+/// Uses axum's `State` extractor (same pattern as `spawn_test_server`)
+/// for reliable shared state.
+#[derive(Clone)]
+struct RelayServerState {
+    items: Arc<Mutex<Vec<OfflineQueueItem>>>,
+}
+
+impl RelayServerState {
+    fn new() -> Self {
+        Self {
+            items: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+/// Handler: POST /api/sync/push (store items for later pull)
+async fn relay_handle_push(
+    State(state): State<RelayServerState>,
+    Json(items): Json<Vec<OfflineQueueItem>>,
+) -> Json<PushResponse> {
+    let mut stored = state.items.lock().unwrap();
+    let results: Vec<PushOutcome> = items.iter().map(|_| PushOutcome::Accepted).collect();
+    stored.extend(items);
+    Json(PushResponse { results })
+}
+
+/// Handler: POST /api/sync/pull (return all stored items)
+async fn relay_handle_pull(
+    State(state): State<RelayServerState>,
+    Json(_request): Json<PullRequest>,
+) -> Json<PullResponse> {
+    let stored = state.items.lock().unwrap();
+    Json(PullResponse {
+        items: stored.clone(),
+    })
+}
+
+/// Spawn a relay server and return (port, state, handle).
+pub async fn spawn_relay_server() -> (u16, RelayServerState, tokio::task::JoinHandle<()>) {
+    let state = RelayServerState::new();
+    let app = Router::new()
+        .route("/api/sync/push", post(relay_handle_push))
+        .route("/api/sync/pull", post(relay_handle_pull))
+        .with_state(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    (port, state, handle)
+}
+
+#[tokio::test]
+async fn product_created_on_terminal_a_appears_on_terminal_b() {
+    let (relay_port, relay_state, relay_handle) = spawn_relay_server().await;
+
+    // ── Terminal A: create a product and enqueue it for sync ────────
+    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
+    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_a).unwrap();
+    let store_a = Store::new(&conn_a);
+
+    // Create a product on Terminal A
+    store_a
+        .create_product(
+            "SYNC-COFFEE",
+            "Sync Coffee",
+            oz_core::Money {
+                minor_units: 500,
+                currency: "USD".parse().unwrap(),
+            },
+            None,
+            None,
+            100,
+        )
+        .unwrap();
+
+    // Enqueue the product creation for sync (as the event handler would)
+    let product_payload = serde_json::json!({
+        "sku": "SYNC-COFFEE",
+        "name": "Sync Coffee",
+        "price_minor": 500,
+        "currency": "USD",
+        "category_id": null,
+        "barcode": null,
+        "initial_stock": 100,
+    })
+    .to_string();
+    store_a
+        .enqueue_offline("product.created", &product_payload)
+        .unwrap();
+    assert_eq!(store_a.pending_offline_count().unwrap(), 1);
+
+    // ── Push: Terminal A → server ───────────────────────────────────
+    let engine_a = SyncEngine::new(test_config(relay_port));
+    let result_a = engine_a.run_sync_cycle(&store_a).await.unwrap();
+    assert_eq!(result_a.pushed, 1, "Terminal A should push 1 item");
+    // A pushed 1 item, then the relay server returns all stored items on pull.
+    assert_eq!(result_a.pulled, 1, "Terminal A should pull 1 item back");
+    assert_eq!(
+        store_a.pending_offline_count().unwrap(),
+        0,
+        "Terminal A's pending queue should be empty after sync"
+    );
+
+    // Verify server received the item
+    {
+        let stored = relay_state.items.lock().unwrap();
+        assert_eq!(stored.len(), 1, "server should have 1 stored item");
+        assert_eq!(stored[0].action, "product.created");
+        assert!(stored[0].payload.contains("SYNC-COFFEE"));
+    }
+
+    // ── Terminal B: empty database, pull from server ────────────────
+    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
+    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_b).unwrap();
+    let store_b = Store::new(&conn_b);
+
+    // Verify Terminal B has no products yet
+    let products_before = store_b.list_products().unwrap();
+    assert!(products_before.is_empty(), "Terminal B should be empty initially");
+
+    // Run sync cycle on Terminal B (push nothing, pull the product)
+    let engine_b = SyncEngine::new(test_config(relay_port));
+    let result_b = engine_b.run_sync_cycle(&store_b).await.unwrap();
+    assert_eq!(result_b.pushed, 0);
+    assert_eq!(
+        result_b.pulled, 1,
+        "Terminal B should pull 1 item from server"
+    );
+
+    // ── Verify: the product now exists on Terminal B ────────────────
+    let products_after = store_b.list_products().unwrap();
+    assert_eq!(products_after.len(), 1, "Terminal B should now have 1 product");
+    assert_eq!(
+        products_after[0].product.sku.as_str(),
+        "SYNC-COFFEE",
+        "Product SKU should match"
+    );
+    assert_eq!(
+        products_after[0].product.name, "Sync Coffee",
+        "Product name should match"
+    );
+    assert_eq!(
+        products_after[0].product.price.minor_units, 500,
+        "Product price should match"
+    );
+    // Initial stock is set during product creation
+    assert_eq!(
+        products_after[0].stock_qty,
+        Some(100),
+        "Inventory should be replicated"
+    );
+
+    relay_handle.abort();
+}
+
+#[tokio::test]
+async fn stock_adjustment_on_terminal_a_reflected_on_terminal_b() {
+    let (relay_port, _relay_state, relay_handle) = spawn_relay_server().await;
+
+    // ── Terminal A: create a product with stock, adjust it ──────────
+    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
+    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_a).unwrap();
+    let store_a = Store::new(&conn_a);
+
+    store_a
+        .create_product(
+            "STK-TEA",
+            "Sync Tea",
+            oz_core::Money {
+                minor_units: 300,
+                currency: "USD".parse().unwrap(),
+            },
+            None,
+            None,
+            50,
+        )
+        .unwrap();
+
+    // Enqueue the initial product creation FIRST so that when Terminal B
+    // pulls items (oldest first), the product is created before stock is adjusted.
+    let product_payload = serde_json::json!({
+        "sku": "STK-TEA",
+        "name": "Sync Tea",
+        "price_minor": 300,
+        "currency": "USD",
+        "category_id": null,
+        "barcode": null,
+        "initial_stock": 50,
+    })
+    .to_string();
+    store_a
+        .enqueue_offline("product.created", &product_payload)
+        .unwrap();
+
+    // Adjust stock on Terminal A (sell 5 units)
+    store_a.adjust_stock("STK-TEA", -5).unwrap();
+
+    // Enqueue the stock adjustment for sync
+    let stock_payload = serde_json::json!({
+        "sku": "STK-TEA",
+        "delta": -5,
+        "new_qty": 45,
+        "reason": "sale",
+    })
+    .to_string();
+    store_a
+        .enqueue_offline("stock.adjusted", &stock_payload)
+        .unwrap();
+
+    // ── Push: Terminal A → server (both items) ──────────────────────
+    assert_eq!(store_a.pending_offline_count().unwrap(), 2);
+    let engine_a = SyncEngine::new(test_config(relay_port));
+    let result_a = engine_a.run_sync_cycle(&store_a).await.unwrap();
+    assert_eq!(result_a.pushed, 2);
+
+    // ── Terminal B: pull both items ─────────────────────────────────
+    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
+    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_b).unwrap();
+    let store_b = Store::new(&conn_b);
+
+    let engine_b = SyncEngine::new(test_config(relay_port));
+    let result_b = engine_b.run_sync_cycle(&store_b).await.unwrap();
+    assert_eq!(result_b.pulled, 2, "Terminal B should pull 2 items");
+
+    // ── Verify: product exists on Terminal B with ADJUSTED stock ────
+    let products = store_b.list_products().unwrap();
+    assert_eq!(products.len(), 1);
+    assert_eq!(products[0].product.sku.as_str(), "STK-TEA");
+    // The product is created first with 50 stock, then adjusted by -5
+    // So Terminal B should see 50 - 5 = 45
+    assert_eq!(
+        products[0].stock_qty,
+        Some(45),
+        "Stock should reflect terminal A's adjustment (50 - 5 = 45)"
+    );
+
+    relay_handle.abort();
+}
+
+#[tokio::test]
+async fn full_sync_cycle_completes_under_one_second() {
+    // Verify that a full push+pull cycle completes in under 1 second,
+    // well within the 5-second acceptance criterion.
+    let (relay_port, _relay_state, relay_handle) = spawn_relay_server().await;
+
+    // Setup Terminal A with data to sync (BEFORE the timed section)
+    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
+    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_a).unwrap();
+    let store_a = Store::new(&conn_a);
+
+    store_a
+        .create_product(
+            "PERF-SKU",
+            "Perf Product",
+            oz_core::Money {
+                minor_units: 1000,
+                currency: "USD".parse().unwrap(),
+            },
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+
+    let payload = serde_json::json!({
+        "sku": "PERF-SKU",
+        "name": "Perf Product",
+        "price_minor": 1000,
+        "currency": "USD",
+    })
+    .to_string();
+    store_a
+        .enqueue_offline("product.created", &payload)
+        .unwrap();
+
+    // Prepare Terminal B's database ahead of time too
+    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
+    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_b).unwrap();
+    let store_b = Store::new(&conn_b);
+
+    // Time the full Terminal A push + Terminal B pull cycle
+    let start = std::time::Instant::now();
+
+    // Push from A
+    let engine_a = SyncEngine::new(test_config(relay_port));
+    engine_a.run_sync_cycle(&store_a).await.unwrap();
+
+    // Pull into B
+    let engine_b = SyncEngine::new(test_config(relay_port));
+    engine_b.run_sync_cycle(&store_b).await.unwrap();
+
+    let elapsed = start.elapsed();
+
+    // Verify the product arrived on Terminal B
+    let products = store_b.list_products().unwrap();
+    assert_eq!(products.len(), 1);
+    assert_eq!(products[0].product.sku.as_str(), "PERF-SKU");
+
+    // Assert the full cycle completes well within 5 seconds
+    assert!(
+        elapsed.as_secs() < 1,
+        "cross-terminal sync should complete in < 1 second, took {elapsed:?}"
+    );
+
+    relay_handle.abort();
+}
+
 #[tokio::test]
 async fn server_error_prevents_sync_item_stays_pending() {
     // Start a server that will reject the request by returning 500.

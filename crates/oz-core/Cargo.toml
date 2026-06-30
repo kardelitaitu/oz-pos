@@ -33,4 +33,13 @@ cache-redis = ["dep:redis"]
 reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 proptest = "1"
+
+[[bench]]
+name = "barcode_lookup"
+harness = false
+
+[[bench]]
+name = "transaction_commit"
+harness = false

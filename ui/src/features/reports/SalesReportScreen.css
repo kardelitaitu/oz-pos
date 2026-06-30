@@ -1,0 +1,219 @@
+.sales-report {
+  padding: var(--space-4);
+}
+
+.sales-report-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.sales-report-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.sales-report-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sales-report-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-fg-secondary);
+}
+
+.sales-report-input {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.sales-report-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
+.sales-report-view-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.sales-report-view-btn {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border: none;
+  background: var(--color-bg);
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sales-report-view-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.sales-report-view-btn.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.sales-report-error {
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  padding: var(--space-2) 0;
+}
+
+.sales-report-chart-card {
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.sales-report-section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.sales-report-totals {
+  display: flex;
+  gap: var(--space-6);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-fg);
+}
+
+.sales-report-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.sales-report-no-data {
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-6) 0;
+  font-size: var(--text-sm);
+}
+
+.sales-report-top-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sales-report-top-header {
+  display: grid;
+  grid-template-columns: 24px 1fr 48px 100px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-report-top-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 48px 100px;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-report-top-row:last-child {
+  border-bottom: none;
+}
+
+.sales-report-top-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.sales-report-heatmap {
+  overflow-x: auto;
+}
+
+.sales-report-heatmap-header {
+  display: grid;
+  grid-template-columns: 40px repeat(24, 28px);
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.sales-report-heatmap-corner {
+  width: 40px;
+}
+
+.sales-report-heatmap-col-header {
+  width: 28px;
+  font-size: 10px;
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.sales-report-heatmap-row {
+  display: grid;
+  grid-template-columns: 40px repeat(24, 28px);
+  gap: 2px;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.sales-report-heatmap-row-label {
+  font-size: 10px;
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono);
+  text-align: right;
+  padding-right: var(--space-1);
+}
+
+.sales-report-heatmap-cell {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs, 2px);
+  cursor: default;
+  transition: opacity 0.15s;
+}
+
+.sales-report-heatmap-cell:hover {
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .sales-report-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-report-header {
+    flex-direction: column;
+  }
+
+  .sales-report-controls {
+    width: 100%;
+  }
+}

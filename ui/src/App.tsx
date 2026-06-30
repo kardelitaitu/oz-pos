@@ -32,6 +32,9 @@ import { MultiStoreDashboardScreen } from '@/features/stores';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
+import DashboardScreen from '@/features/reports/DashboardScreen';
+import SalesReportScreen from '@/features/reports/SalesReportScreen';
+import InventoryReportScreen from '@/features/reports/InventoryReportScreen';
 import DesignSystem from '@/features/design/DesignSystem';
 import { registerSalesWidgets } from '@/features/sales/widgets';
 
@@ -116,6 +119,18 @@ registerNavItem({ route: 'shifts', label: 'Shifts', requiredRole: 'manager', ico
 
 registerPage({ route: 'settings', component: SettingsPage, label: 'Settings', requiredRole: 'manager' });
 registerNavItem({ route: 'settings', label: 'Settings', requiredRole: 'manager', icon: icon('M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42') });
+
+registerPage({ route: 'dashboard', component: DashboardScreen, label: 'Dashboard' });
+registerNavItem({ route: 'dashboard', label: 'Dashboard',
+  icon: icon('M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z') });
+
+registerPage({ route: 'reports', component: SalesReportScreen, label: 'Sales Report', requiredRole: 'manager' });
+registerNavItem({ route: 'reports', label: 'Sales Report', requiredRole: 'manager',
+  icon: icon('M21.21 15.89A10 10 0 1 1 8 2.83M22 12A10 10 0 0 0 12 2v10z') });
+
+registerPage({ route: 'inventory-report', component: InventoryReportScreen, label: 'Inventory Report', requiredRole: 'manager' });
+registerNavItem({ route: 'inventory-report', label: 'Inventory Report', requiredRole: 'manager',
+  icon: icon('M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z') });
 
 registerPage({ route: 'design', component: DesignSystem, label: 'Design System' });
 registerNavItem({ route: 'design', label: 'Design System', icon: icon('M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />) });
