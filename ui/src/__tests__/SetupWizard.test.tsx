@@ -1,7 +1,20 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { FluentBundle, FluentResource } from '@fluent/bundle';
+import { LocalizationProvider, ReactLocalization } from '@fluent/react';
+import type { ReactNode } from 'react';
 import SetupWizard, { type WizardState } from '@/features/setup/SetupWizard';
+import settingsFtl from '@/locales/settings.ftl?raw';
+import salesFtl from '@/locales/sales.ftl?raw';
+
+function FluentWrapper({ children }: { children: ReactNode }) {
+  const bundle = new FluentBundle('en-US');
+  bundle.addResource(new FluentResource(settingsFtl));
+  bundle.addResource(new FluentResource(salesFtl));
+  const l10n = new ReactLocalization([bundle]);
+  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
+}
 
 // ── Helper functions ────────────────────────────────────────────────
 
@@ -31,7 +44,7 @@ describe('SetupWizard', () => {
   // ── Step 1: Preset selection ────────────────────────────────────
 
   it('renders the preset selection step on mount', () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     expect(
       screen.getByText('What kind of store are you running?'),
@@ -51,7 +64,7 @@ describe('SetupWizard', () => {
 
   it('shows the skip button on step 1 when no preset is selected', () => {
     const onSkip = vi.fn();
-    render(<SetupWizard onSkip={onSkip} />);
+    render(<SetupWizard onSkip={onSkip} />, { wrapper: FluentWrapper });
 
     expect(
       screen.getByRole('button', { name: /skip setup/i }),
@@ -61,7 +74,7 @@ describe('SetupWizard', () => {
   // ── Preset selection ────────────────────────────────────────────
 
   it('selecting a preset advances to step 2', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
     const presetCards = screen.getAllByRole('radio');
 
     await userEvent.click(presetCards[0]!);
@@ -73,7 +86,7 @@ describe('SetupWizard', () => {
   });
 
   it('preset cards start unchecked and become selected on click', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
     const presetCards = screen.getAllByRole('radio');
 
     // All cards start unchecked.
@@ -90,7 +103,7 @@ describe('SetupWizard', () => {
   });
 
   it('Simple Retail preset pre-populates correct features', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Simple Retail.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -106,7 +119,7 @@ describe('SetupWizard', () => {
   });
 
   it('Restaurant preset pre-populates correct features', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Restaurant.
     const cards = screen.getAllByRole('radio');
@@ -118,7 +131,7 @@ describe('SetupWizard', () => {
   });
 
   it('Full Store preset pre-populates all payment features', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Full Store.
     const cards = screen.getAllByRole('radio');
@@ -132,7 +145,7 @@ describe('SetupWizard', () => {
   });
 
   it('Custom preset starts with no features enabled', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Custom.
     const cards = screen.getAllByRole('radio');
@@ -148,7 +161,7 @@ describe('SetupWizard', () => {
   // ── Feature toggling ────────────────────────────────────────────
 
   it('toggles a feature on and off', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Simple Retail (pre-enables Cash).
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -167,7 +180,7 @@ describe('SetupWizard', () => {
   });
 
   it('all features in a step can be individually toggled', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Custom (all off).
     await userEvent.click(screen.getAllByRole('radio')[3]!);
@@ -189,7 +202,7 @@ describe('SetupWizard', () => {
   // ── Navigation ──────────────────────────────────────────────────
 
   it('navigates to the next step via Next button', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select a preset.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -203,7 +216,7 @@ describe('SetupWizard', () => {
   });
 
   it('navigates back via Back button', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select preset → step 2.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -218,7 +231,7 @@ describe('SetupWizard', () => {
   });
 
   it('Back button is not shown on step 1', () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // On step 1, no Back button.
     expect(
@@ -227,7 +240,7 @@ describe('SetupWizard', () => {
   });
 
   it('navigates through all 8 steps', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select preset.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -253,7 +266,7 @@ describe('SetupWizard', () => {
   // ── Step indicator ──────────────────────────────────────────────
 
   it('updates step indicator dots as steps progress', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
     const nav = screen.getByLabelText('Setup progress');
 
     // Step 1 (index 0): first dot should be active.
@@ -273,7 +286,7 @@ describe('SetupWizard', () => {
   // ── Review screen (Step 8) ─────────────────────────────────────
 
   it('review screen shows enabled and disabled feature tag clouds', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Simple Retail preset.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -293,7 +306,7 @@ describe('SetupWizard', () => {
   // ── Completion ─────────────────────────────────────────────────
 
   it('completion screen shows the correct feature count', async () => {
-    render(<SetupWizard />);
+    render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Simple Retail.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -311,12 +324,9 @@ describe('SetupWizard', () => {
     // Should show completion screen with "All Set!" heading.
     expect(screen.getByText('All Set!')).toBeInTheDocument();
 
-    // The feature count (6 for Simple Retail) is inside a <strong>
-    // element between text nodes, so we check for the number and
-    // the surrounding text separately.
-    expect(screen.getByText('6')).toBeInTheDocument();
+    // The feature count (6 for Simple Retail) is rendered via Fluent.
     expect(
-      screen.getByText(/features enabled/),
+      screen.getByText((content) => content.includes('6') && content.includes('features enabled')),
     ).toBeInTheDocument();
 
     // Should show "Launch OZ-POS" button.
@@ -327,7 +337,7 @@ describe('SetupWizard', () => {
 
   it('completion screen fires onComplete with WizardState', async () => {
     const onComplete = vi.fn();
-    render(<SetupWizard onComplete={onComplete} />);
+    render(<SetupWizard onComplete={onComplete} />, { wrapper: FluentWrapper });
 
     // Select Simple Retail.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -352,7 +362,7 @@ describe('SetupWizard', () => {
   it('Launch button on completion fires onSkip', async () => {
     const onSkip = vi.fn();
     const onComplete = vi.fn();
-    render(<SetupWizard onComplete={onComplete} onSkip={onSkip} />);
+    render(<SetupWizard onComplete={onComplete} onSkip={onSkip} />, { wrapper: FluentWrapper });
 
     // Select preset, navigate to review, complete.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -376,7 +386,7 @@ describe('SetupWizard', () => {
 
   it('Skip button fires onSkip callback', async () => {
     const onSkip = vi.fn();
-    render(<SetupWizard onSkip={onSkip} />);
+    render(<SetupWizard onSkip={onSkip} />, { wrapper: FluentWrapper });
 
     await userEvent.click(
       screen.getByRole('button', { name: /skip setup/i }),
@@ -389,7 +399,7 @@ describe('SetupWizard', () => {
 
   it('handles Full Store preset with all features enabled in review', async () => {
     const onComplete = vi.fn();
-    render(<SetupWizard onComplete={onComplete} />);
+    render(<SetupWizard onComplete={onComplete} />, { wrapper: FluentWrapper });
 
     // Select Full Store (23 features).
     const cards = screen.getAllByRole('radio');
@@ -415,7 +425,7 @@ describe('SetupWizard', () => {
 
   it('toggle state persists across steps into review', async () => {
     const onComplete = vi.fn();
-    render(<SetupWizard onComplete={onComplete} />);
+    render(<SetupWizard onComplete={onComplete} />, { wrapper: FluentWrapper });
 
     // Select Custom (all off).
     await userEvent.click(screen.getAllByRole('radio')[3]!);

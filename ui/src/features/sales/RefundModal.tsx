@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react';
+import { useLocalization } from '@fluent/react';
+import { Localized } from '@/frontend/shared/Localized';
 import { processRefund, type SaleDetail } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney, type Money } from '@/types/domain';
@@ -13,6 +15,7 @@ interface RefundModalProps {
 }
 
 export default function RefundModal({ open, sale, onClose, onRefunded }: RefundModalProps) {
+  const { l10n } = useLocalization();
   const { session } = useAuth();
   const [selectedLines, setSelectedLines] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
@@ -79,11 +82,11 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
       });
       setResult(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Refund failed');
+      setError(err instanceof Error ? err.message : l10n.getString('refund-error', null, 'Refund failed'));
     } finally {
       setProcessing(false);
     }
-  }, [session, hasSelection, reason, note, selectedLines, sale]);
+  }, [session, hasSelection, reason, note, selectedLines, sale, l10n]);
 
   const handleDone = useCallback(() => {
     onRefunded();
@@ -93,66 +96,94 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   if (!open) return null;
 
   return (
-    <div className="refund-overlay" role="dialog" aria-modal="true" aria-label="Process refund">
-      <div className="refund-modal">
+    <Localized id="refund-dialog-aria" attrs={{ 'aria-label': true }}>
+      <div className="refund-overlay" role="dialog" aria-modal="true" aria-label="Process refund">
+        <div className="refund-modal">
         {result ? (
           <div className="refund-done">
-            <h2 className="refund-done-title">Refund Processed</h2>
-            <p className="refund-done-amount">
-              Refunded: {formatMoney({ minor_units: result.totalMinor, currency: sale.total.currency } as Money)}
-            </p>
-            <Button variant="primary" onClick={handleDone}>
-              Done
-            </Button>
+            <Localized id="refund-done-title">
+              <h2 className="refund-done-title">Refund Processed</h2>
+            </Localized>
+            <Localized
+              id="refund-done-amount"
+              vars={{ amount: formatMoney({ minor_units: result.totalMinor, currency: sale.total.currency } as Money) }}
+            >
+              <p className="refund-done-amount">
+                Refunded: {formatMoney({ minor_units: result.totalMinor, currency: sale.total.currency } as Money)}
+              </p>
+            </Localized>
+            <Localized id="refund-done">
+              <Button variant="primary" onClick={handleDone}>
+                Done
+              </Button>
+            </Localized>
           </div>
         ) : (
           <>
             <div className="refund-header">
-              <h2 className="refund-title">Process Refund</h2>
-              <button type="button" className="refund-close" onClick={onClose} aria-label="Cancel refund">
+              <Localized id="refund-title">
+                <h2 className="refund-title">Process Refund</h2>
+              </Localized>
+              <Localized id="refund-close-aria" attrs={{ 'aria-label': true }}>
+                <button type="button" className="refund-close" onClick={onClose} aria-label="Cancel refund">
                 &times;
               </button>
+              </Localized>
             </div>
 
             <div className="refund-sale-info">
-              <span>Sale: {sale.id.slice(0, 8)}&hellip;</span>
-              <span>Total: {formatMoney(sale.total as Money)}</span>
-              <span>Date: {new Date(sale.createdAt).toLocaleDateString()}</span>
+              <Localized id="refund-sale-id" vars={{ id: sale.id.slice(0, 8) }}>
+                <span>Sale: {sale.id.slice(0, 8)}&hellip;</span>
+              </Localized>
+              <Localized id="refund-sale-total" vars={{ amount: formatMoney(sale.total as Money) }}>
+                <span>Total: {formatMoney(sale.total as Money)}</span>
+              </Localized>
+              <Localized id="refund-sale-date" vars={{ date: new Date(sale.createdAt).toLocaleDateString() }}>
+                <span>Date: {new Date(sale.createdAt).toLocaleDateString()}</span>
+              </Localized>
             </div>
 
             <div className="refund-lines">
-              <h3 className="refund-section-title">Select Items to Refund</h3>
+              <Localized id="refund-items-title">
+                <h3 className="refund-section-title">Select Items to Refund</h3>
+              </Localized>
               {sale.lines.map((line) => {
                 const selectedQty = selectedLines[line.id] ?? 0;
                 return (
                   <div key={line.id} className={`refund-line ${selectedQty > 0 ? 'refund-line-selected' : ''}`}>
-                    <label className="refund-line-label">
-                      <input
-                        type="checkbox"
-                        checked={selectedQty > 0}
-                        onChange={() => toggleLine(line.id, line.sku, line.qty ?? 1)}
-                        aria-label={`Refund ${line.sku}`}
-                      />
+                      <label className="refund-line-label">
+                        <Localized id="refund-item-aria" vars={{ sku: line.sku }} attrs={{ 'aria-label': true }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedQty > 0}
+                            onChange={() => toggleLine(line.id, line.sku, line.qty ?? 1)}
+                            aria-label={`Refund ${line.sku}`}
+                          />
+                        </Localized>
                       <span className="refund-line-sku">{line.sku}</span>
                       <span className="refund-line-name">{line.name ?? line.sku}</span>
-                    </label>
+                      </label>
                     {selectedQty > 0 && (
                       <div className="refund-line-qty">
-                        <button
-                          type="button"
-                          className="refund-qty-btn"
-                          onClick={() => updateQty(line.id, selectedQty - 1)}
-                          disabled={selectedQty <= 1}
-                          aria-label="Decrease refund quantity"
-                        >−</button>
+                        <Localized id="refund-qty-decrease-aria" attrs={{ 'aria-label': true }}>
+                          <button
+                            type="button"
+                            className="refund-qty-btn"
+                            onClick={() => updateQty(line.id, selectedQty - 1)}
+                            disabled={selectedQty <= 1}
+                            aria-label="Decrease refund quantity"
+                          >−</button>
+                        </Localized>
                         <span className="refund-qty-value">{selectedQty}</span>
-                        <button
-                          type="button"
-                          className="refund-qty-btn"
-                          onClick={() => updateQty(line.id, selectedQty + 1)}
-                          disabled={selectedQty >= (line.qty ?? 1)}
-                          aria-label="Increase refund quantity"
-                        >+</button>
+                        <Localized id="refund-qty-increase-aria" attrs={{ 'aria-label': true }}>
+                          <button
+                            type="button"
+                            className="refund-qty-btn"
+                            onClick={() => updateQty(line.id, selectedQty + 1)}
+                            disabled={selectedQty >= (line.qty ?? 1)}
+                            aria-label="Increase refund quantity"
+                          >+</button>
+                        </Localized>
                         <span className="refund-line-total">
                           {formatMoney({
                             minor_units: Math.round((line.total_minor ?? 0) * selectedQty / (line.qty ?? 1)),
@@ -168,54 +199,69 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
 
             <div className="refund-details">
               <label className="refund-field">
-                <span>Reason *</span>
-                <input
-                  type="text"
-                  className="refund-input"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g. Customer changed mind"
-                  aria-label="Refund reason"
-                />
+                <Localized id="refund-reason-label">
+                  <span>Reason *</span>
+                </Localized>
+                <Localized id="refund-reason-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    type="text"
+                    className="refund-input"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder={l10n.getString('refund-reason-placeholder')}
+                    aria-label={l10n.getString('refund-reason-aria')}
+                  />
+                </Localized>
               </label>
               <label className="refund-field">
-                <span>Note (internal)</span>
-                <input
-                  type="text"
-                  className="refund-input"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Optional internal note"
-                  aria-label="Refund note"
-                />
+                <Localized id="refund-note-label">
+                  <span>Note (internal)</span>
+                </Localized>
+                <Localized id="refund-note-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    type="text"
+                    className="refund-input"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder={l10n.getString('refund-note-placeholder')}
+                    aria-label={l10n.getString('refund-note-aria')}
+                  />
+                </Localized>
               </label>
             </div>
 
             {error && <div className="refund-error">{error}</div>}
 
             <div className="refund-total-row">
-              <span className="refund-total-label">Refund Total</span>
+              <Localized id="refund-total-label">
+                <span className="refund-total-label">Refund Total</span>
+              </Localized>
               <span className="refund-total-amount">
                 {formatMoney({ minor_units: totalRefund, currency: sale.total.currency } as Money)}
               </span>
             </div>
 
             <div className="refund-actions">
-              <Button variant="ghost" onClick={onClose} disabled={processing}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={processing}
-                disabled={!hasSelection || !reason.trim()}
-                onClick={handleRefund}
-              >
-                Process Refund
-              </Button>
+              <Localized id="refund-cancel">
+                <Button variant="ghost" onClick={onClose} disabled={processing}>
+                  Cancel
+                </Button>
+              </Localized>
+              <Localized id="refund-submit">
+                <Button
+                  variant="primary"
+                  loading={processing}
+                  disabled={!hasSelection || !reason.trim()}
+                  onClick={handleRefund}
+                >
+                  Process Refund
+                </Button>
+              </Localized>
             </div>
           </>
         )}
+        </div>
       </div>
-    </div>
+    </Localized>
   );
 }

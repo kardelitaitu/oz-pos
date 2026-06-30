@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { Localized } from '@/frontend/shared/Localized';
+import { useLocalization } from '@fluent/react';
 import './StaffLoginScreen.css';
 
 // ── SVG icons ───────────────────────────────────────────────────────
@@ -33,6 +35,7 @@ type Step = 'username' | 'pin';
 
 export default function StaffLoginScreen() {
   const { login, loading, error, clearError } = useAuth();
+  const { l10n } = useLocalization();
 
   const [step, setStep] = useState<Step>('username');
   const [username, setUsername] = useState('');
@@ -134,15 +137,17 @@ export default function StaffLoginScreen() {
 
   const renderPinDots = (length: number) => {
     return (
-      <div className="staff-login-pin-dots" aria-label={`PIN entry: ${length} of ${MAX_PIN_LENGTH} digits`}>
-        {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
-          <span
-            key={i}
-            className={`staff-login-pin-dot ${i < length ? 'staff-login-pin-dot--filled' : ''}`}
-            aria-hidden="true"
-          />
-        ))}
-      </div>
+      <Localized id="staff-login-pin-aria" attrs={{ 'aria-label': true }} vars={{ length, max: MAX_PIN_LENGTH }}>
+        <div className="staff-login-pin-dots" aria-label={`PIN entry: ${length} of ${MAX_PIN_LENGTH} digits`}>
+          {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
+            <span
+              key={i}
+              className={`staff-login-pin-dot ${i < length ? 'staff-login-pin-dot--filled' : ''}`}
+              aria-hidden="true"
+            />
+          ))}
+        </div>
+      </Localized>
     );
   };
 
@@ -156,59 +161,66 @@ export default function StaffLoginScreen() {
     ];
 
     return (
-      <div className="staff-login-pad" role="group" aria-label="Numeric keypad">
-        {keys.map((row) => (
-          <div className="staff-login-pad-row" key={row[0]}>
-            {row.map((digit) => (
+      <Localized id="staff-login-keypad-aria" attrs={{ 'aria-label': true }}>
+        <div className="staff-login-pad" role="group" aria-label="Numeric keypad">
+          {keys.map((row) => (
+            <div className="staff-login-pad-row" key={row[0]}>
+              {row.map((digit) => (
+                <Localized id="staff-login-digit-aria" attrs={{ 'aria-label': true }} vars={{ digit }} key={digit}>
+                  <button
+                    type="button"
+                    className="staff-login-pad-key"
+                    onClick={() => handlePinDigit(digit)}
+                    aria-label={digit}
+                    disabled={loading}
+                  >
+                    {digit}
+                  </button>
+                </Localized>
+              ))}
+            </div>
+          ))}
+          <div className="staff-login-pad-row">
+            <Localized id="staff-login-clear-aria" attrs={{ 'aria-label': true }}>
               <button
-                key={digit}
+                type="button"
+                className="staff-login-pad-key staff-login-pad-key--clear"
+                onClick={handlePinClear}
+                aria-label="Clear"
+                disabled={loading || pin.length === 0}
+              >
+                <Localized id="staff-login-clear">Clear</Localized>
+              </button>
+            </Localized>
+            <Localized id="staff-login-digit-aria" attrs={{ 'aria-label': true }} vars={{ digit: '0' }}>
+              <button
                 type="button"
                 className="staff-login-pad-key"
-                onClick={() => handlePinDigit(digit)}
-                aria-label={digit}
+                onClick={() => handlePinDigit('0')}
+                aria-label="0"
                 disabled={loading}
               >
-                {digit}
+                0
               </button>
-            ))}
+            </Localized>
+            <Localized id="staff-login-backspace-aria" attrs={{ 'aria-label': true }}>
+              <button
+                type="button"
+                className="staff-login-pad-key staff-login-pad-key--backspace"
+                onClick={handlePinBackspace}
+                aria-label="Backspace"
+                disabled={loading || pin.length === 0}
+              >
+                <BackspaceIcon />
+              </button>
+            </Localized>
           </div>
-        ))}
-        <div className="staff-login-pad-row">
-          <button
-            type="button"
-            className="staff-login-pad-key staff-login-pad-key--clear"
-            onClick={handlePinClear}
-            aria-label="Clear"
-            disabled={loading || pin.length === 0}
-          >
-            Clear
-          </button>
-          <button
-            type="button"
-            className="staff-login-pad-key"
-            onClick={() => handlePinDigit('0')}
-            aria-label="0"
-            disabled={loading}
-          >
-            0
-          </button>
-          <button
-            type="button"
-            className="staff-login-pad-key staff-login-pad-key--backspace"
-            onClick={handlePinBackspace}
-            aria-label="Backspace"
-            disabled={loading || pin.length === 0}
-          >
-            <BackspaceIcon />
-          </button>
         </div>
-      </div>
+      </Localized>
     );
   };
 
   // ── Step label ────────────────────────────────────────────────
-
-  const stepLabel = step === 'username' ? 'Enter your username' : 'Enter your PIN';
 
   return (
     <div className="staff-login-screen">
@@ -217,55 +229,76 @@ export default function StaffLoginScreen() {
         <div className="staff-login-logo">
           <UserIcon />
         </div>
-        <h1 className="staff-login-title">OZ-POS</h1>
-        <p className="staff-login-subtitle">Staff Login</p>
+        <Localized id="staff-login-title">
+          <h1 className="staff-login-title">OZ-POS</h1>
+        </Localized>
+        <Localized id="staff-login-subtitle">
+          <p className="staff-login-subtitle">Staff Login</p>
+        </Localized>
 
         {/* Step indicator */}
-        <div className="staff-login-steps" role="progressbar" aria-valuenow={step === 'username' ? 1 : 2} aria-valuemin={1} aria-valuemax={2} aria-label="Login progress">
+        <Localized id="staff-login-progress-aria" attrs={{ 'aria-label': true }}>
+          <div className="staff-login-steps" role="progressbar" aria-valuenow={step === 'username' ? 1 : 2} aria-valuemin={1} aria-valuemax={2} aria-label="Login progress">
           <span className={`staff-login-step-dot ${step === 'username' ? 'staff-login-step-dot--active' : 'staff-login-step-dot--done'}`} />
           <span className="staff-login-step-line" />
           <span className={`staff-login-step-dot ${step === 'pin' ? 'staff-login-step-dot--active' : ''}`} />
-        </div>
+          </div>
+        </Localized>
 
-        <p className="staff-login-step-label">{stepLabel}</p>
+        {step === 'username' ? (
+          <Localized id="staff-login-step-username">
+            <p className="staff-login-step-label">Enter your username</p>
+          </Localized>
+        ) : (
+          <Localized id="staff-login-step-pin">
+            <p className="staff-login-step-label">Enter your PIN</p>
+          </Localized>
+        )}
 
         {/* Username step */}
         {step === 'username' && (
           <form onSubmit={handleUsernameSubmit} className="staff-login-form">
             <div className="staff-login-input-wrap">
-              <input
-                ref={usernameInputRef}
-                type="text"
-                className="staff-login-input"
-                placeholder="Username"
-                value={username}
-                onChange={handleUsernameChange}
-                autoComplete="username"
-                aria-label="Username"
-                disabled={loading}
-              />
+              <Localized id="staff-login-username-placeholder" attrs={{ placeholder: true }}>
+                <Localized id="staff-login-username-aria" attrs={{ 'aria-label': true }}>
+                  <input
+                    ref={usernameInputRef}
+                    type="text"
+                    className="staff-login-input"
+                    placeholder="Username"
+                    value={username}
+                    onChange={handleUsernameChange}
+                    autoComplete="username"
+                    aria-label="Username"
+                    disabled={loading}
+                  />
+                </Localized>
+              </Localized>
             </div>
-            <button
-              type="submit"
-              className="staff-login-submit-btn"
-              disabled={!username.trim() || loading}
-            >
-              Next
-            </button>
+            <Localized id="staff-login-next">
+              <button
+                type="submit"
+                className="staff-login-submit-btn"
+                disabled={!username.trim() || loading}
+              >
+                Next
+              </button>
+            </Localized>
           </form>
         )}
 
         {/* PIN step */}
         {step === 'pin' && (
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-          <div
-            className="staff-login-pin-section"
-            ref={pinSectionRef}
-            tabIndex={-1}
-            onKeyDown={handleKeyDown}
-            role="application"
-            aria-label="PIN entry — type digits on your keyboard or use the on-screen keypad"
-          >
+          <Localized id="staff-login-pin-section-aria" attrs={{ 'aria-label': true }}>
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+            <div
+              className="staff-login-pin-section"
+              ref={pinSectionRef}
+              tabIndex={-1}
+              onKeyDown={handleKeyDown}
+              role="application"
+              aria-label="PIN entry — type digits on your keyboard or use the on-screen keypad"
+            >
             {renderPinDots(pin.length)}
             {renderPinPad()}
 
@@ -276,9 +309,10 @@ export default function StaffLoginScreen() {
               onClick={attemptLogin}
               disabled={pin.length === 0 || loading}
             >
-              {loading ? 'Logging in…' : 'Log in'}
+              {loading ? l10n.getString('staff-login-submitting') : l10n.getString('staff-login-submit')}
             </button>
-          </div>
+            </div>
+          </Localized>
         )}
 
         {/* Error */}
@@ -297,20 +331,22 @@ export default function StaffLoginScreen() {
         {loading && (
           <div className="staff-login-loading" role="status">
             <div className="staff-login-spinner" />
-            <span>Verifying…</span>
+            <Localized id="staff-login-verifying"><span>Verifying…</span></Localized>
           </div>
         )}
 
         {/* Back button (except on username step) */}
         {step !== 'username' && (
-          <button
-            type="button"
-            className="staff-login-back-link"
-            onClick={goBack}
-            disabled={loading}
-          >
-            &larr; Back
-          </button>
+          <Localized id="staff-login-back">
+            <button
+              type="button"
+              className="staff-login-back-link"
+              onClick={goBack}
+              disabled={loading}
+            >
+              &larr; Back
+            </button>
+          </Localized>
         )}
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 # Product Lookup
 product-lookup-title = Products
+product-lookup-dev-fallback = Using sample data (IPC unavailable)
 product-lookup-search-placeholder = Search products…
 product-lookup-barcode-placeholder = Scan barcode…
 product-lookup-barcode-scan = Scan

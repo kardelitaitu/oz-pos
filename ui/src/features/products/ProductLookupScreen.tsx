@@ -292,7 +292,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             padding: 'var(--space-2)',
           }}
         >
-          Using sample data (IPC unavailable)
+          <Localized id="product-lookup-dev-fallback">Using sample data (IPC unavailable)</Localized>
         </div>
       )}
       {/* TODO: localize the fallback notice — it's a dev-only banner not shown in production */}

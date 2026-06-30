@@ -1,6 +1,9 @@
+/* eslint-disable jsx-a11y/label-has-associated-control -- <Localized> blocks static analysis */
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { Localized } from '@/frontend/shared/Localized';
+import { useLocalization } from '@fluent/react';
 import './SetupWizard.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -32,6 +35,18 @@ const STEPS = [
 ] as const;
 
 export const TOTAL_STEPS = STEPS.length;
+
+/** Suffixes used to build the FTL id for each step (e.g. `setup-step-store-type`). */
+const STEP_IDS = [
+  'store-type',
+  'payments',
+  'products',
+  'staff',
+  'hardware',
+  'business-rules',
+  'data-cloud',
+  'review',
+] as const;
 
 interface PresetOption {
   value: Preset;
@@ -68,9 +83,10 @@ const PRESETS: PresetOption[] = [
 ];
 
 /** Features shown per wizard step. */
-const STEP_FEATURES: { title: string; features: FeatureDef[] }[] = [
+const STEP_FEATURES: { sectionId: string; title: string; features: FeatureDef[] }[] = [
   // Step 2 — Payments
   {
+    sectionId: 'payments',
     title: 'Payment Methods',
     features: [
       { key: 'cash-payment', label: 'Cash', description: 'Accept cash payments and track cash drawer' },
@@ -80,6 +96,7 @@ const STEP_FEATURES: { title: string; features: FeatureDef[] }[] = [
   },
   // Step 3 — Products
   {
+    sectionId: 'products',
     title: 'Products & Inventory',
     features: [
       { key: 'inventory-tracking', label: 'Inventory Tracking', description: 'Track stock levels per product with alerts' },
@@ -89,6 +106,7 @@ const STEP_FEATURES: { title: string; features: FeatureDef[] }[] = [
   },
   // Step 4 — Staff
   {
+    sectionId: 'staff',
     title: 'Staff Management',
     features: [
       { key: 'staff-login', label: 'Staff Login', description: 'PIN or password login for cashiers' },
@@ -99,6 +117,7 @@ const STEP_FEATURES: { title: string; features: FeatureDef[] }[] = [
   },
   // Step 5 — Hardware
   {
+    sectionId: 'hardware',
     title: 'Hardware & Peripherals',
     features: [
       { key: 'barcode-scanning', label: 'Barcode Scanner', description: 'USB, serial, or Bluetooth barcode scanning' },
@@ -110,6 +129,7 @@ const STEP_FEATURES: { title: string; features: FeatureDef[] }[] = [
   },
   // Step 6 — Business Rules
   {
+    sectionId: 'business-rules',
     title: 'Business Rules',
     features: [
       { key: 'discount-engine', label: 'Discounts', description: 'Percentage and fixed-amount discounts on items or cart' },
@@ -121,6 +141,7 @@ const STEP_FEATURES: { title: string; features: FeatureDef[] }[] = [
   },
   // Step 7 — Data & Cloud
   {
+    sectionId: 'data-cloud',
     title: 'Data, Reporting & Cloud',
     features: [
       { key: 'reporting', label: 'Reporting', description: 'Sales, inventory, and shift reports' },
@@ -240,6 +261,7 @@ export interface SetupWizardProps {
  *   4. Staff                8. Review & Confirm
  */
 export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
+  const { l10n } = useLocalization();
   const [step, setStep] = useState(0);
   const [preset, setPreset] = useState<Preset | null>(null);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
@@ -282,42 +304,47 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
       onComplete({ preset, features });
     }
   }, [onComplete, preset, features]);
-
   // ── All-features list for review ─────────────────────────────────
+
   const allFeatures = STEP_FEATURES.flatMap((s) => s.features);
-  const enabledCount = allFeatures.filter((f) => features[f.key]).length;
+  const enabledCount = Object.values(features).filter(Boolean).length;
 
   // ── Step indicator dots ──────────────────────────────────────────
   const stepIndicator = (
-    <nav className="setup-progress" aria-label="Setup progress">
-      {STEPS.map((label, i) => (
-        <span key={label} className="setup-step-group">
-          <span
-            className={
-              i === step
-                ? 'setup-step-dot setup-step-dot--active'
-                : i < step || (completed && i === TOTAL_STEPS - 1)
-                  ? 'setup-step-dot setup-step-dot--completed'
-                  : 'setup-step-dot setup-step-dot--pending'
-            }
-            aria-current={i === step ? 'step' : undefined}
-            aria-label={`Step ${i + 1}: ${label}`}
-          >
-            {i < step || (completed && i === TOTAL_STEPS - 1) ? '✓' : i + 1}
-          </span>
-          {i < TOTAL_STEPS - 1 && (
-            <span
-              className={
-                i < step
-                  ? 'setup-step-line setup-step-line--completed'
-                  : 'setup-step-line setup-step-line--pending'
-              }
-              aria-hidden="true"
-            />
-          )}
-        </span>
-      ))}
-    </nav>
+    <Localized id="setup-progress-aria" attrs={{ 'aria-label': true }}>
+      <nav className="setup-progress" aria-label="Setup progress">
+        {STEPS.map((label, i) => {
+          const stepLabel = l10n.getString(`setup-step-${STEP_IDS[i]}`) || label;
+          return (
+            <span key={label} className="setup-step-group">
+              <span
+                className={
+                  i === step
+                    ? 'setup-step-dot setup-step-dot--active'
+                    : i < step || (completed && i === TOTAL_STEPS - 1)
+                      ? 'setup-step-dot setup-step-dot--completed'
+                      : 'setup-step-dot setup-step-dot--pending'
+                }
+                aria-current={i === step ? 'step' : undefined}
+                aria-label={l10n.getString('setup-step-aria', { number: i + 1, label: stepLabel }) || `Step ${i + 1}: ${label}`}
+              >
+                {i < step || (completed && i === TOTAL_STEPS - 1) ? '✓' : i + 1}
+              </span>
+              {i < TOTAL_STEPS - 1 && (
+                <span
+                  className={
+                    i < step
+                      ? 'setup-step-line setup-step-line--completed'
+                      : 'setup-step-line setup-step-line--pending'
+                  }
+                  aria-hidden="true"
+                />
+              )}
+            </span>
+          );
+        })}
+      </nav>
+    </Localized>
   );
 
   // ── Completion screen ───────────────────────────────────────────
@@ -326,7 +353,9 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
       <div className="setup-page">
         <div className="setup-container">
           <div className="setup-header">
-            <div className="setup-logo">OZ-POS</div>
+            <Localized id="setup-logo">
+              <div className="setup-logo">OZ-POS</div>
+            </Localized>
           </div>
 
           {stepIndicator}
@@ -337,14 +366,19 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
-            <h1 className="setup-complete-title">All Set!</h1>
+            <Localized id="setup-complete-title">
+              <h1 className="setup-complete-title">All Set!</h1>
+            </Localized>
             <p className="setup-complete-desc">
-              Your {preset ? PRESET_NAMES[preset] : 'custom'} POS is configured
-              with <strong>{enabledCount}</strong> features enabled. You can
-              change any setting later in Preferences.
+              {l10n.getString('setup-complete-desc', {
+                preset: preset ? l10n.getString(`setup-preset-${preset}`) || PRESET_NAMES[preset] : l10n.getString('setup-preset-custom'),
+              })}
+            </p>
+            <p className="setup-complete-features">
+              {l10n.getString('setup-complete-features', { count: enabledCount })}
             </p>
             <Button size="lg" onClick={onSkip}>
-              Launch OZ-POS
+              <Localized id="setup-launch">Launch OZ-POS</Localized>
             </Button>
           </div>
         </div>
@@ -362,8 +396,12 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
       <div className="setup-container">
         {/* ── Header ──────────────────────────────── */}
         <div className="setup-header">
-          <div className="setup-logo">OZ-POS</div>
-          <div className="setup-tagline">Point of Sale — Simplified</div>
+          <Localized id="setup-logo">
+            <div className="setup-logo">OZ-POS</div>
+          </Localized>
+          <Localized id="setup-tagline">
+            <div className="setup-tagline">Point of Sale — Simplified</div>
+          </Localized>
         </div>
 
         {stepIndicator}
@@ -380,6 +418,7 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
 
             {step >= 1 && step <= 6 && (
               <StepFeatures
+                sectionId={STEP_FEATURES[step - 1]!.sectionId}
                 title={STEP_FEATURES[step - 1]!.title}
                 features={STEP_FEATURES[step - 1]!.features}
                 enabled={features}
@@ -402,7 +441,7 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
           <div className="setup-nav-left">
             {showBack && (
               <Button variant="ghost" onClick={goBack}>
-                Back
+                <Localized id="setup-back">Back</Localized>
               </Button>
             )}
           </div>
@@ -414,7 +453,7 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
                 className="setup-skip-btn"
                 onClick={onSkip}
               >
-                Skip setup
+                <Localized id="setup-skip">Skip setup</Localized>
               </button>
             )}
 
@@ -425,12 +464,12 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
                 onClick={handleComplete}
                 disabled={!preset}
               >
-                Complete Setup
+                <Localized id="setup-finish">Complete Setup</Localized>
               </Button>
             ) : (
               step > 0 && (
                 <Button variant="primary" onClick={goNext}>
-                  Next
+                  <Localized id="setup-next">Next</Localized>
                 </Button>
               )
             )}
@@ -452,34 +491,43 @@ function StepPreset({
 }) {
   return (
     <>
-      <h2 className="setup-step-title">What kind of store are you running?</h2>
-      <p className="setup-step-desc">
-        Choose a preset that matches your business. You can customise every
-        feature in the next steps.
-      </p>
+      <Localized id="setup-preset-question">
+        <h2 className="setup-step-title">What kind of store are you running?</h2>
+      </Localized>
+      <Localized id="setup-preset-desc">
+        <p className="setup-step-desc">
+          Choose a preset to get started quickly, or customise every feature later.
+        </p>
+      </Localized>
 
-      <div className="setup-presets" role="radiogroup" aria-label="Store preset">
-        {PRESETS.map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            role="radio"
-            aria-checked={selected === p.value}
-            className={
-              selected === p.value
-                ? 'setup-preset-card setup-preset-card--selected'
-                : 'setup-preset-card'
-            }
-            onClick={() => onSelect(p.value)}
-          >
-            <span className="setup-preset-emoji" aria-hidden="true">
-              {p.emoji}
-            </span>
-            <span className="setup-preset-name">{p.name}</span>
-            <span className="setup-preset-desc">{p.description}</span>
-          </button>
-        ))}
-      </div>
+      <Localized id="setup-preset-group-aria" attrs={{ 'aria-label': true }}>
+        <div className="setup-presets" role="radiogroup" aria-label="Store preset">
+          {PRESETS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              role="radio"
+              aria-checked={selected === p.value}
+              className={
+                selected === p.value
+                  ? 'setup-preset-card setup-preset-card--selected'
+                  : 'setup-preset-card'
+              }
+              onClick={() => onSelect(p.value)}
+            >
+              <span className="setup-preset-emoji" aria-hidden="true">
+                {p.emoji}
+              </span>
+              <Localized id={`setup-preset-${p.value}`}>
+                <span className="setup-preset-name">{p.name}</span>
+              </Localized>
+              <Localized id={`setup-preset-${p.value}-desc`}>
+                <span className="setup-preset-desc">{p.description}</span>
+              </Localized>
+            </button>
+          ))}
+        </div>
+      </Localized>
     </>
   );
 }
@@ -487,51 +535,69 @@ function StepPreset({
 // ── Steps 2–7: Feature Toggles ──────────────────────────────────────
 
 function StepFeatures({
+  sectionId,
   title,
   features,
   enabled,
   onToggle,
 }: {
+  sectionId: string;
   title: string;
   features: FeatureDef[];
   enabled: Record<string, boolean>;
   onToggle: (key: string) => void;
 }) {
+  const { l10n } = useLocalization();
+  const localizedTitle = l10n.getString(`setup-features-section-${sectionId}`) || title;
+
   return (
     <>
-      <h2 className="setup-step-title">{title}</h2>
-      <p className="setup-step-desc">
-        Toggle the features you need. You can change these later in Settings.
-      </p>
+      <Localized id="setup-features-title" vars={{ title: localizedTitle }}>
+        <h2 className="setup-step-title">{title}</h2>
+      </Localized>
+      <Localized id="setup-features-desc">
+        <p className="setup-step-desc">
+          Toggle the features you need. You can change these later.
+        </p>
+      </Localized>
 
-      <div className="setup-features" role="group" aria-label={title}>
-        {features.map((f) => {
-          const isOn = !!enabled[f.key];
-          return (
-            <label
-              key={f.key}
-              className="setup-feature-row"
-            >
-              <div className="setup-feature-info">
-                <div className="setup-feature-name">{f.label}</div>
-                <div className="setup-feature-desc">{f.description}</div>
-              </div>
+      <Localized id="setup-features-group-aria" attrs={{ 'aria-label': true }} vars={{ title: localizedTitle }}>
+        <div className="setup-features" role="group" aria-label={title}>
+          {features.map((f) => {
+            const isOn = !!enabled[f.key];
+            const label = l10n.getString(`setup-feature-${f.key}-label`) || l10n.getString(`setup-feature-${f.key}`) || f.label;
+            return (
+              <label
+                key={f.key}
+                className="setup-feature-row"
+              >
+                <div className="setup-feature-info">
+                  <Localized id={`setup-feature-${f.key}-label`}>
+                    <div className="setup-feature-name">{f.label}</div>
+                  </Localized>
+                  <Localized id={`setup-feature-${f.key}-desc`}>
+                    <div className="setup-feature-desc">{f.description}</div>
+                  </Localized>
+                </div>
 
-              <span className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={isOn}
-                  onChange={() => onToggle(f.key)}
-                  aria-label={`Toggle ${f.label}`}
-                />
-                <span className="toggle-track">
-                  <span className="toggle-thumb" />
+                <span className="toggle-switch">
+                  <Localized id="setup-features-toggle-aria" attrs={{ 'aria-label': true }} vars={{ label }}>
+                    <input
+                      type="checkbox"
+                      checked={isOn}
+                      onChange={() => onToggle(f.key)}
+                      aria-label={`Toggle ${f.label}`}
+                    />
+                  </Localized>
+                  <span className="toggle-track">
+                    <span className="toggle-thumb" />
+                  </span>
                 </span>
-              </span>
-            </label>
-          );
-        })}
-      </div>
+              </label>
+            );
+          })}
+        </div>
+      </Localized>
     </>
   );
 }
@@ -547,38 +613,48 @@ function StepReview({
   features: Record<string, boolean>;
   allFeatures: FeatureDef[];
 }) {
+  const { l10n } = useLocalization();
   const enabledFeatures = allFeatures.filter((f) => features[f.key]);
   const disabledFeatures = allFeatures.filter((f) => !features[f.key]);
 
   return (
     <>
-      <h2 className="setup-step-title">Review Your Setup</h2>
-      <p className="setup-step-desc">
-        Here&rsquo;s a summary of your choices. You can go back to change
-        anything, or complete the setup.
-      </p>
+      <Localized id="setup-review-title">
+        <h2 className="setup-step-title">Review Your Setup</h2>
+      </Localized>
+      <Localized id="setup-review-desc">
+        <p className="setup-step-desc">
+          Here&rsquo;s a summary of your configuration. You can change anything later.
+        </p>
+      </Localized>
 
       <div className="setup-review-list">
         {/* Preset summary */}
         <Card padding="md" shadow="sm">
           <p className="setup-preset-summary">
-            Preset: <strong>{preset ? PRESET_NAMES[preset] : 'None'}</strong>
+            {l10n.getString('setup-review-preset', {
+              name: preset ? l10n.getString(`setup-preset-${preset}`) || PRESET_NAMES[preset] : l10n.getString('setup-review-none') || 'None',
+            })}
           </p>
         </Card>
 
         {/* Enabled features */}
         <div className="setup-review-section">
           <h3 className="setup-review-section-title">
-            Enabled Features ({enabledFeatures.length})
+            {l10n.getString('setup-review-enabled', { count: enabledFeatures.length })}
           </h3>
           <div className="setup-tag-cloud">
             {enabledFeatures.length === 0 ? (
-              <span className="setup-tag setup-tag--disabled">None</span>
+              <Localized id="setup-review-none">
+                <span className="setup-tag setup-tag--disabled">None</span>
+              </Localized>
             ) : (
               enabledFeatures.map((f) => (
-                <span key={f.key} className="setup-tag setup-tag--enabled">
-                  {FEATURE_LABELS[f.key] ?? f.label}
-                </span>
+                <Localized key={f.key} id={`setup-feature-${f.key}`}>
+                  <span className="setup-tag setup-tag--enabled">
+                    {FEATURE_LABELS[f.key] ?? f.label}
+                  </span>
+                </Localized>
               ))
             )}
           </div>
@@ -587,21 +663,25 @@ function StepReview({
         {/* Disabled features */}
         <div className="setup-review-section">
           <h3 className="setup-review-section-title">
-            Disabled Features ({disabledFeatures.length})
+            {l10n.getString('setup-review-disabled', { count: disabledFeatures.length })}
           </h3>
           <div className="setup-tag-cloud">
             {disabledFeatures.length === 0 ? (
-              <span className="setup-tag setup-tag--enabled">Everything on!</span>
+              <Localized id="setup-review-all-on">
+                <span className="setup-tag setup-tag--enabled">Everything on!</span>
+              </Localized>
             ) : (
               disabledFeatures.slice(0, 20).map((f) => (
-                <span key={f.key} className="setup-tag setup-tag--disabled">
-                  {FEATURE_LABELS[f.key] ?? f.label}
-                </span>
+                <Localized key={f.key} id={`setup-feature-${f.key}`}>
+                  <span className="setup-tag setup-tag--disabled">
+                    {FEATURE_LABELS[f.key] ?? f.label}
+                  </span>
+                </Localized>
               ))
             )}
             {disabledFeatures.length > 20 && (
               <span className="setup-tag setup-tag--disabled">
-                +{disabledFeatures.length - 20} more
+                {l10n.getString('setup-review-more', { count: disabledFeatures.length - 20 })}
               </span>
             )}
           </div>

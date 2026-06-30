@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useLocalization } from '@fluent/react';
+import { Localized } from '@/frontend/shared/Localized';
 import {
   listSales,
   getSale,
@@ -15,14 +17,14 @@ import './VoidOrdersScreen.css';
 // ── Reason options ──────────────────────────────────────────────────
 
 const VOID_REASONS = [
-  { value: 'cancelled-by-customer', label: 'Cancelled by customer' },
-  { value: 'wrong-items', label: 'Wrong items scanned' },
-  { value: 'duplicate-order', label: 'Duplicate order' },
-  { value: 'price-dispute', label: 'Price dispute' },
-  { value: 'payment-issue', label: 'Payment issue' },
-  { value: 'customer-change-of-mind', label: 'Customer changed mind' },
-  { value: 'manager-authorization', label: 'Manager override' },
-  { value: 'other', label: 'Other reason…' },
+  { value: 'cancelled-by-customer', id: 'void-orders-reason-cancelled' },
+  { value: 'wrong-items', id: 'void-orders-reason-wrong-items' },
+  { value: 'duplicate-order', id: 'void-orders-reason-duplicate' },
+  { value: 'price-dispute', id: 'void-orders-reason-price-dispute' },
+  { value: 'payment-issue', id: 'void-orders-reason-payment-issue' },
+  { value: 'customer-change-of-mind', id: 'void-orders-reason-changed-mind' },
+  { value: 'manager-authorization', id: 'void-orders-reason-manager-override' },
+  { value: 'other', id: 'void-orders-reason-other' },
 ] as const;
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -34,6 +36,16 @@ function statusBadgeVariant(status: string): 'success' | 'warning' | 'danger' | 
     case 'Pending': return 'warning';
     case 'Voided': return 'danger';
     default: return 'info';
+  }
+}
+
+function statusLabelFluentId(status: string): string {
+  switch (status) {
+    case 'Active': return 'void-orders-status-active';
+    case 'Completed': return 'void-orders-status-completed';
+    case 'Voided': return 'void-orders-status-voided';
+    case 'Pending': return 'void-orders-status-pending';
+    default: return 'void-orders-status-active';
   }
 }
 
@@ -56,6 +68,8 @@ interface VoidOrdersScreenProps {
 }
 
 export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProps) {
+  const { l10n } = useLocalization();
+
   // Data
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,11 +101,11 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
       const items = await listSales();
       setSales(items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load orders');
+      setError(err instanceof Error ? err.message : l10n.getString('void-orders-error-load'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { loadSales(); }, [loadSales]);
 
@@ -156,7 +170,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
 
     const reason = voidReason === 'other' ? customReason.trim() : voidReason;
     if (!reason) {
-      setVoidError('Please select or enter a void reason');
+      setVoidError(l10n.getString('void-orders-error-reason'));
       return;
     }
 
@@ -170,7 +184,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
         userId: 'admin', // Will be replaced once StaffLogin is implemented
         reason,
       });
-      setVoidSuccess('Order voided successfully. Stock has been restored.');
+      setVoidSuccess(l10n.getString('void-orders-success-voided'));
       setVoidError(null);
       setVoidReason('');
       setCustomReason('');
@@ -178,11 +192,11 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
       const updated = await getSale(activeSaleId);
       if (updated) setDetail(updated);
     } catch (err) {
-      setVoidError(err instanceof Error ? err.message : 'Failed to void order');
+      setVoidError(err instanceof Error ? err.message : l10n.getString('void-orders-error-void'));
     } finally {
       setVoiding(false);
     }
-  }, [activeSaleId, detail, voidReason, customReason, loadSales]);
+  }, [activeSaleId, detail, voidReason, customReason, l10n]);
 
   const openDetail = useCallback((id: string) => {
     setActiveSaleId(id);
@@ -209,7 +223,9 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
     return (
       <div className="void-orders">
         <div className="void-orders-header">
-          <h1 className="void-orders-title">Orders</h1>
+          <Localized id="void-orders-title">
+            <h1 className="void-orders-title">Orders</h1>
+          </Localized>
         </div>
 
         {/* Filters */}
@@ -219,17 +235,19 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input
-              type="search"
-              className="void-orders-search"
-              placeholder="Search by order ID or payment method…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search orders"
-            />
+            <Localized id="void-orders-search-placeholder" attrs={{ placeholder: true }}>
+              <input
+                type="search"
+                className="void-orders-search"
+                placeholder="Search by order ID or payment method…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label={l10n.getString('void-orders-search-aria')}
+              />
+            </Localized>
           </div>
 
-          <div className="void-orders-status-filters" role="radiogroup" aria-label="Filter by status">
+          <div className="void-orders-status-filters" role="radiogroup" aria-label={l10n.getString('void-orders-filter-status-aria')}>
             {(['all', 'Active', 'Completed', 'Voided', 'Pending'] as FilterStatus[]).map((status) => (
               <button
                 key={status}
@@ -239,7 +257,15 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                 role="radio"
                 aria-checked={statusFilter === status}
               >
-                {status === 'all' ? 'All' : status}
+                {status === 'all' ? (
+                  <Localized id="void-orders-status-all">
+                    <span>All</span>
+                  </Localized>
+                ) : (
+                  <Localized id={statusLabelFluentId(status)}>
+                    <span>{status}</span>
+                  </Localized>
+                )}
               </button>
             ))}
           </div>
@@ -247,73 +273,109 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
 
         {/* Content */}
         {loading ? (
-          <div className="void-orders-loading">Loading orders…</div>
+          <Localized id="void-orders-loading">
+            <div className="void-orders-loading">Loading orders…</div>
+          </Localized>
         ) : error ? (
           <Card shadow="sm">
             <div className="void-orders-error">
               <p>{error}</p>
-              <Button variant="secondary" onClick={loadSales}>Retry</Button>
+              <Localized id="void-orders-retry">
+                <Button variant="secondary" onClick={loadSales}>Retry</Button>
+              </Localized>
             </div>
           </Card>
         ) : filteredSales.length === 0 ? (
           <Card shadow="sm">
             <div className="void-orders-empty">
-              {searchQuery || statusFilter !== 'all'
-                ? 'No orders match the current filters.'
-                : 'No orders recorded yet.'}
+              {searchQuery || statusFilter !== 'all' ? (
+                <Localized id="void-orders-empty-filtered">
+                  <span>No orders match the current filters.</span>
+                </Localized>
+              ) : (
+                <Localized id="void-orders-empty-none">
+                  <span>No orders recorded yet.</span>
+                </Localized>
+              )}
             </div>
           </Card>
         ) : (
           <div className="void-orders-table-wrap">
-            <table className="void-orders-table" aria-label="Orders">
-              <thead>
-                <tr>
-                  <th>Order ID</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  <th>Total</th>
-                  <th>Items</th>
-                  <th>Payment</th>
-                  <th aria-label="Actions"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSales.map((sale) => (
-                  <tr key={sale.id} className={sale.status === 'Active' ? 'void-orders-row--active' : ''}>
-                    <td className="void-orders-cell-id">{sale.id.slice(0, 8)}&hellip;</td>
-                    <td>{formatDate(sale.createdAt)}</td>
-                    <td>
-                      <Badge variant={statusBadgeVariant(sale.status)}>
-                        {sale.status}
-                      </Badge>
-                    </td>
-                    <td className="void-orders-cell-total">{formatMoney(sale.total)}</td>
-                    <td>{sale.lineCount}</td>
-                    <td>{sale.paymentMethod ?? '\u2014'}</td>
-                    <td className="void-orders-cell-actions">
-                      <button
-                        type="button"
-                        className="void-orders-action-btn"
-                        onClick={() => openDetail(sale.id)}
-                        aria-label={`View order ${sale.id}`}
-                      >
-                        View
-                      </button>
-                      {sale.status === 'Active' && (
-                        <button
-                          type="button"
-                          className="void-orders-action-btn void-orders-action-btn--void"
-                          onClick={() => openDetail(sale.id)}
-                          aria-label={`Void order ${sale.id}`}
-                        >
-                          Void
-                        </button>
-                      )}
-                    </td>
+            <Localized id="void-orders-table-aria" attrs={{ 'aria-label': true }}>
+              <table className="void-orders-table" aria-label="Orders">
+                <thead>
+                  <tr>
+                    <Localized id="void-orders-col-order-id">
+                      <th>Order ID</th>
+                    </Localized>
+                    <Localized id="void-orders-col-date">
+                      <th>Date</th>
+                    </Localized>
+                    <Localized id="void-orders-col-status">
+                      <th>Status</th>
+                    </Localized>
+                    <Localized id="void-orders-col-total">
+                      <th>Total</th>
+                    </Localized>
+                    <Localized id="void-orders-col-items">
+                      <th>Items</th>
+                    </Localized>
+                    <Localized id="void-orders-col-payment">
+                      <th>Payment</th>
+                    </Localized>
+                    <Localized id="void-orders-col-actions-aria" attrs={{ 'aria-label': true }}>
+                      <th aria-label="Actions"> </th>
+                    </Localized>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredSales.map((sale) => (
+                    <tr key={sale.id} className={sale.status === 'Active' ? 'void-orders-row--active' : ''}>
+                      <td className="void-orders-cell-id">{sale.id.slice(0, 8)}&hellip;</td>
+                      <td>{formatDate(sale.createdAt)}</td>
+                      <td>
+                        <Badge variant={statusBadgeVariant(sale.status)}>
+                          <Localized id={statusLabelFluentId(sale.status)}>
+                            <span>{sale.status}</span>
+                          </Localized>
+                        </Badge>
+                      </td>
+                      <td className="void-orders-cell-total">{formatMoney(sale.total)}</td>
+                      <td>{sale.lineCount}</td>
+                      <td>{sale.paymentMethod ?? '\u2014'}</td>
+                      <td className="void-orders-cell-actions">
+                        <Localized id="void-orders-view-aria" attrs={{ 'aria-label': true }} vars={{ id: sale.id }}>
+                          <button
+                            type="button"
+                            className="void-orders-action-btn"
+                            onClick={() => openDetail(sale.id)}
+                            aria-label={`View order ${sale.id}`}
+                          >
+                            <Localized id="void-orders-view">
+                              <span>View</span>
+                            </Localized>
+                          </button>
+                        </Localized>
+                        {sale.status === 'Active' && (
+                          <Localized id="void-orders-void-aria" attrs={{ 'aria-label': true }} vars={{ id: sale.id }}>
+                            <button
+                              type="button"
+                              className="void-orders-action-btn void-orders-action-btn--void"
+                              onClick={() => openDetail(sale.id)}
+                              aria-label={`Void order ${sale.id}`}
+                            >
+                              <Localized id="void-orders-void">
+                                <span>Void</span>
+                              </Localized>
+                            </button>
+                          </Localized>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Localized>
           </div>
         )}
       </div>
@@ -327,27 +389,37 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
   return (
     <div className="void-orders">
       <div className="void-orders-header">
-        <button
-          type="button"
-          className="void-orders-back-btn"
-          onClick={backToList}
-          aria-label="Back to orders list"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          Back to Orders
-        </button>
+        <Localized id="void-orders-back-aria" attrs={{ 'aria-label': true }}>
+          <button
+            type="button"
+            className="void-orders-back-btn"
+            onClick={backToList}
+            aria-label="Back to orders list"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <Localized id="void-orders-back">
+              <span>Back to Orders</span>
+            </Localized>
+          </button>
+        </Localized>
       </div>
 
       {detailLoading ? (
-        <div className="void-orders-loading">Loading order details…</div>
+        <Localized id="void-orders-loading-detail">
+          <div className="void-orders-loading">Loading order details…</div>
+        </Localized>
       ) : !detail ? (
         <Card shadow="sm">
           <div className="void-orders-error">
-            <p>Order not found.</p>
-            <Button variant="secondary" onClick={backToList}>Go back</Button>
+            <Localized id="void-orders-not-found">
+              <p>Order not found.</p>
+            </Localized>
+            <Localized id="void-orders-go-back">
+              <Button variant="secondary" onClick={backToList}>Go back</Button>
+            </Localized>
           </div>
         </Card>
       ) : (
@@ -356,27 +428,39 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
           <Card shadow="sm">
             <div className="void-orders-detail-summary">
               <div className="void-orders-detail-header">
-                <h2 className="void-orders-detail-id">Order {detail.id.slice(0, 8)}</h2>
+                <Localized id="void-orders-detail-heading" vars={{ id: detail.id.slice(0, 8) }}>
+                  <h2 className="void-orders-detail-id">Order {detail.id.slice(0, 8)}</h2>
+                </Localized>
                 <Badge variant={statusBadgeVariant(detail.status)}>
-                  {detail.status}
+                  <Localized id={statusLabelFluentId(detail.status)}>
+                    <span>{detail.status}</span>
+                  </Localized>
                 </Badge>
               </div>
 
               <div className="void-orders-detail-meta">
                 <div className="void-orders-meta-item">
-                  <span className="void-orders-meta-label">Date</span>
+                  <Localized id="void-orders-meta-date">
+                    <span className="void-orders-meta-label">Date</span>
+                  </Localized>
                   <span className="void-orders-meta-value">{formatDate(detail.createdAt)}</span>
                 </div>
                 <div className="void-orders-meta-item">
-                  <span className="void-orders-meta-label">Payment</span>
+                  <Localized id="void-orders-meta-payment">
+                    <span className="void-orders-meta-label">Payment</span>
+                  </Localized>
                   <span className="void-orders-meta-value">{detail.paymentMethod ?? '\u2014'}</span>
                 </div>
                 <div className="void-orders-meta-item">
-                  <span className="void-orders-meta-label">Total</span>
+                  <Localized id="void-orders-meta-total">
+                    <span className="void-orders-meta-label">Total</span>
+                  </Localized>
                   <span className="void-orders-meta-value void-orders-meta-value--total">{formatMoney(detail.total)}</span>
                 </div>
                 <div className="void-orders-meta-item">
-                  <span className="void-orders-meta-label">Items</span>
+                  <Localized id="void-orders-meta-items">
+                    <span className="void-orders-meta-label">Items</span>
+                  </Localized>
                   <span className="void-orders-meta-value">{detail.lineCount}</span>
                 </div>
               </div>
@@ -385,53 +469,73 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
 
           {/* Line items */}
           <Card shadow="sm" className="void-orders-section">
-            <h3 className="void-orders-section-title">Line Items</h3>
-            <table className="void-orders-lines-table" aria-label="Order line items">
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Name</th>
-                  <th>Qty</th>
-                  <th>Unit Price</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.lines.map((line, i) => (
-                  <tr key={i}>
-                    <td className="void-orders-cell-mono">{line.sku}</td>
-                    <td>{line.name}</td>
-                    <td>{line.qty}</td>
-                    <td>{formatMoney(line.unit_price)}</td>
-                    <td className="void-orders-cell-total">
-                      {formatMoney({
-                        minor_units: line.total_minor,
-                        currency: line.unit_price.currency,
-                      })}
-                    </td>
+            <Localized id="void-orders-line-items-title">
+              <h3 className="void-orders-section-title">Line Items</h3>
+            </Localized>
+            <Localized id="void-orders-line-items-aria" attrs={{ 'aria-label': true }}>
+              <table className="void-orders-lines-table" aria-label="Order line items">
+                <thead>
+                  <tr>
+                    <Localized id="void-orders-line-sku">
+                      <th>SKU</th>
+                    </Localized>
+                    <Localized id="void-orders-line-name">
+                      <th>Name</th>
+                    </Localized>
+                    <Localized id="void-orders-line-qty">
+                      <th>Qty</th>
+                    </Localized>
+                    <Localized id="void-orders-line-unit-price">
+                      <th>Unit Price</th>
+                    </Localized>
+                    <Localized id="void-orders-line-total">
+                      <th>Total</th>
+                    </Localized>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {detail.lines.map((line, i) => (
+                    <tr key={i}>
+                      <td className="void-orders-cell-mono">{line.sku}</td>
+                      <td>{line.name}</td>
+                      <td>{line.qty}</td>
+                      <td>{formatMoney(line.unit_price)}</td>
+                      <td className="void-orders-cell-total">
+                        {formatMoney({
+                          minor_units: line.total_minor,
+                          currency: line.unit_price.currency,
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Localized>
           </Card>
 
           {/* Void action (only for Active sales) */}
           {canVoid && (
             <Card shadow="sm" className="void-orders-section void-orders-void-section">
-              <h3 className="void-orders-section-title void-orders-section-title--danger">
-                Void Order
-              </h3>
-              <p className="void-orders-void-desc">
-                This will cancel the order, restore all items to inventory,
-                and create an immutable audit log entry. This action cannot
-                be undone.
-              </p>
+              <Localized id="void-orders-void-section-title">
+                <h3 className="void-orders-section-title void-orders-section-title--danger">
+                  Void Order
+                </h3>
+              </Localized>
+              <Localized id="void-orders-void-description">
+                <p className="void-orders-void-desc">
+                  This will cancel the order, restore all items to inventory,
+                  and create an immutable audit log entry. This action cannot
+                  be undone.
+                </p>
+              </Localized>
 
               {/* Reason picker */}
               <div className="void-orders-reason-group">
-                <label className="void-orders-reason-label" htmlFor="void-reason-select">
-                  Reason for void
-                </label>
+                <Localized id="void-orders-reason-label">
+                  <label className="void-orders-reason-label" htmlFor="void-reason-select">
+                    Reason for void
+                  </label>
+                </Localized>
                 <select
                   id="void-reason-select"
                   className="void-orders-reason-select"
@@ -442,26 +546,30 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                   }}
                   aria-describedby="void-reason-desc"
                 >
-                  <option value="">Select a reason…</option>
+                  <Localized id="void-orders-reason-select">
+                    <option value="">Select a reason…</option>
+                  </Localized>
                   {VOID_REASONS.map((r) => (
                     <option key={r.value} value={r.value}>
-                      {r.label}
+                      {l10n.getString(r.id)}
                     </option>
                   ))}
                 </select>
 
                 {voidReason === 'other' && (
-                  <input
-                    type="text"
-                    className="void-orders-reason-input"
-                    placeholder="Enter the reason for voiding this order…"
-                    value={customReason}
-                    onChange={(e) => {
-                      setCustomReason(e.target.value);
-                      setVoidError(null);
-                    }}
-                    aria-label="Custom void reason"
-                  />
+                  <Localized id="void-orders-reason-placeholder" attrs={{ placeholder: true }}>
+                    <input
+                      type="text"
+                      className="void-orders-reason-input"
+                      placeholder="Enter the reason for voiding this order…"
+                      value={customReason}
+                      onChange={(e) => {
+                        setCustomReason(e.target.value);
+                        setVoidError(null);
+                      }}
+                      aria-label={l10n.getString('void-orders-reason-aria')}
+                    />
+                  </Localized>
                 )}
               </div>
 
@@ -487,16 +595,26 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
               )}
 
               <div className="void-orders-void-actions">
-                <Button variant="ghost" onClick={backToList}>
-                  Cancel
-                </Button>
+                <Localized id="void-orders-cancel">
+                  <Button variant="ghost" onClick={backToList}>
+                    <span>Cancel</span>
+                  </Button>
+                </Localized>
                 <Button
                   variant="danger"
                   onClick={handleVoid}
                   loading={voiding}
                   disabled={!voidReason || (voidReason === 'other' && !customReason.trim())}
                 >
-                  {voiding ? 'Voiding…' : 'Confirm Void'}
+                  {voiding ? (
+                    <Localized id="void-orders-confirm-voiding">
+                      <span>Voiding…</span>
+                    </Localized>
+                  ) : (
+                    <Localized id="void-orders-confirm">
+                      <span>Confirm Void</span>
+                    </Localized>
+                  )}
                 </Button>
               </div>
             </Card>
@@ -511,7 +629,9 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                   <line x1="15" y1="9" x2="9" y2="15" />
                   <line x1="9" y1="9" x2="15" y2="15" />
                 </svg>
-                <span>This order has been voided.</span>
+                <Localized id="void-orders-voided-notice">
+                  <span>This order has been voided.</span>
+                </Localized>
               </div>
             </Card>
           )}
