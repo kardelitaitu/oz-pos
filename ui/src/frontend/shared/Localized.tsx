@@ -3,4 +3,4 @@
 // is a one-liner today, but it gives us a place to add defaults (e.g.
 // `data-testid` propagation) without rewriting every JSX site.
 
-export { Localized } from '@fluent/react';
+export { Localized, type LocalizedProps } from '@fluent/react';

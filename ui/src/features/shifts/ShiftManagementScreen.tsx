@@ -164,18 +164,6 @@ export default function ShiftManagementScreen() {
     }
   }, [activeShift, payoutAmount, payoutReason, load]);
 
-  // ── Reconciliation helper ─────────────────────────────────────────
-
-  const _reconciliationBreakdown = (shift: ShiftDto) => {
-    const opening = shift.openingBalanceMinor;
-    const cashSales = shift.totalCashMinor;
-    const payouts = shift.totalPayoutsMinor;
-    const expected = opening + cashSales - payouts;
-    const counted = shift.closingBalanceMinor ?? 0;
-    const diff = counted - expected;
-    return { opening, cashSales, payouts, expected, counted, diff };
-  };
-
   // ── Format time/date helpers ───────────────────────────────────────
 
   const time = (iso: string) =>

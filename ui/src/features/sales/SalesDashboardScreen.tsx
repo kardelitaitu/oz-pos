@@ -34,9 +34,11 @@ export default function SalesDashboardScreen() {
             const WidgetComponent = w.component;
             const widthClass = w.width === 2 ? 'widget-width-2' : 'widget-width-1';
             return (
-              <Card key={w.id} shadow="sm" className={widthClass} role="listitem" aria-label={w.title}>
-                <WidgetComponent />
-              </Card>
+              <div key={w.id} role="listitem" aria-label={w.title}>
+                <Card shadow="sm" className={widthClass}>
+                  <WidgetComponent />
+                </Card>
+              </div>
             );
           })}
         </div>

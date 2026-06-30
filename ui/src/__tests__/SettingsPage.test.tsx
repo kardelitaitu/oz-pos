@@ -119,10 +119,10 @@ describe('SettingsPage', () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+    await userEvent.click(screen.getByRole('button', { name: /save settings/i }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('set_receipt_settings', expect.any(Object));
@@ -134,10 +134,10 @@ describe('SettingsPage', () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+    await userEvent.click(screen.getByRole('button', { name: /save settings/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
@@ -151,19 +151,19 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
     });
 
-    expect(screen.getByLabelText(/store name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/address/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/tax.*id/i)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Address' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /tax.*id/i })).toBeInTheDocument();
   });
 
   it('updates store name input', async () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/store name/i)).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
     });
 
-    const name = screen.getByLabelText(/store name/i);
+    const name = screen.getByRole('textbox', { name: 'Store name' });
     await userEvent.clear(name);
     await userEvent.type(name, 'Acme Corp');
     expect(name).toHaveValue('Acme Corp');
@@ -173,10 +173,10 @@ describe('SettingsPage', () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/address/i)).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Address' })).toBeInTheDocument();
     });
 
-    const addr = screen.getByLabelText(/address/i);
+    const addr = screen.getByRole('textbox', { name: 'Address' });
     await userEvent.clear(addr);
     await userEvent.type(addr, '456 Oak Ave');
     expect(addr).toHaveValue('456 Oak Ave');

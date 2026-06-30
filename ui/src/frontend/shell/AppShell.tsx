@@ -60,7 +60,7 @@ export default function AppShell() {
     setHasCompletedSetup(true);
   }, []);
 
-  const userRole = session?.role_name;
+  const userRole = session?.role_name ?? '';
 
   const handleNavigate = useCallback((route: AppRoute) => {
     const target = getPage(route);

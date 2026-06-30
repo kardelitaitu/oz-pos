@@ -27,6 +27,9 @@ pos-bundle-expanded = Bundle added: { $count } item{ $count ->
   *[other] s
 } to cart
 
+# Scanner
+pos-scanner-error = Scanner error: { $detail }
+
 # Sales History
 sales-history-title = Sales History
 sales-history-loading = Loading sales…

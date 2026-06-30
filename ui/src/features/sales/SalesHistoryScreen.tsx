@@ -9,6 +9,7 @@ import {
   type SaleListItem,
   type SaleDetail,
   type RefundDto,
+  type LineItemDto,
 } from '@/api/sales';
 import { listStaff, type StaffMemberDto } from '@/api/staff';
 import { formatMoney } from '@/types/domain';
@@ -296,23 +297,25 @@ export default function SalesHistoryScreen() {
     if (!detail) return;
     setPrinting(true);
     try {
-      const _subtotalMinor = detail.lines.reduce((s, l) => s + l.total_minor, 0);
       await printSalesReceipt({
         date: detail.createdAt,
         receiptNumber: detail.id,
-        items: detail.lines.map((l) => ({
-          name: l.name,
-          quantity: l.qty,
-          unitPrice: { minorUnits: l.unit_price.minor_units, currency: l.unit_price.currency },
-          totalPrice: { minorUnits: l.total_minor, currency: l.unit_price.currency },
-          taxAmount: l.tax_amount
-            ? { minorUnits: l.tax_amount.minor_units, currency: l.tax_amount.currency }
-            : undefined,
-        })),
+        items: detail.lines.map((l): LineItemDto => {
+          const item: LineItemDto = {
+            name: l.name,
+            quantity: l.qty,
+            unitPrice: { minorUnits: l.unit_price.minor_units, currency: l.unit_price.currency },
+            totalPrice: { minorUnits: l.total_minor, currency: l.unit_price.currency },
+          };
+          if (l.tax_amount) {
+            item.taxAmount = { minorUnits: l.tax_amount.minor_units, currency: l.tax_amount.currency };
+          }
+          return item;
+        }),
         subtotal: { minorUnits: detail.subtotal.minor_units, currency: detail.total.currency },
-        tax: detail.taxTotal.minor_units > 0
-          ? { minorUnits: detail.taxTotal.minor_units, currency: detail.total.currency }
-          : undefined,
+        ...(detail.taxTotal.minor_units > 0
+          ? { tax: { minorUnits: detail.taxTotal.minor_units, currency: detail.total.currency } }
+          : {}),
         total: { minorUnits: detail.total.minor_units, currency: detail.total.currency },
         payments: [
           {

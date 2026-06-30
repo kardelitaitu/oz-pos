@@ -48,7 +48,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const dtos = await listProductVariants(productSku);
       setVariants(dtos);
@@ -95,9 +95,9 @@ export default function VariantManagementScreen({ productSku, productName, onClo
         await updateProductVariant({
           sku: editingSku,
           name: form.name,
-          priceMinor: hasPrice ? priceMinor : undefined,
-          currency: hasPrice ? form.currency : undefined,
-          barcode: form.barcode || undefined,
+          priceMinor: hasPrice ? priceMinor : null,
+          currency: hasPrice ? form.currency : null,
+          barcode: form.barcode || null,
           sortOrder: parseInt(form.sortOrder, 10) || 0,
           isActive: form.isActive,
         });

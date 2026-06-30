@@ -146,6 +146,8 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           type: 'success',
           message: `Bundle "${bundle.bundle.name}" added — ${expanded.length} items`,
         });
+      } else {
+        addToast({ type: 'warning', message: 'No product or bundle matches this barcode' });
       }
     } catch {
       // If bundle lookup fails, silently ignore.

@@ -55,6 +55,37 @@ export default function StaffLoginScreen() {
     clearError();
   }, [step, clearError]);
 
+  // ── PIN pad handlers ───────────────────────────────────────────
+
+  const handlePinDigit = useCallback((digit: string) => {
+    setPin((prev) => {
+      if (prev.length >= MAX_PIN_LENGTH) return prev;
+      return [...prev, digit];
+    });
+  }, []);
+
+  const handlePinBackspace = useCallback(() => {
+    setPin((prev) => prev.slice(0, -1));
+  }, []);
+
+  const handlePinClear = useCallback(() => {
+    setPin([]);
+  }, []);
+
+  // Auto-submit when PIN reaches max length.
+  const attemptLogin = useCallback(() => {
+    if (pin.length >= 1) {
+      login(username.trim(), pin.join(''));
+    }
+  }, [pin, username, login]);
+
+  // ── Back button ────────────────────────────────────────────────
+
+  const goBack = useCallback(() => {
+    setStep('username');
+    setPin([]);
+  }, []);
+
   // ── Hardware keyboard handler for PIN step ────────────────────
 
   const handleKeyDown = useCallback(
@@ -92,30 +123,6 @@ export default function StaffLoginScreen() {
   const handleUsernameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value);
   }, []);
-
-  // ── PIN pad handlers ───────────────────────────────────────────
-
-  const handlePinDigit = useCallback((digit: string) => {
-    setPin((prev) => {
-      if (prev.length >= MAX_PIN_LENGTH) return prev;
-      return [...prev, digit];
-    });
-  }, []);
-
-  const handlePinBackspace = useCallback(() => {
-    setPin((prev) => prev.slice(0, -1));
-  }, []);
-
-  const handlePinClear = useCallback(() => {
-    setPin([]);
-  }, []);
-
-  // Auto-submit when PIN reaches max length.
-  const attemptLogin = useCallback(() => {
-    if (pin.length >= 1) {
-      login(username.trim(), pin.join(''));
-    }
-  }, [pin, username, login]);
 
   useEffect(() => {
     if (pin.length === MAX_PIN_LENGTH && !loading) {
@@ -198,13 +205,6 @@ export default function StaffLoginScreen() {
       </div>
     );
   };
-
-  // ── Back button ────────────────────────────────────────────────
-
-  const goBack = useCallback(() => {
-    setStep('username');
-    setPin([]);
-  }, []);
 
   // ── Step label ────────────────────────────────────────────────
 

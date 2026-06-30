@@ -20,4 +20,4 @@ export { Localized } from './Localized';
 export type { LocalizedProps } from './Localized';
 export { ToastProvider, useToast } from './Toast';
 export type { ToastType } from './Toast';
-export { PermissionDenied } from './PermissionDenied';
+export { default as PermissionDenied } from './PermissionDenied';

@@ -193,8 +193,8 @@ export default function DataManagementScreen() {
         types: Array.from(exportState.selectedTypes),
         password: exportState.password,
         outputPath: filePath,
-        dateFrom: exportState.dateFrom || undefined,
-        dateTo: exportState.dateTo || undefined,
+        ...(exportState.dateFrom ? { dateFrom: exportState.dateFrom } : {}),
+        ...(exportState.dateTo ? { dateTo: exportState.dateTo } : {}),
       });
 
       setExportState((prev) => ({

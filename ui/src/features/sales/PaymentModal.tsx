@@ -190,6 +190,9 @@ export default function PaymentModal({
           receiptNumber: `SALE-${saleResult.saleId}`,
           items: lineItems.map((line, i) => {
             const computedLine = completedSale?.lines[i];
+            const tax = computedLine?.tax_amount
+              ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
+              : null;
             return {
               name: line.name ?? line.sku,
               quantity: line.qty,
@@ -198,17 +201,15 @@ export default function PaymentModal({
                 minorUnits: line.unit_price.minor_units * line.qty,
                 currency: line.unit_price.currency,
               },
-              taxAmount: computedLine?.tax_amount
-                ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
-                : undefined,
+              ...(tax ? { taxAmount: tax } : {}),
             };
           }),
           subtotal: completedSale
             ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
             : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
-          tax: completedSale && completedSale.taxTotal.minor_units > 0
-            ? { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency }
-            : undefined,
+          ...(completedSale && completedSale.taxTotal.minor_units > 0
+            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
+            : {}),
           total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
           payments: [
             {
@@ -295,7 +296,7 @@ export default function PaymentModal({
     };
     const exp = known[total.currency] ?? 2;
     const eachFormatted = (each / 10 ** exp).toFixed(exp);
-    const remainderCents = Number(totalMinor) % BigInt(count);
+    const remainderCents = Number(totalMinor % BigInt(count));
     setSplits((prev) =>
       prev.map((s, i) => {
         const val = exp === 0 ? parseFloat(eachFormatted).toFixed(0) : eachFormatted;
@@ -363,7 +364,7 @@ export default function PaymentModal({
         paymentMethod: methodLabel,
         tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
         userId,
-        paymentSplits,
+        ...(paymentSplits ? { paymentSplits } : {}),
       });
 
       try {
@@ -377,6 +378,9 @@ export default function PaymentModal({
           receiptNumber: `SALE-${saleResult.saleId}`,
           items: lineItems.map((line, i) => {
             const computedLine = completedSale?.lines[i];
+            const tax = computedLine?.tax_amount
+              ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
+              : null;
             return {
               name: line.name ?? line.sku,
               quantity: line.qty,
@@ -385,17 +389,15 @@ export default function PaymentModal({
                 minorUnits: line.unit_price.minor_units * line.qty,
                 currency: line.unit_price.currency,
               },
-              taxAmount: computedLine?.tax_amount
-                ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
-                : undefined,
+              ...(tax ? { taxAmount: tax } : {}),
             };
           }),
           subtotal: completedSale
             ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
             : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
-          tax: completedSale && completedSale.taxTotal.minor_units > 0
-            ? { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency }
-            : undefined,
+          ...(completedSale && completedSale.taxTotal.minor_units > 0
+            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
+            : {}),
           total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
           payments: paymentSplits
             ? paymentSplits.map((ps) => ({

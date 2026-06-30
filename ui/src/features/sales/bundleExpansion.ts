@@ -32,8 +32,10 @@ interface PriceItem {
  *
  * Post-condition: the sum of `unitPrices[i] × items[i].qty` is within
  * a few minor units of `bundlePriceMinor` (exact when every item has qty=1).
+ *
+ * @visibleForTesting Exported for unit test access.
  */
-function distributeBundlePrice(
+export function distributeBundlePrice(
   bundlePriceMinor: number,
   items: PriceItem[],
 ): number[] {

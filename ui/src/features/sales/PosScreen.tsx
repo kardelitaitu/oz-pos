@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect, useRef } from 'react';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Localized } from '@/components/Localized';
+import { useLocalization } from '@fluent/react';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import { formatMoney, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
 import { useSwipe } from '@/hooks/useSwipe';
@@ -183,8 +184,9 @@ export default function PosScreen() {
     setLines,
   } = usePosState();
   const { addToast } = useToast();
+  const { l10n } = useLocalization();
   const { session, logout } = useAuth();
-  const userId = session.user_id;
+  const userId = session!.user_id;
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
@@ -227,12 +229,26 @@ export default function PosScreen() {
             type: 'success',
             message: `Bundle "${bundle.bundle.name}" added — ${expanded.length} items`,
           });
+        } else {
+          addToast({ type: 'warning', message: 'No product or bundle matches this barcode' });
         }
-        // If neither product nor bundle matched, silently ignore.
       } catch {
         // Silently ignore — the scanner will beep, user retries.
       }
     }, [addProduct, addToast]),
+    onError: useCallback(
+      (error: string) => {
+        addToast({
+          type: 'error',
+          message: l10n.getString(
+            'pos-scanner-error',
+            { detail: error },
+            `Scanner error: ${error}`,
+          ),
+        });
+      },
+      [addToast, l10n],
+    ),
   });
 
   const handlePay = useCallback(() => {

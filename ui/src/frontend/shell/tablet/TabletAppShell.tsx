@@ -44,7 +44,7 @@ export default function TabletAppShell() {
     return () => { cancelled = true; };
   }, []);
 
-  const userRole = session?.role_name;
+  const userRole = session?.role_name ?? '';
 
   const handleNavigate = useCallback((route: string) => {
     const target = getPage(route);

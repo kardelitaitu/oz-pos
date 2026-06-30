@@ -3,10 +3,14 @@ import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import productsFtl from '@/locales/products.ftl?raw';
+import { ToastProvider } from '@/components/Toast';
+import { ScannerError } from '@/api/hardware';
+import * as bundlesApi from '@/api/bundles';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import type { Product } from '@/types/domain';
 
-const wrap = (children: React.ReactNode) => withFluent(children, productsFtl);
+const wrap = (children: React.ReactNode) =>
+  withFluent(<ToastProvider>{children}</ToastProvider>, productsFtl);
 
 // ── Tests ────────────────────────────────────────────────────────
 
@@ -232,5 +236,31 @@ describe('ProductLookupScreen', () => {
     await waitForProducts();
     const badges = screen.getAllByText(/^Beverages$|^Food$/);
     expect(badges.length).toBeGreaterThanOrEqual(17);
+  });
+
+  it('silently swallows when lookupBundleBySku rejects with a ScannerError in the barcode scan catch block', async () => {
+    const handler = vi.fn();
+    render(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await waitForProducts();
+
+    // Spy on lookupBundleBySku and make it reject with a ScannerError.
+    // The barcode doesn't match any product's barcode, so the callback
+    // falls through to the bundle lookup path, which rejects.
+    vi.spyOn(bundlesApi, 'lookupBundleBySku').mockRejectedValueOnce(
+      new ScannerError(
+        'Scanner disconnected — check USB connection',
+        ScannerError.codes.DISCONNECTED,
+      ),
+    );
+
+    const barcodeInput = screen.getByLabelText(/barcode input/i);
+    await userEvent.type(barcodeInput, '0000000000000{Enter}');
+
+    // The catch block silently swallows the ScannerError.
+    // No product should have been added.
+    expect(handler).not.toHaveBeenCalled();
+
+    // Barcode input should still be cleared after the catch block.
+    expect(barcodeInput).toHaveValue('');
   });
 });

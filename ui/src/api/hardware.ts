@@ -31,6 +31,41 @@ export const printReceipt = (args: PrintReceiptArgs): Promise<PrintReceiptResult
 
 // ── Barcode Scanner ──────────────────────────────────────────────
 
+/**
+ * Error thrown by scanner-related operations when the scanner hardware
+ * encounters a recoverable or unrecoverable failure.
+ *
+ * The `code` field identifies the specific type of failure so callers
+ * can surface appropriate diagnostics or recovery prompts.
+ */
+export class ScannerError extends Error {
+  /**
+   * @param message  Human-readable description of the failure.
+   * @param code     Machine-readable error code (see `ScannerError.codes`).
+   * @param scannerId  Optional id of the scanner that failed.
+   */
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly scannerId?: string,
+  ) {
+    super(message);
+    this.name = 'ScannerError';
+  }
+
+  /** Canonical error codes emitted by the scanner subsystem. */
+  static codes = {
+    /** Scanner was physically disconnected mid-operation. */
+    DISCONNECTED: 'SCANNER_DISCONNECTED',
+    /** Scanner did not respond within the expected time frame. */
+    TIMEOUT: 'SCANNER_TIMEOUT',
+    /** Generic hardware failure (e.g. USB error, power issue). */
+    HARDWARE_FAILURE: 'SCANNER_HARDWARE_FAILURE',
+    /** Scanner is already claimed by another process. */
+    CONFLICT: 'SCANNER_CONFLICT',
+  } as const;
+}
+
 export interface ScannerInfo {
   id: string;
 }

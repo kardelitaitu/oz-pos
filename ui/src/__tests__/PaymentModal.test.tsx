@@ -16,7 +16,24 @@ const lineItem = (overrides: Partial<CartLine> = {}): CartLine => ({
 });
 
 const { invokeMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn().mockResolvedValue({ printed: true }),
+  invokeMock: vi.fn((cmd: string) => {
+    switch (cmd) {
+      case 'start_sale':
+        return Promise.resolve({ cartId: 'test-cart' });
+      case 'add_line':
+        return Promise.resolve({ lineId: 'test-line', lineTotal: null });
+      case 'complete_sale':
+        return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
+      case 'get_sale':
+        return Promise.resolve(null);
+      case 'print_sales_receipt':
+        return Promise.resolve({ printed: true });
+      case 'get_enabled_features':
+        return Promise.resolve({ features: [] });
+      default:
+        return Promise.resolve({});
+    }
+  }),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -25,7 +42,6 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 beforeEach(() => {
   invokeMock.mockClear();
-  invokeMock.mockResolvedValue({ printed: true });
 });
 
 describe('PaymentModal', () => {
@@ -35,6 +51,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -53,6 +70,7 @@ describe('PaymentModal', () => {
         open={false}
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -67,6 +85,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -86,6 +105,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -105,6 +125,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -124,6 +145,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -143,6 +165,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -164,6 +187,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={onComplete}
         onClose={vi.fn()}
       />,
@@ -188,6 +212,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -208,6 +233,7 @@ describe('PaymentModal', () => {
         open
         lineItems={[lineItem()]}
         total={usd(700)}
+        userId="test-user-id"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,

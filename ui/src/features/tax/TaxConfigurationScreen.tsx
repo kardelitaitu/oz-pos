@@ -307,7 +307,7 @@ export default function TaxConfigurationScreen() {
                             {assignedNames.length > 0 ? (
                               <span className="tax-config-cat-badges">
                                 {assignedNames.map((n) => (
-                                  <Badge key={n} variant="neutral" size="sm">{n}</Badge>
+                                  <Badge key={n} variant="default" size="sm">{n}</Badge>
                                 ))}
                               </span>
                             ) : (
