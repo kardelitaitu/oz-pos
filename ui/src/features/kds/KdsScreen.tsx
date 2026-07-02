@@ -48,7 +48,7 @@ export default function KdsScreen() {
     <div className="kds" role="region" aria-label="Kitchen Display System">
       <div className="kds-header">
         <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
-        <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}>{orders.length} orders</Localized></span>
+        <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}><span>{orders.length} orders</span></Localized></span>
       </div>
       {error && <p className="kds-error">{error}</p>}
       <div className="kds-columns">

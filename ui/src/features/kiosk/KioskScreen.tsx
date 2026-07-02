@@ -156,7 +156,7 @@ export default function KioskScreen() {
             <span className="kiosk-product-name">{p.name}</span>
             <span className="kiosk-product-price">${(p.price.minor_units / 100).toFixed(2)}</span>
             {p.stock_qty !== null && p.stock_qty <= 5 && (
-              <span className="kiosk-stock-badge"><Localized id="kiosk-stock-left" vars={{ count: p.stock_qty }}>{p.stock_qty} left</Localized></span>
+              <span className="kiosk-stock-badge"><Localized id="kiosk-stock-left" vars={{ count: p.stock_qty }}><span>{p.stock_qty} left</span></Localized></span>
             )}
           </button>
         ))}
