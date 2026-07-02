@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { startSale, addLine, completeSale, setCartDiscount, printSalesReceipt, getSale, type SetCartDiscountArgs, type PaymentSplitArg } from '@/api/sales';
+import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg } from '@/api/sales';
+import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
@@ -12,9 +13,10 @@ import {
   type ExchangeRateDto,
 } from '@/api/currency';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
+import { animDuration } from '@/utils/animation';
 import './PaymentModal.css';
 
-type PaymentMethod = 'cash' | 'card' | 'qris' | 'other';
+type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill';
 
 interface SplitRow {
   id: number;
@@ -30,6 +32,7 @@ export interface PaymentModalProps {
   discountPercent?: number;
   discountLabel?: string;
   userId: string;
+  tableNumber?: string;
   onComplete: () => void;
   onClose: () => void;
 }
@@ -41,6 +44,7 @@ export default function PaymentModal({
   discountPercent = 0,
   discountLabel,
   userId,
+  tableNumber,
   onComplete,
   onClose,
 }: PaymentModalProps) {
@@ -51,6 +55,23 @@ export default function PaymentModal({
   const [processing, setProcessing] = useState(false);
   const [done, setDone] = useState(false);
   const [changeDue, setChangeDue] = useState<Money | null>(null);
+  const [customerName, setCustomerName] = useState('');
+  const [leaving, setLeaving] = useState(false);
+  const leaveCb = useRef<(() => void) | null>(null);
+
+  const MS_200 = animDuration(200);
+
+  const animateLeave = useCallback((done: () => void) => {
+    setLeaving(true);
+    leaveCb.current = done;
+  }, []);
+
+  const handleLeaveEnd = useCallback(() => {
+    if (!leaving) return;
+    leaveCb.current?.();
+    leaveCb.current = null;
+    setLeaving(false);
+  }, [leaving]);
 
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
@@ -220,9 +241,16 @@ export default function PaymentModal({
               change: null,
             },
           ],
+          ...(tableNumber ? { tableNumber } : {}),
         });
       } catch {
         // Printer may not be connected.
+      }
+
+      try {
+        await createKdsOrderFromSale(saleResult.saleId);
+      } catch {
+        // KDS may not be configured — non-blocking.
       }
 
       setDone(true);
@@ -315,15 +343,46 @@ export default function PaymentModal({
   const canComplete = useMemo(() => {
     if (splitMode) return splitComplete;
     if (method === 'other' && !otherLabel.trim()) return false;
+    if (method === 'open_bill') return customerName.trim().length > 0;
     if (method === 'cash') return sufficient;
     if (method === 'qris') return true;
     return true;
-  }, [splitMode, splitComplete, method, otherLabel, sufficient]);
+  }, [splitMode, splitComplete, method, otherLabel, sufficient, customerName]);
+
+  const subtotalMinor = useMemo(() => {
+    return lineItems.reduce((acc, l) => acc + l.unit_price.minor_units * l.qty, 0);
+  }, [lineItems]);
 
   const complete = useCallback(async () => {
     setProcessing(true);
 
     try {
+      // ── Open Bill: save cart without payment ──────────────
+      if (method === 'open_bill') {
+        const cartData = JSON.stringify({
+          lines: lineItems.map((l) => ({
+            sku: l.sku,
+            name: l.name,
+            qty: l.qty,
+            unit_price: l.unit_price,
+          })),
+          discountPercent,
+          discountLabel,
+          tableNumber,
+        });
+        await holdCart({
+          label: customerName.trim() || `Open Bill #${Date.now()}`,
+          cart_data: cartData,
+          item_count: lineItems.length,
+          total_minor: total.minor_units,
+          currency: total.currency,
+          bill_type: 'open_bill',
+          customer_name: customerName.trim(),
+        });
+        setDone(true);
+        return;
+      }
+
       const { cartId } = await startSale({ currency: total.currency });
 
       if (discountPercent > 0) {
@@ -416,9 +475,16 @@ export default function PaymentModal({
                     : null,
                 },
               ],
+          ...(tableNumber ? { tableNumber } : {}),
         });
       } catch {
         // Printer may not be connected.
+      }
+
+      try {
+        await createKdsOrderFromSale(saleResult.saleId);
+      } catch {
+        // KDS may not be configured — non-blocking.
       }
 
       if (change) setChangeDue(change);
@@ -428,20 +494,31 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [splitMode, splits, method, otherLabel, lineItems, total, discountPercent, discountLabel, change, userId, tenderedMinor]);
+  }, [method, customerName, lineItems, subtotalMinor, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor]);
 
   useEffect(() => {
     if (!done) return;
     const timer = setTimeout(() => {
-      onComplete();
+      animateLeave(onComplete);
     }, changeDue ? 3000 : 1500);
     return () => clearTimeout(timer);
-  }, [done, changeDue, onComplete]);
+  }, [done, changeDue, onComplete, animateLeave]);
 
-  if (!open) return null;
+  // Auto-dismiss after leave animation completes
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = setTimeout(handleLeaveEnd, MS_200);
+    return () => clearTimeout(timer);
+  }, [leaving, handleLeaveEnd]);
+
+  if (!open && !leaving) return null;
+
+  const stateClass = leaving ? 'payment-overlay--exit' : 'payment-overlay--enter';
+  const modalStateClass = leaving ? 'payment-modal--exit' : 'payment-modal--enter';
 
   return (
-    <div className="payment-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria')}>
+    <Localized id="payment-dialog-aria" attrs={{ 'aria-label': true }}>
+    <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria')}>
       <QrisQrDisplay
         amount={total.minor_units}
         currency={total.currency}
@@ -451,7 +528,7 @@ export default function PaymentModal({
         onPaymentConfirmed={handleQrConfirmed}
       />
 
-      <div className="payment-modal">
+      <div className={`payment-modal ${modalStateClass}`}>
         {done ? (
           <div className="payment-done">
             <Localized id="payment-done-title">
@@ -477,14 +554,16 @@ export default function PaymentModal({
               <Localized id="payment-title">
                 <h2 className="payment-title">Complete Sale</h2>
               </Localized>
+              <Localized id="payment-close-aria" attrs={{ 'aria-label': true }}>
               <button
                 type="button"
                 className="payment-close"
-                onClick={onClose}
+                onClick={() => animateLeave(onClose)}
                 aria-label={l10n.getString('payment-close-aria')}
               >
                 &times;
               </button>
+              </Localized>
             </div>
 
             <div className="payment-total-row">
@@ -496,31 +575,36 @@ export default function PaymentModal({
 
             {multiCurrency && (
               <div className="payment-currency-selector">
-                <label htmlFor="payment-currency-select" aria-label={l10n.getString('payment-currency-aria')}>
-                  <Localized id="payment-currency-label">
-                    <span className="payment-currency-label">Charge Currency</span>
-                  </Localized>
-                  <select
-                    id="payment-currency-select"
-                    className="payment-currency-select"
-                    value={selectedCurrency}
-                    onChange={(e) => setSelectedCurrency(e.target.value)}
-                    aria-label={l10n.getString('payment-currency-select-aria')}
-                  >
-                    {currencies.length === 0 && (
-                      <option value={total.currency}>{total.currency}</option>
-                    )}
-                    {currencies.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.code} — {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <Localized id="payment-currency-aria" attrs={{ 'aria-label': true }}>
+                  <label htmlFor="payment-currency-select" aria-label={l10n.getString('payment-currency-aria')}>
+                    <Localized id="payment-currency-label">
+                      <span className="payment-currency-label">Charge Currency</span>
+                    </Localized>
+                    <Localized id="payment-currency-select-aria" attrs={{ 'aria-label': true }}>
+                      <select
+                        id="payment-currency-select"
+                        className="payment-currency-select"
+                        value={selectedCurrency}
+                        onChange={(e) => setSelectedCurrency(e.target.value)}
+                        aria-label={l10n.getString('payment-currency-select-aria')}
+                      >
+                        {currencies.length === 0 && (
+                          <option value={total.currency}>{total.currency}</option>
+                        )}
+                        {currencies.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.code} — {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Localized>
+                  </label>
+                </Localized>
               </div>
             )}
 
             {selectedCurrency !== total.currency && exchangeRateInfo && (
+              <Localized id="payment-exchange-aria" attrs={{ 'aria-label': true }}>
               <div className="payment-exchange-notice" aria-label={l10n.getString('payment-exchange-aria')}>
                 <div className="payment-exchange-row">
                   <Localized id="payment-exchange-rate">
@@ -543,9 +627,11 @@ export default function PaymentModal({
                   <span>{exchangeRateInfo.effective_date}</span>
                 </div>
               </div>
+              </Localized>
             )}
 
             {selectedCurrency !== total.currency && (
+              <Localized id="payment-receipt-currency-aria" attrs={{ 'aria-label': true }}>
               <div className="payment-receipt-currency" aria-label={l10n.getString('payment-receipt-currency-aria')}>
                 <div className="payment-receipt-currency-row">
                   <Localized id="payment-charged-in">
@@ -577,6 +663,7 @@ export default function PaymentModal({
                   </span>
                 </div>
               </div>
+              </Localized>
             )}
 
             {!splitMode && (
@@ -608,6 +695,7 @@ export default function PaymentModal({
                         checked={method === 'other'}
                         onChange={() => setMethod('other')}
                       />
+                      <Localized id="payment-other-aria" attrs={{ 'aria-label': true }}>
                       <Localized id="payment-other-placeholder" attrs={{ placeholder: true }}>
                         <input
                           type="text"
@@ -619,12 +707,43 @@ export default function PaymentModal({
                             setOtherLabel(e.target.value);
                           }}
                           disabled={method !== 'other'}
-                          aria-label={l10n.getString('payment-other-aria')}
                         />
                       </Localized>
+                      </Localized>
+                    </label>
+                    <label className="payment-method-label">
+                      <input
+                        type="radio"
+                        name="payment-method"
+                        value="open_bill"
+                        checked={method === 'open_bill'}
+                        onChange={() => setMethod('open_bill')}
+                      />
+                      <span className="payment-method-name">
+                        Open Bill
+                      </span>
                     </label>
                   </div>
                 </fieldset>
+
+                {method === 'open_bill' && (
+                  <div className="payment-open-bill-section">
+                    <label className="payment-customer-label">
+                      <Localized id="payment-customer-name">
+                        <span>Customer Name</span>
+                      </Localized>
+                      <Localized id="payment-customer-name-aria" attrs={{ 'aria-label': true }}>
+                      <input
+                        type="text"
+                        className="payment-customer-input"
+                        placeholder="e.g. John Doe"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                      />
+                      </Localized>
+                    </label>
+                  </div>
+                )}
 
                 {method === 'cash' && (
                   <div className="payment-cash-section">
@@ -632,6 +751,7 @@ export default function PaymentModal({
                       <Localized id="payment-amount-tendered">
                         <span>Amount Tendered</span>
                       </Localized>
+                      <Localized id="payment-tendered-aria" attrs={{ 'aria-label': true }}>
                       <Localized id="payment-tendered-placeholder" attrs={{ placeholder: true }}>
                         <input
                           type="text"
@@ -640,8 +760,8 @@ export default function PaymentModal({
                           placeholder="0.00"
                           value={tendered}
                           onChange={(e) => setTendered(e.target.value)}
-                          aria-label={l10n.getString('payment-tendered-aria')}
                         />
+                      </Localized>
                       </Localized>
                     </label>
 
@@ -650,27 +770,28 @@ export default function PaymentModal({
                         const totalNum = Number(total.minor_units) / 100;
                         const quickVal = Math.ceil(totalNum / amount) * amount;
                         return (
+                          <Localized key={amount} id="payment-quick-tender-aria" attrs={{ 'aria-label': true }} vars={{ amount: quickVal.toFixed(2) }}>
                           <button
-                            key={amount}
                             type="button"
                             className="payment-quick-btn"
                             onClick={() => setTendered(quickVal.toFixed(2))}
-                            aria-label={l10n.getString('payment-quick-tender-aria', { amount: quickVal.toFixed(2) })}
                           >
                             ${quickVal}
                           </button>
+                          </Localized>
                         );
                       })}
+                      <Localized id="payment-tender-exact-aria" attrs={{ 'aria-label': true }}>
                       <button
                         type="button"
                         className="payment-quick-btn"
                         onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
-                        aria-label={l10n.getString('payment-tender-exact-aria')}
                       >
                         <Localized id="payment-tender-exact">
                           <span>Exact</span>
                         </Localized>
                       </button>
+                      </Localized>
                     </div>
 
                     {tendered.length > 0 && (
@@ -697,17 +818,18 @@ export default function PaymentModal({
                         Generate a QRIS QR code for the customer to scan with their payment app.
                       </p>
                     </Localized>
+                    <Localized id="payment-qris-btn-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-qris-btn"
                       onClick={handleQrPay}
                       disabled={processing}
-                      aria-label={l10n.getString('payment-qris-btn-aria')}
                     >
                       <Localized id="payment-qris-pay">
                         <span>Pay with QR</span>
                       </Localized>
                     </button>
+                    </Localized>
                   </div>
                 )}
               </>
@@ -720,26 +842,28 @@ export default function PaymentModal({
                     <span className="payment-section-title">Split Payments</span>
                   </Localized>
                   <div className="payment-split-actions">
+                    <Localized id="payment-split-evenly-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-split-btn"
                       onClick={autoSplitEvenly}
-                      aria-label={l10n.getString('payment-split-evenly-aria')}
                     >
                       <Localized id="payment-split-evenly">
                         <span>Split Evenly</span>
                       </Localized>
                     </button>
+                    </Localized>
+                    <Localized id="payment-split-add-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-split-btn"
                       onClick={addSplit}
-                      aria-label={l10n.getString('payment-split-add-aria')}
                     >
                       <Localized id="payment-split-add">
                         <span>+ Add Split</span>
                       </Localized>
                     </button>
+                    </Localized>
                   </div>
                 </div>
 
@@ -767,6 +891,7 @@ export default function PaymentModal({
                             checked={s.method === 'other'}
                             onChange={() => updateSplit(s.id, { method: 'other' })}
                           />
+                          <Localized id="payment-split-other-aria" attrs={{ 'aria-label': true }}>
                           <Localized id="payment-split-other-placeholder" attrs={{ placeholder: true }}>
                             <input
                               type="text"
@@ -775,13 +900,14 @@ export default function PaymentModal({
                               value={s.otherLabel}
                               onChange={(e) => updateSplit(s.id, { otherLabel: e.target.value })}
                               disabled={s.method !== 'other'}
-                              aria-label={l10n.getString('payment-split-other-aria')}
                             />
+                          </Localized>
                           </Localized>
                         </label>
                       </div>
                       <div className="payment-split-amount-group">
                         <span className="payment-split-currency">$</span>
+                        <Localized id="payment-split-amount-aria" attrs={{ 'aria-label': true }}>
                         <Localized id="payment-split-amount-placeholder" attrs={{ placeholder: true }}>
                           <input
                             type="text"
@@ -790,19 +916,20 @@ export default function PaymentModal({
                             placeholder="0.00"
                             value={s.amountMinor}
                             onChange={(e) => updateSplit(s.id, { amountMinor: e.target.value })}
-                            aria-label={l10n.getString('payment-split-amount-aria')}
                           />
                         </Localized>
+                        </Localized>
                       </div>
+                      <Localized id="payment-split-remove-aria" attrs={{ 'aria-label': true }}>
                       <button
                         type="button"
                         className="payment-split-remove"
                         onClick={() => removeSplit(s.id)}
                         disabled={splits.length <= 1}
-                        aria-label={l10n.getString('payment-split-remove-aria')}
                       >
                         &times;
                       </button>
+                      </Localized>
                     </div>
                   ))}
                 </div>
@@ -838,7 +965,7 @@ export default function PaymentModal({
 
             <div className="payment-actions">
               <Localized id="payment-cancel">
-                <Button variant="ghost" onClick={onClose} disabled={processing}>
+                <Button variant="ghost" onClick={() => animateLeave(onClose)} disabled={processing}>
                   Cancel
                 </Button>
               </Localized>
@@ -848,14 +975,21 @@ export default function PaymentModal({
                 disabled={!canComplete}
                 onClick={complete}
               >
-                <Localized id="payment-complete">
-                  <span>Complete Sale</span>
-                </Localized>
+                {method === 'open_bill' ? (
+                  <Localized id="payment-open-bill">
+                    <span>Open Bill</span>
+                  </Localized>
+                ) : (
+                  <Localized id="payment-complete">
+                    <span>Complete Sale</span>
+                  </Localized>
+                )}
               </Button>
             </div>
           </>
         )}
       </div>
     </div>
+    </Localized>
   );
 }

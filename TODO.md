@@ -1,10 +1,30 @@
 # TODO — OZ-POS v0.0.3
 
+## Completed Improvements
+
+- [x] **KDS integration** — `createKdsOrderFromSale()` called from PaymentModal after `completeSale()`
+- [x] **Open bill table number** — table number persisted and restored with open bills
+- [x] **Toast error feedback** — silent catch blocks now surface errors via toast
+- [x] **Localized multi-child fix** — KioskScreen + KdsScreen expression+text wrapped in `<span>`
+
+## Animations (Restaurant POS)
+
+- [x] **PaymentModal** — overlay fade + modal slide-up on open; fade-out + scale-down on close
+- [x] **Cart line item removal** — slide-out/fade-out animation before DOM removal
+- [ ] **Modal exit animations** — Hold cart, held carts, shift modals (all fade in but snap out)
+- [ ] **Add-to-cart feedback** — brief pulse/green flash on RestaurantMenu/ProductLookup cards when tapped
+- [ ] **Quantity change pulse** — scale-bounce on qty value when +/- is tapped
+- [ ] **Total amount change highlight** — amber pulse when discount/tip/service charge updates total
+- [ ] **Staggered card entrance** — RestaurantMenu grid cards cascade in with incremental delay
+- [ ] **Discount/tip/service charge form slide-in** — form rows slide down instead of appearing instantly
+- [ ] **Empty cart ↔ populated cart cross-fade** — smooth transition between bag icon and line items
+- [ ] **Sale complete celebration** — checkmark draw or confetti on PaymentModal "Done" screen
+
 ## High Priority
 
-- [ ] **Full i18n migration** — scan all `.tsx` files for hardcoded English strings and move to Fluent `.ftl` files (known: ProductLookupScreen fallback notice)
+- [x] **Full i18n migration** — Fluent `.ftl` files for all screens
 - [ ] **White-label theming** — brand logo upload, primary color picker, theme preview in Settings (infra already in place)
-- [ ] **SQLite-backed cart** — replace in-memory CartStore with SQLite persistence (TODOs in `apps/*/state.rs`)
+- [x] **SQLite-backed cart** — replace in-memory CartStore with SQLite persistence (`active_carts` table, JSON blob, db::cart module, both clients)
 
 ## Medium Priority
 
