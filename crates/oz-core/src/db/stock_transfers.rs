@@ -17,6 +17,7 @@ impl Store<'_> {
     ///
     /// Generates a unique transfer number (`TRF-<timestamp>-<short-id>`).
     /// All lines are inserted in the same transaction as the header.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_transfer(
         &self,
         source_location: Option<&str>,
@@ -468,7 +469,9 @@ impl Store<'_> {
 /// A line-level received quantity for [`Store::receive_transfer`].
 #[derive(Debug, Clone)]
 pub struct ReceivedLine {
+    /// FK to stock_transfer_lines.id.
     pub line_id: String,
+    /// Quantity actually received for this line.
     pub received_qty: i64,
 }
 

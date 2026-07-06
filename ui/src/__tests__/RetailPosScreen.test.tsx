@@ -13,7 +13,6 @@ import { withFluent } from '@/locales/test-utils';
 import salesFtl from '@/locales/sales.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
-import settingsFtl from '@/locales/settings.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import type { CartLine, Money, LineId } from '@/types/domain';
 
@@ -47,8 +46,8 @@ vi.mock('@/features/sales/usePosState', () => ({
     discountLabel: '',
     discountAmount: null,
     addProduct: vi.fn(),
-    removeLine: vi.fn((id: string) => {}),
-    updateQty: vi.fn((id: string, qty: number) => {}),
+    removeLine: vi.fn((_id: string) => {}),
+    updateQty: vi.fn((_id: string, _qty: number) => {}),
     setDiscount: vi.fn(),
     resetCart: vi.fn(),
   })),

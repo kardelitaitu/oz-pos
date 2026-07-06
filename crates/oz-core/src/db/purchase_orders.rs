@@ -307,14 +307,14 @@ impl Store<'_> {
 
         for line in &po.lines {
             if !line.sku.is_empty() {
-                if let Err(e) = self.adjust_stock(&line.sku, line.qty) {
+                let _ = self.adjust_stock(&line.sku, line.qty).map_err(|e| {
                     tracing::warn!(
                         sku = %line.sku,
                         qty = line.qty,
                         error = %e,
                         "failed to adjust stock during PO receive"
                     );
-                }
+                });
             }
         }
 

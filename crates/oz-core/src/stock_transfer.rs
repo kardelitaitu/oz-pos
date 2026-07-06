@@ -10,30 +10,50 @@ use serde::{Deserialize, Serialize};
 /// A single stock transfer between locations/terminals.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StockTransfer {
+    /// UUID primary key.
     pub id: String,
+    /// Human-readable transfer number (e.g., "TRF-20260701-001").
     pub transfer_number: String,
+    /// Status: draft, pending, in_transit, received, cancelled.
     pub status: String,
+    /// Source store/location name.
     pub source_location: Option<String>,
+    /// Destination store/location name.
     pub destination_location: Option<String>,
+    /// FK to terminals.id — source terminal device.
     pub source_terminal_id: Option<String>,
+    /// FK to terminals.id — destination terminal device.
     pub destination_terminal_id: Option<String>,
+    /// Free-form notes.
     pub notes: String,
+    /// FK to users.id — who created the transfer.
     pub created_by: String,
+    /// FK to users.id — who received the transfer (None until received).
     pub received_by: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 timestamp when the transfer was sent (None until sent).
     pub sent_at: Option<String>,
+    /// ISO-8601 timestamp when the transfer was received (None until received).
     pub received_at: Option<String>,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
 /// A line item in a stock transfer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StockTransferLine {
+    /// UUID primary key.
     pub id: String,
+    /// FK to stock_transfers.id.
     pub transfer_id: String,
+    /// Product SKU being transferred.
     pub sku: String,
+    /// Product display name (denormalised).
     pub product_name: String,
+    /// Quantity being transferred.
     pub qty: i64,
+    /// Quantity actually received (0 until received).
     pub received_qty: i64,
 }
 
