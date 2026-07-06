@@ -353,6 +353,27 @@
   outline-offset: -2px;
 }
 
+/* ── Price override button (inside cart line) ───────────────── */
+
+.pos-cart-line-override {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-accent);
+  background: var(--color-accent-subtle, rgba(99, 102, 241, 0.1));
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--duration-100) var(--ease-out), color var(--duration-100) var(--ease-out);
+}
+
+.pos-cart-line-override:hover {
+  background: var(--color-accent);
+  color: var(--color-accent-fg, #fff);
+}
+
 /* ── Responsive: tablet thumbnail shrink ────────────────────
  * On narrower viewports the right-side panel reflows below the
  * menu (see CartPanel.css @media) and we trim the thumbnail so

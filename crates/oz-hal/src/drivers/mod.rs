@@ -10,6 +10,7 @@ pub mod drawer;
 pub mod escpos;
 pub mod mock;
 pub mod receipt;
+pub mod scale;
 pub mod serial_display;
 pub mod serial_scanner;
 pub mod tcp_printer;

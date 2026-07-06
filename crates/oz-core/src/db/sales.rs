@@ -119,6 +119,7 @@ impl Store<'_> {
                 currency,
             },
             tax_rate_id: row.get("tax_rate_id")?,
+            serial_number: row.get("serial_number")?,
         })
     }
 
@@ -150,13 +151,14 @@ impl Store<'_> {
                 .expect("currency bytes are valid UTF-8");
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                                        tax_minor, tax_rate_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                                        tax_minor, tax_rate_id, serial_number)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     line.id, line.sale_id, line.sku, line.qty,
                     line.unit_price.minor_units, line.line_total.minor_units,
                     unit_cur, line.line_position,
                     line.tax_amount.minor_units, line.tax_rate_id,
+                    line.serial_number,
                 ],
             )?;
         }
@@ -268,7 +270,7 @@ impl Store<'_> {
 
         let mut line_stmt = self.conn.prepare(
             "SELECT id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                    tax_minor, tax_rate_id
+                    tax_minor, tax_rate_id, serial_number
              FROM sale_lines WHERE sale_id = ?1 ORDER BY line_position",
         )?;
         let line_rows = line_stmt.query_map(params![id], Self::row_to_sale_line)?;
@@ -482,6 +484,37 @@ impl Store<'_> {
             });
         }
         Ok(())
+    }
+}
+
+// ── Receipt Barcodes ──────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// Store a receipt barcode mapping for a sale.
+    pub fn save_receipt_barcode(&self, sale_id: &str, barcode: &str) -> Result<(), CoreError> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO receipt_barcodes (id, sale_id, barcode) VALUES (?1, ?2, ?3)",
+            params![id, sale_id, barcode],
+        )?;
+        Ok(())
+    }
+
+    /// Look up a sale by its receipt barcode.
+    pub fn lookup_sale_by_receipt_barcode(&self, barcode: &str) -> Result<Option<Sale>, CoreError> {
+        let sale_id: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT sale_id FROM receipt_barcodes WHERE barcode = ?1",
+                params![barcode],
+                |row| row.get(0),
+            )
+            .ok();
+
+        match sale_id {
+            Some(id) => self.get_sale(&id),
+            None => Ok(None),
+        }
     }
 }
 
@@ -1211,6 +1244,7 @@ mod tests {
                 line_position: 1,
                 tax_amount: price(0),
                 tax_rate_id: None,
+                serial_number: None,
             }],
         };
 
@@ -1448,6 +1482,7 @@ mod tests {
                 line_position: 1,
                 tax_amount: price(0),
                 tax_rate_id: None,
+                serial_number: None,
             }],
         }
     }
@@ -1547,6 +1582,7 @@ mod tests {
             line_position: 1,
             tax_amount: price(0),
             tax_rate_id: None,
+            serial_number: None,
         };
         let line2 = SaleLine {
             id: uuid::Uuid::new_v4().to_string(),
@@ -1558,6 +1594,7 @@ mod tests {
             line_position: 2,
             tax_amount: price(0),
             tax_rate_id: None,
+            serial_number: None,
         };
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mut sale = Sale {
@@ -1683,6 +1720,7 @@ mod tests {
                 line_position: 1,
                 tax_amount: price(0),
                 tax_rate_id: None,
+                serial_number: None,
             }],
         };
         s.create_sale(&sale).unwrap();

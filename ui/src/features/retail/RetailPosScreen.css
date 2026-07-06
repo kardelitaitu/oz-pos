@@ -2092,3 +2092,140 @@
 .retail-customer-close-btn:hover {
   background: var(--color-border-3);
 }
+
+/* ── Scale Indicator ────────────────────────────────────────── */
+
+.scale-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.scale-indicator--error {
+  color: var(--color-danger);
+}
+
+.scale-indicator--idle {
+  color: var(--color-muted);
+}
+
+.scale-indicator-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scale-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.scale-indicator-dot--stable {
+  background: var(--color-success);
+}
+
+.scale-indicator-dot--unstable {
+  background: var(--color-warning);
+  animation: scale-pulse 1s ease-in-out infinite;
+}
+
+@keyframes scale-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.scale-indicator-weight {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 60px;
+}
+
+.scale-indicator-stable-label {
+  font-size: 10px;
+  color: var(--color-muted);
+}
+
+.scale-indicator-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.scale-indicator-target {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.scale-indicator-add-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--color-success);
+  color: var(--color-white);
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.scale-indicator-add-btn:hover {
+  background: var(--color-success-2);
+}
+
+.scale-indicator-clear-btn {
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.scale-indicator-clear-btn:hover {
+  color: var(--color-danger);
+}
+
+/* ── Weigh button on product cards ──────────────────────────── */
+
+.retail-product-weigh-btn {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: var(--color-primary);
+  color: var(--color-white);
+  border-radius: 2px;
+  cursor: pointer;
+  z-index: 2;
+  line-height: 1;
+  user-select: none;
+}
+
+.retail-product-weigh-btn:hover {
+  background: var(--color-primary-dark);
+  transform: scale(1.1);
+}

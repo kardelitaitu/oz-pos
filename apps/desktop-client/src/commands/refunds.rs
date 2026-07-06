@@ -5,7 +5,7 @@ use tauri::{State, command};
 
 use oz_core::db::Store;
 use oz_core::permissions;
-use oz_core::{Money, Refund, RefundLine};
+use oz_core::{Money, Refund, RefundLine, Sale};
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
@@ -114,6 +114,19 @@ pub async fn process_refund(
         refund_id: refund.id,
         total_minor,
     })
+}
+
+/// Look up a sale by its receipt barcode for quick return.
+#[command]
+pub async fn lookup_sale_by_receipt_barcode(
+    barcode: String,
+    state: State<'_, AppState>,
+) -> Result<Option<Sale>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
+    drop(db);
+    Ok(sale)
 }
 
 /// List all refunds for a sale.

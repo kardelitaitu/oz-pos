@@ -173,6 +173,7 @@ vi.mock('@/api/sales', () => ({
   exportDailySummary: vi.fn(() => Promise.resolve([])),
   exportSalesByHour: vi.fn(() => Promise.resolve([])),
   exportEodReport: vi.fn(() => Promise.resolve(null)),
+  getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
 }));
 
 vi.mock('@/api/kds', () => ({
@@ -416,7 +417,8 @@ describe('RetailPosScreen', () => {
   it('opens quantity picker on long-press of a product button', async () => {
     render(wrap(<RetailPosScreen />));
 
-    const productBtn = await screen.findByRole('button', { name: /indomie goreng/i });
+    const productBtns = await screen.findAllByRole('button', { name: /indomie goreng/i });
+    const productBtn = productBtns[0]!;
     fireEvent.pointerDown(productBtn);
     await new Promise(r => setTimeout(r, 500));
     fireEvent.pointerUp(productBtn);
@@ -433,7 +435,8 @@ describe('RetailPosScreen', () => {
 
     await showAllProducts();
 
-    const productBtn = await screen.findByRole('button', { name: /indomie goreng/i });
+    const productBtns = await screen.findAllByRole('button', { name: /indomie goreng/i });
+    const productBtn = productBtns[0]!;
     fireEvent.pointerDown(productBtn);
     await new Promise(r => setTimeout(r, 500));
     fireEvent.pointerUp(productBtn);

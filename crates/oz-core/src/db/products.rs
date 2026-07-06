@@ -41,7 +41,7 @@ impl Store<'_> {
     pub fn list_products(&self) -> Result<Vec<ProductWithDetails>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, p.track_serial,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -66,7 +66,7 @@ impl Store<'_> {
 
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, p.track_serial,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -98,7 +98,7 @@ impl Store<'_> {
         }
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, p.track_serial,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -158,8 +158,8 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         let result = tx.execute(
-            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 id,
                 sku.trim(),
@@ -171,6 +171,7 @@ impl Store<'_> {
                 now,
                 now,
                 now,
+                0i32,
             ],
         );
 
@@ -210,6 +211,7 @@ impl Store<'_> {
             created_at: now.clone(),
             updated_at: now.clone(),
             price_updated_at: now,
+            track_serial: false,
         })
     }
 
@@ -269,7 +271,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -282,7 +284,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);
@@ -291,6 +293,24 @@ impl Store<'_> {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Set the `track_serial` flag for a product identified by SKU.
+    pub fn set_product_track_serial(&self, sku: &str, track_serial: bool) -> Result<(), CoreError> {
+        let rows = self.conn.execute(
+            "UPDATE products SET track_serial = ?1 WHERE sku = ?2",
+            params![track_serial as i64, sku],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "product",
+                id: sku.to_owned(),
+            });
+        }
+        if let Some(cache) = &self.cache {
+            cache.invalidate_product(sku);
+        }
+        Ok(())
     }
 
     /// Delete a product by SKU.

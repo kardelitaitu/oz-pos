@@ -106,3 +106,94 @@ impl CoreError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn db_error_kind() {
+        let err = CoreError::Db(rusqlite::Error::InvalidParameterName("x".into()));
+        assert!(matches!(err.kind(), CoreErrorKind::Db));
+        assert!(err.to_string().contains("database error"));
+    }
+
+    #[test]
+    fn money_overflow_kind_and_display() {
+        let err = CoreError::MoneyOverflow {
+            left: 1_000_000,
+            right: 500_000,
+            currency: "IDR".into(),
+        };
+        assert!(matches!(err.kind(), CoreErrorKind::MoneyOverflow));
+        let msg = err.to_string();
+        assert!(msg.contains("money overflow"));
+        assert!(msg.contains("IDR"));
+        assert!(msg.contains("1000000"));
+        assert!(msg.contains("500000"));
+    }
+
+    #[test]
+    fn currency_mismatch_kind_and_display() {
+        let err = CoreError::CurrencyMismatch("USD".into(), "IDR".into());
+        assert!(matches!(err.kind(), CoreErrorKind::CurrencyMismatch));
+        let msg = err.to_string();
+        assert!(msg.contains("currency mismatch"));
+        assert!(msg.contains("USD"));
+        assert!(msg.contains("IDR"));
+    }
+
+    #[test]
+    fn not_found_kind_and_display() {
+        let err = CoreError::NotFound {
+            entity: "product",
+            id: "prod-1".into(),
+        };
+        assert!(matches!(err.kind(), CoreErrorKind::NotFound));
+        let msg = err.to_string();
+        assert!(msg.contains("not found"));
+        assert!(msg.contains("product"));
+        assert!(msg.contains("prod-1"));
+    }
+
+    #[test]
+    fn conflict_kind_and_display() {
+        let err = CoreError::Conflict {
+            entity: "category",
+            field: "name",
+        };
+        assert!(matches!(err.kind(), CoreErrorKind::Conflict));
+        let msg = err.to_string();
+        assert!(msg.contains("conflict"));
+        assert!(msg.contains("category"));
+        assert!(msg.contains("name"));
+    }
+
+    #[test]
+    fn validation_kind_and_display() {
+        let err = CoreError::Validation {
+            field: "price",
+            message: "must be positive".into(),
+        };
+        assert!(matches!(err.kind(), CoreErrorKind::Validation));
+        let msg = err.to_string();
+        assert!(msg.contains("validation error"));
+        assert!(msg.contains("price"));
+        assert!(msg.contains("must be positive"));
+    }
+
+    #[test]
+    fn internal_kind_and_display() {
+        let err = CoreError::Internal("something went wrong".into());
+        assert!(matches!(err.kind(), CoreErrorKind::Internal));
+        let msg = err.to_string();
+        assert!(msg.contains("internal error"));
+        assert!(msg.contains("something went wrong"));
+    }
+
+    #[test]
+    fn platform_error_kind() {
+        let err = CoreError::Platform(platform_core::PlatformError::Internal("test".into()));
+        assert!(matches!(err.kind(), CoreErrorKind::Platform));
+    }
+}

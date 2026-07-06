@@ -22,6 +22,8 @@ pub mod audit;
 pub mod cart;
 pub mod cash_payouts;
 pub mod customers;
+/// Gift cards — issue, redeem, top-up, freeze, balance checks.
+pub mod gift_cards;
 pub mod kds;
 pub mod loyalty;
 pub mod offline;
@@ -30,13 +32,21 @@ pub mod payments;
 pub mod product_bundles;
 pub mod products;
 pub mod promotions;
+/// CRUD for purchase orders.
+pub mod purchase_orders;
 pub mod refunds;
 pub mod reports;
 pub mod sales;
 pub mod settings;
 pub mod shifts;
 pub mod staff;
+/// CRUD for stock counts / cycle counting.
+pub mod stock_counts;
+/// CRUD for stock transfers between terminals/stores.
+pub mod stock_transfers;
 pub mod store_profiles;
+/// CRUD for suppliers.
+pub mod suppliers;
 /// CRUD for restaurant tables (floor plan, status management).
 pub mod tables;
 pub mod tax;
@@ -109,7 +119,7 @@ impl Store<'_> {
 
 // ── Default helpers for row mapping ──────────────────────────────────
 
-/// Build a [`crate::Product`] from a `rusqlite::Row`. All 9 `products` columns
+/// Build a [`crate::Product`] from a `rusqlite::Row`. All `products` columns
 /// must be present in the result set.
 pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Product> {
     let sku_str: String = row.get("sku")?;
@@ -128,5 +138,6 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         price_updated_at: row.get("price_updated_at")?,
+        track_serial: row.get("track_serial").unwrap_or(false),
     })
 }

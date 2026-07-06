@@ -49,6 +49,11 @@ pub struct SaleLine {
     /// `None` when no tax was applied (e.g. tax-exempt product).
     #[serde(default)]
     pub tax_rate_id: Option<String>,
+
+    /// Serial number captured at checkout for this line item.
+    /// Present only when the product has `track_serial = true`.
+    #[serde(default)]
+    pub serial_number: Option<String>,
 }
 
 /// A point-of-sale transaction with line items and a state machine.
@@ -160,6 +165,7 @@ impl Sale {
                     line_position: (i as i64) + 1,
                     tax_amount: Money::zero(currency),
                     tax_rate_id: None,
+                    serial_number: None,
                 })
             })
             .collect::<Option<Vec<_>>>()?;

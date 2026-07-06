@@ -97,14 +97,14 @@ describe('RoleBadge', () => {
     expect(badge).toBeInTheDocument();
   });
 
-  it('has logout button with correct aria-label', () => {
+  it('has logout button with correct title', () => {
     mockUseAuth.mockReturnValue({
       session: { display_name: 'Alice', role_name: 'cashier' },
       logout: vi.fn(),
     });
     renderRoleBadge();
-    // Fluent wraps interpolated variables in Unicode Bidi markers.
-    const btn = screen.getByRole('button', { name: /log out alice/i });
+    // Use title which is a plain string without bidi markers.
+    const btn = screen.getByTitle('Log out');
     expect(btn).toBeInTheDocument();
   });
 
@@ -115,7 +115,7 @@ describe('RoleBadge', () => {
       logout,
     });
     renderRoleBadge();
-    await userEvent.click(screen.getByRole('button', { name: /log out alice/i }));
+    await userEvent.click(screen.getByTitle('Log out'));
     expect(logout).toHaveBeenCalledTimes(1);
   });
 

@@ -274,6 +274,80 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'reports/SalesReportScreen.tsx',
     css: ['reports/SalesReportScreen.css'],
   },
+
+  // ── Gift Cards ─────────────────────────────────────────
+  {
+    name: 'GiftCardsScreen',
+    tsx: 'gift-cards/GiftCardsScreen.tsx',
+    css: ['gift-cards/GiftCardsScreen.css'],
+    dynamicClassPrefixes: ['gift-card-status--', 'gift-card-txn-type--'],
+    externalClasses: [
+      'gift-cards-modal-overlay',
+      'gift-cards-modal',
+      'gift-cards-modal-title',
+      'gift-cards-modal-form',
+      'gift-cards-modal-field',
+      'gift-cards-modal-label',
+      'gift-cards-modal-input',
+      'gift-cards-modal-error',
+      'gift-cards-modal-actions',
+    ],
+  },
+
+  // ── Stock Counting ─────────────────────────────────────
+  {
+    name: 'StockCountsScreen',
+    tsx: 'inventory/StockCountsScreen.tsx',
+    css: ['inventory/StockCountsScreen.css'],
+    dynamicClassPrefixes: ['sc-badge--'],
+    externalClasses: ['sc-card-type', 'sc-card-date', 'sc-badge'],
+  },
+  {
+    name: 'StockCountDetail',
+    tsx: 'inventory/StockCountDetail.tsx',
+    css: ['inventory/StockCountDetail.css'],
+    dynamicClassPrefixes: ['sc-badge--', 'sc-add-line-item--', 'sc-diff-'],
+  },
+  {
+    name: 'StockCountForm',
+    tsx: 'inventory/StockCountForm.tsx',
+    css: ['inventory/StockCountForm.css'],
+    dynamicClassPrefixes: ['sc-type-btn--'],
+  },
+  {
+    name: 'StockCountHistory',
+    tsx: 'inventory/StockCountHistory.tsx',
+    css: ['inventory/StockCountHistory.css'],
+    dynamicClassPrefixes: ['sc-hist-item--'],
+  },
+
+  // ── Stock Transfers ────────────────────────────────────
+  {
+    name: 'StockTransfersScreen',
+    tsx: 'stock-transfers/StockTransfersScreen.tsx',
+    css: ['stock-transfers/StockTransfersScreen.css'],
+    dynamicClassPrefixes: ['stock-transfers-badge--'],
+    externalClasses: ['stock-transfers-detail'],
+  },
+
+  // ── Purchasing ─────────────────────────────────────────
+  {
+    name: 'SuppliersScreen',
+    tsx: 'purchasing/SuppliersScreen.tsx',
+    css: ['purchasing/SuppliersScreen.css'],
+    dynamicClassPrefixes: ['suppliers-badge--'],
+  },
+  {
+    name: 'PurchaseOrdersScreen',
+    tsx: 'purchasing/PurchaseOrdersScreen.tsx',
+    css: ['purchasing/PurchaseOrdersScreen.css'],
+    dynamicClassPrefixes: ['po-status--'],
+  },
+  {
+    name: 'PurchaseOrderForm',
+    tsx: 'purchasing/PurchaseOrderForm.tsx',
+    css: ['purchasing/PurchaseOrderForm.css'],
+  },
 ];
 
 // ── Tests ─────────────────────────────────────────────────────────

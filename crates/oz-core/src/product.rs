@@ -51,6 +51,10 @@ pub struct Product {
     /// ISO-8601 timestamp of the last price change.
     /// Used by the front-end to show a price-volatility hint.
     pub price_updated_at: String,
+
+    /// Whether this product requires serial number capture at checkout.
+    #[serde(default)]
+    pub track_serial: bool,
 }
 
 impl Product {
@@ -77,6 +81,7 @@ impl Product {
             created_at: String::new(),
             updated_at: String::new(),
             price_updated_at: String::new(),
+            track_serial: false,
         }
     }
 

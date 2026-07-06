@@ -319,6 +319,70 @@ impl EventHandler<ProductCreated> for AuditLogHandler {
     }
 }
 
+/// Handler that earns loyalty points into a customer's loyalty account
+/// when a sale completes.
+///
+/// If the sale has a linked customer, this handler calls
+/// `Store::earn_points()` to credit the loyalty_accounts table.
+/// The earning rate is determined by the customer's tier multiplier.
+#[derive(Debug)]
+pub struct LoyaltyEarnHandler {
+    db: Arc<Mutex<Connection>>,
+}
+
+impl LoyaltyEarnHandler {
+    /// Create a new handler with a shared database connection.
+    pub fn new(db: Arc<Mutex<Connection>>) -> Self {
+        Self { db }
+    }
+}
+
+impl EventHandler<SaleCompleted> for LoyaltyEarnHandler {
+    fn handle(&self, event: &SaleCompleted) -> ModuleResult {
+        let Some(ref customer_id) = event.customer_id else {
+            info!(
+                sale_id = %event.sale_id,
+                "loyalty earn handler: sale has no customer, skipping"
+            );
+            return Ok(());
+        };
+
+        let conn = self
+            .db
+            .lock()
+            .map_err(|e| anyhow::anyhow!("loyalty earn handler: db lock failed: {e}"))?;
+        let store = Store::new(&conn);
+
+        // Get or create a loyalty account for this customer.
+        let account = store
+            .get_or_create_loyalty_account(customer_id)
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "loyalty earn handler: failed to get/create account for {customer_id}: {e}"
+                )
+            })?;
+
+        // Earn points based on the sale total.
+        store
+            .earn_points(customer_id, &event.sale_id, event.total_minor)
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "loyalty earn handler: earn_points failed for customer {customer_id}: {e}"
+                )
+            })?;
+
+        info!(
+            customer_id = %customer_id,
+            sale_id = %event.sale_id,
+            account_id = %account.id,
+            total_minor = event.total_minor,
+            "loyalty earn handler: points credited"
+        );
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

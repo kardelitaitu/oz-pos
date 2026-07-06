@@ -237,6 +237,12 @@ pub async fn override_line_price(
 // ── Complete Sale ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+pub struct SerialNumberArg {
+    pub sku: String,
+    pub serial: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CompleteSaleArgs {
     pub cart_id: CartId,
     pub payment_method: String,
@@ -251,6 +257,8 @@ pub struct CompleteSaleArgs {
     pub payment_splits: Option<Vec<PaymentSplitArg>>,
     /// Optional customer name (for credit sales).
     pub customer_name: Option<String>,
+    /// Optional serial numbers captured at checkout for track_serial products.
+    pub serial_numbers: Option<Vec<SerialNumberArg>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -397,6 +405,16 @@ pub async fn complete_sale(
         let db = state.db.lock().await;
         let store = Store::new(&db);
         store.compute_sale_tax(&mut sale, &lua_overrides)?;
+
+        // Match serial numbers from args to sale lines by SKU.
+        if let Some(ref serial_numbers) = args.serial_numbers {
+            for sn in serial_numbers {
+                if let Some(line) = sale.lines.iter_mut().find(|l| l.sku == sn.sku) {
+                    line.serial_number = Some(sn.serial.clone());
+                }
+            }
+        }
+
         store.create_sale(&sale)?;
 
         // Create payment records for each split (or a single payment record

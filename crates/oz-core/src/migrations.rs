@@ -176,8 +176,36 @@ pub const ALL: &[Migration] = &[
         sql: include_str!("../migrations/043_price_updated_at.sql"),
     },
     Migration {
-        id: "044_sale_lines_overridden_price.sql",
-        sql: include_str!("../migrations/044_sale_lines_overridden_price.sql"),
+        id: "045_serial_number.sql",
+        sql: include_str!("../migrations/045_serial_number.sql"),
+    },
+    Migration {
+        id: "046_gift_cards.sql",
+        sql: include_str!("../migrations/046_gift_cards.sql"),
+    },
+    Migration {
+        id: "046_suppliers.sql",
+        sql: include_str!("../migrations/046_suppliers.sql"),
+    },
+    Migration {
+        id: "046_stock_counts.sql",
+        sql: include_str!("../migrations/046_stock_counts.sql"),
+    },
+    Migration {
+        id: "047_purchase_orders.sql",
+        sql: include_str!("../migrations/047_purchase_orders.sql"),
+    },
+    Migration {
+        id: "047_stock_transfers.sql",
+        sql: include_str!("../migrations/047_stock_transfers.sql"),
+    },
+    Migration {
+        id: "046_track_serial.sql",
+        sql: include_str!("../migrations/046_track_serial.sql"),
+    },
+    Migration {
+        id: "047_receipt_barcodes.sql",
+        sql: include_str!("../migrations/047_receipt_barcodes.sql"),
     },
 ];
 
@@ -306,6 +334,16 @@ mod tests {
             "loyalty_tiers",
             "loyalty_accounts",
             "loyalty_transactions",
+            "gift_cards",
+            "gift_card_transactions",
+            "suppliers",
+            "stock_counts",
+            "stock_count_lines",
+            "stock_adjustments",
+            "purchase_orders",
+            "purchase_order_lines",
+            "stock_transfers",
+            "stock_transfer_lines",
             "active_carts",
             "tables",
             "workspaces",

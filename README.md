@@ -79,6 +79,26 @@ cd apps/desktop-client && cargo tauri dev
 |---------|--------|
 | `cargo clippy --all-targets` | Rust lint |
 | `cargo test --workspace` | Rust tests (400+) |
+| `bash scripts/coverage.sh` | Rust + UI coverage (HTML + JSON in `coverage/`) |
+
+### Measuring test coverage
+
+Cross-platform coverage reports are produced by [`scripts/coverage.sh`](./scripts/coverage.sh) (Linux/macOS) or [`scripts/coverage.ps1`](./scripts/coverage.ps1) (Windows).
+
+```bash
+# Both reports (default)
+bash scripts/coverage.sh
+
+# Just one side
+bash scripts/coverage.sh rust   # → coverage/rust/index.html
+bash scripts/coverage.sh ui     # → coverage/ui/index.html
+```
+
+- **Rust** uses [`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov) (LLVM source-based, cross-platform). The legacy [`.tarpaulin.toml`](./.tarpaulin.toml) stays as a Linux-only fast-path.
+- **UI** uses [`@vitest/coverage-v8`](https://vitest.dev/guide/coverage.html) (the v8 provider, native Node).
+- Both produce HTML + JSON + LCOV in `coverage/`. CI uploads them as workflow artifacts on every merge to `main`.
+
+Prerequisites: `cargo install cargo-llvm-cov` (plus LLVM tools on PATH: `apt install llvm` / `brew install llvm` / `choco install llvm`).
 
 ## Backend Conventions
 

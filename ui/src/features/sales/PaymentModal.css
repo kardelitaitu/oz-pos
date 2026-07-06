@@ -809,3 +809,117 @@
 .payment-customer-search-close:hover {
   background: #e2e8f0;
 }
+
+.payment-loyalty-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: #fef9e7;
+  border: 1px solid #f9e79f;
+  border-radius: 6px;
+}
+
+.payment-loyalty-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-loyalty-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #7d6608;
+}
+
+.payment-loyalty-value {
+  font-size: 13px;
+  color: #7d6608;
+}
+
+.payment-loyalty-redeem-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  background: #f39c12;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.payment-loyalty-redeem-btn:hover {
+  background: #e67e22;
+}
+
+.payment-loyalty-active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.payment-loyalty-discount-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #27ae60;
+}
+
+.payment-loyalty-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  background: transparent;
+  color: #e74c3c;
+  border: 1px solid #e74c3c;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.payment-loyalty-cancel-btn:hover {
+  background: #fdf2f2;
+}
+
+.payment-loyalty-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.payment-loyalty-input-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7d6608;
+  white-space: nowrap;
+}
+
+.payment-loyalty-input {
+  width: 80px;
+  padding: 3px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #f9e79f;
+  border-radius: 4px;
+  text-align: center;
+  background: #fff;
+  color: #333;
+  outline: none;
+}
+
+.payment-loyalty-input:focus {
+  border-color: #f39c12;
+}
+
+.payment-loyalty-input-hint {
+  font-size: 11px;
+  color: #999;
+}

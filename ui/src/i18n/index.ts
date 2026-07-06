@@ -19,6 +19,7 @@ import loyaltyFtl from '../locales/loyalty.ftl?raw';
 import shiftsFtl from '../locales/shifts.ftl?raw';
 import reportsFtl from '../locales/reports.ftl?raw';
 import multiStoreFtl from '../locales/multi-store.ftl?raw';
+import stockTransfersFtl from '../locales/stock-transfers.ftl?raw';
 import idFTL from './id.ftl?raw';
 
 export type LocaleCode = 'en' | 'id';
@@ -44,6 +45,7 @@ const enFTL = [
   shiftsFtl,
   reportsFtl,
   multiStoreFtl,
+  stockTransfersFtl,
 ].join('\n');
 
 const RESOURCES: Record<LocaleCode, string> = {

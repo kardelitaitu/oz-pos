@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
-import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg } from '@/api/sales';
+import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
@@ -14,6 +14,7 @@ import {
   type ExchangeRateDto,
 } from '@/api/currency';
 import { listCustomers, type CustomerDto } from '@/api/customers';
+import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAccountWithDetails } from '@/api/loyalty';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { animDuration } from '@/utils/animation';
 import './PaymentModal.css';
@@ -39,6 +40,8 @@ export interface PaymentModalProps {
   onCustomerChange?: (customer: CustomerDto | null) => void;
   onComplete: () => void;
   onClose: () => void;
+  /** Serial numbers captured per SKU for track_serial products. */
+  serialNumbers?: Record<string, string>;
 }
 
 export default function PaymentModal({
@@ -53,6 +56,7 @@ export default function PaymentModal({
   onCustomerChange,
   onComplete,
   onClose,
+  serialNumbers,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
@@ -65,6 +69,11 @@ export default function PaymentModal({
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDto | null>(selectedCustomerProp ?? null);
   const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+  const [loyaltyAccount, setLoyaltyAccount] = useState<LoyaltyAccountWithDetails | null>(null);
+  const [redeemPoints, setRedeemPoints] = useState(false);
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState(0n);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [pointsWorthMinor, setPointsWorthMinor] = useState<number | null>(null);
 
   const notifyCustomerChange = useCallback(
     (c: CustomerDto | null) => {
@@ -194,6 +203,62 @@ export default function PaymentModal({
 
   const totalMinor = useMemo(() => BigInt(total.minor_units), [total.minor_units]);
 
+  useEffect(() => {
+    if (selectedCustomer) {
+      getLoyaltyAccount(selectedCustomer.id)
+        .then((account) => {
+          setLoyaltyAccount(account);
+          if (account && account.account.points > 0) {
+            setRedeemPoints(false);
+            setLoyaltyDiscount(0n);
+          }
+        })
+        .catch(() => setLoyaltyAccount(null));
+    } else {
+      setLoyaltyAccount(null);
+      setRedeemPoints(false);
+      setLoyaltyDiscount(0n);
+    }
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (loyaltyAccount && loyaltyAccount.account.points > 0) {
+      getPointsValue(loyaltyAccount.account.points)
+        .then(setPointsWorthMinor)
+        .catch(() => setPointsWorthMinor(null));
+    } else {
+      setPointsWorthMinor(null);
+    }
+  }, [loyaltyAccount]);
+
+  useEffect(() => {
+    if (!redeemPoints || pointsToRedeem <= 0) {
+      setLoyaltyDiscount(0n);
+      return;
+    }
+    let cancelled = false;
+    getPointsValue(pointsToRedeem)
+      .then((val) => {
+        if (!cancelled) {
+          const discount = BigInt(val);
+          setLoyaltyDiscount(discount > totalMinor ? totalMinor : discount);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [pointsToRedeem, redeemPoints, totalMinor]);
+
+  const effectiveTotal = useMemo(() => {
+    const base = totalMinor;
+    const discount = loyaltyDiscount;
+    return base - discount >= 0n ? base - discount : 0n;
+  }, [totalMinor, loyaltyDiscount]);
+
+  const effectiveTotalMoney = useMemo<Money>(() => ({
+    minor_units: Number(effectiveTotal),
+    currency: total.currency,
+  }), [effectiveTotal, total.currency]);
+
   const tenderedMinor = useMemo(() => {
     const num = parseFloat(tendered);
     if (Number.isNaN(num) || num < 0) return 0n;
@@ -233,16 +298,22 @@ export default function PaymentModal({
         });
       }
 
+      const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
+        ? Object.entries(serialNumbers)
+            .filter(([_, s]) => s.trim().length > 0)
+            .map(([sku, serial]) => ({ sku, serial }))
+        : undefined;
       const saleResult = await completeSale({
         cartId,
         paymentMethod: 'QRIS',
         tenderedMinor: null,
         userId,
         ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+        ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
         paymentSplits: [
           {
             method: 'QRIS',
-            amountMinor: total.minor_units,
+            amountMinor: Number(effectiveTotal),
             gatewayReference: qrReference,
             gatewayStatus: 'completed',
             gatewayResponse: 'QRIS payment confirmed',
@@ -300,23 +371,35 @@ export default function PaymentModal({
         // KDS may not be configured — non-blocking.
       }
 
+      if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
+        try {
+          await redeemLoyaltyPoints(
+            selectedCustomer!.id,
+            Number(loyaltyDiscount),
+            saleResult.saleId,
+          );
+        } catch {
+          // non-blocking
+        }
+      }
+
       setDone(true);
     } catch (err) {
       console.error('QR payment failed:', err);
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference, selectedCustomer]);
+  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
-    if (tenderedMinor < totalMinor) return { sufficient: false, change: null };
-    const diff = Number(tenderedMinor - totalMinor);
+    if (tenderedMinor < effectiveTotal) return { sufficient: false, change: null };
+    const diff = Number(tenderedMinor - effectiveTotal);
     return {
       sufficient: true,
       change: { minor_units: diff, currency: total.currency } as Money,
     };
-  }, [method, total, tenderedMinor, totalMinor]);
+  }, [method, total, tenderedMinor, effectiveTotal]);
 
   const parseSplitMinor = useCallback((val: string): bigint => {
     const num = parseFloat(val);
@@ -334,8 +417,8 @@ export default function PaymentModal({
     for (const s of splits) {
       splitSum += parseSplitMinor(s.amountMinor);
     }
-    return { splitSum, remaining: totalMinor - splitSum };
-  }, [splits, parseSplitMinor, totalMinor]);
+    return { splitSum, remaining: effectiveTotal - splitSum };
+  }, [splits, parseSplitMinor, effectiveTotal]);
 
   const splitComplete = useMemo(() => {
     if (splitTotals.remaining !== 0n) return false;
@@ -475,6 +558,11 @@ export default function PaymentModal({
           : method.toUpperCase();
 
       console.log('[Sale] Completing sale...');
+      const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
+        ? Object.entries(serialNumbers)
+            .filter(([_, s]) => s.trim().length > 0)
+            .map(([sku, serial]) => ({ sku, serial }))
+        : undefined;
       const saleResult = await completeSale({
         cartId,
         paymentMethod: methodLabel,
@@ -483,6 +571,7 @@ export default function PaymentModal({
         ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
         ...(paymentSplits ? { paymentSplits } : {}),
         ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
+        ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
       });
       console.log('[Sale] Sale completed:', saleResult.saleId);
 
@@ -546,6 +635,19 @@ export default function PaymentModal({
         // KDS may not be configured — non-blocking.
       }
 
+      if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
+        try {
+          await redeemLoyaltyPoints(
+            selectedCustomer!.id,
+            Number(loyaltyDiscount),
+            saleResult.saleId,
+          );
+          console.log('[Sale] Loyalty points redeemed');
+        } catch (e) {
+          console.warn('[Sale] Loyalty redemption failed (non-blocking):', e);
+        }
+      }
+
       if (change) setChangeDue(change);
       console.log('[Sale] Done');
       setDone(true);
@@ -554,7 +656,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, subtotalMinor, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer]);
+  }, [method, customerName, lineItems, subtotalMinor, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount]);
 
   useEffect(() => {
     if (!done) return;
@@ -634,7 +736,9 @@ export default function PaymentModal({
               <Localized id="payment-total-due">
                 <span className="payment-total-label">Total Due</span>
               </Localized>
-              <span className="payment-total-amount">{formatMoney(total)}</span>
+              <span className="payment-total-amount">
+                {loyaltyDiscount > 0n ? formatMoney(effectiveTotalMoney) : formatMoney(total)}
+              </span>
             </div>
 
             {multiCurrency && (
@@ -1066,6 +1170,69 @@ export default function PaymentModal({
                 </button>
               )}
             </div>
+
+            {isEnabled(FEATURES.LOYALTY_PROGRAM) && loyaltyAccount && (
+              <div className="payment-loyalty-section">
+                <div className="payment-loyalty-balance">
+                  <span className="payment-loyalty-label">
+                    Points: {loyaltyAccount.account.points}
+                  </span>
+                  <span className="payment-loyalty-value">
+                    {pointsWorthMinor !== null
+                      ? `(${formatMoney({ minor_units: pointsWorthMinor, currency: total.currency } as Money)})`
+                      : '…'}
+                  </span>
+                </div>
+                {loyaltyAccount.account.points > 0 && !redeemPoints && (
+                  <button
+                    type="button"
+                    className="payment-loyalty-redeem-btn"
+                    onClick={() => {
+                      setRedeemPoints(true);
+                      setPointsToRedeem(loyaltyAccount.account.points);
+                    }}
+                  >
+                    Use Points
+                  </button>
+                )}
+                {redeemPoints && (
+                  <div className="payment-loyalty-active">
+                    <div className="payment-loyalty-input-row">
+                      <label className="payment-loyalty-input-label">Points</label>
+                      <input
+                        type="number"
+                        className="payment-loyalty-input"
+                        value={pointsToRedeem}
+                        onChange={(e) => setPointsToRedeem(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        min={0}
+                        max={loyaltyAccount.account.points}
+                        autoFocus
+                      />
+                      <span className="payment-loyalty-input-hint">
+                        / {loyaltyAccount.account.points}
+                      </span>
+                    </div>
+                    <span className="payment-loyalty-discount-label">
+                      Discount: -{formatMoney({
+                        minor_units: Number(loyaltyDiscount),
+                        currency: total.currency,
+                      } as Money)}
+                    </span>
+                    <button
+                      type="button"
+                      className="payment-loyalty-cancel-btn"
+                      onClick={() => {
+                        setRedeemPoints(false);
+                        setPointsToRedeem(0);
+                        setLoyaltyDiscount(0n);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {showCustomerSearch && (
               <div className="payment-customer-search-overlay" onClick={() => setShowCustomerSearch(false)}>

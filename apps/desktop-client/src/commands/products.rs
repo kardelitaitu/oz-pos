@@ -376,6 +376,19 @@ pub async fn update_product(
     Ok(UpdateProductResult { sku: args.sku })
 }
 
+/// Check whether a product tracks serial numbers.
+#[command]
+pub async fn get_product_track_serial(
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let product = store.get_product(&sku)?;
+    drop(db);
+    Ok(product.map(|p| p.product.track_serial).unwrap_or(false))
+}
+
 // ── Delete product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]

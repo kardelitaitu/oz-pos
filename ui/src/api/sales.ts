@@ -26,6 +26,11 @@ export interface AddLineResult {
   lineTotal: Money | null;
 }
 
+export interface SerialNumberArg {
+  sku: string;
+  serial: string;
+}
+
 export interface PaymentSplitArg {
   method: string;
   amountMinor: number;
@@ -45,6 +50,8 @@ export interface CompleteSaleArgs {
   customerName?: string;
   /** Optional payment splits for multi-method payments. */
   paymentSplits?: PaymentSplitArg[];
+  /** Optional serial numbers captured at checkout for track_serial products. */
+  serialNumbers?: SerialNumberArg[];
 }
 
 export interface CompleteSaleResult {
@@ -68,6 +75,9 @@ export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
 
 export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale', { args });
+
+export const getProductTrackSerial = (sku: string): Promise<boolean> =>
+  invoke<boolean>('get_product_track_serial', { sku });
 
 export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
   invoke<void>('set_cart_discount', { args });
@@ -238,6 +248,9 @@ export interface RefundLineDto {
   unitPrice: Money;
   lineTotal: Money;
 }
+
+export const lookupSaleByReceiptBarcode = (barcode: string): Promise<SaleDetail | null> =>
+  invoke<SaleDetail | null>('lookup_sale_by_receipt_barcode', { barcode });
 
 export const processRefund = (args: ProcessRefundArgs): Promise<ProcessRefundResult> =>
   invoke<ProcessRefundResult>('process_refund', { args });

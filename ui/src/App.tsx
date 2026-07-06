@@ -28,6 +28,7 @@ import SettingsPage from '@/features/settings/SettingsPage';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import DataManagementScreen from '@/features/settings/DataManagementScreen';
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
+import GiftCardsScreen from '@/features/gift-cards/GiftCardsScreen';
 import LoyaltyManagementScreen from '@/features/loyalty/LoyaltyManagementScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
@@ -43,6 +44,10 @@ import DesignSystem from '@/features/design/DesignSystem';
 import KdsScreen from '@/features/kds/KdsScreen';
 import KioskScreen from '@/features/kiosk/KioskScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
+import SuppliersScreen from '@/features/purchasing/SuppliersScreen';
+import PurchaseOrdersScreen from '@/features/purchasing/PurchaseOrdersScreen';
+import StockCountsFlow from '@/features/inventory/StockCountsFlow';
+import StockTransfersScreen from '@/features/stock-transfers/StockTransfersScreen';
 import { registerSalesWidgets } from '@/features/sales/widgets';
 
 // ── Register dashboard widgets ────────────────────────────────────
@@ -103,6 +108,10 @@ registerNavItem({ route: 'categories', label: 'Categories', feature: 'categories
 
 registerPage({ route: 'customers', component: CustomerManagementScreen, label: 'Customers' });
 registerNavItem({ route: 'customers', label: 'Customers', i18nKey: 'nav-customers', icon: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', <circle cx="9" cy="7" r="4" />) });
+
+registerPage({ route: 'gift-cards', component: GiftCardsScreen, label: 'Gift Cards', feature: 'gift-cards', requiredRole: 'manager' });
+registerNavItem({ route: 'gift-cards', label: 'Gift Cards', feature: 'gift-cards', requiredRole: 'manager', i18nKey: 'nav-gift-cards',
+  icon: icon('M20 12H4M12 4v16M4 8h16M8 4v16') });
 
 registerPage({ route: 'loyalty', component: LoyaltyManagementScreen, label: 'Loyalty', requiredRole: 'manager' });
 registerNavItem({ route: 'loyalty', label: 'Loyalty', requiredRole: 'manager', i18nKey: 'nav-loyalty',
@@ -165,6 +174,22 @@ registerNavItem({ route: 'tables', label: 'Tables', feature: 'tables', i18nKey: 
 registerPage({ route: 'promotions', component: PromotionManagementScreen, label: 'Promotions', requiredRole: 'manager' });
 registerNavItem({ route: 'promotions', label: 'Promotions', requiredRole: 'manager', i18nKey: 'nav-promotions',
   icon: icon('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z') });
+
+registerPage({ route: 'suppliers', component: SuppliersScreen, label: 'Suppliers', feature: 'purchase-orders' });
+registerNavItem({ route: 'suppliers', label: 'Suppliers', feature: 'purchase-orders', i18nKey: 'nav-suppliers',
+  icon: icon('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', <circle cx="9" cy="7" r="4" />, <path d="M22 21v-2a4 4 0 0 0-3-3.87" />, <path d="M16 3.13a4 4 0 0 1 0 7.75" />) });
+
+registerPage({ route: 'purchase-orders', component: PurchaseOrdersScreen, label: 'Purchase Orders', feature: 'purchase-orders' });
+registerNavItem({ route: 'purchase-orders', label: 'Purchase Orders', feature: 'purchase-orders', i18nKey: 'nav-purchase-orders',
+  icon: icon('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', <polyline points="14 2 14 8 20 8" />, <line x1="16" y1="13" x2="8" y2="13" />, <line x1="16" y1="17" x2="8" y2="17" />, <polyline points="10 9 9 9 8 9" />) });
+
+registerPage({ route: 'stock-counts', component: StockCountsFlow, label: 'Stock Counts', feature: 'stock-counting' });
+registerNavItem({ route: 'stock-counts', label: 'Stock Counts', feature: 'stock-counting', i18nKey: 'nav-stock-counts',
+  icon: icon('M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2', <path d="M9 14l2 2 4-4" />) });
+
+registerPage({ route: 'stock-transfers', component: StockTransfersScreen, label: 'Stock Transfers', feature: 'stock-transfers' });
+registerNavItem({ route: 'stock-transfers', label: 'Stock Transfers', feature: 'stock-transfers', i18nKey: 'nav-stock-transfers',
+  icon: icon('M5 12h14M12 5l7 7-7 7') });
 
 // ── Root App component ──────────────────────────────────────────────
 

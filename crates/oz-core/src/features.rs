@@ -64,6 +64,8 @@ pub enum Feature {
     CustomerDisplay,
     /// NFC / contactless reader.
     NfcReader,
+    /// USB weight scale for produce/groceries.
+    UsbScale,
 
     // ── Business Rules ───────────────────────────────────────────
     /// Percentage and fixed-amount discounts.
@@ -72,10 +74,22 @@ pub enum Feature {
     TaxEngine,
     /// Customer loyalty points and tiers.
     LoyaltyProgram,
+    /// Gift cards — issue, redeem, top-up, freeze.
+    GiftCards,
+    /// Quick return from POS — scan receipt barcode to initiate refund.
+    QuickReturn,
     /// Time-limited promotions (buy-X-get-Y, etc.).
     PromotionsEngine,
     /// Sell multiple SKUs as a bundle.
     ProductBundles,
+    /// Stock counting / physical inventory.
+    StockCounting,
+    /// Transfer stock between locations or terminals.
+    StockTransfers,
+    /// Purchase orders and supplier management.
+    PurchaseOrders,
+    /// Track serial numbers for warranty tracking at checkout.
+    SerialTracking,
 
     // ── Restaurant ───────────────────────────────────────────────
     /// Kitchen display system for order routing.
@@ -136,6 +150,10 @@ impl Feature {
 
             // Reporting.
             Self::Analytics => &[Self::Reporting],
+
+            // Products.
+            Self::StockCounting => &[Self::InventoryTracking],
+            Self::SerialTracking => &[Self::InventoryTracking],
 
             // Everything else has no dependencies.
             _ => &[],
@@ -324,9 +342,12 @@ impl FeatureRegistry {
             Feature::CashDrawer,
             Feature::CustomerDisplay,
             Feature::NfcReader,
+            Feature::UsbScale,
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
+            Feature::QuickReturn,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
             Feature::Reporting,
@@ -366,9 +387,16 @@ pub fn feature_key(f: Feature) -> &'static str {
         Feature::CashDrawer => "cash-drawer",
         Feature::CustomerDisplay => "customer-display",
         Feature::NfcReader => "nfc-reader",
+        Feature::UsbScale => "usb-scale",
         Feature::DiscountEngine => "discount-engine",
         Feature::TaxEngine => "tax-engine",
         Feature::LoyaltyProgram => "loyalty-program",
+        Feature::GiftCards => "gift-cards",
+        Feature::QuickReturn => "quick-return",
+        Feature::StockCounting => "stock-counting",
+        Feature::StockTransfers => "stock-transfers",
+        Feature::PurchaseOrders => "purchase-orders",
+        Feature::SerialTracking => "serial-tracking",
         Feature::PromotionsEngine => "promotions-engine",
         Feature::ProductBundles => "product-bundles",
         Feature::KitchenDisplay => "kitchen-display",
@@ -406,9 +434,16 @@ pub fn feature_from_key(suffix: &str) -> Option<Feature> {
         "cash-drawer" => Some(Feature::CashDrawer),
         "customer-display" => Some(Feature::CustomerDisplay),
         "nfc-reader" => Some(Feature::NfcReader),
+        "usb-scale" => Some(Feature::UsbScale),
         "discount-engine" => Some(Feature::DiscountEngine),
         "tax-engine" => Some(Feature::TaxEngine),
         "loyalty-program" => Some(Feature::LoyaltyProgram),
+        "gift-cards" => Some(Feature::GiftCards),
+        "quick-return" => Some(Feature::QuickReturn),
+        "stock-counting" => Some(Feature::StockCounting),
+        "stock-transfers" => Some(Feature::StockTransfers),
+        "purchase-orders" => Some(Feature::PurchaseOrders),
+        "serial-tracking" => Some(Feature::SerialTracking),
         "promotions-engine" => Some(Feature::PromotionsEngine),
         "product-bundles" => Some(Feature::ProductBundles),
         "kitchen-display" => Some(Feature::KitchenDisplay),
@@ -522,6 +557,14 @@ mod tests {
     }
 
     #[test]
+    fn serial_tracking_depends_on_inventory_tracking() {
+        assert_eq!(
+            Feature::SerialTracking.dependencies(),
+            &[Feature::InventoryTracking]
+        );
+    }
+
+    #[test]
     fn analytics_depends_on_reporting() {
         assert_eq!(Feature::Analytics.dependencies(), &[Feature::Reporting]);
     }
@@ -559,7 +602,10 @@ mod tests {
             Feature::NfcReader,
             Feature::DiscountEngine,
             Feature::TaxEngine,
+            Feature::GiftCards,
+            Feature::QuickReturn,
             Feature::ProductBundles,
+            Feature::PurchaseOrders,
             Feature::Reporting,
             Feature::MultiStore,
             Feature::ExportImport,
@@ -593,6 +639,7 @@ mod tests {
             Feature::TableManagement,
             Feature::SelfServiceKiosk,
             Feature::LoyaltyProgram,
+            Feature::SerialTracking,
             Feature::PromotionsEngine,
             Feature::Analytics,
             Feature::MultiTerminal,
@@ -601,7 +648,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        // All 32 features listed explicitly (same pattern as
+        // All features listed explicitly (same pattern as
         // `feature_key_roundtrip`). This avoids unsafe transmute.
         let all_features = [
             Feature::SimpleRetail,
@@ -624,6 +671,7 @@ mod tests {
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
             Feature::KitchenDisplay,
@@ -831,8 +879,10 @@ mod tests {
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
+            Feature::PurchaseOrders,
             Feature::KitchenDisplay,
             Feature::TableManagement,
             Feature::SelfServiceKiosk,
@@ -843,12 +893,15 @@ mod tests {
             Feature::Analytics,
             Feature::ExportImport,
             Feature::PluginSystem,
+            Feature::SerialTracking,
+            Feature::QuickReturn,
+            Feature::UsbScale,
         ];
 
         for f in all_features {
             reg.enable(f);
         }
-        assert!(reg.count() >= 32);
+        assert!(reg.count() >= 37);
 
         for f in all_features {
             reg.disable(f);
@@ -999,8 +1052,10 @@ mod tests {
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
+            Feature::PurchaseOrders,
             Feature::KitchenDisplay,
             Feature::TableManagement,
             Feature::SelfServiceKiosk,
@@ -1011,6 +1066,9 @@ mod tests {
             Feature::Analytics,
             Feature::ExportImport,
             Feature::PluginSystem,
+            Feature::SerialTracking,
+            Feature::QuickReturn,
+            Feature::UsbScale,
         ];
         for f in features {
             let key = feature_key(f);
@@ -1049,7 +1107,7 @@ mod proptests {
     use super::*;
     use proptest::prelude::*;
 
-    /// List of all 32 features for generating random selections.
+    /// List of all features for generating random selections.
     const ALL_FEATURES: &[Feature] = &[
         Feature::SimpleRetail,
         Feature::Restaurant,
@@ -1068,11 +1126,16 @@ mod proptests {
         Feature::CashDrawer,
         Feature::CustomerDisplay,
         Feature::NfcReader,
+        Feature::UsbScale,
         Feature::DiscountEngine,
         Feature::TaxEngine,
         Feature::LoyaltyProgram,
+        Feature::GiftCards,
+        Feature::QuickReturn,
         Feature::PromotionsEngine,
         Feature::ProductBundles,
+        Feature::PurchaseOrders,
+        Feature::SerialTracking,
         Feature::KitchenDisplay,
         Feature::TableManagement,
         Feature::SelfServiceKiosk,

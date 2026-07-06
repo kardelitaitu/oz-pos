@@ -79,10 +79,10 @@ describe('GatewayStatusBadge', () => {
       isConfigured: true,
       isOnline: true,
     });
-    expect(screen.getByRole('status')).toHaveAttribute(
-      'aria-label',
-      'Midtrans is online',
-    );
+    // Fluent wraps interpolated variables in Unicode bidi markers.
+    const label = screen.getByRole('status').getAttribute('aria-label') ?? '';
+    expect(label).toContain('Midtrans');
+    expect(label).toContain('is online');
   });
 
   it('has correct aria-label for offline status', () => {
@@ -91,9 +91,9 @@ describe('GatewayStatusBadge', () => {
       isConfigured: true,
       isOnline: false,
     });
-    expect(screen.getByRole('status')).toHaveAttribute(
-      'aria-label',
-      'GoPay is offline',
-    );
+    // Fluent wraps interpolated variables in Unicode bidi markers.
+    const label = screen.getByRole('status').getAttribute('aria-label') ?? '';
+    expect(label).toContain('GoPay');
+    expect(label).toContain('is offline');
   });
 });

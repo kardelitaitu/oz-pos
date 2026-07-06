@@ -21,11 +21,15 @@ export const FEATURES = {
   CASH_DRAWER: 'cash-drawer',
   CUSTOMER_DISPLAY: 'customer-display',
   NFC_READER: 'nfc-reader',
+  USB_SCALE: 'usb-scale',
   DISCOUNT_ENGINE: 'discount-engine',
   TAX_ENGINE: 'tax-engine',
   LOYALTY_PROGRAM: 'loyalty-program',
+  QUICK_RETURN: 'quick-return',
   PROMOTIONS_ENGINE: 'promotions-engine',
   PRODUCT_BUNDLES: 'product-bundles',
+  SERIAL_TRACKING: 'serial-tracking',
+  STOCK_TRANSFERS: 'stock-transfers',
   KITCHEN_DISPLAY: 'kitchen-display',
   TABLE_MANAGEMENT: 'table-management',
   SELF_SERVICE_KIOSK: 'self-service-kiosk',
@@ -47,6 +51,7 @@ export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 
 export const ROUTE_FEATURE: Record<string, FeatureKey | undefined> = {
   sales: FEATURES.SIMPLE_RETAIL,
+  'stock-transfers': FEATURES.STOCK_TRANSFERS,
 };
 
 // ── Hook ─────────────────────────────────────────────────────────────

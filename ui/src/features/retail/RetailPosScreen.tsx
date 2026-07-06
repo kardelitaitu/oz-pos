@@ -7,15 +7,18 @@ import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
 import PaymentModal from '@/features/sales/PaymentModal';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
-import { overrideLinePrice, startSale } from '@/api/sales';
+import { overrideLinePrice, startSale, getProductTrackSerial, lookupSaleByReceiptBarcode } from '@/api/sales';
+import { useFeatures, FEATURES } from '@/hooks/useFeatures';
+import RefundModal from '@/features/sales/RefundModal';
 import { listProducts, listCategories, lookupProductBySku, lookupByBarcode, type ProductDto, type CategoryDto } from '@/api/products';
 import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getActiveShift, openShift, closeShift, type ShiftDto } from '@/api/shifts';
-import { holdCart, listHeldCarts, getHeldCart, deleteHeldCart, type HeldCartRow } from '@/api/sales';
+import { holdCart, listHeldCarts, getHeldCart, deleteHeldCart, type HeldCartRow, type SaleDetail } from '@/api/sales';
 import { getStoreSettings, listCreditSales, settleCredit, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { formatMoney, type CartId, type LineId, type Money, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
+import ScaleIndicator from './ScaleIndicator';
 import RetailOptionsScreen from './RetailOptionsScreen';
 import './RetailPosScreen.css';
 
@@ -65,6 +68,66 @@ export default function RetailPosScreen() {
   const lineCount = lines.reduce((a, l) => a + l.qty, 0);
 
   const { playBeep, playError, playSuccess, setSoundEnabled } = useSound();
+
+  const { isEnabled } = useFeatures();
+
+  const [weighTarget, setWeighTarget] = useState<{ sku: Sku; name: string } | null>(null);
+
+  // ── Serial Number Capture ──────────────────────────────────────────
+  const [serialNumbers, setSerialNumbers] = useState<Record<string, string>>({});
+  const [trackSerialMap, setTrackSerialMap] = useState<Record<string, boolean>>({});
+  const pendingTrackFetchRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const uniqueSkus = [...new Set(lines.map((l) => l.sku))];
+    for (const sku of uniqueSkus) {
+      if (trackSerialMap[sku] === undefined && !pendingTrackFetchRef.current.has(sku)) {
+        pendingTrackFetchRef.current.add(sku);
+        getProductTrackSerial(sku).then((track) => {
+          setTrackSerialMap((prev) => ({ ...prev, [sku]: track }));
+        }).catch(() => {});
+      }
+    }
+  }, [lines]);
+
+  const handleSerialChange = useCallback((sku: string, serial: string) => {
+    setSerialNumbers((prev) => ({ ...prev, [sku]: serial }));
+  }, []);
+
+  // ── Quick Return ───────────────────────────────────────────────────
+  const [showQuickReturn, setShowQuickReturn] = useState(false);
+  const [quickReturnBarcode, setQuickReturnBarcode] = useState('');
+  const [quickReturnLoading, setQuickReturnLoading] = useState(false);
+  const [quickReturnSale, setQuickReturnSale] = useState<SaleDetail | null>(null);
+  const [showQuickReturnRefund, setShowQuickReturnRefund] = useState(false);
+
+  const handleQuickReturnSubmit = useCallback(async () => {
+    const barcode = quickReturnBarcode.trim();
+    if (!barcode) return;
+    setQuickReturnLoading(true);
+    try {
+      const sale = await lookupSaleByReceiptBarcode(barcode);
+      if (sale) {
+        setQuickReturnSale(sale);
+        setShowQuickReturn(false);
+        setShowQuickReturnRefund(true);
+        setQuickReturnBarcode('');
+      } else {
+        addToast({ message: l10n.getString('retail-quick-return-not-found') || 'Sale not found for this receipt barcode', type: 'error' });
+        playError();
+      }
+    } catch {
+      addToast({ message: l10n.getString('retail-quick-return-error') || 'Failed to look up receipt', type: 'error' });
+      playError();
+    } finally {
+      setQuickReturnLoading(false);
+    }
+  }, [quickReturnBarcode, addToast, l10n, playError]);
+
+  const handleQuickReturnRefundDone = useCallback(() => {
+    setShowQuickReturnRefund(false);
+    setQuickReturnSale(null);
+  }, []);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('retail-theme');
@@ -282,6 +345,29 @@ export default function RetailPosScreen() {
     addProduct(toProduct(p));
     addToRecent(p);
   }, [addProduct, addToRecent, addToast, l10n, lines]);
+
+  const handleWeighAdd = useCallback((sku: Sku, weightGrams: number) => {
+    const product = products.find((p) => p.sku === sku);
+    if (!product) return;
+    const qty = Math.max(1, Math.round(weightGrams));
+    if (product.stock_qty != null) {
+      const inCart = lines.filter((l) => l.sku === sku).reduce((s, l) => s + l.qty, 0);
+      if (inCart + qty > product.stock_qty) {
+        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${product.name}`, type: 'warning' });
+        return;
+      }
+    }
+    addProduct(toProduct(product), qty);
+    addToRecent(product);
+    setWeighTarget(null);
+    addToast({ message: l10n.getString('scale-weigh-added', { name: product.name, weight: qty }) || `Added ${qty}g of ${product.name}`, type: 'success' });
+  }, [products, lines, addProduct, addToRecent, addToast, l10n]);
+
+  const handleSetWeighTarget = useCallback((p: ProductDto) => {
+    if (weighTarget?.sku === p.sku) return;
+    setWeighTarget({ sku: p.sku as Sku, name: p.name });
+    addToast({ message: l10n.getString('scale-target-set', { name: p.name }) || `${p.name} selected for weighing`, type: 'info' });
+  }, [weighTarget, addToast, l10n]);
 
   /** Stock-aware cart qty increase — checks stock_qty before incrementing. */
   const handleIncreaseQty = useCallback((line: { sku: string; id: string; qty: number }) => {
@@ -702,6 +788,7 @@ export default function RetailPosScreen() {
         discountLabel={discountLabel}
         userId={userId}
         selectedCustomer={selectedCustomer}
+        {...(isEnabled(FEATURES.SERIAL_TRACKING) ? { serialNumbers } : {})}
         onCustomerChange={(c) => setSelectedCustomer(c)}
         onClose={() => setShowPayment(false)}
         onComplete={() => { setShowPayment(false); resetCart(); setSelectedCustomer(null); playSuccess(); addToast({ message: l10n.getString('retail-toast-sale-complete') || 'Sale complete', type: 'success' }); }}
@@ -800,6 +887,14 @@ export default function RetailPosScreen() {
             )}
           </div>
 
+          {isEnabled(FEATURES.USB_SCALE) && (
+            <ScaleIndicator
+              weighTarget={weighTarget}
+              onWeighAdd={handleWeighAdd}
+              onClearWeighTarget={() => setWeighTarget(null)}
+            />
+          )}
+
           {/* ── Recent products ──────────────── */}
           {recentProducts.length > 0 && !searchQuery.trim() && !activeCategory && (
             <div className="retail-recent-strip">
@@ -832,6 +927,8 @@ export default function RetailPosScreen() {
                   formatMoney={formatMoney}
                   handleAdd={handleAdd}
                   handleOpenQtyPicker={handleOpenQtyPicker}
+                  scaleEnabled={isEnabled(FEATURES.USB_SCALE)}
+                  onSetWeighTarget={handleSetWeighTarget}
                 />)}
             </div>
           )}
@@ -907,6 +1004,21 @@ export default function RetailPosScreen() {
                         <td className="retail-cart-line-sku">{idx + 1}</td>
                         <td>
                           <div style={{ fontWeight: 600, fontSize: 11 }}>{line.name ?? line.sku}</div>
+                          {isEnabled(FEATURES.SERIAL_TRACKING) && trackSerialMap[line.sku] && (
+                            <input
+                              type="text"
+                              className="retail-cart-serial-input"
+                              value={serialNumbers[line.sku] ?? ''}
+                              onChange={(e) => handleSerialChange(line.sku, e.target.value)}
+                              placeholder="Serial #"
+                              aria-label={`Serial number for ${line.name ?? line.sku}`}
+                              style={{
+                                marginTop: 4, padding: '2px 4px', fontSize: 10,
+                                width: '100%', boxSizing: 'border-box',
+                                border: '1px solid #ccc', borderRadius: 2,
+                              }}
+                            />
+                          )}
                         </td>
                         <td>
                           <span className="retail-cart-line-qty">
@@ -1079,6 +1191,11 @@ export default function RetailPosScreen() {
         <button className="retail-fn-btn" onClick={() => setShowOptions(true)} disabled={session?.role_name === 'cashier'} style={session?.role_name === 'cashier' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
           <span className="retail-fn-key">F10</span> {l10n.getString('retail-fn-options')}
         </button>
+        {isEnabled(FEATURES.QUICK_RETURN) && (
+          <button className="retail-fn-btn" onClick={() => setShowQuickReturn(true)}>
+            <span className="retail-fn-key">F11</span> {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
+          </button>
+        )}
       </div>
 
       {/* ── Open Shift modal ────────────────── */}
@@ -1462,6 +1579,47 @@ export default function RetailPosScreen() {
         />
       )}
 
+      {/* ── Quick Return modal ──────────────── */}
+      {showQuickReturn && (
+        <div className="retail-shift-overlay" onClick={() => { setShowQuickReturn(false); setQuickReturnBarcode(''); }}>
+          <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
+            <p style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
+              {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
+            </p>
+            <input
+              type="text"
+              className="retail-sku-input"
+              style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+              value={quickReturnBarcode}
+              onChange={(e) => setQuickReturnBarcode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleQuickReturnSubmit(); }}
+              placeholder={l10n.getString('retail-quick-return-placeholder') || 'Receipt barcode'}
+              autoFocus
+              aria-label={l10n.getString('retail-quick-return-aria') || 'Receipt barcode input'}
+            />
+            <div className="retail-shift-modal-actions">
+              <button onClick={() => { setShowQuickReturn(false); setQuickReturnBarcode(''); }} disabled={quickReturnLoading}>
+                {l10n.getString('cancel')}
+              </button>
+              <button className="retail-shift-confirm-btn" onClick={handleQuickReturnSubmit} disabled={quickReturnLoading || !quickReturnBarcode.trim()}>
+                {quickReturnLoading ? l10n.getString('loading') : (l10n.getString('retail-quick-return-lookup') || 'Look Up')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Return Refund modal ───────── */}
+      {showQuickReturnRefund && quickReturnSale && (
+        <RefundModal
+          open
+          sale={quickReturnSale}
+          onClose={handleQuickReturnRefundDone}
+          onRefunded={handleQuickReturnRefundDone}
+        />
+      )}
+
       {/* ── Scan flash overlay ─────────────── */}
       {scanFlash && <div className="retail-scan-flash" />}
     </div>
@@ -1478,12 +1636,14 @@ function isPriceRecent(p: ProductDto): boolean {
   return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
 }
 
-function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPicker }: {
+function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget }: {
   product: ProductDto;
   catHue: (catId: string | null) => number;
   formatMoney: (m: Money) => string;
   handleAdd: (p: ProductDto) => void;
   handleOpenQtyPicker: (p: ProductDto) => void;
+  scaleEnabled: boolean;
+  onSetWeighTarget: (p: ProductDto) => void;
 }) {
   const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1523,6 +1683,19 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
       {isPriceRecent(product) && <span className="retail-price-volatility-hint" title="Price changed recently" />}
       <span className="retail-product-name">{product.name}</span>
       <span className="retail-product-price">{formatMoney(product.price)}</span>
+      {scaleEnabled && (
+        <span
+          className="retail-product-weigh-btn"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); } }}
+          aria-label={`Weigh ${product.name}`}
+        >
+          ⚖
+        </span>
+      )}
     </button>
   );
 }

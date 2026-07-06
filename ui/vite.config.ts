@@ -36,5 +36,28 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+
+    // ── Coverage ────────────────────────────────────────────────────────
+    //
+    // Run with `npm run test:coverage` (or `vitest run --coverage`).
+    // Uses the v8 provider (native to Node; faster than istanbul).
+    // HTML + JSON reports land in `../coverage/ui/` so they sit beside
+    // the Rust coverage report produced by `scripts/coverage.{sh,ps1}`.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'json', 'json-summary', 'lcov'],
+      reportsDirectory: '../coverage/ui',
+      // Only count source files — never the test code itself.
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        '**/node_modules/**',
+        '**/*.test.{ts,tsx}',
+        '**/__tests__/**',
+        '**/test-setup.ts',
+        '**/locales/test-utils.tsx',
+        // Type-only modules (Fluent locale bundles are just strings).
+        '**/locales/**',
+      ],
+    },
   },
 });

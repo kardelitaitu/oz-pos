@@ -72,3 +72,46 @@ jobs:
       - run: cargo run -p oz-cli -- migrate
       - name: Clean up the local DB the smoke test created
         run: rm -f oz-pos.db oz-pos.db-wal oz-pos.db-shm
+
+  # ── Coverage ───────────────────────────────────────────────────────────
+  #
+  # Generates both Rust and UI coverage reports and uploads the HTML +
+  # JSON outputs as workflow artifacts. Main-only so PR builds stay
+  # fast — open a PR, get the report after merge.
+  coverage:
+    name: Test coverage
+    runs-on: ubuntu-latest
+    # Only run on main pushes — skip PR builds to keep them fast, but
+    # still run on every merge to main so the badge-of-record updates.
+    # `github.ref == 'refs/heads/main'` alone is NOT sufficient: for
+    # `pull_request` events targeting main, `github.ref` resolves to
+    # the PR merge ref, which would let coverage leak onto PRs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            src-tauri -> target
+      - name: Install cargo-llvm-cov (prebuilt binary)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Install LLVM runtime (for llvm-cov / llvm-profdata)
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config llvm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - run: cd ui && npm ci --no-audit --no-fund
+      - name: Generate coverage (Rust + UI)
+        run: bash scripts/coverage.sh
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: coverage/
+          retention-days: 30

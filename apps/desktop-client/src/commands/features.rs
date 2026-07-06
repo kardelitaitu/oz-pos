@@ -342,6 +342,12 @@ fn all_feature_metadata() -> Vec<(Feature, &'static str, &'static str, &'static 
             "Business Rules",
         ),
         (
+            Feature::GiftCards,
+            "Gift Cards",
+            "Issue, redeem, and manage gift card balances",
+            "Payments",
+        ),
+        (
             Feature::PromotionsEngine,
             "Promotions Engine",
             "Time-limited buy-X-get-Y and % off",
