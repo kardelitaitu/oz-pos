@@ -1,0 +1,123 @@
+use serde::Serialize;
+use tauri::{State, command};
+
+use oz_core::db::Store;
+use oz_core::gift_card::{
+    GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
+    RedeemGiftCardResult,
+};
+
+use crate::error::AppError;
+use crate::state::AppState;
+
+#[derive(Debug, Serialize)]
+pub struct BalanceResult {
+    pub balance_minor: i64,
+    pub currency: String,
+    pub status: String,
+}
+
+#[command]
+pub async fn issue_gift_card(
+    input: IssueGiftCardInput,
+    state: State<'_, AppState>,
+) -> Result<GiftCardWithTransactions, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.issue_gift_card(input)?;
+    drop(db);
+    Ok(result)
+}
+
+#[command]
+pub async fn get_gift_card(
+    card_number_or_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<GiftCardWithTransactions>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.get_gift_card_detail(&card_number_or_id)?;
+    drop(db);
+    Ok(result)
+}
+
+#[command]
+pub async fn list_gift_cards(
+    filter: GiftCardFilter,
+    state: State<'_, AppState>,
+) -> Result<Vec<GiftCardWithTransactions>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.list_gift_cards(filter)?;
+    drop(db);
+    Ok(result)
+}
+
+#[command]
+pub async fn get_gift_card_balance(
+    card_number_or_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<BalanceResult>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.get_gift_card_balance(&card_number_or_id)?;
+    drop(db);
+    Ok(
+        result.map(|(balance_minor, currency, status)| BalanceResult {
+            balance_minor,
+            currency,
+            status,
+        }),
+    )
+}
+
+#[command]
+pub async fn redeem_gift_card(
+    card_number_or_id: String,
+    amount_minor: i64,
+    sale_id: String,
+    state: State<'_, AppState>,
+) -> Result<RedeemGiftCardResult, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.redeem_gift_card(&card_number_or_id, amount_minor, &sale_id)?;
+    drop(db);
+    Ok(result)
+}
+
+#[command]
+pub async fn top_up_gift_card(
+    card_number_or_id: String,
+    amount_minor: i64,
+    state: State<'_, AppState>,
+) -> Result<GiftCardWithTransactions, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.top_up_gift_card(&card_number_or_id, amount_minor)?;
+    drop(db);
+    Ok(result)
+}
+
+#[command]
+pub async fn freeze_gift_card(
+    card_number_or_id: String,
+    state: State<'_, AppState>,
+) -> Result<GiftCard, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.freeze_gift_card(&card_number_or_id)?;
+    drop(db);
+    Ok(result)
+}
+
+#[command]
+pub async fn unfreeze_gift_card(
+    card_number_or_id: String,
+    state: State<'_, AppState>,
+) -> Result<GiftCard, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.unfreeze_gift_card(&card_number_or_id)?;
+    drop(db);
+    Ok(result)
+}
