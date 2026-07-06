@@ -25,6 +25,7 @@ pub struct TransferWithLines {
 }
 
 #[command]
+#[allow(clippy::too_many_arguments)]
 pub async fn create_stock_transfer(
     source_location: Option<String>,
     destination_location: Option<String>,

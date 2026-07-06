@@ -3,8 +3,7 @@ use tauri::{State, command};
 
 use oz_core::db::Store;
 use oz_core::gift_card::{
-    GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
-    RedeemGiftCardResult,
+    GiftCard, GiftCardFilter, GiftCardWithTransactions, IssueGiftCardInput, RedeemGiftCardResult,
 };
 
 use crate::error::AppError;

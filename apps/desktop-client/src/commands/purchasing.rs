@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::db::{Store, purchase_orders::CreatePoLineInput};
-use oz_core::{PurchaseOrder, PurchaseOrderLine, PurchaseOrderWithLines, Supplier};
+use oz_core::{PurchaseOrderLine, PurchaseOrderWithLines, Supplier};
 
 use foundation::validate_not_empty;
 
