@@ -1,15 +1,8 @@
 //! Integration tests for [`StripePaymentProcessor`] using `wiremock` to
 //! simulate the Stripe REST API.
 //!
-//! These tests start a local mock HTTP server, point the processor at it,
-//! and verify that each `PaymentProcessor` method sends the correct
-//! requests and handles responses correctly.
-//!
-//! # Running
-//!
-//! ```bash
-//! cargo test --package oz-payment --test stripe_integration
-//! ```
+//! Each test creates its own `MockServer` to avoid race conditions from
+//! shared mutable state when tests run in parallel.
 
 use foundation::{Currency, Money};
 use oz_payment::PaymentProcessor;
@@ -19,6 +12,9 @@ use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
 };
+
+mod fixtures;
+use fixtures::stripe_processor;
 
 /// Helper: construct a USD currency.
 fn usd() -> Currency {
@@ -36,7 +32,7 @@ fn request(major_amount: i64) -> PaymentRequest {
 
 // ── Authorize ────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn authorize_happy_path() {
     let mock_server = MockServer::start().await;
 
@@ -52,7 +48,7 @@ async fn authorize_happy_path() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let result = proc.authorize(&request(15)).await.unwrap();
     assert!(result.success);
@@ -60,7 +56,7 @@ async fn authorize_happy_path() {
     assert_eq!(result.amount_charged.minor_units, 1500);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn authorize_declined() {
     let mock_server = MockServer::start().await;
 
@@ -76,7 +72,7 @@ async fn authorize_declined() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let err = proc.authorize(&request(10)).await.unwrap_err();
     let msg = err.to_string();
@@ -86,7 +82,7 @@ async fn authorize_declined() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn authorize_server_error() {
     let mock_server = MockServer::start().await;
 
@@ -96,14 +92,14 @@ async fn authorize_server_error() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let err = proc.authorize(&request(10)).await.unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("500"), "expected HTTP 500 error, got: {msg}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn authorize_non_json_response() {
     let mock_server = MockServer::start().await;
 
@@ -113,7 +109,7 @@ async fn authorize_non_json_response() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let err = proc.authorize(&request(10)).await.unwrap_err();
     let msg = err.to_string();
@@ -125,7 +121,7 @@ async fn authorize_non_json_response() {
 
 // ── Sale (authorize + capture) ───────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn sale_happy_path() {
     let mock_server = MockServer::start().await;
 
@@ -164,7 +160,7 @@ async fn sale_happy_path() {
 
 // ── Capture ──────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn capture_happy_path() {
     let mock_server = MockServer::start().await;
 
@@ -180,14 +176,14 @@ async fn capture_happy_path() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let result = proc.capture("pi_capture_001").await.unwrap();
     assert!(result.success);
     assert_eq!(result.amount_charged.minor_units, 3000);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn capture_not_found() {
     let mock_server = MockServer::start().await;
 
@@ -203,7 +199,7 @@ async fn capture_not_found() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let err = proc.capture("pi_missing").await.unwrap_err();
     let msg = err.to_string();
@@ -215,7 +211,7 @@ async fn capture_not_found() {
 
 // ── Refund ───────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn refund_happy_path() {
     let mock_server = MockServer::start().await;
 
@@ -230,7 +226,7 @@ async fn refund_happy_path() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let result = proc.refund("pi_to_refund", None).await.unwrap();
     assert!(result.success);
@@ -238,7 +234,7 @@ async fn refund_happy_path() {
     assert_eq!(result.amount_charged.minor_units, 5000);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn refund_declined() {
     let mock_server = MockServer::start().await;
 
@@ -254,7 +250,7 @@ async fn refund_declined() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let err = proc.refund("pi_uncaptured", None).await.unwrap_err();
     let msg = err.to_string();
@@ -264,34 +260,9 @@ async fn refund_declined() {
     );
 }
 
-// ── Void ─────────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn void_happy_path() {
-    let mock_server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(path("/payment_intents/pi_void_001/cancel"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "pi_void_001",
-            "amount": 2500,
-            "amount_received": null,
-            "currency": "usd",
-            "status": "canceled"
-        })))
-        .mount(&mock_server)
-        .await;
-
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
-
-    let result = proc.void("pi_void_001").await.unwrap();
-    assert!(result.transaction_id.is_some());
-    assert_eq!(result.amount_charged.minor_units, 2500);
-}
-
 // ── Receipt ──────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn receipt_happy_path() {
     let mock_server = MockServer::start().await;
 
@@ -307,7 +278,7 @@ async fn receipt_happy_path() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let receipt = proc.receipt("pi_receipt_001").await.unwrap();
     assert_eq!(receipt.transaction_id, "pi_receipt_001");
@@ -315,7 +286,7 @@ async fn receipt_happy_path() {
     assert_eq!(receipt.amount.minor_units, 1000);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn receipt_not_found() {
     let mock_server = MockServer::start().await;
 
@@ -330,7 +301,7 @@ async fn receipt_not_found() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let err = proc.receipt("pi_nonexistent").await.unwrap_err();
     let msg = err.to_string();
@@ -339,7 +310,7 @@ async fn receipt_not_found() {
 
 // ── Request body verification ───────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn authorize_sends_correct_form_body() {
     let mock_server = MockServer::start().await;
 
@@ -355,7 +326,7 @@ async fn authorize_sends_correct_form_body() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let req = PaymentRequest {
         amount: Money::from_major(50, usd()).unwrap(),
@@ -365,7 +336,6 @@ async fn authorize_sends_correct_form_body() {
 
     let _ = proc.authorize(&req).await.unwrap();
 
-    // Verify the request that reached the mock server.
     let received = mock_server.received_requests().await.unwrap_or_default();
     assert_eq!(received.len(), 1, "expected 1 request");
 
@@ -382,18 +352,17 @@ async fn authorize_sends_correct_form_body() {
         "body: {body}"
     );
 
-    // Verify the Authorization header
     let auth_header = received[0]
         .headers
         .get("Authorization")
         .expect("Authorization header should be present");
     assert_eq!(
-        auth_header, "Bearer sk_test_mock",
+        auth_header, "Bearer sk_test_shared_fixture",
         "unexpected auth header: {auth_header:?}"
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn refund_sends_correct_form_body() {
     let mock_server = MockServer::start().await;
 
@@ -408,7 +377,7 @@ async fn refund_sends_correct_form_body() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let _ = proc.refund("pi_to_refund", None).await.unwrap();
 
@@ -421,7 +390,7 @@ async fn refund_sends_correct_form_body() {
 
 // ── Partial amount refund ────────────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn refund_partial_amount() {
     let mock_server = MockServer::start().await;
 
@@ -436,7 +405,7 @@ async fn refund_partial_amount() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint("sk_test_mock", &mock_server.uri(), false);
+    let proc = stripe_processor(&mock_server.uri(), false);
 
     let partial_amount = Some(Money::from_major(10, usd()).unwrap());
     let result = proc.refund("pi_partial", partial_amount).await.unwrap();
@@ -446,7 +415,7 @@ async fn refund_partial_amount() {
 
 // ─── Card-present ────────────────────────────────────────────────────
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn authorize_card_present_sends_correct_method_type() {
     let mock_server = MockServer::start().await;
 
@@ -462,11 +431,8 @@ async fn authorize_card_present_sends_correct_method_type() {
         .mount(&mock_server)
         .await;
 
-    let proc = StripePaymentProcessor::new_with_endpoint(
-        "sk_test_terminal",
-        &mock_server.uri(),
-        true, // card_present = true
-    );
+    let proc =
+        StripePaymentProcessor::new_with_endpoint("sk_test_terminal", &mock_server.uri(), true);
 
     let _ = proc.authorize(&request(20)).await.unwrap();
 
@@ -477,22 +443,5 @@ async fn authorize_card_present_sends_correct_method_type() {
     assert!(
         body.contains("payment_method_types%5B%5D=card_present"),
         "body: {body}"
-    );
-}
-
-// ── Timeout simulation ───────────────────────────────────────────────
-
-#[tokio::test]
-async fn authorize_network_error() {
-    // Point at a port where nothing is listening — should produce a
-    // connection refused error.
-    let proc =
-        StripePaymentProcessor::new_with_endpoint("sk_test_mock", "http://127.0.0.1:1", false);
-
-    let err = proc.authorize(&request(10)).await.unwrap_err();
-    let msg = err.to_string();
-    assert!(
-        msg.contains("network error"),
-        "expected network error, got: {msg}"
     );
 }

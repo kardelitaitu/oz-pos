@@ -34,17 +34,17 @@ export const listTerminals = (): Promise<TerminalDto[]> =>
 export const getTerminal = (id: string): Promise<TerminalDto | null> =>
   invoke<TerminalDto | null>('get_terminal', { id });
 
-export const registerTerminal = (args: RegisterTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('register_terminal', { args });
+export const registerTerminal = (userId: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
+  invoke<{ id: string }>('register_terminal', { userId, args });
 
-export const updateTerminal = (args: UpdateTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('update_terminal', { args });
+export const updateTerminal = (userId: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
+  invoke<{ id: string }>('update_terminal', { userId, args });
 
 export const pingTerminal = (id: string): Promise<void> =>
   invoke<void>('ping_terminal', { id });
 
-export const deleteTerminal = (id: string): Promise<void> =>
-  invoke('delete_terminal', { id });
+export const deleteTerminal = (userId: string, id: string): Promise<void> =>
+  invoke('delete_terminal', { userId, id });
 
 // ── Feature Overrides ──────────────────────────────────────────────
 
@@ -60,14 +60,16 @@ export const listTerminalOverrides = (terminalId: string): Promise<TerminalFeatu
   invoke<TerminalFeatureOverride[]>('list_terminal_overrides', { terminalId });
 
 export const setTerminalOverride = (
+  userId: string,
   terminalId: string,
   feature: string,
   enabled: boolean,
 ): Promise<void> =>
-  invoke<void>('set_terminal_override', { terminalId, feature, enabled });
+  invoke<void>('set_terminal_override', { userId, terminalId, feature, enabled });
 
 export const deleteTerminalOverride = (
+  userId: string,
   terminalId: string,
   feature: string,
 ): Promise<void> =>
-  invoke<void>('delete_terminal_override', { terminalId, feature });
+  invoke<void>('delete_terminal_override', { userId, terminalId, feature });

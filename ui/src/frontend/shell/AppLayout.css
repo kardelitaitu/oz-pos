@@ -7,6 +7,12 @@
  *   .app-content         → scrollable main area
  * ============================================================ */
 
+/* Fullscreen workspace (e.g. restaurant-pos) — no sidebar. */
+.workspace-fullscreen {
+  height: 100dvh;
+  overflow: hidden;
+}
+
 .app-layout {
   display: flex;
   height: 100dvh;
@@ -35,6 +41,11 @@
   font-size: var(--text-sm);
   writing-mode: vertical-rl;
   text-orientation: mixed;
+}
+
+.app-sidebar.collapsed .app-sidebar-logo-img,
+.app-sidebar.collapsed .app-sidebar-store-name {
+  display: none;
 }
 
 .app-sidebar.collapsed .app-sidebar-user,
@@ -87,6 +98,33 @@
   color: var(--color-accent);
   letter-spacing: var(--tracking-tight);
   line-height: 1;
+}
+
+.app-sidebar-logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.app-sidebar.collapsed .app-sidebar-logo-img {
+  width: 28px;
+  height: 28px;
+}
+
+.app-sidebar-logo-img {
+  max-width: 120px;
+  max-height: 32px;
+  object-fit: contain;
+}
+
+.app-sidebar-store-name {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-sidebar-gateway {
@@ -175,6 +213,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.app-sidebar-workspace-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: color var(--duration-100) var(--ease-out), background-color var(--duration-100) var(--ease-out);
+  white-space: nowrap;
+}
+
+.app-sidebar-workspace-btn:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
+.app-sidebar-workspace-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
 }
 
 /* ── Sidebar toggle button ────────────────────────── */

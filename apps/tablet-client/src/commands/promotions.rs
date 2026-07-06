@@ -5,6 +5,7 @@ use tauri::{State, command};
 
 use oz_core::{Promotion, PromotionApplication, Store};
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -51,6 +52,7 @@ pub async fn get_promotion(
 
 #[command]
 pub async fn create_promotion(
+    user_id: String,
     args: CreatePromotionArgs,
     state: State<'_, AppState>,
 ) -> Result<Promotion, AppError> {
@@ -76,11 +78,13 @@ pub async fn create_promotion(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_CREATE)?;
     Ok(store.create_promotion(&promo)?)
 }
 
 #[command]
 pub async fn update_promotion(
+    user_id: String,
     promotion: Promotion,
     state: State<'_, AppState>,
 ) -> Result<Promotion, AppError> {
@@ -89,24 +93,33 @@ pub async fn update_promotion(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_EDIT)?;
     Ok(store.update_promotion(&p)?)
 }
 
 #[command]
-pub async fn delete_promotion(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn delete_promotion(
+    user_id: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_DELETE)?;
     Ok(store.delete_promotion(&id)?)
 }
 
 #[command]
 pub async fn apply_promotion(
+    user_id: String,
     sale_id: String,
     promotion_id: String,
     state: State<'_, AppState>,
 ) -> Result<PromotionApplication, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_APPLY)?;
 
     let promo = store
         .get_promotion(&promotion_id)?

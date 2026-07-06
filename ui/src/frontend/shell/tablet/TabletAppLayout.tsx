@@ -71,7 +71,7 @@ export default function TabletAppLayout({
                   {item.icon}
                 </span>
               )}
-              <span className="tablet-tab-label"><Localized id={item.i18nKey ?? item.label}>{item.label}</Localized></span>
+              <span className="tablet-tab-label"><Localized id={item.i18nKey ?? item.label}><span>{item.label}</span></Localized></span>
             </button>
           ))}
         </div>

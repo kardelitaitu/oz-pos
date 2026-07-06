@@ -301,6 +301,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -357,6 +358,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -396,6 +398,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -447,6 +450,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -497,6 +501,7 @@ mod tests {
                 updated_at: now.clone(),
                 subtotal: price(0),
                 tax_total: price(0),
+                customer_id: None,
                 lines: vec![],
             };
             s.create_sale(&test_sale).unwrap();
@@ -554,6 +559,7 @@ mod tests {
                 updated_at: now.clone(),
                 subtotal: price(0),
                 tax_total: price(0),
+                customer_id: None,
                 lines: vec![],
             };
             s.create_sale(&test_sale).unwrap();
@@ -649,6 +655,7 @@ mod tests {
                 updated_at: now.clone(),
                 subtotal: price(0),
                 tax_total: price(0),
+                customer_id: None,
                 lines: vec![],
             };
             s.create_sale(&test_sale).unwrap();

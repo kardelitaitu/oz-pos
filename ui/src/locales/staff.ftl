@@ -61,6 +61,11 @@ staff-field-pin-aria =
     .aria-label = PIN
 staff-error-generic = { $message }
 
+# ── Workspace Access ──────────────────────────────────────────────────────
+staff-ws-section-label = Workspace Access
+staff-ws-role-defaults = Use role defaults
+staff-ws-custom = Custom
+
 # ── Staff Login ──────────────────────────────────────────────────────────
 staff-login-title = OZ-POS
 staff-login-subtitle = Staff Login
@@ -86,7 +91,9 @@ staff-login-backspace-aria =
     .aria-label = Backspace
 staff-login-digit-aria =
     .aria-label = { $digit }
-staff-login-submit = Log in
+staff-login-submit = Login
 staff-login-submitting = Logging in…
 staff-login-verifying = Verifying...
 staff-login-back = ← Back
+staff-login-submit = Login
+staff-login-submitting = Logging in…

@@ -99,7 +99,8 @@ describe('SalesDashboardScreen', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /daily total/i })).toBeInTheDocument();
     });
-    expect(screen.getByText('$12.50')).toBeInTheDocument();
-    expect(screen.getByText('$8.00')).toBeInTheDocument();
+    // formatMoney uses id-ID locale by default → $ 12,50, $ 8,00
+    expect(screen.getByText(/\$ 12,50/)).toBeInTheDocument();
+    expect(screen.getByText(/\$ 8,00/)).toBeInTheDocument();
   });
 });

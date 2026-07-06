@@ -61,12 +61,25 @@
   padding: var(--space-3) var(--space-4);
 }
 
-.cat-mgmt-swatch {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
+/* Coloured circle badge that holds the icon SVG */
+.cat-mgmt-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.cat-mgmt-icon-badge-empty {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  display: block;
 }
 
 .cat-mgmt-card-info {
@@ -96,6 +109,36 @@
   font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   font-family: var(--font-mono);
+}
+
+/* Edit button — pencil icon */
+.cat-mgmt-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  color: var(--color-fg-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition:
+    color var(--duration-100) var(--ease-out),
+    background-color var(--duration-100) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.cat-mgmt-edit-btn:hover {
+  color: var(--color-accent);
+  background: var(--color-accent-muted, rgba(99, 102, 241, 0.08));
+}
+
+.cat-mgmt-edit-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
 }
 
 .cat-mgmt-delete-btn {
@@ -287,7 +330,48 @@
   transform: scale(1.1);
 }
 
-/* ── Preview chip ───────────────────────────────────── */
+/* ── Icon picker ─────────────────────────────────────── */
+.cat-mgmt-icon-picker {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.cat-mgmt-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color var(--duration-100) var(--ease-out),
+    transform var(--duration-100) var(--ease-out),
+    background-color var(--duration-100) var(--ease-out),
+    color var(--duration-100) var(--ease-out);
+  outline: none;
+}
+
+.cat-mgmt-icon-btn:hover {
+  border-color: var(--color-border-hover);
+  transform: scale(1.08);
+}
+
+.cat-mgmt-icon-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.cat-mgmt-icon-btn--selected {
+  border-color: transparent;
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+
 .cat-mgmt-preview {
   display: flex;
   flex-direction: column;

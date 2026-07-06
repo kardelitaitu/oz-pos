@@ -289,6 +289,16 @@
   font-weight: 500;
 }
 
+.data-mgmt-meta-value {
+  color: var(--color-fg-primary);
+  font-size: var(--text-sm);
+  text-align: right;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Dry-run ─────────────────────────────────────────────────────── */
 
 .data-mgmt-dry-run {

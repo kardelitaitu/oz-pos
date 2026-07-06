@@ -7,6 +7,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod authz;
 pub mod branding;
 pub mod bundles;
 pub mod categories;
@@ -21,6 +22,7 @@ pub mod history;
 pub mod kds;
 pub mod loyalty;
 pub mod offline;
+pub mod plugins;
 pub mod pos;
 pub mod product_variants;
 pub mod products;
@@ -38,3 +40,4 @@ pub mod tables;
 pub mod tax;
 pub mod terminals;
 pub mod void;
+pub mod workspaces;

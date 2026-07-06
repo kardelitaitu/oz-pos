@@ -6,8 +6,9 @@
 // 3. Expanded items appear in the cart
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import { ToastProvider } from '@/components/Toast';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { withFluent } from '@/locales/test-utils';
 import { ScannerError } from '@/api/hardware';
 import salesFtl from '@/locales/sales.ftl?raw';
@@ -159,9 +160,41 @@ vi.mock('@/api/bundles', () => ({
 }));
 
 vi.mock('@/api/shifts', () => ({
-  getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
+  getActiveShift: vi.fn(() => Promise.resolve({
+    id: 'shift-1',
+    userId: 'user-1',
+    terminalId: null,
+    openedAt: new Date().toISOString(),
+    closedAt: null,
+    openingBalanceMinor: 0,
+    closingBalanceMinor: null,
+    expectedCashMinor: null,
+    cashDifferenceMinor: null,
+    totalSalesMinor: 0,
+    totalCashMinor: 0,
+    totalCardMinor: 0,
+    totalOtherMinor: 0,
+    totalVoidsMinor: 0,
+    totalRefundsMinor: 0,
+    totalPayoutsMinor: 0,
+    notes: '',
+    status: 'open',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })),
   openShift: vi.fn(),
   closeShift: vi.fn(),
+}));
+
+vi.mock('@/api/settings', () => ({
+  getReceiptSettings: vi.fn(() => Promise.resolve({
+    showCurrency: true, decimalSeparator: 'dot', showTax: true,
+    footer: '', paperWidth: 'standard', showTableNumber: false,
+    marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+  })),
+  getStoreSettings: vi.fn(() => Promise.resolve({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' })),
+  listCreditSales: vi.fn(() => Promise.resolve([])),
+  settleCredit: vi.fn(),
 }));
 
 // Mock sales API to prevent unhandled promise rejections from
@@ -187,6 +220,14 @@ vi.mock('@/api/sales', () => ({
   onReceiptPrinted: vi.fn(),
 }));
 
+// Mock interaction utils so jsdom's non-Promise play() doesn't
+// trigger a TypeError inside triggerInteraction (the catch {}
+// in PosScreen's onProductFound would swallow the entire scan
+// handler before addProduct/addToast can execute).
+vi.mock('@/utils/interaction', () => ({
+  triggerInteraction: vi.fn(),
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: {
@@ -194,6 +235,7 @@ vi.mock('@/contexts/AuthContext', () => ({
       username: 'testuser',
       role_name: 'cashier',
       token: 'mock-token',
+      role_id: 'role-1',
     },
     loading: false,
     error: null,
@@ -203,6 +245,17 @@ vi.mock('@/contexts/AuthContext', () => ({
     isManager: false,
     isOwner: false,
   }),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'store-pos',
+    setActiveWorkspace: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+  }),
+  WorkspaceProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 // ── Test wrapper ──────────────────────────────────────────────────
@@ -222,10 +275,12 @@ describe('PosScreen – bundle scanning toast', () => {
   it('shows a success toast when a bundle barcode is scanned', async () => {
     render(wrap(<PosScreen />));
 
-    // Wait for component to mount and register the barcode callback.
+    // Wait for component to mount, register the barcode callback, and
+    // load an active shift (the onProductFound callback checks for it).
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // Simulate scanning a bundle SKU barcode.
     mockedBarcode.triggerScan('BUNDLE-SKU-001');
@@ -243,6 +298,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // Simulate scanning an unrecognised code.
     mockedBarcode.triggerScan('UNKNOWN-CODE');
@@ -259,6 +315,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // Simulate scanning a bundle SKU.
     mockedBarcode.triggerScan('BUNDLE-SKU-001');
@@ -269,10 +326,10 @@ describe('PosScreen – bundle scanning toast', () => {
     expect(toast.textContent).toContain('Bundle');
     expect(toast.textContent).toContain('items');
 
-    // Cart should show the expanded items by SKU.
-    // The CartLineItem component renders SKU in .pos-cart-line-sku.
-    expect(screen.getByText(/ITEM-001/)).toBeInTheDocument();
-    expect(screen.getByText(/ITEM-002/)).toBeInTheDocument();
+    // Cart should show the expanded items by product name.
+    // CartLineItem renders `line.name ?? line.sku`.
+    expect(screen.getByText('Item 1')).toBeInTheDocument();
+    expect(screen.getByText('Item 2')).toBeInTheDocument();
   });
 
   it('silently swallows when lookupByBarcode rejects (catch block)', async () => {
@@ -281,6 +338,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // Make lookupByBarcode throw on the next call.
     vi.mocked(productsApi.lookupByBarcode).mockRejectedValueOnce(
@@ -310,6 +368,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // Make lookupByBarcode throw a ScannerError (scanner hardware failure).
     vi.mocked(productsApi.lookupByBarcode).mockRejectedValueOnce(
@@ -342,6 +401,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // lookupByBarcode returns null (as mocked by default), so the
     // callback falls through to lookupBundleBySku. Make it reject.
@@ -373,6 +433,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // lookupByBarcode returns null (default), so the callback falls
     // through to lookupBundleBySku. Make it reject with a ScannerError.
@@ -407,6 +468,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // lookupByBarcode returns null (default), lookupBundleBySku succeeds.
     // But make lookupProductBySku reject — this is used as the lookupItem
@@ -439,6 +501,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // lookupByBarcode returns null (default), lookupBundleBySku succeeds.
     // But make lookupProductBySku reject with a ScannerError — this is
@@ -474,6 +537,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // Make lookupByBarcode return a product DTO for this scan.
     vi.mocked(productsApi.lookupByBarcode).mockResolvedValueOnce({
@@ -485,6 +549,8 @@ describe('PosScreen – bundle scanning toast', () => {
       in_stock: true,
       stock_qty: 25,
       tax_rate_ids: [],
+      created_at: '',
+      price_updated_at: '',
     });
 
     // Simulate scanning a barcode that matches a product (not a bundle).
@@ -498,8 +564,11 @@ describe('PosScreen – bundle scanning toast', () => {
     // The product name appears in both the product grid and the cart.
     expect(screen.getAllByText('Caffè Latte').length).toBeGreaterThanOrEqual(1);
 
-    // Cart should no longer be empty (product was added).
-    expect(screen.queryByText(/Cart is empty/)).not.toBeInTheDocument();
+    // Cart should no longer be empty — wait for the async state update
+    // from addProduct (setLines inside usePosState adds the item).
+    await waitFor(() => {
+      expect(screen.queryByText(/Cart is empty/)).not.toBeInTheDocument();
+    });
 
     // The subtotal area should appear, confirming the product is in the cart.
     expect(screen.getByText(/Subtotal/)).toBeInTheDocument();
@@ -517,6 +586,7 @@ describe('PosScreen – bundle scanning toast', () => {
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // lookupByBarcode returns a product DTO for the scanned code.
     // Note: we deliberately do NOT set mockResolvedValueOnce on
@@ -531,6 +601,8 @@ describe('PosScreen – bundle scanning toast', () => {
       in_stock: true,
       stock_qty: 50,
       tax_rate_ids: [],
+      created_at: '',
+      price_updated_at: '',
     });
 
     // Scan a code that matches both a product barcode and a bundle SKU.
@@ -543,7 +615,9 @@ describe('PosScreen – bundle scanning toast', () => {
 
     // The product should appear in the cart (product path won).
     expect(screen.getAllByText('Espresso Shot').length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText(/Cart is empty/)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/Cart is empty/)).not.toBeInTheDocument();
+    });
 
     // The bundle lookup should NOT have been called — the product path
     // returns early via `return` before falling through to the bundle path.
@@ -556,10 +630,12 @@ describe('PosScreen – bundle scanning toast', () => {
   it('shows a warning toast when a bundle is found but inactive', async () => {
     render(wrap(<PosScreen />));
 
-    // Wait for the barcode scanner callback to be registered.
+    // Wait for the barcode scanner callback to be registered and an
+    // active shift to be loaded.
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
     });
+    await screen.findByText('Close');
 
     // Scan an SKU the mock factory recognizes as an inactive bundle.
     // lookupByBarcode returns null (default) → falls through to bundle

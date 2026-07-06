@@ -186,14 +186,58 @@
 }
 
 /* ── Product card (button inside listitem wrapper) ─ */
+.product-card-price-volatility {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #eab308;
+  animation: product-card-price-pulse 2s ease-in-out infinite;
+  z-index: 1;
+}
+@keyframes product-card-price-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 .product-card {
+  position: relative;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   overflow: hidden;
   transition:
     box-shadow var(--duration-150) var(--ease-out),
-    border-color var(--duration-150) var(--ease-out);
+    border-color var(--duration-150) var(--ease-out),
+    transform var(--duration-150) var(--ease-out);
+}
+
+.product-card--added {
+  animation: product-card-added 450ms var(--ease-out);
+  z-index: 2;
+}
+
+@keyframes product-card-added {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-success);
+    border-color: var(--color-success);
+  }
+  25% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-success) 25%, transparent);
+    border-color: var(--color-success);
+    transform: scale(0.97);
+  }
+  55% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 8%, transparent);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    border-color: var(--color-border);
+    transform: scale(1);
+  }
 }
 
 .product-card:hover {
@@ -329,33 +373,25 @@
   background: var(--color-danger);
 }
 
-.product-card-add-btn {
+.product-card-add-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  padding: 0;
+  flex-shrink: 0;
   border-radius: var(--radius-md);
   color: var(--color-accent-fg);
   background: var(--color-accent);
-  border: none;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-150) var(--ease-out),
-    opacity var(--duration-150) var(--ease-out);
+  transition: background-color var(--duration-200) var(--ease-out), color var(--duration-200) var(--ease-out);
 }
 
-.product-card-add-btn:hover {
-  background: var(--color-accent-hover);
+.product-card--added .product-card-add-icon {
+  background-color: var(--color-success);
+  color: #fff;
 }
 
-.product-card-add-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
-}
-
-.product-card-add-btn svg {
+.product-card-add-icon svg {
   width: 16px;
   height: 16px;
 }

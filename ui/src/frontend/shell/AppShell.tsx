@@ -1,14 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useIdleTimer } from '@/hooks/useIdleTimer';
 import AppLayout, { type AppRoute } from './AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
-import { completeSetup, getSetupStatus } from '@/api/settings';
+import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
+import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
 import type { WizardState } from '@/features/setup/SetupWizard';
+import RetailPosScreen from '@/features/retail/RetailPosScreen';
 
 /**
  * Application shell — handles setup wizard flow, auth gates,
@@ -19,7 +23,12 @@ export default function AppShell() {
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
+  const { activeWorkspace } = useWorkspace();
+
+  useIdleTimer(() => {
+    if (session) logout();
+  });
 
   // On mount, check if setup was already completed.
   useEffect(() => {
@@ -43,21 +52,33 @@ export default function AppShell() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleComplete = useCallback(async (state: WizardState) => {
-    try {
-      await completeSetup({
-        preset: state.preset ?? 'custom',
-        features: Object.keys(state.features).filter(
-          (k) => state.features[k],
-        ),
-      });
-    } catch (err) {
-      console.error('Failed to persist setup:', err);
+  // Navigate to workspace-appropriate route on selection.
+  const prevWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => {
+    if (prevWorkspaceRef.current !== undefined && prevWorkspaceRef.current !== activeWorkspace) {
+      const workspaceRoute: Record<string, string> = {
+        'restaurant-pos': 'sales',
+        'store-pos': 'products',
+        inventory: 'inventory',
+        admin: 'settings',
+      };
+      setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'products');
     }
+    prevWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
+
+  const handleComplete = useCallback(async (state: WizardState) => {
+    await completeSetup({
+      preset: state.preset ?? 'custom',
+      features: Object.keys(state.features).filter(
+        (k) => state.features[k],
+      ),
+    });
     setHasCompletedSetup(true);
   }, []);
 
   const handleSkip = useCallback(() => {
+    dismissSetupWizard().catch(console.error);
     setHasCompletedSetup(true);
   }, []);
 
@@ -95,22 +116,51 @@ export default function AppShell() {
     );
   }
 
-  if (!hasCompletedSetup) {
-    return (
-      <SetupWizard onComplete={handleComplete} onSkip={handleSkip} />
-    );
-  }
-
   if (!session) {
     return (
       <StaffLoginScreen />
     );
   }
 
+  if (!hasCompletedSetup) {
+    return (
+      <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />
+    );
+  }
+
+  if (!activeWorkspace) {
+    return <WorkspaceHome />;
+  }
+
   // Render the current page from the registry, or null if not found.
   const pageRegistration = getPage(currentRoute);
   const PageComponent = pageRegistration?.component ?? null;
   const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole);
+
+  // Workspace fullscreen — restaurant POS hides the sidebar.
+  if (activeWorkspace === 'restaurant-pos') {
+    return (
+      <div className="workspace-fullscreen">
+        {pageDenied ? (
+          <PermissionDenied
+            action={pageRegistration!.label}
+            requiredRole={pageRegistration!.requiredRole!}
+          />
+        ) : PageComponent ? (
+          <PageComponent />
+        ) : null}
+      </div>
+    );
+  }
+
+  // Workspace fullscreen — retail POS with its own layout.
+  if (activeWorkspace === 'store-pos') {
+    return (
+      <div className="workspace-fullscreen">
+        <RetailPosScreen />
+      </div>
+    );
+  }
 
   // Fullscreen pages (e.g. Kiosk mode) render without AppLayout wrapper.
   if (pageRegistration?.fullscreen) {

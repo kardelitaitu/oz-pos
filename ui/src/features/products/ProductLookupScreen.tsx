@@ -1,6 +1,6 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useLocalization } from '@fluent/react';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/components/Localized';
 import { formatMoney, type Product } from '@/types/domain';
 import { lookupProductBySku } from '@/api/products';
@@ -87,6 +87,23 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
   const [searchQuery, setSearchQuery] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('All');
+  const [addedSku, setAddedSku] = useState<string | null>(null);
+  const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up add-to-cart animation timer on unmount
+  useEffect(() => {
+    return () => {
+      if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    };
+  }, []);
+
+  // Wrap onAddProduct to trigger the green flash animation
+  const handleAddProduct = useCallback((product: Product) => {
+    onAddProduct?.(product);
+    setAddedSku(product.sku);
+    if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    addedTimerRef.current = setTimeout(() => setAddedSku(null), 450);
+  }, [onAddProduct]);
 
   // All category options: "All" + each unique category
   const categoryOptions = useMemo<Category[]>(
@@ -123,7 +140,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
     const code = barcodeInput.trim();
     const found = products.find((p) => p.barcode === code);
     if (found && found.inStock) {
-      onAddProduct?.(found);
+      handleAddProduct(found);
       setBarcodeInput('');
       return;
     }
@@ -144,6 +161,8 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             onAddProduct?.(item.product);
           }
         }
+        setAddedSku(code);
+        addedTimerRef.current = setTimeout(() => setAddedSku(null), 450);
         addToast({
           type: 'success',
           message: l10n.getString('product-lookup-bundle-added', {
@@ -161,7 +180,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
       // If bundle lookup fails, silently ignore.
     }
     setBarcodeInput('');
-  }, [barcodeInput, onAddProduct, products, addToast]);
+  }, [barcodeInput, handleAddProduct, products, addToast]);
 
   // Handle Enter key in barcode input
   const handleBarcodeKeyDown = useCallback(
@@ -236,7 +255,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             >
               <BarcodeIcon />
               <Localized id="product-lookup-barcode-scan">
-                <span>Scan</span>
+                <span />
               </Localized>
             </button>
           </Localized>
@@ -261,7 +280,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             >
               {cat === 'All' ? (
                 <Localized id="product-lookup-all-categories">
-                  <span>All Categories</span>
+                  <span />
                 </Localized>
               ) : (
                 cat
@@ -276,7 +295,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
         <div className="product-empty">
           <span className="product-empty-text">
             <Localized id="product-lookup-loading">
-              <span>Loading products…</span>
+              <span />
             </Localized>
           </span>
         </div>
@@ -285,7 +304,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           <PackageIcon />
           <span className="product-empty-text">
             <Localized id="product-lookup-no-results">
-              <span>No products found</span>
+              <span />
             </Localized>
           </span>
         </div>
@@ -296,7 +315,8 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
               <ProductCard
                 key={product.sku}
                 product={product}
-                {...(onAddProduct ? { onAdd: onAddProduct } : {})}
+                onAdd={handleAddProduct}
+                added={product.sku === addedSku}
               />
             ))}
           </div>
@@ -315,7 +335,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           }}
         >
           <Localized id="product-lookup-dev-fallback">
-            <span>Using sample data (IPC unavailable)</span>
+            <span />
           </Localized>
         </div>
       )}
@@ -323,14 +343,23 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
   );
 }
 
+const PRICE_VOLATILITY_MS = 24 * 60 * 60 * 1000;
+
+function isPriceRecent(p: Product): boolean {
+  if (!p.priceUpdatedAt) return false;
+  const elapsed = Date.now() - new Date(p.priceUpdatedAt).getTime();
+  return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
+}
+
 // ── ProductCard sub-component ──────────────────────────────────────
 
 interface ProductCardProps {
   product: Product;
   onAdd?: (product: Product) => void;
+  added?: boolean;
 }
 
-function ProductCard({ product, onAdd }: ProductCardProps) {
+function ProductCard({ product, onAdd, added }: ProductCardProps) {
   const { l10n } = useLocalization();
   const handleAdd = useCallback(() => {
     onAdd?.(product);
@@ -340,9 +369,13 @@ function ProductCard({ product, onAdd }: ProductCardProps) {
     ? l10n.getString('product-lookup-in-stock')
     : l10n.getString('product-lookup-out-of-stock');
 
+  let cardClass = 'product-card';
+  if (!product.inStock) cardClass += ' product-card--disabled';
+  if (added) cardClass += ' product-card--added';
+
   return (
     <div
-      className={`product-card${!product.inStock ? ' product-card--disabled' : ''}`}
+      className={cardClass}
       role="listitem"
     >
       {/* Clickable area wraps the entire card content */}
@@ -364,6 +397,7 @@ function ProductCard({ product, onAdd }: ProductCardProps) {
           aria-label={`${product.name} — ${formatMoney(product.price)}`}
         >
           {/* Row: name + category badge */}
+          {isPriceRecent(product) && <span className="product-card-price-volatility" title="Price changed recently" />}
           <div className="product-card-header">
             <h3 className="product-card-name" title={product.name}>
               {product.name}
@@ -395,11 +429,11 @@ function ProductCard({ product, onAdd }: ProductCardProps) {
               />
               {product.inStock ? (
                 <Localized id="product-lookup-in-stock">
-                  <span>In stock</span>
+                  <span />
                 </Localized>
               ) : (
                 <Localized id="product-lookup-out-of-stock">
-                  <span>Out of stock</span>
+                  <span />
                 </Localized>
               )}
             </span>

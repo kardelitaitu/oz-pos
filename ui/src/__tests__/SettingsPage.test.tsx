@@ -5,6 +5,8 @@ import { withFluent } from '@/locales/test-utils';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { BrandProvider } from '@/contexts/BrandContext';
 
 const SAMPLE_CURRENCIES = [
   { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
@@ -25,6 +27,13 @@ const { invokeMock } = vi.hoisted(() => {
     if (cmd === 'set_default_currency') {
       return Promise.resolve(undefined);
     }
+    if (cmd === 'get_brand_settings') {
+      return Promise.resolve({
+        primary_colour: '#4f46e5',
+        logo_path: null,
+        store_name: '',
+      });
+    }
     return Promise.resolve({
       showCurrency: false,
       decimalSeparator: 'dot',
@@ -44,7 +53,17 @@ beforeEach(() => {
   invokeMock.mockClear();
 });
 
-const wrap = (children: React.ReactNode) => withFluent(children, settingsFtl, sharedFtl);
+function TestWrapper({ children }: { children: React.ReactNode }) {
+  return withFluent(
+    <BrandProvider>
+      <AuthProvider>{children}</AuthProvider>
+    </BrandProvider>,
+    settingsFtl,
+    sharedFtl,
+  );
+}
+
+const wrap = (children: React.ReactNode) => <TestWrapper>{children}</TestWrapper>;
 
 describe('SettingsPage', () => {
   it('renders the settings title and receipt section', async () => {

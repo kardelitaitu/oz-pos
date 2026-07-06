@@ -247,6 +247,8 @@ export interface SetupWizardProps {
   onComplete?: (state: WizardState) => void;
   /** Called to skip the wizard entirely. */
   onSkip?: () => void;
+  /** Called to dismiss the completion screen without touching the DB. */
+  onLaunch?: () => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -260,7 +262,7 @@ export interface SetupWizardProps {
  *   3. Products             7. Data & Cloud
  *   4. Staff                8. Review & Confirm
  */
-export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
+export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizardProps) {
   const { l10n } = useLocalization();
   const [step, setStep] = useState(0);
   const [preset, setPreset] = useState<Preset | null>(null);
@@ -370,14 +372,12 @@ export default function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
               <h1 className="setup-complete-title">All Set!</h1>
             </Localized>
             <p className="setup-complete-desc">
-              {l10n.getString('setup-complete-desc', {
-                preset: preset ? l10n.getString(`setup-preset-${preset}`) || PRESET_NAMES[preset] : l10n.getString('setup-preset-custom'),
-              })}
+              {PRESET_NAMES[preset ?? 'custom']} &mdash; ready to go.
             </p>
             <p className="setup-complete-features">
-              {l10n.getString('setup-complete-features', { count: enabledCount })}
+              {enabledCount} feature{enabledCount !== 1 ? 's' : ''} enabled.
             </p>
-            <Button size="lg" onClick={onSkip}>
+            <Button size="lg" onClick={() => onLaunch?.()}>
               <Localized id="setup-launch">Launch OZ-POS</Localized>
             </Button>
           </div>

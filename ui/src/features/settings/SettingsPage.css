@@ -90,6 +90,48 @@
   margin: 0;
 }
 
+.settings-size-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-size-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-150) var(--ease-out),
+    background var(--duration-150) var(--ease-out);
+}
+
+.settings-size-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-hover);
+}
+
+.settings-size-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-size-value {
+  min-width: 24px;
+  text-align: center;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
 @media (max-width: 768px) {
   .settings-page {
     padding: 12px;

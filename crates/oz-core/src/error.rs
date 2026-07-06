@@ -4,7 +4,33 @@
 //! so consumers can match on variants. The enum is `#[non_exhaustive]`
 //! so we can add variants without breaking semver.
 
+use serde::Serialize;
 use thiserror::Error;
+
+/// Serializable discriminator for [`CoreError`] variants.
+///
+/// Mirrored on the front-end as `AppError.subKind` so UI code can branch
+/// on the specific flavour of core error without parsing the message string.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CoreErrorKind {
+    /// A database operation failed.
+    Db,
+    /// A platform infrastructure error.
+    Platform,
+    /// Money arithmetic overflowed `i64`.
+    MoneyOverflow,
+    /// Currency code mismatch in an operation requiring equal codes.
+    CurrencyMismatch,
+    /// A lookup by id returned no row.
+    NotFound,
+    /// A uniqueness constraint was violated.
+    Conflict,
+    /// Input validation failure.
+    Validation,
+    /// Unexpected internal error.
+    Internal,
+}
 
 /// Errors that can originate in `oz-core` domain logic.
 #[derive(Debug, Error)]
@@ -63,4 +89,20 @@ pub enum CoreError {
     /// An unexpected internal error (serialization, crypto, I/O, etc.).
     #[error("internal error: {0}")]
     Internal(String),
+}
+
+impl CoreError {
+    /// Map a `CoreError` to its [`CoreErrorKind`] discriminator.
+    pub fn kind(&self) -> CoreErrorKind {
+        match self {
+            CoreError::Db(_) => CoreErrorKind::Db,
+            CoreError::Platform(_) => CoreErrorKind::Platform,
+            CoreError::MoneyOverflow { .. } => CoreErrorKind::MoneyOverflow,
+            CoreError::CurrencyMismatch(..) => CoreErrorKind::CurrencyMismatch,
+            CoreError::NotFound { .. } => CoreErrorKind::NotFound,
+            CoreError::Conflict { .. } => CoreErrorKind::Conflict,
+            CoreError::Validation { .. } => CoreErrorKind::Validation,
+            CoreError::Internal(_) => CoreErrorKind::Internal,
+        }
+    }
 }

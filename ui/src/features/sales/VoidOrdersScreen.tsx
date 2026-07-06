@@ -8,6 +8,7 @@ import {
   type SaleListItem,
   type SaleDetail,
 } from '@/api/sales';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -69,6 +70,7 @@ interface VoidOrdersScreenProps {
 
 export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProps) {
   const { l10n } = useLocalization();
+  const { session } = useAuth();
 
   // Data
   const [sales, setSales] = useState<SaleListItem[]>([]);
@@ -181,7 +183,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
     try {
       await voidSale({
         saleId: activeSaleId,
-        userId: 'admin', // Will be replaced once StaffLogin is implemented
+        userId: session?.user_id ?? 'admin',
         reason,
       });
       setVoidSuccess(l10n.getString('void-orders-success-voided'));
@@ -235,6 +237,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
+            <Localized id="void-orders-search-aria" attrs={{ 'aria-label': true }}>
             <Localized id="void-orders-search-placeholder" attrs={{ placeholder: true }}>
               <input
                 type="search"
@@ -242,12 +245,13 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                 placeholder="Search by order ID or payment method…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label={l10n.getString('void-orders-search-aria')}
               />
+            </Localized>
             </Localized>
           </div>
 
-          <div className="void-orders-status-filters" role="radiogroup" aria-label={l10n.getString('void-orders-filter-status-aria')}>
+          <Localized id="void-orders-filter-status-aria" attrs={{ 'aria-label': true }}>
+          <div className="void-orders-status-filters" role="radiogroup">
             {(['all', 'Active', 'Completed', 'Voided', 'Pending'] as FilterStatus[]).map((status) => (
               <button
                 key={status}
@@ -269,6 +273,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
               </button>
             ))}
           </div>
+          </Localized>
         </div>
 
         {/* Content */}
@@ -557,6 +562,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                 </select>
 
                 {voidReason === 'other' && (
+                  <Localized id="void-orders-reason-aria" attrs={{ 'aria-label': true }}>
                   <Localized id="void-orders-reason-placeholder" attrs={{ placeholder: true }}>
                     <input
                       type="text"
@@ -567,8 +573,8 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                         setCustomReason(e.target.value);
                         setVoidError(null);
                       }}
-                      aria-label={l10n.getString('void-orders-reason-aria')}
                     />
+                  </Localized>
                   </Localized>
                 )}
               </div>

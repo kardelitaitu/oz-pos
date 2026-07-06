@@ -12,9 +12,85 @@ import {
   type TerminalFeatureOverride,
 } from '@/api/terminals';
 import { FEATURES } from '@/hooks/useFeatures';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './TerminalManagementScreen.css';
+
+// ── Feature groups for the override toggle UI ─────────────────────
+
+const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
+  {
+    label: 'Sales',
+    keys: [
+      FEATURES.SIMPLE_RETAIL,
+      FEATURES.RESTAURANT,
+      FEATURES.DISCOUNT_ENGINE,
+      FEATURES.TAX_ENGINE,
+      FEATURES.PROMOTIONS_ENGINE,
+      FEATURES.PRODUCT_BUNDLES,
+      FEATURES.LOYALTY_PROGRAM,
+      FEATURES.KITCHEN_DISPLAY,
+      FEATURES.TABLE_MANAGEMENT,
+    ],
+  },
+  {
+    label: 'Payments',
+    keys: [
+      FEATURES.CASH_PAYMENT,
+      FEATURES.CARD_PAYMENT,
+      FEATURES.MULTI_CURRENCY,
+    ],
+  },
+  {
+    label: 'Inventory & Products',
+    keys: [
+      FEATURES.INVENTORY_TRACKING,
+      FEATURES.PRODUCT_VARIANTS,
+      FEATURES.CATEGORIES_ENABLED,
+      FEATURES.BARCODE_SCANNING,
+    ],
+  },
+  {
+    label: 'Hardware',
+    keys: [
+      FEATURES.RECEIPT_PRINTING,
+      FEATURES.CASH_DRAWER,
+      FEATURES.CUSTOMER_DISPLAY,
+      FEATURES.NFC_READER,
+    ],
+  },
+  {
+    label: 'Staff & Security',
+    keys: [
+      FEATURES.STAFF_LOGIN,
+      FEATURES.STAFF_ROLES,
+      FEATURES.SHIFT_MANAGEMENT,
+      FEATURES.AUDIT_LOG,
+    ],
+  },
+  {
+    label: 'System',
+    keys: [
+      FEATURES.CLOUD_SYNC,
+      FEATURES.MULTI_STORE,
+      FEATURES.MULTI_TERMINAL,
+      FEATURES.REPORTING,
+      FEATURES.ANALYTICS,
+      FEATURES.EXPORT_IMPORT,
+      FEATURES.PLUGIN_SYSTEM,
+      FEATURES.SELF_SERVICE_KIOSK,
+    ],
+  },
+];
+
+/** Convert a kebab-case feature key to a human-readable label. */
+function featureLabel(key: string): string {
+  return key
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 // ── Form state ──────────────────────────────────────────────────────
 
@@ -51,6 +127,7 @@ function formatDate(iso: string): string {
 
 export default function TerminalManagementScreen() {
   const { l10n } = useLocalization();
+  const { session } = useAuth();
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +239,7 @@ export default function TerminalManagementScreen() {
     async (featureKey: string, currentEnabled: boolean) => {
       if (!editingId) return;
       try {
-        await setTerminalOverride(editingId, featureKey, !currentEnabled);
+        await setTerminalOverride(session?.user_id ?? '', editingId, featureKey, !currentEnabled);
         const data = await listTerminalOverrides(editingId);
         setOverrides(data);
       } catch {
@@ -177,7 +254,7 @@ export default function TerminalManagementScreen() {
     try {
       // Delete each known override.
       const promises = overrides.map((o) =>
-        deleteTerminalOverride(editingId, o.feature),
+        deleteTerminalOverride(session?.user_id ?? '', editingId, o.feature),
       );
       await Promise.all(promises);
       setOverrides([]);
@@ -205,7 +282,7 @@ export default function TerminalManagementScreen() {
       }
 
       if (editingId) {
-        await updateTerminal({
+        await updateTerminal(session?.user_id ?? '', {
           id: editingId,
           name,
           deviceId,
@@ -213,7 +290,7 @@ export default function TerminalManagementScreen() {
           metadata: form.metadata || null,
         });
       } else {
-        await registerTerminal({
+        await registerTerminal(session?.user_id ?? '', {
           name,
           deviceId,
           terminalSecret: form.terminalSecret || null,
@@ -236,7 +313,7 @@ export default function TerminalManagementScreen() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteTerminal(deleteTarget.id);
+      await deleteTerminal(session?.user_id ?? '', deleteTarget.id);
       closeDelete();
       await load();
     } catch {
@@ -485,39 +562,79 @@ export default function TerminalManagementScreen() {
                         <p className="terminal-mgmt-loading">Loading overrides…</p>
                       </Localized>
                     ) : (
-                      <div className="terminal-mgmt-feature-grid">
-                        {Object.entries(FEATURES).map(([_, featureKey]) => {
-                          const ov = overrideEnabled(featureKey);
-                          const isOverridden = ov !== undefined;
+                      <div className="terminal-mgmt-feature-groups">
+                        {FEATURE_GROUPS.map((group) => {
+                          const groupOverrides = group.keys.filter((k) =>
+                            overrideEnabled(k) !== undefined,
+                          );
                           return (
-                            <div
-                              key={featureKey}
-                              className={
-                                'terminal-mgmt-feature-row' +
-                                (isOverridden ? ' terminal-mgmt-feature-row--overridden' : '')
-                              }
-                            >
-                              <span className="terminal-mgmt-feature-name">
-                                {featureKey}
-                                {isOverridden && (
-                                  <Localized id="terminal-overridden">
-                                    <span className="terminal-mgmt-feature-badge">
-                                      overridden
-                                    </span>
-                                  </Localized>
+                            <div key={group.label} className="terminal-mgmt-feature-group">
+                              <div className="terminal-mgmt-feature-group-header">
+                                <span className="terminal-mgmt-feature-group-label">
+                                  {group.label}
+                                </span>
+                                {groupOverrides.length > 0 && (
+                                  <span className="terminal-mgmt-feature-group-count">
+                                    {groupOverrides.length} override
+                                    {groupOverrides.length !== 1 ? 's' : ''}
+                                  </span>
                                 )}
-                              </span>
-                              <label>
-                                <input
-                                  type="checkbox"
-                                  className="terminal-mgmt-feature-toggle"
-                                  checked={ov ?? false}
-                                  onChange={() =>
-                                    handleToggleOverride(featureKey, ov ?? false)
-                                  }
-                                  aria-label={l10n.getString('terminal-override-aria', { feature: featureKey })}
-                                />
-                              </label>
+                              </div>
+                              <div className="terminal-mgmt-feature-group-items">
+                                {group.keys.map((featureKey) => {
+                                  const ov = overrideEnabled(featureKey);
+                                  const isOverridden = ov !== undefined;
+                                  const checked = ov ?? false;
+                                  const toggleId = `toggle-${featureKey}`;
+                                  return (
+                                    <label
+                                      key={featureKey}
+                                      htmlFor={toggleId}
+                                      className={
+                                        'terminal-mgmt-toggle-row' +
+                                        (isOverridden
+                                          ? ' terminal-mgmt-toggle-row--overridden'
+                                          : '')
+                                      }
+                                    >
+                                      <span className="terminal-mgmt-toggle-label">
+                                        <span className="terminal-mgmt-toggle-name">
+                                          {featureLabel(featureKey)}
+                                        </span>
+                                        {isOverridden && (
+                                          <span className="terminal-mgmt-toggle-badge">
+                                            overridden
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="terminal-mgmt-toggle-switch">
+                                        <input
+                                          type="checkbox"
+                                          id={toggleId}
+                                          className="terminal-mgmt-toggle-input"
+                                          checked={checked}
+                                          onChange={() =>
+                                            handleToggleOverride(
+                                              featureKey,
+                                              checked,
+                                            )
+                                          }
+                                          aria-label={l10n.getString(
+                                            'terminal-override-aria',
+                                            {
+                                              feature:
+                                                featureLabel(featureKey),
+                                            },
+                                          )}
+                                        />
+                                        <span className="terminal-mgmt-toggle-track">
+                                          <span className="terminal-mgmt-toggle-thumb" />
+                                        </span>
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
                             </div>
                           );
                         })}

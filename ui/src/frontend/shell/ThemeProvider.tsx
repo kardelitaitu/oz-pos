@@ -7,7 +7,8 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import { getBrandSettings } from '@/api/branding';
+import { useBrand } from '@/contexts/BrandContext';
+import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ interface ThemeProviderProps {
  * 2. `prefers-color-scheme` (OS-level preference)
  *
  * Sets `data-theme` on `<html>` so the CSS dark-mode selector works.
+ * Also reactively applies the brand accent palette from BrandContext
+ * whenever the primary colour changes.
  */
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => {
@@ -92,19 +95,14 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // Load brand settings and apply custom accent colour.
+  // Reactively apply brand accent palette whenever brand settings change.
+  const { settings: brandSettings } = useBrand();
   useEffect(() => {
-    getBrandSettings()
-      .then((s) => {
-        if (s.primary_colour) {
-          document.documentElement.style.setProperty(
-            '--color-accent',
-            s.primary_colour,
-          );
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (brandSettings.primary_colour) {
+      const palette = deriveAccentPalette(brandSettings.primary_colour);
+      applyAccentPalette(palette);
+    }
+  }, [brandSettings.primary_colour]);
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));

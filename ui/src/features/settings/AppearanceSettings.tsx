@@ -7,12 +7,15 @@ import {
   setBrandStoreName,
   pickLogoFile,
 } from '@/api/branding';
+import { useBrand } from '@/contexts/BrandContext';
+import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './AppearanceSettings.css';
 
 export function AppearanceSettings() {
-  const [colour, setColour] = useState('#4f46e5');
+  const { refreshBrandSettings } = useBrand();
+  const [colour, setColour] = useState('#10b981');
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [storeName, setStoreName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -27,7 +30,8 @@ export function AppearanceSettings() {
 
   const applyColour = useCallback((c: string) => {
     setColour(c);
-    document.documentElement.style.setProperty('--color-accent', c);
+    const palette = deriveAccentPalette(c);
+    applyAccentPalette(palette);
   }, []);
 
   const handlePickLogo = useCallback(async () => {
@@ -35,15 +39,17 @@ export function AppearanceSettings() {
     if (path) {
       setLogoPath(path);
       await setBrandLogoPath(path);
+      refreshBrandSettings();
     }
-  }, []);
+  }, [refreshBrandSettings]);
 
   const save = useCallback(async () => {
     setSaving(true);
     await setBrandPrimaryColour(colour);
     await setBrandStoreName(storeName);
+    refreshBrandSettings();
     setSaving(false);
-  }, [colour, storeName]);
+  }, [colour, logoPath, storeName, refreshBrandSettings]);
 
   return (
     <Card shadow="sm">
@@ -123,9 +129,46 @@ export function AppearanceSettings() {
             className="appearance-preview-box"
             style={{ '--preview-colour': colour } as React.CSSProperties}
           >
-            <span className="appearance-preview-text" style={{ color: colour }}>
-              {storeName ? storeName : <Localized id="appearance-store-name-fallback"><span>OZ-POS</span></Localized>}
-            </span>
+            <div className="appearance-preview-sample">
+              <span className="appearance-preview-text" style={{ color: colour }}>
+                {storeName ? storeName : <Localized id="appearance-store-name-fallback"><span>OZ-POS</span></Localized>}
+              </span>
+            </div>
+            <div className="appearance-preview-elements">
+              <button
+                type="button"
+                className="appearance-preview-btn"
+                style={{
+                  backgroundColor: colour,
+                  borderColor: colour,
+                  color: parseInt(colour.slice(1), 16) > 0x7fffff ? '#0a0a0a' : '#ffffff',
+                }}
+                disabled
+              >
+                <Localized id="appearance-preview-btn-label">Primary Button</Localized>
+              </button>
+              <button
+                type="button"
+                className="appearance-preview-btn-outline"
+                style={{
+                  borderColor: colour,
+                  color: colour,
+                }}
+                disabled
+              >
+                <Localized id="appearance-preview-btn-outline-label">Secondary</Localized>
+              </button>
+              <span
+                className="appearance-preview-badge"
+                style={{
+                  backgroundColor: `${colour}1a`,
+                  color: colour,
+                  borderColor: `${colour}33`,
+                }}
+              >
+                <Localized id="appearance-preview-badge-label">Live</Localized>
+              </span>
+            </div>
           </div>
         </div>
 

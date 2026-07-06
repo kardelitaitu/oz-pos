@@ -359,10 +359,10 @@ describe('SetupWizard', () => {
     expect(state.features['card-payment']).toBeUndefined();
   });
 
-  it('Launch button on completion fires onSkip', async () => {
-    const onSkip = vi.fn();
+  it('Launch button on completion fires onLaunch', async () => {
+    const onLaunch = vi.fn();
     const onComplete = vi.fn();
-    render(<SetupWizard onComplete={onComplete} onSkip={onSkip} />, { wrapper: FluentWrapper });
+    render(<SetupWizard onComplete={onComplete} onLaunch={onLaunch} />, { wrapper: FluentWrapper });
 
     // Select preset, navigate to review, complete.
     await userEvent.click(screen.getAllByRole('radio')[0]!);
@@ -378,7 +378,7 @@ describe('SetupWizard', () => {
       screen.getByRole('button', { name: /launch oz-pos/i }),
     );
 
-    expect(onSkip).toHaveBeenCalledTimes(1);
+    expect(onLaunch).toHaveBeenCalledTimes(1);
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 

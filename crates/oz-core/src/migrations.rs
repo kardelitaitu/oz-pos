@@ -139,6 +139,46 @@ pub const ALL: &[Migration] = &[
         id: "033_tables.sql",
         sql: include_str!("../migrations/033_tables.sql"),
     },
+    Migration {
+        id: "035_workspaces.sql",
+        sql: include_str!("../migrations/035_workspaces.sql"),
+    },
+    Migration {
+        id: "036_open_bills.sql",
+        sql: include_str!("../migrations/036_open_bills.sql"),
+    },
+    Migration {
+        id: "037_active_carts.sql",
+        sql: include_str!("../migrations/037_active_carts.sql"),
+    },
+    Migration {
+        id: "038_user_preferences.sql",
+        sql: include_str!("../migrations/038_user_preferences.sql"),
+    },
+    Migration {
+        id: "039_category_icon.sql",
+        sql: include_str!("../migrations/039_category_icon.sql"),
+    },
+    Migration {
+        id: "040_user_workspaces.sql",
+        sql: include_str!("../migrations/040_user_workspaces.sql"),
+    },
+    Migration {
+        id: "041_credit_reminders.sql",
+        sql: include_str!("../migrations/041_credit_reminders.sql"),
+    },
+    Migration {
+        id: "042_customer_id_on_sales.sql",
+        sql: include_str!("../migrations/042_customer_id_on_sales.sql"),
+    },
+    Migration {
+        id: "043_price_updated_at.sql",
+        sql: include_str!("../migrations/043_price_updated_at.sql"),
+    },
+    Migration {
+        id: "044_sale_lines_overridden_price.sql",
+        sql: include_str!("../migrations/044_sale_lines_overridden_price.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -266,7 +306,12 @@ mod tests {
             "loyalty_tiers",
             "loyalty_accounts",
             "loyalty_transactions",
+            "active_carts",
             "tables",
+            "workspaces",
+            "workspace_screens",
+            "role_workspaces",
+            "user_workspaces",
         ];
 
         for table in &expected_tables {

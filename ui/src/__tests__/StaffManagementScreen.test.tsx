@@ -27,6 +27,19 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    session: { user_id: 'test', display_name: 'Test', role_name: 'owner', role_id: 'role-1' },
+    loading: false,
+    error: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    clearError: vi.fn(),
+    isManager: true,
+    isOwner: true,
+  }),
+}));
+
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {

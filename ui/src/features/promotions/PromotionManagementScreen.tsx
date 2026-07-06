@@ -8,6 +8,7 @@ import {
   type Promotion,
   type CreatePromotionArgs,
 } from '@/api/promotions';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './PromotionManagementScreen.css';
@@ -43,6 +44,7 @@ const emptyForm = (): Promotion => ({
 
 export default function PromotionManagementScreen() {
   const { l10n } = useLocalization();
+  const { session } = useAuth();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -98,9 +100,9 @@ export default function PromotionManagementScreen() {
           min_order_minor: form.min_order_minor,
           category_id: form.category_id,
         };
-        await createPromotion(args);
+        await createPromotion(session?.user_id ?? '', args);
       } else {
-        await updatePromotion(form);
+        await updatePromotion(session?.user_id ?? '', form);
       }
       closeModal();
       await load();
@@ -116,7 +118,7 @@ export default function PromotionManagementScreen() {
     setDeleting(deleteTarget.id);
     setDeleteTarget(null);
     try {
-      await deletePromotion(deleteTarget.id);
+      await deletePromotion(session?.user_id ?? '', deleteTarget.id);
       await load();
     } catch (err) {
       console.error('Failed to delete promotion:', err);
@@ -127,7 +129,7 @@ export default function PromotionManagementScreen() {
 
   const toggleActive = useCallback(async (p: Promotion) => {
     try {
-      await updatePromotion({ ...p, active: !p.active });
+      await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
       await load();
     } catch (err) {
       console.error('Failed to toggle promotion:', err);

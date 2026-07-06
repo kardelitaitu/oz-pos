@@ -13,6 +13,9 @@ use oz_core::events::{ProductCreated, StockAdjusted};
 
 use foundation::validate_not_empty;
 
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -92,6 +95,10 @@ pub struct ProductDto {
     pub stock_qty: Option<i64>,
     /// Tax rate IDs assigned to this product.
     pub tax_rate_ids: Vec<String>,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+    /// ISO-8601 timestamp of the last price change.
+    pub price_updated_at: String,
 }
 
 /// Money DTO matching the front-end `Money` type (snake_case keys).
@@ -134,6 +141,8 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
                 barcode: pwd.product.barcode.as_ref().map(|b| b.to_string()),
                 in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
                 stock_qty: pwd.stock_qty,
+                created_at: pwd.product.created_at,
+                price_updated_at: pwd.product.price_updated_at,
                 tax_rate_ids: store
                     .get_product_tax_rates(pwd.product.sku.as_str())
                     .unwrap_or_default(),
@@ -226,6 +235,8 @@ fn map_pwd_to_dto(
             in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
             stock_qty: pwd.stock_qty,
             tax_rate_ids,
+            created_at: pwd.product.created_at,
+            price_updated_at: pwd.product.price_updated_at,
         }
     }))
 }
@@ -234,6 +245,7 @@ fn map_pwd_to_dto(
 
 #[derive(Debug, Deserialize)]
 pub struct CreateProductArgs {
+    pub user_id: String,
     pub sku: String,
     pub name: String,
     pub price_minor: i64,
@@ -259,6 +271,8 @@ pub async fn create_product(
     {
         let db = state.db.lock().await;
         let store = Store::new(&db);
+
+        require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_CREATE)?;
 
         let currency: oz_core::Currency = args
             .currency
@@ -314,6 +328,7 @@ pub async fn create_product(
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProductArgs {
+    pub user_id: String,
     pub sku: String,
     pub name: String,
     pub price_minor: i64,
@@ -335,6 +350,8 @@ pub async fn update_product(
 ) -> Result<UpdateProductResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_UPDATE)?;
 
     let currency: oz_core::Currency = args
         .currency
@@ -363,6 +380,7 @@ pub async fn update_product(
 
 #[derive(Debug, Deserialize)]
 pub struct DeleteProductArgs {
+    pub user_id: String,
     pub sku: String,
 }
 
@@ -373,6 +391,7 @@ pub async fn delete_product(
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_DELETE)?;
     store.delete_product(&args.sku)?;
     Ok(())
 }
@@ -404,9 +423,9 @@ mod tests {
 
         // Seed some products directly via SQL.
         conn.execute_batch(
-            "INSERT INTO categories (id, name, colour) VALUES
-                ('cat-drinks', 'Drinks', '#06b6d4'),
-                ('cat-food',   'Food',   '#f97316');
+            "INSERT INTO categories (id, name, colour, icon) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4', ''),
+                ('cat-food',   'Food',   '#f97316', '');
              INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
                 ('p1', 'LATTE',  'Caffè Latte',  450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
                 ('p2', 'BAGEL',  'Plain Bagel',   250, 'USD', 'cat-food',   NULL,           '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
@@ -439,8 +458,8 @@ mod tests {
     fn lookup_by_barcode_found() {
         let conn = fresh_conn();
         conn.execute_batch(
-            "INSERT INTO categories (id, name, colour) VALUES
-                ('cat-drinks', 'Drinks', '#06b6d4');
+            "INSERT INTO categories (id, name, colour, icon) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4', '');
              INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
                 ('p1', 'LATTE', 'Caffè Latte', 450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO inventory (product_id, qty) VALUES ('p1', 50);",
@@ -486,8 +505,8 @@ mod tests {
     fn lookup_product_by_sku_found() {
         let conn = fresh_conn();
         conn.execute_batch(
-            "INSERT INTO categories (id, name, colour) VALUES
-                ('cat-drinks', 'Drinks', '#06b6d4');
+            "INSERT INTO categories (id, name, colour, icon) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4', '');
              INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
                 ('p1', 'LATTE', 'Caffè Latte', 450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO inventory (product_id, qty) VALUES ('p1', 50);",

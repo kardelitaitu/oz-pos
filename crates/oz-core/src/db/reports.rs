@@ -542,7 +542,7 @@ mod tests {
     fn category_breakdown_with_sales() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_category("cat-1", "Beverages", "#fff").unwrap();
+        s.create_category("cat-1", "Beverages", "#fff", "").unwrap();
 
         let money = Money {
             minor_units: 350,

@@ -113,6 +113,10 @@ pub struct Sale {
     /// Defaults to zero for sales created before Phase 3.
     #[serde(default)]
     pub tax_total: Money,
+
+    /// Customer ID linked to this sale for loyalty tracking.
+    #[serde(default)]
+    pub customer_id: Option<String>,
 }
 
 impl Sale {
@@ -169,6 +173,7 @@ impl Sale {
             payment_method: None,
             tendered_minor: None,
             user_id,
+            customer_id: None,
             created_at: now.clone(),
             updated_at: now,
             lines,

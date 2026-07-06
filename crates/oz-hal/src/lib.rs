@@ -25,7 +25,7 @@ pub mod traits;
 pub mod transport;
 pub mod types;
 
-pub use error::HalError;
+pub use error::{HalError, HalErrorKind};
 pub use registry::DriverRegistry;
 pub use traits::barcode::BarcodeScanner;
 pub use traits::cash_drawer::CashDrawer;

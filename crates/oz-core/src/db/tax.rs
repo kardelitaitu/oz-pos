@@ -453,7 +453,8 @@ mod tests {
     fn set_and_get_category_tax_rates() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_category("cat-tax", "Taxed Cat", "#fff").unwrap();
+        s.create_category("cat-tax", "Taxed Cat", "#fff", "")
+            .unwrap();
 
         let rate = s.create_tax_rate("CT", 800, false, false).unwrap();
         s.set_category_tax_rates("cat-tax", std::slice::from_ref(&rate.id))

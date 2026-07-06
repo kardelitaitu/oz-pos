@@ -14,10 +14,11 @@ sale-pay-button-aria = Charge the customer for the current cart
 pos-title = POS Terminal
 pos-cart-panel-title = Current Sale
 pos-cart-empty = Cart is empty
+pos-cart-empty-subtitle = Tap a menu item to start the order
 pos-cart-total = Total
 pos-cart-qty-label = Qty
 pos-cart-remove = Remove
-pos-cart-pay = Charge { $amount }
+pos-cart-pay = Charge
 pos-login-required-title = Login Required
 pos-login-required-message = Please log in to use the POS.
 
@@ -37,7 +38,7 @@ pos-scanner-error = Scanner error: { $detail }
 # Payment Modal
 payment-dialog-aria =
     .aria-label = Payment
-payment-title = Complete Sale
+payment-title = Complete Order
 payment-close-aria =
     .aria-label = Cancel payment
 payment-done-title = Sale Complete
@@ -74,9 +75,13 @@ payment-tendered-placeholder =
     .placeholder = 0.00
 payment-tendered-aria =
     .aria-label = Amount tendered
-payment-quick-tender-aria = Tender { $amount }
-payment-tender-exact-aria = Tend exact amount
+payment-quick-tender-aria =
+    .aria-label = Tender { $amount }
+payment-tender-exact-aria =
+    .aria-label = Tend exact amount
 payment-tender-exact = Exact
+payment-customer-name-aria =
+    .aria-label = Customer name for open bill
 payment-change = Change
 payment-insufficient = Insufficient amount
 payment-qris-description = Generate a QRIS QR code for the customer to scan with their payment app.
@@ -105,7 +110,8 @@ payment-split-remove-aria =
 payment-split-remaining = Remaining
 payment-split-toggle = Split payment across methods
 payment-cancel = Cancel
-payment-complete = Complete Sale
+payment-open-bill = Open Bill
+payment-complete = Complete
 
 # Sales History
 sales-history-title = Sales History
@@ -126,6 +132,46 @@ sales-history-col-payment = Payment
 sales-history-col-cashier = Cashier
 sales-history-view-aria = View { $id }
 sales-history-void-aria = Void order { $id }
+sales-history-search-placeholder =
+    .placeholder = Search sale ID, payment, cashier…
+sales-history-search-aria =
+    .aria-label = Search sales
+sales-history-filter-aria =
+    .aria-label = Filter sales
+sales-history-status-filter-aria =
+    .aria-label = Filter by status
+sales-history-date-from-aria =
+    .aria-label = From date
+sales-history-date-to-aria =
+    .aria-label = To date
+sales-history-cashier-aria =
+    .aria-label = Filter by cashier
+sales-history-table-aria =
+    .aria-label = Sales history
+sales-history-prev-aria =
+    .aria-label = Previous page
+sales-history-next-aria =
+    .aria-label = Next page
+sales-history-per-page-aria =
+    .aria-label = Results per page
+sales-history-void-overlay-aria =
+    .aria-label = Void order
+sales-history-void-reason-aria =
+    .aria-label = Void reason
+sales-history-detail-overlay-aria =
+    .aria-label = Sale detail
+sales-history-detail-close-aria =
+    .aria-label = Close
+sales-history-lines-aria =
+    .aria-label = Sale line items
+sales-history-actions-aria =
+    .aria-label = Actions
+sales-history-pagination-aria =
+    .aria-label = Pagination
+sales-history-void-close-aria =
+    .aria-label = Close void dialog
+sales-history-refund-lines-aria =
+    .aria-label = Refund line items
 sales-history-detail-title = Sale Detail
 sales-history-detail-close = Close
 sales-history-detail-print = Reprint Receipt
@@ -398,9 +444,9 @@ pos-cart-pct-placeholder =
 pos-cart-removed = Removed { $name }
 pos-cart-subtotal = Subtotal
 pos-cart-undo = Undo
-pos-close-shift-counted-label = Counted cash in drawer (minor units)
+pos-close-shift-counted-label = Counted cash in drawer
 pos-close-shift-counted-placeholder =
-    .placeholder = e.g. 15000 for $150.00
+    .placeholder = e.g. 150.00
 pos-close-shift-notes-label = Notes (optional)
 pos-close-shift-notes-placeholder =
     .placeholder = Any notes about this shift…
@@ -417,9 +463,9 @@ pos-hold-label-placeholder =
 pos-hold-title = Hold Current Order
 pos-login-desc = Please log in to use the POS.
 pos-login-required = Login Required
-pos-open-shift-balance-label = Opening balance (minor units)
+pos-open-shift-balance-label = Opening balance
 pos-open-shift-balance-placeholder =
-    .placeholder = e.g. 500 for $5.00
+    .placeholder = e.g. 100.00
 pos-open-shift-title = Open Shift
 pos-shift-card-sales = Card Sales
 pos-shift-cash-sales = Cash Sales
@@ -438,6 +484,218 @@ pos-shift-no-active = No active shift
 pos-shift-notes = Notes
 pos-shift-open-since = Shift open since { $time }
 pos-shift-summary-done = Done
+
+# Cart Tip (items 6-10)
+pos-cart-tip-label = Add Tip
+pos-cart-tip-none = None
+pos-cart-tip-aria = Tip selection
+pos-cart-tip-segment-aria = Set tip to { $percent } percent
+pos-cart-tip-segment-zero-aria = No tip
+pos-cart-tip-line = Tip ({ $percent }%)
+
+# Cart Service Charge
+pos-cart-service-toggle-label = Add { $percent }% service charge
+pos-cart-service-toggle-aria = Toggle service charge
+pos-cart-service-line = Service ({ $percent }%)
+
+# Persistent undo
+pos-cart-undo-dismiss = Dismiss
+pos-cart-undo-dismiss-aria = Dismiss undo notification
 pos-shift-total-sales = Total Sales
 pos-shift-over = Over
 pos-shift-short = Short
+
+# POS shift bar
+pos-shift-loading = Loading shift…
+pos-shift-close-btn = Close
+pos-shift-open-btn = Open
+pos-shift-close-aria =
+    .aria-label = Close current shift
+pos-shift-open-aria =
+    .aria-label = Open a new shift
+pos-dismiss-error-aria =
+    .aria-label = Dismiss error
+
+# POS cart
+pos-cart-undo-btn = Undo
+pos-cart-clear-aria =
+    .aria-label = Clear all items from cart
+pos-cart-charge-aria =
+    .aria-label = Charge the customer
+pos-cart-open-bill = Open Bill
+pos-cart-open-bill-aria =
+    .aria-label = Save as open bill
+pos-cart-open-bills = Open Bills
+pos-cart-open-bills-aria =
+    .aria-label = View open bills
+pos-cart-table-label = Table #
+pos-cart-table-placeholder =
+    .placeholder = No.
+pos-cart-table-aria =
+    .aria-label = Table number
+pos-cart-options-collapse-aria =
+    .aria-label = Collapse options
+pos-cart-options-expand-aria =
+    .aria-label = Expand options
+pos-cart-discount-pct-aria =
+    .aria-label = Discount percentage
+pos-cart-discount-label-aria =
+    .aria-label = Discount label
+pos-cart-discount-remove-aria =
+    .aria-label = Remove discount
+pos-cart-discount-cancel-aria =
+    .aria-label = Cancel discount
+
+# Cart line items (dynamic)
+pos-cart-line-aria = { $sku }, { $qty } × { $amount }
+pos-cart-line-decrease-aria = Decrease quantity of { $sku }
+pos-cart-line-qty-aria = Quantity: { $qty }
+pos-cart-line-increase-aria = Increase quantity of { $sku }
+pos-cart-line-remove-aria = Remove { $sku } from cart
+pos-cart-line-swipe-remove-aria = Remove { $sku }
+
+# Cart panel
+pos-cart-panel-aria = Cart
+
+# Shift modal overlay labels
+pos-close-shift-overlay-aria = Close shift
+pos-close-shift-balance-aria = Closing balance
+pos-close-shift-notes-aria = Shift notes
+pos-close-shift-summary-aria = Shift closed summary
+pos-open-shift-overlay-aria = Open shift
+pos-open-shift-balance-aria = Opening balance
+pos-open-bill-overlay-aria = Open bill
+pos-open-bills-overlay-aria = Open bills list
+
+# POS open bill modal
+pos-open-bill-title = Open Bill
+pos-open-bill-desc = Enter the customer name for this open bill.
+pos-open-bill-placeholder =
+    .placeholder = e.g. John Doe
+pos-open-bill-name-aria =
+    .aria-label = Customer name
+pos-open-bill-cancel = Cancel
+pos-open-bill-saving = Saving…
+pos-open-bill-save = Save Open Bill
+pos-open-bills-title = Open Bills
+pos-open-bills-close-aria =
+    .aria-label = Close open bills list
+pos-open-bills-empty = No open bills.
+pos-open-bills-resume = Resume
+
+# ── Retail POS screen ──
+retail-store-name-fallback = TOKO
+retail-shift-label = Shift
+retail-no-shift = No shift
+retail-search-placeholder = Cari produk…
+retail-search-clear-aria = Clear search
+retail-recent-label = Recent
+retail-no-products = No products
+retail-no-products-match = No products match your search
+retail-sku-label = SKU
+retail-sku-placeholder = Scan or type barcode / SKU
+retail-sku-go = GO
+retail-cart-items =
+    { $count ->
+        [one] { $count } item
+       *[other] { $count } items
+    }
+retail-cart-header-col = #
+retail-cart-header-item = Item
+retail-cart-header-qty = Qty
+retail-cart-header-price = @Price
+retail-cart-header-subtotal = Subtotal
+retail-undo-items-removed =
+    { $count ->
+        [one] { $count } item removed
+       *[other] { $count } items removed
+    }
+retail-total-discount = Discount { $percent }%
+retail-total-tax = PPN
+retail-pay-button = Pay
+retail-discount-button = Diskon
+retail-resume-button = Resume
+retail-credit-reminders = Credit Reminders ({ $count })
+retail-fn-void = Void
+retail-fn-diskon = Diskon
+retail-fn-cari = Cari
+retail-fn-history = History
+retail-fn-pelanggan = Pelanggan
+retail-fn-stok = Stok
+retail-fn-shift = Shift
+retail-fn-options = Options
+retail-open-shift-opening-label = Opening balance (Rp)
+retail-open-shift-opening = Opening…
+retail-shift-closed-cash-sales = Cash Sales:
+retail-shift-closed-expected-label = Expected:
+retail-shift-closed-difference-label = Difference:
+retail-credit-reminders-title = Credit Reminders
+retail-credit-no-outstanding = No outstanding credits
+retail-credit-col-customer = Customer
+retail-credit-col-amount = Amount
+retail-credit-col-date = Date
+retail-credit-settle = Settle
+retail-clear-cart-title = Clear Cart
+retail-clear-cart-confirm =
+    Remove all { $count ->
+        [one] { $count } item from the cart?
+       *[other] { $count } items from the cart?
+    }
+retail-clear-cart-clear = Clear
+retail-discount-title = Discount
+retail-discount-pct-tab = %
+retail-discount-rp-tab = Rp
+retail-discount-pct-label = Discount (%)
+retail-discount-rp-label = Discount (Rp)
+retail-customer-search-title = Select Customer
+retail-customer-search-placeholder =
+    .placeholder = Search by name, phone, or email...
+retail-customer-search-loading = Loading...
+retail-customer-search-empty = No customers found
+retail-customer-clear = Clear
+retail-qty-total = Total:
+retail-qty-add = Add
+retail-shortcuts-title = Keyboard Shortcuts
+retail-shortcut-pay = Pay / Charge
+retail-shortcut-clear = Clear cart (Void)
+retail-shortcut-discount = Discount
+retail-shortcut-hold = Hold / Resume order
+retail-shortcut-sku = Focus SKU input
+retail-shortcut-shift = Open / Close shift
+retail-shortcut-options = Options
+retail-shortcut-list = This shortcut list
+retail-shortcut-close = Close modal / Options
+retail-toast-failed-products = Failed to load products
+retail-toast-failed-categories = Failed to load categories
+retail-toast-failed-settings = Failed to load store settings
+retail-toast-open-shift-first = Open a shift first
+retail-toast-order-held = Order held
+retail-toast-failed-hold = Failed to hold order
+retail-toast-failed-resume = Failed to resume order
+retail-toast-sale-complete = Sale complete
+retail-toast-credit-settled = Credit settled
+retail-toast-failed-settle = Failed to settle credit
+retail-toast-failed-open-shift = Failed to open shift
+retail-toast-sales-history-soon = Sales history coming soon
+retail-toast-stock-inquiry-soon = Stock inquiry coming soon
+retail-toast-failed-load-held = Failed to load held carts
+retail-toast-held-cart-deleted = Held cart deleted
+retail-toast-failed-delete-held = Failed to delete held cart
+retail-held-carts-title = Held Carts
+retail-held-carts-empty = No held carts
+retail-fn-bar-aria = Function bar
+retail-page-nav-aria = Product pages
+retail-page-prev-aria = Previous page
+retail-page-next-aria = Next page
+retail-cart-qty-decrease-aria = Decrease quantity
+retail-cart-qty-increase-aria = Increase quantity
+retail-cart-remove-aria = Remove from cart
+retail-toast-insufficient-stock = Insufficient stock
+retail-low-stock-banner =
+    { $count ->
+        [one] { $count } product low on stock
+       *[other] { $count } products low on stock
+    }
+retail-held-cart-delete-aria = Delete held cart
+
+

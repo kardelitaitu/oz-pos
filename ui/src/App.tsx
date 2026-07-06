@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
+import { BrandProvider } from '@/contexts/BrandContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { LocaleProvider } from './i18n/LocaleContext';
@@ -174,16 +175,25 @@ registerNavItem({ route: 'promotions', label: 'Promotions', requiredRole: 'manag
  * Feature pages are registered above so the AppShell can render
  * them dynamically from the page-registry instead of a hardcoded switch.
  */
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
+
 export default function App() {
   return (
-    <LocaleProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <ToastProvider>
-            <AppShell />
-          </ToastProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </LocaleProvider>
+    <ErrorBoundary>
+      <LocaleProvider>
+        <BrandProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <WorkspaceProvider>
+                <AppShell />
+              </WorkspaceProvider>
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
+        </BrandProvider>
+      </LocaleProvider>
+    </ErrorBoundary>
   );
 }

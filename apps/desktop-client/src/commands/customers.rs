@@ -10,6 +10,9 @@ use oz_core::db::Store;
 
 use foundation::validate_not_empty;
 
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -70,6 +73,7 @@ pub async fn get_customer(
 
 #[derive(Debug, Deserialize)]
 pub struct CreateCustomerArgs {
+    pub user_id: String,
     pub name: String,
     pub email: Option<String>,
     pub phone: Option<String>,
@@ -91,6 +95,9 @@ pub async fn create_customer(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::CUSTOMERS_CREATE)?;
+
     let customer = store.create_customer(
         args.name.trim(),
         args.email.as_deref(),
@@ -105,6 +112,7 @@ pub async fn create_customer(
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateCustomerArgs {
+    pub user_id: String,
     pub id: String,
     pub name: String,
     pub email: Option<String>,
@@ -127,6 +135,9 @@ pub async fn update_customer(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::CUSTOMERS_EDIT)?;
+
     let customer = store.update_customer(
         &args.id,
         args.name.trim(),
@@ -140,11 +151,23 @@ pub async fn update_customer(
 
 // ── Delete customer ─────────────────────────────────────────────────
 
+#[derive(Debug, Deserialize)]
+pub struct DeleteCustomerArgs {
+    pub user_id: String,
+    pub id: String,
+}
+
 #[command]
-pub async fn delete_customer(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn delete_customer(
+    args: DeleteCustomerArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    store.delete_customer(&id)?;
+
+    require_permission_for_user(&store, &args.user_id, permissions::CUSTOMERS_DELETE)?;
+
+    store.delete_customer(&args.id)?;
     drop(db);
     Ok(())
 }

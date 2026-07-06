@@ -442,7 +442,7 @@ mod tests {
         let store = make_store(&conn);
         run_category_create(&store, "cat-x", "X", "#fff").unwrap();
         // Duplicate ID should exit — we just verify the store rejects it
-        let result = store.create_category("cat-x", "X", "#fff");
+        let result = store.create_category("cat-x", "X", "#fff", "");
         assert!(result.is_err());
     }
 
@@ -1348,7 +1348,7 @@ fn run_category_get(store: &Store<'_>, id: &str) -> Result<()> {
 
 fn run_category_create(store: &Store<'_>, id: &str, name: &str, colour: &str) -> Result<()> {
     let cat = store
-        .create_category(id, name, colour)
+        .create_category(id, name, colour, "")
         .map_err(|e| match &e {
             CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
             CoreError::Conflict { entity, field } => {

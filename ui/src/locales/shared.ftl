@@ -6,8 +6,6 @@
 ds-title = Design System
 theme-toggle-label = Toggle theme
 theme-toggle-aria =
-    .aria-label = Switch to { $mode } mode
-theme-toggle-aria =
     .aria-label = Switch to { $mode ->
         [dark] dark
        *[light] light
@@ -34,6 +32,9 @@ toast-info = This is an informational message
 empty-state-title = Nothing here yet
 empty-state-desc = Get started by adding your first item
 empty-state-cta = Add Product
+
+# Error boundary
+error-boundary-title = Something went wrong
 
 # Error state
 error-state-title = Something went wrong
@@ -124,7 +125,6 @@ language-selector-select-aria = Select language
 # Locale labels
 locale-en = English
 locale-id = Bahasa Indonesia
-locale-th = ภาษาไทย
 
 # Navigation
 nav-pos-terminal = POS Terminal
@@ -166,9 +166,27 @@ nav-sidebar-collapse = Collapse sidebar
 nav-sidebar-expand = Expand sidebar
 nav-main-aria = Main navigation
 nav-tablist-aria = Navigation tabs
+nav-switch-workspace = Switch Workspace
+
+# Workspace home
+workspace-home-loading = Loading workspaces…
+workspace-home-subtitle = Select a workspace to start
+workspace-home-empty = No workspaces available
+workspace-home-empty-desc = You don't have access to any workspaces yet. Contact an administrator.
+workspace-card-open-aria = Open { $name }
+workspace-card-no-access-aria = { $name } — not available for your role
+workspace-card-no-access-title = Your role ({ $role }) cannot access this workspace
+workspace-card-no-access-badge = Not available
+workspace-home-logout = Logout
 
 # Shell
 shell-loading = Loading…
+
+# Status Bar
+status-bar-connected = Backend connected
+status-bar-disconnected = Backend disconnected
+status-bar-checking = Checking backend connection
+status-bar-authenticating = Authenticating...
 
 # Audit Action Labels
 audit-action-sale-void = Void Sale

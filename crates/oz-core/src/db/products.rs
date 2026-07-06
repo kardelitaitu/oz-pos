@@ -41,9 +41,9 @@ impl Store<'_> {
     pub fn list_products(&self) -> Result<Vec<ProductWithDetails>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -66,9 +66,9 @@ impl Store<'_> {
 
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -98,9 +98,9 @@ impl Store<'_> {
         }
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -158,8 +158,8 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         let result = tx.execute(
-            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 id,
                 sku.trim(),
@@ -168,6 +168,7 @@ impl Store<'_> {
                 cur_str,
                 category_id,
                 barcode,
+                now,
                 now,
                 now,
             ],
@@ -207,7 +208,8 @@ impl Store<'_> {
             category_id: category_id.map(|s| s.to_owned()),
             barcode: barcode.and_then(|s| foundation::Barcode::new(s).ok()),
             created_at: now.clone(),
-            updated_at: now,
+            updated_at: now.clone(),
+            price_updated_at: now,
         })
     }
 
@@ -241,7 +243,8 @@ impl Store<'_> {
         let rows = self.conn.execute(
             "UPDATE products
              SET name = ?1, price_minor = ?2, currency = ?3,
-                 category_id = ?4, barcode = ?5, updated_at = ?6
+                 category_id = ?4, barcode = ?5, updated_at = ?6,
+                 price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END
              WHERE sku = ?7",
             params![
                 name.trim(),
@@ -266,7 +269,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -279,7 +282,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);
@@ -317,12 +320,13 @@ impl Store<'_> {
     pub fn list_categories(&self) -> Result<Vec<Category>, CoreError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name, colour FROM categories ORDER BY name")?;
+            .prepare("SELECT id, name, colour, icon FROM categories ORDER BY name")?;
         let rows = stmt.query_map([], |row| {
             Ok(Category {
                 id: row.get("id")?,
                 name: row.get("name")?,
                 colour: row.get("colour")?,
+                icon: row.get("icon")?,
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -334,6 +338,7 @@ impl Store<'_> {
         id: &str,
         name: &str,
         colour: &str,
+        icon: &str,
     ) -> Result<Category, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -343,8 +348,8 @@ impl Store<'_> {
         }
 
         let result = self.conn.execute(
-            "INSERT INTO categories (id, name, colour) VALUES (?1, ?2, ?3)",
-            params![id, name.trim(), colour],
+            "INSERT INTO categories (id, name, colour, icon) VALUES (?1, ?2, ?3, ?4)",
+            params![id, name.trim(), colour, icon],
         );
 
         match result {
@@ -360,7 +365,39 @@ impl Store<'_> {
             Ok(_) => {}
         }
 
-        Ok(Category::new(id, name, colour))
+        Ok(Category::new(id, name, colour, icon))
+    }
+
+    /// Update an existing category's name, colour, and icon.
+    ///
+    /// Returns [`CoreError::NotFound`] if no category with `id` exists.
+    pub fn update_category(
+        &self,
+        id: &str,
+        name: &str,
+        colour: &str,
+        icon: &str,
+    ) -> Result<Category, CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "category name must not be empty".into(),
+            });
+        }
+
+        let rows = self.conn.execute(
+            "UPDATE categories SET name = ?1, colour = ?2, icon = ?3 WHERE id = ?4",
+            params![name.trim(), colour, icon, id],
+        )?;
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "category",
+                id: id.to_owned(),
+            });
+        }
+
+        Ok(Category::new(id, name, colour, icon))
     }
 
     /// Delete a category by id.
@@ -381,12 +418,13 @@ impl Store<'_> {
     pub fn get_category(&self, id: &str) -> Result<Option<Category>, CoreError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name, colour FROM categories WHERE id = ?1")?;
+            .prepare("SELECT id, name, colour, icon FROM categories WHERE id = ?1")?;
         let result = stmt.query_row(params![id], |row| {
             Ok(Category {
                 id: row.get("id")?,
                 name: row.get("name")?,
                 colour: row.get("colour")?,
+                icon: row.get("icon")?,
             })
         });
         match result {
@@ -914,21 +952,22 @@ mod tests {
     fn create_category() {
         let conn = fresh();
         let cat = store(&conn)
-            .create_category("cat-tools", "Tools", "#10b981")
+            .create_category("cat-tools", "Tools", "#10b981", "dots-1")
             .unwrap();
         assert_eq!(cat.id, "cat-tools");
         assert_eq!(cat.name, "Tools");
         assert_eq!(cat.colour, "#10b981");
+        assert_eq!(cat.icon, "dots-1");
     }
 
     #[test]
     fn create_category_duplicate_name() {
         let conn = fresh();
         store(&conn)
-            .create_category("cat-1", "Drinks", "#000")
+            .create_category("cat-1", "Drinks", "#000", "")
             .unwrap();
         let err = store(&conn)
-            .create_category("cat-2", "Drinks", "#fff")
+            .create_category("cat-2", "Drinks", "#fff", "")
             .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { .. }));
     }
@@ -937,7 +976,7 @@ mod tests {
     fn create_category_empty_name() {
         let conn = fresh();
         let err = store(&conn)
-            .create_category("cat-1", "   ", "#000")
+            .create_category("cat-1", "   ", "#000", "")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
@@ -946,7 +985,7 @@ mod tests {
     fn delete_category_removes_row() {
         let conn = fresh();
         store(&conn)
-            .create_category("cat-orphan", "Orphan", "#000")
+            .create_category("cat-orphan", "Orphan", "#000", "")
             .unwrap();
         store(&conn).delete_category("cat-orphan").unwrap();
         let cat = store(&conn).get_category("cat-orphan").unwrap();

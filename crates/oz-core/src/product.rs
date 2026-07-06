@@ -47,6 +47,10 @@ pub struct Product {
 
     /// ISO-8601 last-update timestamp.
     pub updated_at: String,
+
+    /// ISO-8601 timestamp of the last price change.
+    /// Used by the front-end to show a price-volatility hint.
+    pub price_updated_at: String,
 }
 
 impl Product {
@@ -72,6 +76,7 @@ impl Product {
             barcode: None,
             created_at: String::new(),
             updated_at: String::new(),
+            price_updated_at: String::new(),
         }
     }
 
@@ -189,7 +194,8 @@ mod tests {
             "category_id": null,
             "barcode": null,
             "created_at": "",
-            "updated_at": ""
+            "updated_at": "",
+            "price_updated_at": ""
         }"#;
         let p: Product = serde_json::from_str(json).unwrap();
         assert_eq!(p.sku.as_str(), "COFFEE");

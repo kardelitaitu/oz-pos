@@ -4,12 +4,34 @@ use rusqlite::params;
 
 use crate::error::CoreError;
 use crate::{Role, User};
+use platform_core::rbac::ROLE_PRESETS;
 
 use super::Store;
 
 // ── Role CRUD ───────────────────────────────────────────────────
 
 impl Store<'_> {
+    /// Seed any built-in roles that do not yet exist in the database.
+    ///
+    /// Idempotent — uses `INSERT OR IGNORE` so roles that already exist
+    /// (by their fixed id) are skipped. Safe to call on every startup
+    /// or during the setup wizard.
+    ///
+    /// Returns the number of roles that were newly inserted.
+    pub fn seed_default_roles(&self) -> Result<usize, CoreError> {
+        let mut count = 0usize;
+        for preset in ROLE_PRESETS {
+            let role = preset.into_role();
+            let result = self.conn.execute(
+                "INSERT OR IGNORE INTO roles (id, name, description, permissions, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![role.id, role.name, role.description, role.permissions, role.created_at, role.updated_at],
+            );
+            count += result?;
+        }
+        Ok(count)
+    }
+
     /// List all roles, ordered by name.
     pub fn list_roles(&self) -> Result<Vec<Role>, CoreError> {
         let mut stmt = self.conn.prepare(
@@ -282,20 +304,13 @@ mod tests {
     }
 
     fn seed_roles(conn: &Connection) {
-        conn.execute_batch(
-            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-owner',   'owner',   'Full access',           '[\"*\"]',                                 '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-                ('role-cashier', 'cashier', 'Process sales',         '[\"sales:process\"]',                     '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-                ('role-manager', 'manager', 'Manage products + sales','[\"products:crud\",\"sales:void\"]',  '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
-        ).unwrap();
+        store(conn).seed_default_roles().unwrap();
     }
 
     fn seed_users(conn: &Connection) {
+        store(conn).seed_default_roles().unwrap();
         conn.execute_batch(
-            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-owner',   'owner',   'Full access',    '[\"*\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-                ('role-cashier', 'cashier', 'Process sales',  '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
-             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
                 ('user-1', 'alice',   'hash_alice',   'Alice',   'role-cashier', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
                 ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
                 ('user-3', 'carol',   'hash_carol',   'Carol',   'role-cashier', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
@@ -318,9 +333,9 @@ mod tests {
         let roles = store(&conn).list_roles().unwrap();
         assert_eq!(roles.len(), 3);
         // Ordered by name: cashier, manager, owner.
-        assert_eq!(roles[0].name, "cashier");
-        assert_eq!(roles[1].name, "manager");
-        assert_eq!(roles[2].name, "owner");
+        assert_eq!(roles[0].name, "Cashier");
+        assert_eq!(roles[1].name, "Manager");
+        assert_eq!(roles[2].name, "Owner");
     }
 
     #[test]
@@ -328,7 +343,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let r = store(&conn).get_role("role-owner").unwrap().unwrap();
-        assert_eq!(r.name, "owner");
+        assert_eq!(r.name, "Owner");
         assert_eq!(r.permissions, "[\"*\"]");
     }
 
@@ -359,8 +374,9 @@ mod tests {
     fn create_role_duplicate_name() {
         let conn = fresh();
         seed_roles(&conn);
+        // 'Owner' is already taken by the preset — duplicate name should conflict.
         let err = store(&conn)
-            .create_role("role-dup", "owner", "Dup", "[]")
+            .create_role("role-dup", "Owner", "Dup", "[]")
             .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { entity, .. } if entity == "role"));
     }

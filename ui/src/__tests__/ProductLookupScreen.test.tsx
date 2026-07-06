@@ -3,7 +3,7 @@ import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import productsFtl from '@/locales/products.ftl?raw';
-import { ToastProvider } from '@/components/Toast';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { ScannerError } from '@/api/hardware';
 import * as bundlesApi from '@/api/bundles';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
@@ -31,7 +31,7 @@ describe('ProductLookupScreen', () => {
       expect(screen.getByRole('radio', { name: /all categories/i })).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: /^Beverages$/ })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /^Cold Drinks$/ })).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: /^Food$/ })).toBeInTheDocument();
@@ -103,9 +103,9 @@ describe('ProductLookupScreen', () => {
 
     const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
-    // 10 food items (Bagel, Bagel-S, Croissant, Blueberry Muffin, Chocolate Muffin,
-    // Chicken Sandwich, Veggie Sandwich, Cookie, Brownie, Banana Muffin)
-    expect(items.length).toBe(10);
+    // 5 food items (Plain Bagel, Sesame Bagel, Butter Croissant,
+    // Chicken Sandwich, Veggie Sandwich)
+    expect(items.length).toBe(5);
     // No beverage items
     expect(screen.queryByText('Caffè Latte')).not.toBeInTheDocument();
   });
@@ -128,7 +128,7 @@ describe('ProductLookupScreen', () => {
     await waitForProducts();
     // Check a specific product is rendered
     expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
-    expect(screen.getByText('$4.50')).toBeInTheDocument();
+    expect(screen.getByText('$ 4,50')).toBeInTheDocument();
     expect(screen.getByText('LATTE')).toBeInTheDocument();
     expect(screen.getAllByText(/in stock/i).length).toBeGreaterThanOrEqual(1);
   });
@@ -158,7 +158,7 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const addBtn = screen.getByRole('button', { name: /caffè latte.*sku: latte/i });
+    const addBtn = screen.getByRole('button', { name: /Caffè Latte/i });
     await userEvent.click(addBtn);
 
     expect(handler).toHaveBeenCalledTimes(1);
@@ -172,7 +172,7 @@ describe('ProductLookupScreen', () => {
     render(wrap(<ProductLookupScreen onAddProduct={handler} />));
     await waitForProducts();
 
-    const cardBtn = screen.getByRole('button', { name: /caffè latte.*sku: latte/i });
+    const cardBtn = screen.getByRole('button', { name: /Caffè Latte/i });
     cardBtn.focus();
     await userEvent.keyboard('{Enter}');
 
@@ -234,7 +234,7 @@ describe('ProductLookupScreen', () => {
   it('renders product category badges', async () => {
     render(wrap(<ProductLookupScreen />));
     await waitForProducts();
-    const badges = screen.getAllByText(/^Beverages$|^Food$/);
+    const badges = screen.getAllByText(/^Cold Drinks$|^Hot Drinks$|^Food$|^Snacks$/);
     expect(badges.length).toBeGreaterThanOrEqual(17);
   });
 

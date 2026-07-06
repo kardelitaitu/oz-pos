@@ -7,10 +7,12 @@ use tauri::{State, command};
 
 use oz_core::auth::hash_pin;
 use oz_core::db::Store;
+use oz_core::permissions;
 use oz_core::{Role, User};
 
 use foundation::{validate_min_length, validate_not_empty};
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -88,6 +90,8 @@ pub struct CreateStaffArgs {
     pub pin: String,
     pub display_name: String,
     pub role_id: String,
+    /// User ID of the caller (from `LoginSession`). Used for permission check.
+    pub caller_user_id: String,
 }
 
 #[command]
@@ -110,6 +114,9 @@ pub async fn create_staff(
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
+    // Permission check: caller must have staff:create.
+    require_permission_for_user(&store, &args.caller_user_id, permissions::STAFF_CREATE)?;
+
     let user = store.create_user(&username, &pin_hash, display_name, &args.role_id)?;
     let roles = store.list_roles()?;
     drop(db);
@@ -126,6 +133,8 @@ pub struct UpdateStaffArgs {
     pub display_name: String,
     pub role_id: String,
     pub is_active: bool,
+    /// User ID of the caller (from `LoginSession`). Used for permission check.
+    pub caller_user_id: String,
 }
 
 #[command]
@@ -135,6 +144,9 @@ pub async fn update_staff(
 ) -> Result<StaffMemberDto, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    // Permission check: caller must have staff:update.
+    require_permission_for_user(&store, &args.caller_user_id, permissions::STAFF_UPDATE)?;
 
     let user = store.update_user(
         &args.id,

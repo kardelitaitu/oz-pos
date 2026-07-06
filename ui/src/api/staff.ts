@@ -45,6 +45,8 @@ export interface CreateStaffArgs {
   pin: string;
   display_name: string;
   role_id: string;
+  /** User ID of the caller (from LoginSession). Used for permission check. */
+  caller_user_id: string;
 }
 
 export interface UpdateStaffArgs {
@@ -53,6 +55,8 @@ export interface UpdateStaffArgs {
   display_name: string;
   role_id: string;
   is_active: boolean;
+  /** User ID of the caller (from LoginSession). Used for permission check. */
+  caller_user_id: string;
 }
 
 export const listStaff = (): Promise<StaffMemberDto[]> =>

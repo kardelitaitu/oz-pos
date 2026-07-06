@@ -88,6 +88,7 @@ pub fn run() {
             commands::staff::update_staff,
             commands::categories::list_categories,
             commands::categories::create_category,
+            commands::categories::update_category,
             commands::categories::delete_category,
             commands::currencies::currency_info,
             commands::currencies::list_currencies,
@@ -104,10 +105,16 @@ pub fn run() {
             commands::pos::add_line,
             commands::pos::complete_sale,
             commands::pos::set_cart_discount,
+            commands::pos::override_line_price,
+            commands::pos::list_active_carts,
+            commands::pos::get_active_cart,
             commands::pos::hold_cart,
             commands::pos::list_held_carts,
+            commands::pos::list_open_bills,
             commands::pos::get_held_cart,
+            commands::pos::compute_cart_tax,
             commands::pos::delete_held_cart,
+            commands::plugins::reload_plugins,
             commands::kds::list_kds_orders,
             commands::kds::get_kds_queue,
             commands::kds::update_kds_status,
@@ -129,8 +136,11 @@ pub fn run() {
             commands::settings::set_receipt_settings,
             commands::settings::get_store_settings,
             commands::settings::set_store_settings,
+            commands::settings::get_user_preferences,
+            commands::settings::set_user_preferences,
             commands::setup::get_enabled_features,
             commands::setup::complete_setup,
+            commands::setup::dismiss_setup_wizard,
             commands::products::list_products,
             commands::products::create_product,
             commands::products::update_product,
@@ -150,6 +160,7 @@ pub fn run() {
             commands::product_variants::create_product_variant,
             commands::product_variants::update_product_variant,
             commands::product_variants::delete_product_variant,
+            commands::setup::seed_default_roles,
             commands::setup::get_setup_status,
             commands::tax::list_tax_rates,
             commands::tax::create_tax_rate,
@@ -211,13 +222,17 @@ pub fn run() {
             commands::tables::assign_table_order,
             commands::tables::release_table,
             commands::tables::list_sections,
+            commands::workspaces::list_workspaces,
+            commands::workspaces::list_all_workspaces,
+            commands::workspaces::set_user_workspaces,
+            commands::workspaces::get_user_workspaces,
+            commands::workspaces::list_workspace_screens,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);
 
     tracing::info!("application shutting down");
-    // TODO(phase-2.3): graceful kernel stop via `state.kernel.lock().await.stop_all()`
-    // when modules have resources to release. Currently blocked by Tauri lifecycle API access.
+    // Kernel shutdown happens in AppState::drop() — see state.rs.
 
     if let Err(e) = result {
         tracing::error!(error = %e, "OZ-POS exited with error");

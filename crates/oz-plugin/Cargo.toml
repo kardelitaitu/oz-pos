@@ -7,8 +7,10 @@ license.workspace = true
 description = "Plugin discovery, loading, and sandboxing for OZ-POS."
 
 [dependencies]
+chrono = { workspace = true }
 oz-core = { workspace = true }
 oz-lua = { workspace = true }
+rlua = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }

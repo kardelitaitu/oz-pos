@@ -10,6 +10,7 @@ use oz_core::{Store, Terminal, TerminalFeatureOverride};
 
 use foundation::validate_not_empty;
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -115,6 +116,7 @@ pub async fn get_terminal(
 /// Register a new terminal.
 #[command]
 pub async fn register_terminal(
+    user_id: String,
     args: RegisterTerminalArgs,
     state: State<'_, AppState>,
 ) -> Result<RegisterTerminalResult, AppError> {
@@ -132,6 +134,7 @@ pub async fn register_terminal(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_REGISTER)?;
     store.create_terminal(&terminal)?;
     drop(db);
 
@@ -142,6 +145,7 @@ pub async fn register_terminal(
 /// Update an existing terminal.
 #[command]
 pub async fn update_terminal(
+    user_id: String,
     args: UpdateTerminalArgs,
     state: State<'_, AppState>,
 ) -> Result<UpdateTerminalResult, AppError> {
@@ -173,6 +177,7 @@ pub async fn update_terminal(
         terminal.metadata = Some(meta);
     }
 
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
     store.update_terminal(&terminal)?;
     drop(db);
 
@@ -196,11 +201,16 @@ pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(),
 
 /// Delete a terminal by id.
 #[command]
-pub async fn delete_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn delete_terminal(
+    user_id: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_DELETE)?;
     store.delete_terminal(&id)?;
     drop(db);
 
@@ -228,6 +238,7 @@ pub async fn list_terminal_overrides(
 /// Set (upsert) a feature override for a terminal.
 #[command]
 pub async fn set_terminal_override(
+    user_id: String,
     terminal_id: String,
     feature: String,
     enabled: bool,
@@ -239,6 +250,7 @@ pub async fn set_terminal_override(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
     store.set_terminal_override(&terminal_id, &feature, enabled)?;
     drop(db);
 
@@ -254,6 +266,7 @@ pub async fn set_terminal_override(
 /// Delete a single feature override for a terminal.
 #[command]
 pub async fn delete_terminal_override(
+    user_id: String,
     terminal_id: String,
     feature: String,
     state: State<'_, AppState>,
@@ -264,6 +277,7 @@ pub async fn delete_terminal_override(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
     store.delete_terminal_override(&terminal_id, &feature)?;
     drop(db);
 

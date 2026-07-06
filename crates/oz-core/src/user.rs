@@ -6,6 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::has_permission;
+use platform_core::rbac::AuthorizationError;
+
 /// A staff role with a set of permissions.
 ///
 /// # Schema mapping
@@ -57,6 +60,56 @@ impl Role {
     #[must_use]
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = desc.into();
+        self
+    }
+
+    /// Parse the JSON `permissions` field and check whether this role
+    /// grants a specific action.
+    ///
+    /// Delegates to [`platform_core::rbac::has_permission`].
+    /// Malformed JSON is treated as an empty permission set (deny all).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oz_core::Role;
+    ///
+    /// let role = Role::new("role-test", "Test")
+    ///     .with_permissions_json("[\"sales:void\"]");
+    /// assert!(role.has_permission("sales:void"));
+    /// assert!(!role.has_permission("settings:edit"));
+    /// ```
+    #[must_use]
+    pub fn has_permission(&self, required: &str) -> bool {
+        let granted: Vec<String> = serde_json::from_str(&self.permissions).unwrap_or_default();
+        has_permission(&granted, required)
+    }
+
+    /// Convenience: same as [`has_permission`] but returns
+    /// [`AuthorizationError`] on failure for use with `?`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthorizationError`] when the required permission
+    /// is not granted by this role.
+    pub fn authorize(&self, required: &str) -> Result<(), AuthorizationError> {
+        if self.has_permission(required) {
+            Ok(())
+        } else {
+            Err(AuthorizationError {
+                required: required.to_owned(),
+                role_name: self.name.clone(),
+            })
+        }
+    }
+
+    /// Builder-style: replace the `permissions` JSON string.
+    ///
+    /// Does **not** validate the JSON — the caller is responsible for
+    /// supplying a valid JSON array of strings.
+    #[must_use]
+    pub fn with_permissions_json(mut self, json: &str) -> Self {
+        self.permissions = json.to_owned();
         self
     }
 }

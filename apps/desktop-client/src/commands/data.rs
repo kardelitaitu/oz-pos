@@ -349,12 +349,12 @@ pub async fn import_data(
                 .is_ok();
             if !exists {
                 let _ = tx.execute(
-                    "INSERT INTO categories (id, name, colour) VALUES (?1, ?2, ?3)",
-                    rusqlite::params![cat.id, cat.name, colour],
+                    "INSERT INTO categories (id, name, colour, icon) VALUES (?1, ?2, ?3, ?4)",
+                    rusqlite::params![cat.id, cat.name, colour, ""],
                 );
             } else {
                 let _ = tx.execute(
-                    "UPDATE categories SET name = ?1, colour = ?2 WHERE id = ?3",
+                    "UPDATE categories SET name = ?1, colour = ?2, icon = '' WHERE id = ?3",
                     rusqlite::params![cat.name, colour, cat.id],
                 );
             }

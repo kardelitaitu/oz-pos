@@ -6,10 +6,11 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::{Store, Terminal};
+use oz_core::{Store, Terminal, TerminalFeatureOverride};
 
 use foundation::validate_not_empty;
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -115,6 +116,7 @@ pub async fn get_terminal(
 /// Register a new terminal.
 #[command]
 pub async fn register_terminal(
+    user_id: String,
     args: RegisterTerminalArgs,
     state: State<'_, AppState>,
 ) -> Result<RegisterTerminalResult, AppError> {
@@ -132,6 +134,7 @@ pub async fn register_terminal(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_REGISTER)?;
     store.create_terminal(&terminal)?;
     drop(db);
 
@@ -142,6 +145,7 @@ pub async fn register_terminal(
 /// Update an existing terminal.
 #[command]
 pub async fn update_terminal(
+    user_id: String,
     args: UpdateTerminalArgs,
     state: State<'_, AppState>,
 ) -> Result<UpdateTerminalResult, AppError> {
@@ -173,6 +177,7 @@ pub async fn update_terminal(
         terminal.metadata = Some(meta);
     }
 
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
     store.update_terminal(&terminal)?;
     drop(db);
 
@@ -196,15 +201,87 @@ pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(),
 
 /// Delete a terminal by id.
 #[command]
-pub async fn delete_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn delete_terminal(
+    user_id: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_DELETE)?;
     store.delete_terminal(&id)?;
     drop(db);
 
     tracing::info!(id, "terminal deleted");
+    Ok(())
+}
+
+/// List all feature overrides for a terminal.
+#[command]
+pub async fn list_terminal_overrides(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalFeatureOverride>, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let overrides = store.list_terminal_overrides(&terminal_id)?;
+    drop(db);
+
+    Ok(overrides)
+}
+
+/// Set (upsert) a feature override for a terminal.
+#[command]
+pub async fn set_terminal_override(
+    user_id: String,
+    terminal_id: String,
+    feature: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.set_terminal_override(&terminal_id, &feature, enabled)?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id,
+        feature,
+        enabled,
+        "terminal feature override set"
+    );
+    Ok(())
+}
+
+/// Delete a single feature override for a terminal.
+#[command]
+pub async fn delete_terminal_override(
+    user_id: String,
+    terminal_id: String,
+    feature: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.delete_terminal_override(&terminal_id, &feature)?;
+    drop(db);
+
+    tracing::info!(terminal_id, feature, "terminal feature override deleted");
     Ok(())
 }
 
@@ -343,6 +420,158 @@ mod tests {
         let err = store.ping_terminal("nope").unwrap_err();
         assert!(matches!(err, oz_core::CoreError::NotFound { .. }));
     }
+
+    // ── Terminal Feature Override tests ────────────────────────────
+
+    #[test]
+    fn list_terminal_overrides_empty() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t = Terminal::new("Test", "host-override");
+        store.create_terminal(&t).unwrap();
+
+        let overrides = store.list_terminal_overrides(&t.id).unwrap();
+        assert!(overrides.is_empty());
+    }
+
+    #[test]
+    fn list_terminal_overrides_with_data() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t = Terminal::new("Test", "host-override");
+        store.create_terminal(&t).unwrap();
+
+        store
+            .set_terminal_override(&t.id, "card-payment", false)
+            .unwrap();
+        store
+            .set_terminal_override(&t.id, "receipt-printing", true)
+            .unwrap();
+
+        let overrides = store.list_terminal_overrides(&t.id).unwrap();
+        assert_eq!(overrides.len(), 2);
+        // Ordered by feature ASC.
+        assert_eq!(overrides[0].feature, "card-payment");
+        assert!(!overrides[0].enabled);
+        assert_eq!(overrides[1].feature, "receipt-printing");
+        assert!(overrides[1].enabled);
+        assert_eq!(overrides[0].terminal_id, t.id);
+        assert_eq!(overrides[1].terminal_id, t.id);
+    }
+
+    #[test]
+    fn list_terminal_overrides_scoped_by_terminal() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t1 = Terminal::new("Term-1", "host-1");
+        let t2 = Terminal::new("Term-2", "host-2");
+        store.create_terminal(&t1).unwrap();
+        store.create_terminal(&t2).unwrap();
+
+        store
+            .set_terminal_override(&t1.id, "card-payment", true)
+            .unwrap();
+        store
+            .set_terminal_override(&t2.id, "card-payment", false)
+            .unwrap();
+
+        let t1_overrides = store.list_terminal_overrides(&t1.id).unwrap();
+        assert_eq!(t1_overrides.len(), 1);
+        assert!(t1_overrides[0].enabled);
+
+        let t2_overrides = store.list_terminal_overrides(&t2.id).unwrap();
+        assert_eq!(t2_overrides.len(), 1);
+        assert!(!t2_overrides[0].enabled);
+    }
+
+    #[test]
+    fn set_terminal_override_insert() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t = Terminal::new("Test", "host-override");
+        store.create_terminal(&t).unwrap();
+
+        store
+            .set_terminal_override(&t.id, "cash-payment", false)
+            .unwrap();
+
+        let o = store
+            .get_terminal_override(&t.id, "cash-payment")
+            .unwrap()
+            .unwrap();
+        assert_eq!(o.feature, "cash-payment");
+        assert!(!o.enabled);
+        assert_eq!(o.terminal_id, t.id);
+        assert!(!o.created_at.is_empty());
+        assert!(!o.updated_at.is_empty());
+    }
+
+    #[test]
+    fn set_terminal_override_update_existing() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t = Terminal::new("Test", "host-override");
+        store.create_terminal(&t).unwrap();
+
+        store
+            .set_terminal_override(&t.id, "card-payment", false)
+            .unwrap();
+        store
+            .set_terminal_override(&t.id, "card-payment", true)
+            .unwrap();
+
+        let o = store
+            .get_terminal_override(&t.id, "card-payment")
+            .unwrap()
+            .unwrap();
+        assert!(o.enabled);
+    }
+
+    #[test]
+    fn delete_terminal_override_removes_row() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t = Terminal::new("Test", "host-override");
+        store.create_terminal(&t).unwrap();
+
+        store
+            .set_terminal_override(&t.id, "card-payment", false)
+            .unwrap();
+        store
+            .delete_terminal_override(&t.id, "card-payment")
+            .unwrap();
+
+        let o = store.get_terminal_override(&t.id, "card-payment").unwrap();
+        assert!(o.is_none());
+    }
+
+    #[test]
+    fn set_terminal_override_nonexistent_terminal_fails() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        // No terminal created — FK constraint should reject.
+        let err = store
+            .set_terminal_override("no-such-terminal", "card-payment", true)
+            .unwrap_err();
+        assert!(matches!(err, oz_core::CoreError::Db(_)));
+    }
+
+    #[test]
+    fn delete_terminal_override_not_found() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t = Terminal::new("Test", "host-override");
+        store.create_terminal(&t).unwrap();
+
+        let err = store
+            .delete_terminal_override(&t.id, "nonexistent")
+            .unwrap_err();
+        assert!(
+            matches!(err, oz_core::CoreError::NotFound { entity, .. } if entity == "terminal_feature_override")
+        );
+    }
+
+    // ── delete_terminal ──────────────────────────────────────────────
 
     #[test]
     fn delete_terminal_removes_row() {

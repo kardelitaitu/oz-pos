@@ -10,6 +10,9 @@ use oz_core::{CashPayout, Shift, Store};
 
 use foundation::validate_not_empty;
 
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -87,6 +90,9 @@ pub async fn open_shift(
 ) -> Result<ShiftDto, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::SHIFTS_OPEN)?;
+
     let shift = store.open_shift(
         &args.user_id,
         args.terminal_id.as_deref(),
@@ -98,19 +104,30 @@ pub async fn open_shift(
     Ok(ShiftDto::from(shift))
 }
 
+/// Arguments for closing a shift.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloseShiftArgs {
+    pub user_id: String,
+    pub id: String,
+    pub closing_balance_minor: i64,
+    pub notes: Option<String>,
+}
+
 /// Close an active shift with a counted closing balance.
 #[command]
 pub async fn close_shift(
-    id: String,
-    closing_balance_minor: i64,
-    notes: Option<String>,
+    args: CloseShiftArgs,
     state: State<'_, AppState>,
 ) -> Result<ShiftDto, AppError> {
-    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let shift = store.close_shift(&id, closing_balance_minor, notes.as_deref())?;
+
+    require_permission_for_user(&store, &args.user_id, permissions::SHIFTS_CLOSE)?;
+
+    let shift = store.close_shift(&args.id, args.closing_balance_minor, args.notes.as_deref())?;
     drop(db);
 
     tracing::info!(id = %shift.id, "shift closed");

@@ -80,10 +80,17 @@ pub mod keys {
     pub const STORE_TAX_ID: &str = "store.tax_id";
     /// Default ISO-4217 currency code. Default: `"USD"`.
     pub const DEFAULT_CURRENCY: &str = "store.default_currency";
+    /// Store branch name (e.g. "Downtown", "Mall Branch").
+    pub const STORE_BRANCH: &str = "store.branch";
+    /// Store logo (base64-encoded PNG). Empty string = no logo.
+    pub const STORE_LOGO: &str = "store.logo";
     /// Store preset name (e.g., `"simple-retail"`, `"restaurant"`).
     pub const STORE_PRESET: &str = "store.preset";
     /// Whether the Setup Wizard has been completed.
     pub const SETUP_COMPLETE: &str = "store.setup_complete";
+    /// Whether to show the Setup Wizard. `"true"` by default (absent).
+    /// Set to `"false"` when the user completes or skips the wizard.
+    pub const SHOW_SETUP_WIZARD: &str = "store.show_setup_wizard";
 
     // ── Receipt display settings ───────────────────────────────────
     /// Show currency symbol prefix on amounts. `"1"` or `"0"`. Default `"0"`.
@@ -96,6 +103,30 @@ pub mod keys {
     pub const RECEIPT_FOOTER: &str = "receipt.footer";
     /// Paper width: `"standard"` (80 mm) or `"narrow"` (58 mm). Default `"standard"`.
     pub const RECEIPT_PAPER_WIDTH: &str = "receipt.paper_width";
+    /// Show table number on cart and receipts. `"1"` or `"0"`. Default `"0"`.
+    pub const RECEIPT_SHOW_TABLE_NUMBER: &str = "receipt.show_table_number";
+    /// Top margin in mm. Default `"0"`.
+    pub const RECEIPT_MARGIN_TOP: &str = "receipt.margin_top";
+    /// Bottom margin in mm. Default `"0"`.
+    pub const RECEIPT_MARGIN_BOTTOM: &str = "receipt.margin_bottom";
+    /// Left margin in mm. Default `"0"`.
+    pub const RECEIPT_MARGIN_LEFT: &str = "receipt.margin_left";
+    /// Right margin in mm. Default `"0"`.
+    pub const RECEIPT_MARGIN_RIGHT: &str = "receipt.margin_right";
+
+    // ── Printer settings ──────────────────────────────────────────
+    /// Printer connection type: `"auto"`, `"usb"`, `"serial"`, `"network"`.
+    pub const PRINTER_CONNECTION: &str = "printer.connection";
+    /// Printer device path (e.g. `/dev/usb/lp0` or `COM1`).
+    pub const PRINTER_DEVICE_PATH: &str = "printer.device_path";
+    /// Printer paper size: `"58"`, `"80"`, `"a4"`, `"letter"`, `"9.5x11"`, `"9.5x5.5"`.
+    pub const PRINTER_PAPER_SIZE: &str = "printer.paper_size";
+
+    // ── Scanner settings ──────────────────────────────────────────
+    /// Selected scanner device ID.
+    pub const SCANNER_DEVICE_ID: &str = "scanner.device_id";
+    /// Scanner input mode: `"auto"`, `"keyboard"`, `"serial"`.
+    pub const SCANNER_INPUT_MODE: &str = "scanner.input_mode";
 
     // ── Cloud Sync settings ──────────────────────────────────────
     /// Remote server URL for syncing offline data.
@@ -132,6 +163,14 @@ pub mod keys {
     pub const BRAND_LOGO_PATH: &str = "brand.logo_path";
     /// Store display name for the header. Default `""`.
     pub const BRAND_STORE_NAME: &str = "brand.store_name";
+
+    // ── Credit settings ─────────────────────────────────────────
+    /// Whether credit payment is enabled. `"1"` or `"0"`. Default `"0"`.
+    pub const CREDIT_ENABLED: &str = "credit.enabled";
+    /// Credit reminder interval in hours. Default `"24"`.
+    pub const CREDIT_REMINDER_INTERVAL: &str = "credit.reminder_interval";
+    /// Maximum credit limit in minor units. Default `"0"` (no limit).
+    pub const CREDIT_MAX_LIMIT: &str = "credit.max_limit";
 
     // ── Exchange Rate Auto-Sync settings ─────────────────────────
     /// Whether exchange rate auto-sync is enabled. `"1"` or `"0"`. Default `"0"`.
@@ -183,6 +222,26 @@ impl Settings {
     /// Set the default currency code.
     pub fn set_default_currency(conn: &Connection, code: &str) -> Result<(), PlatformError> {
         Self::set(conn, keys::DEFAULT_CURRENCY, code)
+    }
+
+    /// Get the store branch name.
+    pub fn get_store_branch(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::STORE_BRANCH)
+    }
+
+    /// Set the store branch name.
+    pub fn set_store_branch(conn: &Connection, branch: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::STORE_BRANCH, branch)
+    }
+
+    /// Get the store logo (base64-encoded PNG).
+    pub fn get_store_logo(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Self::get(conn, keys::STORE_LOGO)
+    }
+
+    /// Set the store logo (base64-encoded PNG).
+    pub fn set_store_logo(conn: &Connection, logo: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::STORE_LOGO, logo)
     }
 
     // ── Receipt display settings ───────────────────────────────────
@@ -248,6 +307,164 @@ impl Settings {
     /// Set the paper width.
     pub fn set_receipt_paper_width(conn: &Connection, val: &str) -> Result<(), PlatformError> {
         Self::set(conn, keys::RECEIPT_PAPER_WIDTH, val)
+    }
+
+    /// Whether to show the table number on cart and receipts.
+    pub fn get_receipt_show_table_number(conn: &Connection) -> Result<bool, PlatformError> {
+        Ok(Self::get(conn, keys::RECEIPT_SHOW_TABLE_NUMBER)?
+            .as_deref()
+            .unwrap_or("0")
+            == "1")
+    }
+
+    /// Set whether to show the table number.
+    pub fn set_receipt_show_table_number(conn: &Connection, on: bool) -> Result<(), PlatformError> {
+        Self::set(
+            conn,
+            keys::RECEIPT_SHOW_TABLE_NUMBER,
+            if on { "1" } else { "0" },
+        )
+    }
+
+    /// Margin from paper top edge in mm. Default `"0"`.
+    pub fn get_receipt_margin_top(conn: &Connection) -> Result<i64, PlatformError> {
+        Ok(Self::get(conn, keys::RECEIPT_MARGIN_TOP)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0))
+    }
+
+    /// Set the top margin.
+    pub fn set_receipt_margin_top(conn: &Connection, mm: i64) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RECEIPT_MARGIN_TOP, &mm.to_string())
+    }
+
+    /// Margin from paper bottom edge in mm. Default `"0"`.
+    pub fn get_receipt_margin_bottom(conn: &Connection) -> Result<i64, PlatformError> {
+        Ok(Self::get(conn, keys::RECEIPT_MARGIN_BOTTOM)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0))
+    }
+
+    /// Set the bottom margin.
+    pub fn set_receipt_margin_bottom(conn: &Connection, mm: i64) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RECEIPT_MARGIN_BOTTOM, &mm.to_string())
+    }
+
+    /// Margin from paper left edge in mm. Default `"0"`.
+    pub fn get_receipt_margin_left(conn: &Connection) -> Result<i64, PlatformError> {
+        Ok(Self::get(conn, keys::RECEIPT_MARGIN_LEFT)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0))
+    }
+
+    /// Set the left margin.
+    pub fn set_receipt_margin_left(conn: &Connection, mm: i64) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RECEIPT_MARGIN_LEFT, &mm.to_string())
+    }
+
+    /// Margin from paper right edge in mm. Default `"0"`.
+    pub fn get_receipt_margin_right(conn: &Connection) -> Result<i64, PlatformError> {
+        Ok(Self::get(conn, keys::RECEIPT_MARGIN_RIGHT)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0))
+    }
+
+    /// Set the right margin.
+    pub fn set_receipt_margin_right(conn: &Connection, mm: i64) -> Result<(), PlatformError> {
+        Self::set(conn, keys::RECEIPT_MARGIN_RIGHT, &mm.to_string())
+    }
+
+    // ── Printer settings ─────────────────────────────────────────
+
+    /// Printer connection type.
+    pub fn get_printer_connection(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::PRINTER_CONNECTION)?.unwrap_or_else(|| "auto".into()))
+    }
+
+    /// Set printer connection type.
+    pub fn set_printer_connection(conn: &Connection, val: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PRINTER_CONNECTION, val)
+    }
+
+    /// Printer device path.
+    pub fn get_printer_device_path(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::PRINTER_DEVICE_PATH)?.unwrap_or_default())
+    }
+
+    /// Set printer device path.
+    pub fn set_printer_device_path(conn: &Connection, val: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PRINTER_DEVICE_PATH, val)
+    }
+
+    /// Printer paper size.
+    pub fn get_printer_paper_size(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::PRINTER_PAPER_SIZE)?.unwrap_or_else(|| "80".into()))
+    }
+
+    /// Set printer paper size.
+    pub fn set_printer_paper_size(conn: &Connection, val: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::PRINTER_PAPER_SIZE, val)
+    }
+
+    // ── Scanner settings ─────────────────────────────────────────
+
+    /// Selected scanner device ID.
+    pub fn get_scanner_device_id(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::SCANNER_DEVICE_ID)?.unwrap_or_default())
+    }
+
+    /// Set scanner device ID.
+    pub fn set_scanner_device_id(conn: &Connection, val: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::SCANNER_DEVICE_ID, val)
+    }
+
+    /// Scanner input mode.
+    pub fn get_scanner_input_mode(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::SCANNER_INPUT_MODE)?.unwrap_or_else(|| "auto".into()))
+    }
+
+    /// Set scanner input mode.
+    pub fn set_scanner_input_mode(conn: &Connection, val: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::SCANNER_INPUT_MODE, val)
+    }
+
+    // ── Credit settings ──────────────────────────────────────────
+
+    /// Check if credit payment is enabled.
+    pub fn is_credit_enabled(conn: &Connection) -> Result<bool, PlatformError> {
+        Ok(Self::get(conn, keys::CREDIT_ENABLED)?.as_deref() == Some("1"))
+    }
+
+    /// Enable or disable credit payment.
+    pub fn set_credit_enabled(conn: &Connection, enabled: bool) -> Result<(), PlatformError> {
+        Self::set(conn, keys::CREDIT_ENABLED, if enabled { "1" } else { "0" })
+    }
+
+    /// Get credit reminder interval in hours.
+    pub fn get_credit_reminder_interval(conn: &Connection) -> Result<i64, PlatformError> {
+        Ok(Self::get(conn, keys::CREDIT_REMINDER_INTERVAL)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(24))
+    }
+
+    /// Set credit reminder interval in hours.
+    pub fn set_credit_reminder_interval(
+        conn: &Connection,
+        hours: i64,
+    ) -> Result<(), PlatformError> {
+        Self::set(conn, keys::CREDIT_REMINDER_INTERVAL, &hours.to_string())
+    }
+
+    /// Get maximum credit limit in minor units (0 = no limit).
+    pub fn get_credit_max_limit(conn: &Connection) -> Result<i64, PlatformError> {
+        Ok(Self::get(conn, keys::CREDIT_MAX_LIMIT)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0))
+    }
+
+    /// Set maximum credit limit in minor units.
+    pub fn set_credit_max_limit(conn: &Connection, limit: i64) -> Result<(), PlatformError> {
+        Self::set(conn, keys::CREDIT_MAX_LIMIT, &limit.to_string())
     }
 
     // ── Cloud Sync ───────────────────────────────────────────────
@@ -710,6 +927,27 @@ mod tests {
         assert_eq!(Settings::get_receipt_paper_width(&conn).unwrap(), "narrow");
     }
 
+    #[test]
+    fn receipt_show_table_number_default_false() {
+        let conn = fresh();
+        assert!(!Settings::get_receipt_show_table_number(&conn).unwrap());
+    }
+
+    #[test]
+    fn set_receipt_show_table_number_true() {
+        let conn = fresh();
+        Settings::set_receipt_show_table_number(&conn, true).unwrap();
+        assert!(Settings::get_receipt_show_table_number(&conn).unwrap());
+    }
+
+    #[test]
+    fn set_receipt_show_table_number_false() {
+        let conn = fresh();
+        Settings::set_receipt_show_table_number(&conn, true).unwrap();
+        Settings::set_receipt_show_table_number(&conn, false).unwrap();
+        assert!(!Settings::get_receipt_show_table_number(&conn).unwrap());
+    }
+
     // ── Sync settings ───────────────────────────────────────────-
 
     #[test]
@@ -850,11 +1088,13 @@ mod tests {
         assert!(!keys::DEFAULT_CURRENCY.is_empty());
         assert!(!keys::STORE_PRESET.is_empty());
         assert!(!keys::SETUP_COMPLETE.is_empty());
+        assert!(!keys::SHOW_SETUP_WIZARD.is_empty());
         assert!(!keys::RECEIPT_SHOW_CURRENCY.is_empty());
         assert!(!keys::RECEIPT_DECIMAL_SEP.is_empty());
         assert!(!keys::RECEIPT_SHOW_TAX.is_empty());
         assert!(!keys::RECEIPT_FOOTER.is_empty());
         assert!(!keys::RECEIPT_PAPER_WIDTH.is_empty());
+        assert!(!keys::RECEIPT_SHOW_TABLE_NUMBER.is_empty());
         assert!(!keys::SYNC_SERVER_URL.is_empty());
         assert!(!keys::SYNC_API_KEY.is_empty());
         assert!(!keys::SYNC_ENABLED.is_empty());

@@ -13,9 +13,9 @@ export interface LocaleContextValue {
 }
 
 export const LocaleContext = createContext<LocaleContextValue>({
-  locale: 'en',
+  locale: 'id',
   setLocale: () => {},
-  availableLocales: ['en'],
+  availableLocales: ['id'],
   getLocaleLabel: () => '',
 });
 
@@ -29,7 +29,7 @@ export function LocaleProvider({ children }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState<LocaleCode>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'en' || stored === 'id') return stored;
-    return 'en';
+    return 'id';
   });
 
   const [bundle, setBundle] = useState<FluentBundle>(() => getBundle(locale));

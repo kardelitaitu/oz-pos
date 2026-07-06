@@ -6,6 +6,9 @@ import UpdateBanner from './UpdateBanner';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import { GatewayStatusBadge } from '@/components/GatewayStatusBadge';
 import { useGatewayStatus } from '@/hooks/useGatewayStatus';
+import { useBrand } from '@/contexts/BrandContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+
 import { getNavItems } from '@/platform/ui/menu-registry';
 import './AppLayout.css';
 
@@ -43,8 +46,10 @@ export interface AppLayoutProps {
  */
 export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole }: AppLayoutProps) {
   const { l10n } = useLocalization();
+  const { settings: brandSettings } = useBrand();
   const navItems = getNavItems(enabledFeatures, userRole);
   const stripeStatus = useGatewayStatus();
+  const { setActiveWorkspace } = useWorkspace();
 
   // ── Sidebar collapse state (persisted to localStorage) ─────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -57,12 +62,28 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
 
   const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
 
+  // Set document title to the brand store name (fallback to 'OZ-POS').
+  useEffect(() => {
+    document.title = brandSettings.store_name
+      ? `${brandSettings.store_name} — OZ-POS`
+      : 'OZ-POS';
+  }, [brandSettings.store_name]);
+
   return (
     <div className="app-layout">
       {/* ── Sidebar ──────────────────────────────── */}
       <aside className={`app-sidebar${sidebarCollapsed ? ' collapsed' : ''}`} aria-label={l10n.getString('nav-main-aria')}>
         <div className="app-sidebar-header">
-          <span className="app-sidebar-logo">OZ-POS</span>
+          {brandSettings.logo_path ? (
+            <img
+              className="app-sidebar-logo-img"
+              src={`file://${brandSettings.logo_path}`}
+              alt=""
+            />
+          ) : null}
+          <span className="app-sidebar-logo">
+            {brandSettings.store_name || 'OZ-POS'}
+          </span>
         </div>
         <div className="app-sidebar-user">
           <RoleBadge />
@@ -94,15 +115,25 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
               {item.icon && (
                 <span className="app-nav-icon">{item.icon}</span>
               )}
-              <Localized id={item.i18nKey ?? item.label}>{item.label}</Localized>
+              <Localized id={item.i18nKey ?? item.label}><span>{item.label}</span></Localized>
             </button>
           ))}
         </nav>
 
         <div className="app-sidebar-footer">
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>
-            v0.0.1
+            v0.0.3
           </span>
+          <button
+            type="button"
+            className="app-sidebar-workspace-btn"
+            onClick={() => setActiveWorkspace(null)}
+            aria-label="Switch workspace"
+          >
+            <Localized id="nav-switch-workspace">
+              <span>Switch Workspace</span>
+            </Localized>
+          </button>
           <ThemeToggle />
         </div>
       </aside>

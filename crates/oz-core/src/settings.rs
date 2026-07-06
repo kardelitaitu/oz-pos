@@ -98,6 +98,30 @@ impl Settings {
         )?)
     }
 
+    /// Get the store branch name.
+    pub fn get_store_branch(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_store_branch(conn)?)
+    }
+
+    /// Set the store branch name.
+    pub fn set_store_branch(conn: &Connection, branch: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_store_branch(
+            conn, branch,
+        )?)
+    }
+
+    /// Get the store logo (base64-encoded PNG).
+    pub fn get_store_logo(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_store_logo(conn)?)
+    }
+
+    /// Set the store logo (base64-encoded PNG).
+    pub fn set_store_logo(conn: &Connection, logo: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_store_logo(
+            conn, logo,
+        )?)
+    }
+
     /// Whether to show the currency symbol prefix on receipt amounts.
     pub fn get_receipt_show_currency(conn: &Connection) -> Result<bool, CoreError> {
         Ok(platform_core::settings::Settings::get_receipt_show_currency(conn)?)
@@ -155,6 +179,180 @@ impl Settings {
     pub fn set_receipt_paper_width(conn: &Connection, val: &str) -> Result<(), CoreError> {
         Ok(platform_core::settings::Settings::set_receipt_paper_width(
             conn, val,
+        )?)
+    }
+
+    /// Whether to show the table number on cart and receipts.
+    pub fn get_receipt_show_table_number(conn: &Connection) -> Result<bool, CoreError> {
+        Ok(platform_core::settings::Settings::get_receipt_show_table_number(conn)?)
+    }
+
+    /// Set whether to show the table number.
+    pub fn set_receipt_show_table_number(conn: &Connection, on: bool) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_receipt_show_table_number(conn, on)?)
+    }
+
+    /// Top margin in mm.
+    pub fn get_receipt_margin_top(conn: &Connection) -> Result<i64, CoreError> {
+        Ok(platform_core::settings::Settings::get_receipt_margin_top(
+            conn,
+        )?)
+    }
+
+    /// Set the top margin.
+    pub fn set_receipt_margin_top(conn: &Connection, mm: i64) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_receipt_margin_top(
+            conn, mm,
+        )?)
+    }
+
+    /// Bottom margin in mm.
+    pub fn get_receipt_margin_bottom(conn: &Connection) -> Result<i64, CoreError> {
+        Ok(platform_core::settings::Settings::get_receipt_margin_bottom(conn)?)
+    }
+
+    /// Set the bottom margin.
+    pub fn set_receipt_margin_bottom(conn: &Connection, mm: i64) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_receipt_margin_bottom(conn, mm)?)
+    }
+
+    /// Left margin in mm.
+    pub fn get_receipt_margin_left(conn: &Connection) -> Result<i64, CoreError> {
+        Ok(platform_core::settings::Settings::get_receipt_margin_left(
+            conn,
+        )?)
+    }
+
+    /// Set the left margin.
+    pub fn set_receipt_margin_left(conn: &Connection, mm: i64) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_receipt_margin_left(
+            conn, mm,
+        )?)
+    }
+
+    /// Right margin in mm.
+    pub fn get_receipt_margin_right(conn: &Connection) -> Result<i64, CoreError> {
+        Ok(platform_core::settings::Settings::get_receipt_margin_right(
+            conn,
+        )?)
+    }
+
+    /// Set the right margin.
+    pub fn set_receipt_margin_right(conn: &Connection, mm: i64) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_receipt_margin_right(
+            conn, mm,
+        )?)
+    }
+
+    // ── Printer settings ─────────────────────────────────────────────
+
+    /// Printer connection type.
+    pub fn get_printer_connection(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_printer_connection(
+            conn,
+        )?)
+    }
+
+    /// Set printer connection type.
+    pub fn set_printer_connection(conn: &Connection, val: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_printer_connection(
+            conn, val,
+        )?)
+    }
+
+    /// Printer device path.
+    pub fn get_printer_device_path(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_printer_device_path(
+            conn,
+        )?)
+    }
+
+    /// Set printer device path.
+    pub fn set_printer_device_path(conn: &Connection, val: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_printer_device_path(
+            conn, val,
+        )?)
+    }
+
+    /// Printer paper size.
+    pub fn get_printer_paper_size(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_printer_paper_size(
+            conn,
+        )?)
+    }
+
+    /// Set printer paper size.
+    pub fn set_printer_paper_size(conn: &Connection, val: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_printer_paper_size(
+            conn, val,
+        )?)
+    }
+
+    // ── Scanner settings ─────────────────────────────────────────────
+
+    /// Selected scanner device ID.
+    pub fn get_scanner_device_id(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_scanner_device_id(
+            conn,
+        )?)
+    }
+
+    /// Set scanner device ID.
+    pub fn set_scanner_device_id(conn: &Connection, val: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_scanner_device_id(
+            conn, val,
+        )?)
+    }
+
+    /// Scanner input mode.
+    pub fn get_scanner_input_mode(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_scanner_input_mode(
+            conn,
+        )?)
+    }
+
+    /// Set scanner input mode.
+    pub fn set_scanner_input_mode(conn: &Connection, val: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_scanner_input_mode(
+            conn, val,
+        )?)
+    }
+
+    // ── Credit settings ──────────────────────────────────────────────
+
+    /// Check if credit payment is enabled.
+    pub fn is_credit_enabled(conn: &Connection) -> Result<bool, CoreError> {
+        Ok(platform_core::settings::Settings::is_credit_enabled(conn)?)
+    }
+
+    /// Enable or disable credit payment.
+    pub fn set_credit_enabled(conn: &Connection, enabled: bool) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_credit_enabled(
+            conn, enabled,
+        )?)
+    }
+
+    /// Get credit reminder interval in hours.
+    pub fn get_credit_reminder_interval(conn: &Connection) -> Result<i64, CoreError> {
+        Ok(platform_core::settings::Settings::get_credit_reminder_interval(conn)?)
+    }
+
+    /// Set credit reminder interval in hours.
+    pub fn set_credit_reminder_interval(conn: &Connection, hours: i64) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_credit_reminder_interval(conn, hours)?)
+    }
+
+    /// Get maximum credit limit in minor units (0 = no limit).
+    pub fn get_credit_max_limit(conn: &Connection) -> Result<i64, CoreError> {
+        Ok(platform_core::settings::Settings::get_credit_max_limit(
+            conn,
+        )?)
+    }
+
+    /// Set maximum credit limit in minor units.
+    pub fn set_credit_max_limit(conn: &Connection, limit: i64) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_credit_max_limit(
+            conn, limit,
         )?)
     }
 

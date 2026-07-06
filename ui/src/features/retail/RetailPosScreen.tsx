@@ -6,10 +6,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
 import PaymentModal from '@/features/sales/PaymentModal';
+import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
+import { overrideLinePrice, startSale } from '@/api/sales';
 import { listProducts, listCategories, lookupProductBySku, lookupByBarcode, type ProductDto, type CategoryDto } from '@/api/products';
+import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getActiveShift, openShift, closeShift, type ShiftDto } from '@/api/shifts';
+import { holdCart, listHeldCarts, getHeldCart, deleteHeldCart, type HeldCartRow } from '@/api/sales';
 import { getStoreSettings, listCreditSales, settleCredit, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
-import { formatMoney, type Money, type Sku } from '@/types/domain';
+import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
+import { formatMoney, type CartId, type LineId, type Money, type Sku } from '@/types/domain';
+import { useSound } from '@/frontend/shared/useSound';
 import RetailOptionsScreen from './RetailOptionsScreen';
 import './RetailPosScreen.css';
 
@@ -29,7 +35,8 @@ function clampRetailCartWidth(px: number, viewportWidth: number): number {
 
 function toProduct(p: ProductDto): {
   sku: Sku; name: string; category: string; price: Money;
-  barcode: string | null; inStock: boolean; stockQty: number | null; createdAt?: string;
+  barcode: string | null; inStock: boolean; stockQty: number | null;
+  createdAt?: string; priceUpdatedAt?: string;
 } {
   return {
     sku: p.sku as Sku,
@@ -40,21 +47,35 @@ function toProduct(p: ProductDto): {
     inStock: p.in_stock,
     stockQty: p.stock_qty,
     createdAt: p.created_at,
+    priceUpdatedAt: p.price_updated_at,
   };
 }
 
 export default function RetailPosScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  const { session } = useAuth();
+  const { session, isManager } = useAuth();
   const userId = session!.user_id;
 
   const {
     lines, total, subtotal, discountPercent, discountLabel, discountAmount,
-    addProduct, removeLine, updateQty, setDiscount, resetCart,
+    addProduct, removeLine, updateQty, updateLinePrice, setDiscount, resetCart,
   } = usePosState();
 
   const lineCount = lines.reduce((a, l) => a + l.qty, 0);
+
+  const { playBeep, playError, playSuccess, setSoundEnabled } = useSound();
+
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('retail-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+    catch { return 'light'; }
+  });
+  const handleThemeChange = useCallback((t: 'light' | 'dark') => {
+    setTheme(t);
+    localStorage.setItem('retail-theme', t);
+  }, []);
 
   // ── Cart panel resize state ───────────────────────────────────────
   const [retailCartWidth, setRetailCartWidth] = useState(() => {
@@ -143,10 +164,17 @@ export default function RetailPosScreen() {
   const handleConfirmQty = useCallback(() => {
     if (!pendingProduct) return;
     const qty = Math.max(1, parseInt(qtyInput, 10) || 1);
+    if (pendingProduct.stock_qty != null) {
+      const inCart = lines.filter((l) => l.sku === pendingProduct.sku).reduce((s, l) => s + l.qty, 0);
+      if (inCart + qty > pendingProduct.stock_qty) {
+        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${pendingProduct.name}`, type: 'warning' });
+        return;
+      }
+    }
     for (let i = 0; i < qty; i++) addProduct(toProduct(pendingProduct));
     setShowQtyPicker(false);
     setPendingProduct(null);
-  }, [pendingProduct, qtyInput, addProduct]);
+  }, [pendingProduct, qtyInput, addProduct, addToast, l10n, lines]);
 
   // ── Keyboard shortcut overlay ────────────────────────────────────
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -163,6 +191,7 @@ export default function RetailPosScreen() {
   }, [lines.length]);
 
   const handleConfirmClear = useCallback(() => {
+    setCartId(null);
     resetCart();
     setUndoStack([]);
     setShowClearConfirm(false);
@@ -187,12 +216,12 @@ export default function RetailPosScreen() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   useEffect(() => {
-    listProducts().then(setProducts).catch(() => {});
+    listProducts().then(setProducts).catch(() => { addToast({ message: l10n.getString('retail-toast-failed-products') || 'Failed to load products', type: 'error' }); playError(); });
     listCategories().then((cats) => {
       setCategories(cats);
       const first = cats[0];
       if (first) setActiveCategory(first.id);
-    }).catch(() => {});
+    }).catch(() => { addToast({ message: l10n.getString('retail-toast-failed-categories') || 'Failed to load categories', type: 'error' }); playError(); });
   }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -201,11 +230,20 @@ export default function RetailPosScreen() {
   const catLabels = useMemo(() => {
     const m = new Map<string, string>();
     categories.forEach((c) => {
-      const label = l10n.getString(`category-${c.id}`);
-      m.set(c.id, label || c.name);
+      const catId = `category-${c.id}`;
+      const label = l10n.getString(catId);
+      m.set(c.id, label !== catId ? label : c.name);
     });
     return m;
   }, [categories, l10n]);
+
+  const lowStockCount = useMemo(
+    () => products.filter((p) => p.stock_qty != null && p.stock_qty > 0 && p.stock_qty <= 5).length,
+    [products],
+  );
+
+  const [productPage, setProductPage] = useState(0);
+  const PAGE_SIZE = 50;
 
   const filteredProducts = useMemo(() => {
     let list = products;
@@ -217,6 +255,15 @@ export default function RetailPosScreen() {
     return list;
   }, [products, activeCategory, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const pagedProducts = useMemo(
+    () => filteredProducts.slice(productPage * PAGE_SIZE, (productPage + 1) * PAGE_SIZE),
+    [filteredProducts, productPage],
+  );
+
+  // Reset page when filter changes
+  useEffect(() => { setProductPage(0); }, [activeCategory, searchQuery]);
+
   const catHue = useCallback((catId: string | null) => {
     if (!catId) return 210;
     let h = 0;
@@ -225,9 +272,31 @@ export default function RetailPosScreen() {
   }, []);
 
   const handleAdd = useCallback((p: ProductDto) => {
+    if (p.stock_qty != null) {
+      const inCart = lines.filter((l) => l.sku === p.sku).reduce((s, l) => s + l.qty, 0);
+      if (inCart + 1 > p.stock_qty) {
+        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${p.name}`, type: 'warning' });
+        return;
+      }
+    }
     addProduct(toProduct(p));
     addToRecent(p);
-  }, [addProduct, addToRecent]);
+  }, [addProduct, addToRecent, addToast, l10n, lines]);
+
+  /** Stock-aware cart qty increase — checks stock_qty before incrementing. */
+  const handleIncreaseQty = useCallback((line: { sku: string; id: string; qty: number }) => {
+    const product = products.find((p) => p.sku === line.sku);
+    if (product?.stock_qty != null) {
+      const otherLinesQty = lines
+        .filter((l) => l.sku === line.sku && l.id !== line.id)
+        .reduce((s, l) => s + l.qty, 0);
+      if (otherLinesQty + line.qty + 1 > product.stock_qty) {
+        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${product.name}`, type: 'warning' });
+        return;
+      }
+    }
+    updateQty(line.id, line.qty + 1);
+  }, [products, lines, updateQty, addToast, l10n]);
 
   // ── SKU / Barcode input ──────────────────────────────────────
 
@@ -253,13 +322,14 @@ export default function RetailPosScreen() {
   const handleBarcode = useCallback(async (payload: { code: string }) => {
     const list = productsRef.current;
     const found = list.find((x) => x.barcode === payload.code);
-    if (found) { handleAdd(found); setScanFlash(true); setTimeout(() => setScanFlash(false), 300); return; }
+    if (found) { handleAdd(found); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
     try {
       const p = await lookupByBarcode(payload.code);
-      if (p) { handleAdd(p); setScanFlash(true); setTimeout(() => setScanFlash(false), 300); return; }
+      if (p) { handleAdd(p); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
     } catch {}
+    playError();
     addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
-  }, [handleAdd, addToast, l10n]);
+  }, [handleAdd, addToast, l10n, playBeep, playError]);
 
   useBarcodeScanner({ onProductFound: handleBarcode });
 
@@ -267,7 +337,7 @@ export default function RetailPosScreen() {
 
   const [storeSettings, setStoreSettings] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' });
   useEffect(() => {
-    getStoreSettings().then(setStoreSettings).catch(() => {});
+    getStoreSettings().then(setStoreSettings).catch(() => addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }));
   }, []);
 
   // ── Shift management ─────────────────────────────────────────
@@ -303,7 +373,7 @@ export default function RetailPosScreen() {
       setShowOpenShift(false);
       setOpeningBalance('');
     } catch {
-      addToast({ message: 'Failed to open shift', type: 'error' });
+      addToast({ message: l10n.getString('retail-toast-failed-open-shift') || 'Failed to open shift', type: 'error' });
     } finally {
       setOpeningShift(false);
     }
@@ -316,55 +386,224 @@ export default function RetailPosScreen() {
     setClosingShift(true);
     setCloseShiftError(null);
     try {
-      const s = await closeShift(activeShift.id, val, shiftNotes || null);
+      const s = await closeShift({ userId, id: activeShift.id, closingBalanceMinor: val, notes: shiftNotes || null });
       setClosedShiftSummary(s);
       setActiveShift(null);
     } catch (e: any) {
-      setCloseShiftError(e?.message ?? 'Failed to close shift');
+      setCloseShiftError(e?.message ?? (l10n.getString('pos-close-shift-failed') || 'Failed to close shift'));
     } finally {
       setClosingShift(false);
     }
   }, [activeShift, closingBalance, shiftNotes]);
 
+  // ── Live tax preview ────────────────────────────────────────
+
+  const [cartTax, setCartTax] = useState<number>(0);
+
+  useEffect(() => {
+    if (lines.length === 0 || !subtotal) {
+      setCartTax(0);
+      return;
+    }
+    const currency = subtotal.currency;
+    const taxLines: CartLineTaxInput[] = lines.map((l) => ({
+      sku: String(l.sku),
+      qty: l.qty,
+      unit_price_minor: l.unit_price.minor_units,
+    }));
+    computeCartTax(taxLines, currency)
+      .then(setCartTax)
+      .catch(() => setCartTax(0));
+  }, [lines, subtotal]);
+
   // ── Discount modal ───────────────────────────────────────────
 
   const [showDiscount, setShowDiscount] = useState(false);
+  const [discountTab, setDiscountTab] = useState<'pct' | 'rp'>('pct');
   const [discountInput, setDiscountInput] = useState('');
+  const [discountRpInput, setDiscountRpInput] = useState('');
 
   const handleApplyDiscount = useCallback(() => {
     const pct = parseFloat(discountInput);
-    if (Number.isNaN(pct) || pct < 0 || pct > 100) return;
+    if (Number.isNaN(pct) || pct <= 0) return;
     setDiscount(pct, '');
     setShowDiscount(false);
     setDiscountInput('');
+    setDiscountRpInput('');
   }, [discountInput, setDiscount]);
+
+  const handleApplyDiscountRp = useCallback(() => {
+    const rp = parseFloat(discountRpInput);
+    if (Number.isNaN(rp) || rp <= 0 || !subtotal) return;
+    const rpMinor = Math.round(rp * 100);
+    const pct = Math.round((rpMinor / subtotal.minor_units) * 100 * 100) / 100;
+    setDiscount(pct, '');
+    setShowDiscount(false);
+    setDiscountRpInput('');
+  }, [discountRpInput, subtotal, setDiscount]);
+
+  // ── Customer selection ─────────────────────────────────────
+
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDto | null>(null);
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState<CustomerDto[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [overrideTarget, setOverrideTarget] = useState<{ id: LineId; name: string; unit_price: Money } | null>(null);
+  const [cartId, setCartId] = useState<CartId | null>(null);
+  const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
+    if (cartId) return cartId;
+    try {
+      const { cartId: newCartId } = await startSale({ currency });
+      setCartId(newCartId);
+      return newCartId;
+    } catch {
+      addToast({ message: 'Failed to create sale cart', type: 'error' });
+      return null;
+    }
+  }, [cartId, addToast]);
+
+  const handleOverrideConfirm = useCallback(async (newPriceMinor: number, authorizingUserId: string) => {
+    if (!overrideTarget) return;
+    const cId = cartId;
+    if (!cId) {
+      addToast({ message: 'No active sale cart', type: 'error' });
+      setOverrideTarget(null);
+      return;
+    }
+    try {
+      await overrideLinePrice({
+        cartId: cId,
+        lineId: overrideTarget.id,
+        newPriceMinor,
+        userId: authorizingUserId,
+      });
+      updateLinePrice(overrideTarget.id, {
+        minor_units: newPriceMinor,
+        currency: overrideTarget.unit_price.currency,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Override failed';
+      addToast({ message: msg, type: 'error' });
+    } finally {
+      setOverrideTarget(null);
+    }
+  }, [overrideTarget, cartId, addToast, updateLinePrice]);
+
+  useEffect(() => {
+    if (!showCustomerSearch) return;
+    setLoadingCustomers(true);
+    listCustomers()
+      .then((customers) => {
+        const q = customerSearchQuery.trim().toLowerCase();
+        if (!q) {
+          setCustomerSearchResults(customers);
+        } else {
+          setCustomerSearchResults(
+            customers.filter(
+              (c) =>
+                c.name.toLowerCase().includes(q) ||
+                (c.phone && c.phone.includes(q)) ||
+                (c.email && c.email.toLowerCase().includes(q)),
+            ),
+          );
+        }
+      })
+      .catch(() => setCustomerSearchResults([]))
+      .finally(() => setLoadingCustomers(false));
+  }, [showCustomerSearch, customerSearchQuery]);
 
   // ── Payment modal ────────────────────────────────────────────
 
   const [showPayment, setShowPayment] = useState(false);
 
   const handlePay = useCallback(() => {
-    if (!activeShift) { addToast({ message: 'Open a shift first', type: 'warning' }); return; }
+    if (!activeShift) { addToast({ message: l10n.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
     setShowPayment(true);
   }, [activeShift, addToast]);
 
   // ── Hold cart ────────────────────────────────────────────────
 
-  const [heldCart, setHeldCart] = useState<{ lines: { sku: Sku; name: string; category: string; unit_price: Money }[]; discount?: number; discountLabel?: string } | null>(null);
+  const [heldCartId, setHeldCartId] = useState<string | null>(null);
+  const [showHeldCartsList, setShowHeldCartsList] = useState(false);
+  const [heldCartsList, setHeldCartsList] = useState<HeldCartRow[]>([]);
 
-  const handleHold = useCallback(() => {
+  const handleHold = useCallback(async () => {
     if (lines.length === 0) return;
-    setHeldCart({ lines: lines.map((l) => ({ sku: l.sku as Sku, name: l.name ?? '', category: l.category ?? '', unit_price: l.unit_price })), discount: discountPercent, discountLabel });
-    resetCart();
-    addToast({ message: 'Order held', type: 'success' });
-  }, [lines, discountPercent, discountLabel, resetCart, addToast]);
+    try {
+      const cartData = JSON.stringify({
+        lines: lines.map((l) => ({ sku: l.sku, name: l.name, qty: l.qty, unit_price: l.unit_price })),
+        discountPercent,
+        discountLabel,
+      });
+      const { id } = await holdCart({
+        label: `Hold #${Date.now()}`,
+        cart_data: cartData,
+        item_count: lines.length,
+        total_minor: subtotal.minor_units,
+        currency: subtotal.currency,
+        bill_type: 'hold',
+      });
+      setHeldCartId(id);
+      resetCart();
+      addToast({ message: l10n.getString('retail-toast-order-held') || 'Order held', type: 'success' });
+    } catch {
+      addToast({ message: l10n.getString('retail-toast-failed-hold') || 'Failed to hold order', type: 'error' });
+    }
+  }, [lines, discountPercent, discountLabel, subtotal, resetCart, addToast]);
 
-  const handleResume = useCallback(() => {
-    if (!heldCart) return;
-    heldCart.lines.forEach((l) => addProduct({ ...l, price: l.unit_price, barcode: null, inStock: true, stockQty: null }));
-    if (heldCart.discount) setDiscount(heldCart.discount, heldCart.discountLabel ?? '');
-    setHeldCart(null);
-  }, [heldCart, addProduct, setDiscount]);
+  const handleResumeCart = useCallback(async (cartId: string) => {
+    try {
+      const full = await getHeldCart(cartId);
+      if (!full) return;
+      const data = JSON.parse(full.cart_data);
+      for (const l of data.lines) {
+        for (let i = 0; i < (l.qty || 1); i++) {
+          addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null });
+        }
+      }
+      if (data.discountPercent) setDiscount(data.discountPercent, data.discountLabel ?? '');
+      await deleteHeldCart(cartId);
+      setHeldCartId(null);
+      setShowHeldCartsList(false);
+    } catch {
+      addToast({ message: l10n.getString('retail-toast-failed-resume') || 'Failed to resume order', type: 'error' });
+    }
+  }, [addProduct, setDiscount, addToast]);
+
+  const handleResume = useCallback(async () => {
+    const carts = await listHeldCarts();
+    const held = carts.filter((c) => c.bill_type === 'hold');
+    if (held.length === 0) return;
+    if (held.length === 1) {
+      await handleResumeCart(held[0].id);
+      return;
+    }
+    setHeldCartsList(held);
+    setShowHeldCartsList(true);
+  }, [handleResumeCart]);
+
+  const handleDeleteHeldCart = useCallback(async (cartId: string) => {
+    try {
+      await deleteHeldCart(cartId);
+      setHeldCartsList((prev) => prev.filter((c) => c.id !== cartId));
+      if (heldCartId === cartId) setHeldCartId(null);
+      addToast({ type: 'success', message: l10n.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
+    } catch {
+      addToast({ type: 'error', message: l10n.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
+    }
+  }, [heldCartId, addToast]);
+
+  // ── Load persisted held carts on mount ───────────────────────
+
+  useEffect(() => {
+    listHeldCarts()
+      .then((carts) => {
+        const held = carts.find((c) => c.bill_type === 'hold');
+        if (held) setHeldCartId(held.id);
+      })
+      .catch(() => addToast({ message: 'Failed to load held carts', type: 'error' }));
+  }, []);
 
   // ── Clock ────────────────────────────────────────────────────
 
@@ -377,7 +616,6 @@ export default function RetailPosScreen() {
   const [creditSales, setCreditSales] = useState<CreditSaleDto[]>([]);
   const [showCreditList, setShowCreditList] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
-  const roleId = session!.role_id;
 
   const loadCreditSales = useCallback(async () => {
     try {
@@ -393,15 +631,15 @@ export default function RetailPosScreen() {
   const handleSettleCredit = useCallback(async (saleId: string) => {
     setSettlingId(saleId);
     try {
-      await settleCredit(saleId, roleId);
+      await settleCredit(saleId, userId);
       setCreditSales((prev) => prev.filter((c) => c.saleId !== saleId));
-      addToast({ message: 'Credit settled', type: 'success' });
+      addToast({ message: l10n.getString('retail-toast-credit-settled') || 'Credit settled', type: 'success' });
     } catch {
-      addToast({ message: 'Failed to settle credit', type: 'error' });
+      addToast({ message: l10n.getString('retail-toast-failed-settle') || 'Failed to settle credit', type: 'error' });
     } finally {
       setSettlingId(null);
     }
-  }, [roleId, addToast]);
+  }, [userId, addToast]);
 
   // ── Clock ────────────────────────────────────────────────────
 
@@ -412,6 +650,16 @@ export default function RetailPosScreen() {
   }, []);
 
   const timeStr = clock.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = clock.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+  const shiftDuration = useMemo(() => {
+    if (!activeShift) return null;
+    const opened = new Date(activeShift.openedAt);
+    const diffMs = clock.getTime() - opened.getTime();
+    const h = Math.floor(diffMs / 3600000);
+    const m = Math.floor((diffMs % 3600000) / 60000);
+    return `${h}h ${m}m`;
+  }, [activeShift, clock]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────
 
@@ -422,11 +670,11 @@ export default function RetailPosScreen() {
         case 'F1': handlePay(); break;
         case 'F2': if (lines.length > 0) handleRequestClear(); break;
         case 'F3': if (lines.length > 0) setShowDiscount(true); break;
-        case 'F4': heldCart ? handleResume() : handleHold(); break;
+        case 'F4': heldCartId ? handleResume() : handleHold(); break;
         case 'F5': skuInputRef.current?.focus(); break;
-        case 'F6': addToast({ message: 'Sales history coming soon', type: 'info' }); break;
-        case 'F7': addToast({ message: 'Customer lookup coming soon', type: 'info' }); break;
-        case 'F8': addToast({ message: 'Stock inquiry coming soon', type: 'info' }); break;
+        case 'F6': addToast({ message: l10n.getString('retail-toast-sales-history-soon') || 'Sales history coming soon', type: 'info' }); break;
+        case 'F7': setShowCustomerSearch(true); break;
+        case 'F8': addToast({ message: l10n.getString('retail-toast-stock-inquiry-soon') || 'Stock inquiry coming soon', type: 'info' }); break;
         case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
         case 'F10': if (session?.role_name !== 'cashier') setShowOptions(true); break;
         case 'F11': case '?': setShowShortcuts((v) => !v); break;
@@ -434,12 +682,12 @@ export default function RetailPosScreen() {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showClearConfirm, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCart, activeShift, session, addToast]);
+  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast]);
 
   // ── Render ───────────────────────────────────────────────────
 
   if (showOptions) {
-    return <RetailOptionsScreen onClose={() => setShowOptions(false)} />;
+    return <RetailOptionsScreen onClose={() => setShowOptions(false)} theme={theme} onThemeChange={handleThemeChange} />;
   }
 
   if (showPayment && total) {
@@ -453,14 +701,16 @@ export default function RetailPosScreen() {
         discountPercent={discountPercent}
         discountLabel={discountLabel}
         userId={userId}
+        selectedCustomer={selectedCustomer}
+        onCustomerChange={(c) => setSelectedCustomer(c)}
         onClose={() => setShowPayment(false)}
-        onComplete={() => { setShowPayment(false); resetCart(); addToast({ message: 'Sale complete', type: 'success' }); }}
+        onComplete={() => { setShowPayment(false); resetCart(); setSelectedCustomer(null); playSuccess(); addToast({ message: l10n.getString('retail-toast-sale-complete') || 'Sale complete', type: 'success' }); }}
       />
     );
   }
 
   return (
-    <div className="retail-pos">
+    <div className="retail-pos" data-theme={theme}>
       {/* ── Header ──────────────────────────── */}
       <header className="retail-header">
         <div className="retail-header-store">
@@ -468,20 +718,20 @@ export default function RetailPosScreen() {
             <img src={`data:image/png;base64,${storeSettings.logo}`} alt="" className="retail-header-logo" style={{ height: 32, marginRight: 8 }} />
           )}
           <div>
-            <span className="retail-header-name">{storeSettings.name || 'TOKO'}</span>
+            <span className="retail-header-name">{storeSettings.name || l10n.getString('retail-store-name-fallback')}</span>
             {storeSettings.branch && <span className="retail-header-branch"> &middot; {storeSettings.branch}</span>}
             <span className="retail-header-address">{storeSettings.address || ''}</span>
           </div>
         </div>
         <div className="retail-header-right">
           {shiftLoading ? (
-            <span className="retail-shift-badge">Loading…</span>
+            <span className="retail-shift-badge">{l10n.getString('loading')}</span>
           ) : activeShift ? (
             <span className="retail-shift-badge">
-              Shift &middot; {formatMoney({ minor_units: activeShift.totalSalesMinor, currency: 'IDR' })}
+              {l10n.getString('retail-shift-label')} &middot; {formatMoney({ minor_units: activeShift.totalSalesMinor, currency: 'IDR' })}
             </span>
           ) : (
-            <span className="retail-shift-badge" style={{ opacity: 0.6 }}>No shift</span>
+            <span className="retail-shift-badge" style={{ opacity: 0.6 }}>{l10n.getString('retail-no-shift')}</span>
           )}
           <div className="retail-header-cashier">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
@@ -489,9 +739,23 @@ export default function RetailPosScreen() {
             </svg>
             <span>{session?.display_name ?? ''}</span>
           </div>
-          <span className="retail-header-clock">{timeStr}</span>
+          <span className="retail-header-clock">
+            <span className="retail-header-date">{dateStr}</span>
+            <span>{timeStr}</span>
+            {shiftDuration && <span className="retail-header-duration">{shiftDuration}</span>}
+          </span>
         </div>
       </header>
+
+      {/* ── Low-stock banner ──────────────── */}
+      {lowStockCount > 0 && (
+        <div className="retail-low-stock-banner">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+            <path d="M10 2a1 1 0 011 1v8a1 1 0 11-2 0V3a1 1 0 011-1zM10 16a1 1 0 100-2 1 1 0 000 2z"/>
+          </svg>
+          <span>{l10n.getString('retail-low-stock-banner', { count: lowStockCount }) || `${lowStockCount} product${lowStockCount > 1 ? 's' : ''} low on stock`}</span>
+        </div>
+      )}
 
       {/* ── Main area ───────────────────────── */}
       <div className="retail-main" ref={retailPosRef}>
@@ -509,6 +773,8 @@ export default function RetailPosScreen() {
                 key={cat.id}
                 className={`retail-cat-btn${activeCategory === cat.id ? ' retail-cat-btn--active' : ''}`}
                 onClick={() => setActiveCategory(cat.id)}
+                aria-label={catLabels.get(cat.id) ?? cat.name}
+                aria-pressed={activeCategory === cat.id}
               >
                 {catLabels.get(cat.id) ?? cat.name}
               </button>
@@ -525,10 +791,10 @@ export default function RetailPosScreen() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari produk…"
+              placeholder={l10n.getString('retail-search-placeholder')}
             />
             {searchQuery && (
-              <button className="retail-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
+              <button className="retail-search-clear" onClick={() => setSearchQuery('')} aria-label={l10n.getString('retail-search-clear-aria')}>
                 &times;
               </button>
             )}
@@ -537,7 +803,7 @@ export default function RetailPosScreen() {
           {/* ── Recent products ──────────────── */}
           {recentProducts.length > 0 && !searchQuery.trim() && !activeCategory && (
             <div className="retail-recent-strip">
-              <span className="retail-recent-label">Recent</span>
+              <span className="retail-recent-label">{l10n.getString('retail-recent-label')}</span>
               <div className="retail-recent-items">
                 {recentProducts.map((p) => (
                   <button
@@ -555,28 +821,29 @@ export default function RetailPosScreen() {
 
           {filteredProducts.length === 0 ? (
             <div className="retail-grid-empty">
-              {searchQuery.trim() ? 'No products match your search' : 'No products'}
+              {searchQuery.trim() ? (l10n.getString('retail-no-products-match') || 'No products match your search') : (l10n.getString('retail-no-products') || 'No products')}
             </div>
           ) : (
             <div className="retail-grid">
-              {filteredProducts.map((p) => (
-                <button
+                {pagedProducts.map((p) => <ProductCard
                   key={p.sku}
-                  className="retail-product-btn"
-                  style={{ '--cat-hue': catHue(p.category) } as React.CSSProperties}
-                  onClick={() => handleOpenQtyPicker(p)}
-                >
-                  {p.stock_qty != null && p.stock_qty <= 5 && (
-                    <span className="retail-product-stock-badge">{p.stock_qty}</span>
-                  )}
-                  <span className="retail-product-name">{p.name}</span>
-                  <span className="retail-product-price">{formatMoney(p.price)}</span>
-                </button>
-              ))}
+                  product={p}
+                  catHue={catHue}
+                  formatMoney={formatMoney}
+                  handleAdd={handleAdd}
+                  handleOpenQtyPicker={handleOpenQtyPicker}
+                />)}
+            </div>
+          )}
+          {totalPages > 1 && (
+            <div className="retail-page-nav" role="navigation" aria-label={l10n.getString('retail-page-nav-aria') || 'Product pages'}>
+              <button className="retail-page-btn" disabled={productPage === 0} onClick={() => setProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>{'<'}</button>
+              <span className="retail-page-info" aria-current="true">{productPage + 1} / {totalPages}</span>
+              <button className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => setProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>{'>'}</button>
             </div>
           )}
           <div className="retail-sku-bar">
-            <span className="retail-sku-label">SKU</span>
+            <span className="retail-sku-label">{l10n.getString('retail-sku-label')}</span>
             <input
               ref={skuInputRef}
               className="retail-sku-input"
@@ -584,7 +851,7 @@ export default function RetailPosScreen() {
               value={skuInput}
               onChange={(e) => setSkuInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSkuSubmit(); }}
-              placeholder="Scan or type barcode / SKU"
+              placeholder={l10n.getString('retail-sku-placeholder')}
             />
             <button
               style={{
@@ -593,7 +860,7 @@ export default function RetailPosScreen() {
               }}
               onClick={handleSkuSubmit}
             >
-              GO
+              {l10n.getString('retail-sku-go')}
             </button>
           </div>
         </div>
@@ -608,8 +875,8 @@ export default function RetailPosScreen() {
         {/* Right: cart */}
         <div className="retail-cart" style={{ width: retailCartWidth } as CSSProperties}>
           <div className="retail-cart-header">
-            <span>Cart</span>
-            <span>{lineCount} item{lineCount !== 1 ? 's' : ''}</span>
+            <span>{l10n.getString('cart-title')}</span>
+            <span>{l10n.getString('retail-cart-items', { count: lineCount }) || `${lineCount} item${lineCount !== 1 ? 's' : ''}`}</span>
           </div>
           {lines.length === 0 ? (
             <div className="retail-cart-empty">
@@ -618,7 +885,7 @@ export default function RetailPosScreen() {
                 <path d="M4 6h16" />
                 <path d="M9 10V8a3 3 0 0 1 6 0v2" />
               </svg>
-              <span>Cart is empty</span>
+              <span>{l10n.getString('pos-cart-empty')}</span>
             </div>
           ) : (
             <>
@@ -626,11 +893,11 @@ export default function RetailPosScreen() {
                 <table className="retail-cart-table-inner">
                   <thead>
                     <tr>
-                      <th style={{ width: 40 }}>#</th>
-                      <th>Item</th>
-                      <th style={{ width: 56 }}>Qty</th>
-                      <th style={{ width: 72 }}>@Price</th>
-                      <th style={{ width: 80 }}>Subtotal</th>
+                      <th style={{ width: 40 }}>{l10n.getString('retail-cart-header-col')}</th>
+                      <th>{l10n.getString('retail-cart-header-item')}</th>
+                      <th style={{ width: 56 }}>{l10n.getString('retail-cart-header-qty')}</th>
+                      <th style={{ width: 72 }}>{l10n.getString('retail-cart-header-price')}</th>
+                      <th style={{ width: 80 }}>{l10n.getString('retail-cart-header-subtotal')}</th>
                       <th style={{ width: 24 }}></th>
                     </tr>
                   </thead>
@@ -646,24 +913,41 @@ export default function RetailPosScreen() {
                             <button
                               className="retail-cart-qty-btn"
                               onClick={() => updateQty(line.id, Math.max(1, line.qty - 1))}
+                              aria-label={l10n.getString('retail-cart-qty-decrease-aria') || `Decrease quantity of ${line.sku}`}
                             >
                               &minus;
                             </button>
                             <span className="retail-cart-qty-value">{line.qty}</span>
                             <button
                               className="retail-cart-qty-btn"
-                              onClick={() => updateQty(line.id, line.qty + 1)}
+                              onClick={() => handleIncreaseQty(line)}
+                              aria-label={l10n.getString('retail-cart-qty-increase-aria') || `Increase quantity of ${line.sku}`}
                             >
                               +
                             </button>
                           </span>
                         </td>
-                        <td className="retail-cart-line-unit">{formatMoney(line.unit_price)}</td>
+                        <td className="retail-cart-line-unit">
+                          {formatMoney(line.unit_price)}
+                          {isManager && (
+                            <button
+                              type="button"
+                              className="retail-cart-line-override"
+                              onClick={() => {
+                                setOverrideTarget({ id: line.id as LineId, name: line.name ?? line.sku, unit_price: line.unit_price });
+                                ensureCart(line.unit_price.currency);
+                              }}
+                              aria-label={`Override price for ${line.name ?? line.sku}`}
+                            >
+                              Override
+                            </button>
+                          )}
+                        </td>
                         <td className="retail-cart-line-subtotal">{formatMoney({ minor_units: line.unit_price.minor_units * line.qty, currency: line.unit_price.currency })}</td>
-                        <td>
-                          <button className="retail-cart-remove-btn" onClick={() => handleRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price })}>
-                            &times;
-                          </button>
+                          <td>
+                            <button className="retail-cart-remove-btn" onClick={() => handleRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price })} aria-label={l10n.getString('retail-cart-remove-aria') || `Remove ${line.sku} from cart`}>
+                              &times;
+                            </button>
                         </td>
                       </tr>
                     ))}
@@ -674,56 +958,74 @@ export default function RetailPosScreen() {
               {/* ── Undo bar ───────────── */}
               {undoStack.length > 0 && (
                 <div className="retail-undo-bar" role="status" aria-live="polite">
-                  <span className="retail-undo-bar-label">{undoStack.length} item{undoStack.length > 1 ? 's' : ''} removed</span>
-                  <button className="retail-undo-bar-btn" onClick={handleUndoRemove}>Undo</button>
-                  <button className="retail-undo-bar-dismiss" onClick={handleDismissUndo} aria-label="Dismiss">&times;</button>
+                  <span className="retail-undo-bar-label">{l10n.getString('retail-undo-items-removed', { count: undoStack.length }) || `${undoStack.length} item${undoStack.length > 1 ? 's' : ''} removed`}</span>
+                  <button className="retail-undo-bar-btn" onClick={handleUndoRemove}>{l10n.getString('pos-cart-undo')}</button>
+                  <button className="retail-undo-bar-dismiss" onClick={handleDismissUndo} aria-label={l10n.getString('pos-cart-undo-dismiss-aria')}>&times;</button>
                 </div>
               )}
 
               <div className="retail-cart-totals">
                 <div className="retail-total-row">
-                  <span>Subtotal</span>
+                  <span>{l10n.getString('pos-cart-subtotal')}</span>
                   <span>{subtotal ? formatMoney(subtotal) : '—'}</span>
                 </div>
                 {discountPercent > 0 && discountAmount && (
                   <div className="retail-total-row">
-                    <span>Discount {discountPercent}%</span>
+                    <span>{l10n.getString('retail-total-discount', { percent: discountPercent }) || `Discount ${discountPercent}%`}</span>
                     <span style={{ color: '#c00' }}>&minus;{formatMoney(discountAmount)}</span>
                   </div>
                 )}
+                {cartTax > 0 && (
+                  <div className="retail-total-row">
+                    <span>{l10n.getString('retail-total-tax')}</span>
+                    <span>{formatMoney({ minor_units: cartTax, currency: subtotal?.currency ?? 'IDR' })}</span>
+                  </div>
+                )}
                 <div className="retail-total-row retail-total-row--grand">
-                  <span>Total</span>
+                  <span>{l10n.getString('cart-total-label')}</span>
                   <span>{total ? formatMoney(total) : '—'}</span>
                 </div>
               </div>
+              {selectedCustomer && (
+                <div className="retail-customer-badge">
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+                    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
+                  </svg>
+                  <span>{selectedCustomer.name}</span>
+                </div>
+              )}
               <div className="retail-cart-actions">
                 <button
                   className="retail-cart-action-btn retail-cart-action-btn--pay"
                   onClick={handlePay}
                   disabled={lines.length === 0 || !activeShift}
+                  aria-label={l10n.getString('sale-pay-button')}
                 >
-                  Pay
+                  {l10n.getString('sale-pay-button')}
                 </button>
                 <button
                   className="retail-cart-action-btn retail-cart-action-btn--discount"
                   onClick={() => setShowDiscount(true)}
                   disabled={lines.length === 0}
+                  aria-label={l10n.getString('retail-discount-button')}
                 >
-                  Diskon
+                  {l10n.getString('retail-discount-button')}
                 </button>
                 <button
                   className="retail-cart-action-btn retail-cart-action-btn--hold"
-                  onClick={heldCart ? handleResume : handleHold}
-                  disabled={!heldCart && lines.length === 0}
+                  onClick={heldCartId ? handleResume : handleHold}
+                  disabled={!heldCartId && lines.length === 0}
+                  aria-label={heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
                 >
-                  {heldCart ? 'Resume' : 'Hold'}
+                  {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
                 </button>
                 <button
                   className="retail-cart-action-btn retail-cart-action-btn--void"
                   onClick={handleRequestClear}
                   disabled={lines.length === 0}
+                  aria-label={l10n.getString('pos-cart-clear')}
                 >
-                  Clear
+                  {l10n.getString('pos-cart-clear')}
                 </button>
               </div>
               <div style={{ padding: '4px 8px' }}>
@@ -734,7 +1036,7 @@ export default function RetailPosScreen() {
                     color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700,
                   }}
                 >
-                  Credit Reminders ({creditSales.length})
+                  {l10n.getString('retail-credit-reminders', { count: creditSales.length }) || `Credit Reminders (${creditSales.length})`}
                 </button>
               </div>
             </>
@@ -743,39 +1045,39 @@ export default function RetailPosScreen() {
       </div>
 
       {/* ── Function bar (bottom) ──────────── */}
-      <div className="retail-fn-bar">
+      <div className="retail-fn-bar" role="toolbar" aria-label={l10n.getString('retail-fn-bar-aria') || 'Function bar'}>
         <button className="retail-fn-btn" onClick={handlePay} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F1</span> Pay
+          <span className="retail-fn-key">F1</span> {l10n.getString('sale-pay-button')}
         </button>
         <button className="retail-fn-btn" onClick={handleRequestClear} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F2</span> Void
+          <span className="retail-fn-key">F2</span> {l10n.getString('retail-fn-void')}
         </button>
         <button className="retail-fn-btn" onClick={() => setShowDiscount(true)} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F3</span> Diskon
+          <span className="retail-fn-key">F3</span> {l10n.getString('retail-fn-diskon')}
         </button>
-        <button className="retail-fn-btn" onClick={heldCart ? handleResume : handleHold} disabled={!heldCart && lines.length === 0}>
-          <span className="retail-fn-key">F4</span> {heldCart ? 'Resume' : 'Hold'}
+        <button className="retail-fn-btn" onClick={heldCartId ? handleResume : handleHold} disabled={!heldCartId && lines.length === 0}>
+          <span className="retail-fn-key">F4</span> {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
         </button>
         <button className="retail-fn-btn" onClick={() => skuInputRef.current?.focus()}>
-          <span className="retail-fn-key">F5</span> Cari
+          <span className="retail-fn-key">F5</span> {l10n.getString('retail-fn-cari')}
         </button>
-        <button className="retail-fn-btn" onClick={() => addToast({ message: 'Sales history coming soon', type: 'info' })}>
-          <span className="retail-fn-key">F6</span> History
+        <button className="retail-fn-btn" onClick={() => addToast({ message: l10n.getString('retail-toast-sales-history-soon') || 'Sales history coming soon', type: 'info' })}>
+          <span className="retail-fn-key">F6</span> {l10n.getString('retail-fn-history')}
         </button>
-        <button className="retail-fn-btn" onClick={() => addToast({ message: 'Customer lookup coming soon', type: 'info' })}>
-          <span className="retail-fn-key">F7</span> Pelanggan
+        <button className="retail-fn-btn" onClick={() => setShowCustomerSearch(true)}>
+          <span className="retail-fn-key">F7</span> {l10n.getString('retail-fn-pelanggan')}
         </button>
-        <button className="retail-fn-btn" onClick={() => addToast({ message: 'Stock inquiry coming soon', type: 'info' })}>
-          <span className="retail-fn-key">F8</span> Stok
+        <button className="retail-fn-btn" onClick={() => addToast({ message: l10n.getString('retail-toast-stock-inquiry-soon') || 'Stock inquiry coming soon', type: 'info' })}>
+          <span className="retail-fn-key">F8</span> {l10n.getString('retail-fn-stok')}
         </button>
         <button
           className="retail-fn-btn"
           onClick={() => activeShift ? setShowCloseShift(true) : setShowOpenShift(true)}
         >
-          <span className="retail-fn-key">F9</span> {activeShift ? 'Close' : 'Open'} Shift
+          <span className="retail-fn-key">F9</span> {activeShift ? l10n.getString('pos-shift-close-btn') : l10n.getString('pos-shift-open-btn')} {l10n.getString('retail-fn-shift')}
         </button>
         <button className="retail-fn-btn" onClick={() => setShowOptions(true)} disabled={session?.role_name === 'cashier'} style={session?.role_name === 'cashier' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
-          <span className="retail-fn-key">F10</span> Options
+          <span className="retail-fn-key">F10</span> {l10n.getString('retail-fn-options')}
         </button>
       </div>
 
@@ -783,8 +1085,8 @@ export default function RetailPosScreen() {
       {showOpenShift && (
         <div className="retail-shift-overlay" onClick={() => setShowOpenShift(false)}>
           <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Open Shift</h3>
-            <label htmlFor="retail-opening">Opening balance (Rp)</label>
+            <h3>{l10n.getString('pos-open-shift-title')}</h3>
+            <label htmlFor="retail-opening">{l10n.getString('retail-open-shift-opening-label')}</label>
             <input
               id="retail-opening"
               type="number"
@@ -794,9 +1096,9 @@ export default function RetailPosScreen() {
               autoFocus
             />
             <div className="retail-shift-modal-actions">
-              <button onClick={() => setShowOpenShift(false)} disabled={openingShift}>Cancel</button>
+              <button onClick={() => setShowOpenShift(false)} disabled={openingShift}>{l10n.getString('cancel')}</button>
               <button className="retail-shift-confirm-btn" onClick={handleOpenShift} disabled={openingShift}>
-                {openingShift ? 'Opening…' : 'Open'}
+                {openingShift ? l10n.getString('retail-open-shift-opening') : l10n.getString('pos-shift-open-btn')}
               </button>
             </div>
           </div>
@@ -807,12 +1109,12 @@ export default function RetailPosScreen() {
       {showCloseShift && activeShift && !closedShiftSummary && (
         <div className="retail-shift-overlay" onClick={() => setShowCloseShift(false)}>
           <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Close Shift</h3>
+            <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {closeShiftError && <div className="retail-shift-error">{closeShiftError}</div>}
             <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>
-              Opened: {new Date(activeShift.openedAt).toLocaleString()}
+              {l10n.getString('pos-close-shift-opened')}: {new Date(activeShift.openedAt).toLocaleString()}
             </div>
-            <label htmlFor="retail-closing">Counted cash (Rp)</label>
+            <label htmlFor="retail-closing">{l10n.getString('pos-close-shift-counted-label')}</label>
             <input
               id="retail-closing"
               type="number"
@@ -821,7 +1123,7 @@ export default function RetailPosScreen() {
               onChange={(e) => setClosingBalance(e.target.value)}
               autoFocus
             />
-            <label htmlFor="retail-notes" style={{ marginTop: 8 }}>Notes</label>
+            <label htmlFor="retail-notes" style={{ marginTop: 8 }}>{l10n.getString('pos-shift-notes')}</label>
             <textarea
               id="retail-notes"
               rows={2}
@@ -829,9 +1131,9 @@ export default function RetailPosScreen() {
               onChange={(e) => setShiftNotes(e.target.value)}
             />
             <div className="retail-shift-modal-actions">
-              <button onClick={() => setShowCloseShift(false)} disabled={closingShift}>Cancel</button>
+              <button onClick={() => setShowCloseShift(false)} disabled={closingShift}>{l10n.getString('cancel')}</button>
               <button className="retail-shift-confirm-btn" onClick={handleCloseShift} disabled={closingShift}>
-                {closingShift ? 'Closing…' : 'Close'}
+                {closingShift ? l10n.getString('loading') : l10n.getString('pos-shift-close-btn')}
               </button>
             </div>
           </div>
@@ -842,15 +1144,15 @@ export default function RetailPosScreen() {
       {closedShiftSummary && (
         <div className="retail-shift-overlay">
           <div className="retail-shift-modal">
-            <h3>Shift Closed</h3>
+            <h3>{l10n.getString('pos-shift-closed-title')}</h3>
             <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-              <div>Total Sales: {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: 'IDR' })}</div>
-              <div>Cash Sales: {formatMoney({ minor_units: closedShiftSummary.totalCashMinor, currency: 'IDR' })}</div>
-              <div>Expected: {closedShiftSummary.expectedCashMinor != null ? formatMoney({ minor_units: closedShiftSummary.expectedCashMinor, currency: 'IDR' }) : '—'}</div>
-              <div>Difference: {closedShiftSummary.cashDifferenceMinor != null ? formatMoney({ minor_units: closedShiftSummary.cashDifferenceMinor, currency: 'IDR' }) : '—'}</div>
+              <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: 'IDR' })}</div>
+              <div>{l10n.getString('retail-shift-closed-cash-sales')} {formatMoney({ minor_units: closedShiftSummary.totalCashMinor, currency: 'IDR' })}</div>
+              <div>{l10n.getString('pos-shift-expected-cash')}: {closedShiftSummary.expectedCashMinor != null ? formatMoney({ minor_units: closedShiftSummary.expectedCashMinor, currency: 'IDR' }) : '—'}</div>
+              <div>{l10n.getString('pos-shift-difference')}: {closedShiftSummary.cashDifferenceMinor != null ? formatMoney({ minor_units: closedShiftSummary.cashDifferenceMinor, currency: 'IDR' }) : '—'}</div>
             </div>
             <div className="retail-shift-modal-actions">
-              <button className="retail-shift-confirm-btn" onClick={() => setClosedShiftSummary(null)}>Done</button>
+              <button className="retail-shift-confirm-btn" onClick={() => setClosedShiftSummary(null)}>{l10n.getString('pos-shift-summary-done')}</button>
             </div>
           </div>
         </div>
@@ -860,16 +1162,16 @@ export default function RetailPosScreen() {
       {showCreditList && (
         <div className="retail-shift-overlay" onClick={() => setShowCreditList(false)}>
           <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
-            <h3>Credit Reminders</h3>
+            <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
             {creditSales.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>No outstanding credits</div>
+              <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
             ) : (
               <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #ccc' }}>
-                    <th style={{ textAlign: 'left', padding: 4 }}>Customer</th>
-                    <th style={{ textAlign: 'right', padding: 4 }}>Amount</th>
-                    <th style={{ textAlign: 'center', padding: 4 }}>Date</th>
+                    <th style={{ textAlign: 'left', padding: 4 }}>{l10n.getString('retail-credit-col-customer')}</th>
+                    <th style={{ textAlign: 'right', padding: 4 }}>{l10n.getString('retail-credit-col-amount')}</th>
+                    <th style={{ textAlign: 'center', padding: 4 }}>{l10n.getString('retail-credit-col-date')}</th>
                     <th style={{ padding: 4 }}></th>
                   </tr>
                 </thead>
@@ -892,7 +1194,7 @@ export default function RetailPosScreen() {
                             color: '#fff', border: 'none', cursor: 'pointer',
                           }}
                         >
-                          {settlingId === c.saleId ? '…' : 'Settle'}
+                          {settlingId === c.saleId ? '…' : l10n.getString('retail-credit-settle')}
                         </button>
                       </td>
                     </tr>
@@ -901,7 +1203,7 @@ export default function RetailPosScreen() {
               </table>
             )}
             <div className="retail-shift-modal-actions">
-              <button className="retail-shift-confirm-btn" onClick={() => setShowCreditList(false)}>Close</button>
+              <button className="retail-shift-confirm-btn" onClick={() => setShowCreditList(false)}>{l10n.getString('close')}</button>
             </div>
           </div>
         </div>
@@ -911,13 +1213,13 @@ export default function RetailPosScreen() {
       {showClearConfirm && (
         <div className="retail-shift-overlay" onClick={() => setShowClearConfirm(false)}>
           <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Clear Cart</h3>
+            <h3>{l10n.getString('retail-clear-cart-title')}</h3>
             <p style={{ fontSize: 13, margin: '0 0 16px', color: '#555' }}>
-              Remove all {lineCount} item{lineCount !== 1 ? 's' : ''} from the cart?
+              {l10n.getString('retail-clear-cart-confirm', { count: lineCount }) || `Remove all ${lineCount} item${lineCount !== 1 ? 's' : ''} from the cart?`}
             </p>
             <div className="retail-shift-modal-actions">
-              <button onClick={() => setShowClearConfirm(false)}>Cancel</button>
-              <button className="retail-shift-confirm-btn" onClick={handleConfirmClear}>Clear</button>
+              <button onClick={() => setShowClearConfirm(false)}>{l10n.getString('cancel')}</button>
+              <button className="retail-shift-confirm-btn" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
             </div>
           </div>
         </div>
@@ -927,20 +1229,112 @@ export default function RetailPosScreen() {
       {showDiscount && (
         <div className="retail-discount-overlay" onClick={() => setShowDiscount(false)}>
           <div className="retail-discount-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Discount</h3>
-            <label>Discount (%)</label>
+            <h3>{l10n.getString('retail-discount-title')}</h3>
+            <div className="retail-discount-tabs">
+              <button
+                className={`retail-discount-tab${discountTab === 'pct' ? ' retail-discount-tab--active' : ''}`}
+                onClick={() => setDiscountTab('pct')}
+              >
+                {l10n.getString('retail-discount-pct-tab')}
+              </button>
+              <button
+                className={`retail-discount-tab${discountTab === 'rp' ? ' retail-discount-tab--active' : ''}`}
+                onClick={() => setDiscountTab('rp')}
+              >
+                {l10n.getString('retail-discount-rp-tab')}
+              </button>
+            </div>
+            {discountTab === 'pct' ? (
+              <>
+                <label htmlFor="discount-pct">{l10n.getString('retail-discount-pct-label')}</label>
+                <input
+                  id="discount-pct"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={discountInput}
+                  onChange={(e) => setDiscountInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleApplyDiscount(); }}
+                  autoFocus
+                />
+              </>
+            ) : (
+              <>
+                <label htmlFor="discount-rp">{l10n.getString('retail-discount-rp-label')}</label>
+                <input
+                  id="discount-rp"
+                  type="number"
+                  min="0"
+                  value={discountRpInput}
+                  onChange={(e) => setDiscountRpInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleApplyDiscountRp(); }}
+                  autoFocus
+                />
+              </>
+            )}
+            <div className="retail-discount-actions">
+              <button onClick={() => { setShowDiscount(false); setDiscountInput(''); setDiscountRpInput(''); }}>{l10n.getString('cancel')}</button>
+              {discountTab === 'pct' ? (
+                <button onClick={handleApplyDiscount}>{l10n.getString('pos-cart-apply')}</button>
+              ) : (
+                <button onClick={handleApplyDiscountRp}>{l10n.getString('pos-cart-apply')}</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Customer search modal ──────────── */}
+      {showCustomerSearch && (
+        <div className="retail-customer-overlay" onClick={() => setShowCustomerSearch(false)}>
+          <div className="retail-customer-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-customer-search-title')}</h3>
             <input
-              type="number"
-              min="0"
-              max="100"
-              value={discountInput}
-              onChange={(e) => setDiscountInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleApplyDiscount(); }}
+              className="retail-customer-search-input"
+              type="text"
+              placeholder={l10n.getString('retail-customer-search-placeholder')}
+              value={customerSearchQuery}
+              onChange={(e) => setCustomerSearchQuery(e.target.value)}
               autoFocus
             />
-            <div className="retail-discount-actions">
-              <button onClick={() => { setShowDiscount(false); setDiscountInput(''); }}>Cancel</button>
-              <button onClick={handleApplyDiscount}>Apply</button>
+            <div className="retail-customer-search-list">
+              {loadingCustomers ? (
+                <div className="retail-customer-search-loading">{l10n.getString('retail-customer-search-loading')}</div>
+              ) : customerSearchResults.length === 0 ? (
+                <div className="retail-customer-search-empty">{l10n.getString('retail-customer-search-empty')}</div>
+              ) : (
+                customerSearchResults.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`retail-customer-search-item${selectedCustomer?.id === c.id ? ' retail-customer-search-item--selected' : ''}`}
+                    onClick={() => {
+                      setSelectedCustomer(c);
+                      setShowCustomerSearch(false);
+                      setCustomerSearchQuery('');
+                    }}
+                  >
+                    <span className="retail-customer-search-item-name">{c.name}</span>
+                    {(c.phone || c.email) && (
+                      <span className="retail-customer-search-item-detail">{c.phone || c.email}</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="retail-customer-modal-actions">
+              {selectedCustomer && (
+                <button
+                  className="retail-customer-clear-btn"
+                  onClick={() => {
+                    setSelectedCustomer(null);
+                    setShowCustomerSearch(false);
+                    setCustomerSearchQuery('');
+                  }}
+                >
+                  {l10n.getString('retail-customer-clear')}
+                </button>
+              )}
+              <button className="retail-customer-close-btn" onClick={() => setShowCustomerSearch(false)}>{l10n.getString('close')}</button>
             </div>
           </div>
         </div>
@@ -975,15 +1369,62 @@ export default function RetailPosScreen() {
                 +
               </button>
             </div>
+            <div className="retail-qty-numpad">
+              {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((k) => (
+                k === '' ? <span key="spacer" /> : (
+                  <button
+                    key={String(k)}
+                    className="retail-qty-num-btn"
+                    onClick={() => {
+                      if (k === '⌫') setQtyInput((v) => v.length > 1 ? v.slice(0, -1) : '1');
+                      else setQtyInput((v) => String(Math.max(1, parseInt(v + String(k), 10) || 1)));
+                    }}
+                  >
+                    {k}
+                  </button>
+                )
+              ))}
+            </div>
             <div className="retail-qty-total">
-              Total: {formatMoney({
+              {l10n.getString('retail-qty-total')} {formatMoney({
                 minor_units: pendingProduct.price.minor_units * Math.max(1, parseInt(qtyInput, 10) || 1),
                 currency: pendingProduct.price.currency,
               })}
             </div>
             <div className="retail-qty-actions">
-              <button className="retail-qty-cancel" onClick={() => setShowQtyPicker(false)}>Cancel</button>
-              <button className="retail-qty-confirm" onClick={handleConfirmQty}>Add</button>
+              <button className="retail-qty-cancel" onClick={() => setShowQtyPicker(false)}>{l10n.getString('cancel')}</button>
+              <button className="retail-qty-confirm" onClick={handleConfirmQty}>{l10n.getString('retail-qty-add')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Held carts list modal ──────────── */}
+      {showHeldCartsList && (
+        <div className="retail-held-carts-overlay" onClick={() => setShowHeldCartsList(false)}>
+          <div className="retail-held-carts-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-held-carts-title')}</h3>
+            {heldCartsList.length === 0 ? (
+              <p className="retail-held-carts-empty">{l10n.getString('retail-held-carts-empty')}</p>
+            ) : (
+              <div className="retail-held-carts-list">
+                {heldCartsList.map((c) => (
+                  <div key={c.id} className="retail-held-cart-row">
+                    <div className="retail-held-cart-info" onClick={() => handleResumeCart(c.id)}>
+                      <span className="retail-held-cart-label">{c.label}</span>
+                      <span className="retail-held-cart-meta">
+                        {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
+                      </span>
+                    </div>
+                    <button className="retail-held-cart-delete" onClick={() => handleDeleteHeldCart(c.id)} aria-label={l10n.getString('retail-held-cart-delete-aria')}>
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="retail-held-carts-actions">
+              <button onClick={() => setShowHeldCartsList(false)}>{l10n.getString('close')}</button>
             </div>
           </div>
         </div>
@@ -993,25 +1434,95 @@ export default function RetailPosScreen() {
       {showShortcuts && (
         <div className="retail-shortcuts-overlay" onClick={() => setShowShortcuts(false)}>
           <div className="retail-shortcuts-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="retail-shortcuts-heading">Keyboard Shortcuts</h3>
+            <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
             <div className="retail-shortcuts-grid">
-              <span className="retail-shortcuts-key">F1</span><span>Pay / Charge</span>
-              <span className="retail-shortcuts-key">F2</span><span>Clear cart (Void)</span>
-              <span className="retail-shortcuts-key">F3</span><span>Discount</span>
-              <span className="retail-shortcuts-key">F4</span><span>Hold / Resume order</span>
-              <span className="retail-shortcuts-key">F5</span><span>Focus SKU input</span>
-              <span className="retail-shortcuts-key">F9</span><span>Open / Close shift</span>
-              <span className="retail-shortcuts-key">F10</span><span>Options</span>
-              <span className="retail-shortcuts-key">F11 / ?</span><span>This shortcut list</span>
-              <span className="retail-shortcuts-key">Esc</span><span>Close modal / Options</span>
+              <span className="retail-shortcuts-key">F1</span><span>{l10n.getString('retail-shortcut-pay')}</span>
+              <span className="retail-shortcuts-key">F2</span><span>{l10n.getString('retail-shortcut-clear')}</span>
+              <span className="retail-shortcuts-key">F3</span><span>{l10n.getString('retail-shortcut-discount')}</span>
+              <span className="retail-shortcuts-key">F4</span><span>{l10n.getString('retail-shortcut-hold')}</span>
+              <span className="retail-shortcuts-key">F5</span><span>{l10n.getString('retail-shortcut-sku')}</span>
+              <span className="retail-shortcuts-key">F9</span><span>{l10n.getString('retail-shortcut-shift')}</span>
+              <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
+              <span className="retail-shortcuts-key">F11 / ?</span><span>{l10n.getString('retail-shortcut-list')}</span>
+              <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
             </div>
-            <button className="retail-shortcuts-close" onClick={() => setShowShortcuts(false)}>Close</button>
+            <button className="retail-shortcuts-close" onClick={() => setShowShortcuts(false)}>{l10n.getString('close')}</button>
           </div>
         </div>
+      )}
+
+      {/* ── Price Override modal ───────────── */}
+      {overrideTarget && (
+        <PriceOverrideModal
+          open
+          lineDescription={`${overrideTarget.name} — ${formatMoney(overrideTarget.unit_price)}`}
+          currentPrice={overrideTarget.unit_price}
+          onConfirm={handleOverrideConfirm}
+          onClose={() => setOverrideTarget(null)}
+        />
       )}
 
       {/* ── Scan flash overlay ─────────────── */}
       {scanFlash && <div className="retail-scan-flash" />}
     </div>
+  );
+}
+
+// ── Product card with single-tap / long-press ─────────────────
+
+const PRICE_VOLATILITY_MS = 24 * 60 * 60 * 1000; // 24 h
+
+function isPriceRecent(p: ProductDto): boolean {
+  if (!p.price_updated_at) return false;
+  const elapsed = Date.now() - new Date(p.price_updated_at).getTime();
+  return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
+}
+
+function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPicker }: {
+  product: ProductDto;
+  catHue: (catId: string | null) => number;
+  formatMoney: (m: Money) => string;
+  handleAdd: (p: ProductDto) => void;
+  handleOpenQtyPicker: (p: ProductDto) => void;
+}) {
+  const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPress = useRef(false);
+
+  const handlePointerDown = useCallback(() => {
+    if (isOutOfStock) return;
+    isLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      isLongPress.current = true;
+      handleOpenQtyPicker(product);
+    }, 400);
+  }, [product, isOutOfStock, handleOpenQtyPicker]);
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    if (!isLongPress.current && !isOutOfStock) handleAdd(product);
+  }, [product, isOutOfStock, handleAdd]);
+
+  const handlePointerLeave = useCallback(() => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }, []);
+
+  return (
+    <button
+      className={`retail-product-btn${isOutOfStock ? ' retail-product-btn--out-of-stock' : ''}`}
+      style={{ '--cat-hue': catHue(product.category) } as React.CSSProperties}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
+      aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ' (out of stock)' : ''}`}
+      aria-disabled={isOutOfStock}
+    >
+      {product.stock_qty != null && product.stock_qty > 0 && (
+        <span className={`retail-product-stock-badge retail-stock-${product.stock_qty <= 5 ? 'low' : product.stock_qty <= 10 ? 'medium' : 'high'}`}>{product.stock_qty}</span>
+      )}
+      {isPriceRecent(product) && <span className="retail-price-volatility-hint" title="Price changed recently" />}
+      <span className="retail-product-name">{product.name}</span>
+      <span className="retail-product-price">{formatMoney(product.price)}</span>
+    </button>
   );
 }

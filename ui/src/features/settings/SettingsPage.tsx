@@ -5,9 +5,13 @@ import {
   setReceiptSettings,
   getStoreSettings,
   setStoreSettings,
+  getUserPreferences,
+  setUserPreferences,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
 } from '@/api/settings';
+import { setDecimalSep } from '@/utils/storage';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   listCurrencies,
   getDefaultCurrency,
@@ -50,12 +54,20 @@ export default function SettingsPage() {
     showTax: true,
     footer: '',
     paperWidth: 'standard',
+    showTableNumber: false,
+    marginTop: 0,
+    marginBottom: 0,
+    marginLeft: 0,
+    marginRight: 0,
   });
 
   const [store, setStore] = useState<StoreSettingsDto>({
     name: '',
     address: '',
     taxId: '',
+    currency: 'IDR',
+    branch: '',
+    logo: '',
   });
 
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
@@ -70,25 +82,42 @@ export default function SettingsPage() {
   const [syncApiKey, setSyncApiKey] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
+  const { session } = useAuth();
+  const userId = session?.user_id ?? 'default';
+  const [displayCardSize, setDisplayCardSize] = useState(0);
+  const [displayFontSize, setDisplayFontSize] = useState(0);
+  const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
+
+  // Sync font-smoothing to <html> whenever it changes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-font-smoothing', displayFontSmoothing);
+  }, [displayFontSmoothing]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [r, s, currenciesData, defaultCurrencyData, syncData] = await Promise.all([
+        const [r, s, currenciesData, defaultCurrencyData, syncData, prefs] = await Promise.all([
           getReceiptSettings(),
           getStoreSettings(),
           listCurrencies(),
           getDefaultCurrency(),
           getSyncSettings(),
+          getUserPreferences(userId),
         ]);
         if (!cancelled) {
           setReceipt(r);
           setStore(s);
+          setDecimalSep(r.decimalSeparator);
           setCurrencies(currenciesData);
           setDefaultCurrencyState(defaultCurrencyData ?? 'USD');
           setSync(syncData);
           setSyncServerUrl(syncData.serverUrl ?? '');
+          const cs = prefs['cardsize'];
+          if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
+          const fs = prefs['fontsize'];
+          if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
+          if (prefs['font-smoothing'] !== undefined) setDisplayFontSmoothing(prefs['font-smoothing']);
         }
       } catch {
         // IPC unavailable — use defaults.
@@ -97,16 +126,21 @@ export default function SettingsPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [userId]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaved(false);
     try {
       await Promise.all([
-        setReceiptSettings(receipt),
-        setStoreSettings(store),
+        setReceiptSettings(receipt, session?.user_id ?? ''),
+        setStoreSettings(store, session?.user_id ?? ''),
         setDefaultCurrency({ code: defaultCurrency }),
+        setUserPreferences(userId, [
+          { key: 'cardsize', value: String(displayCardSize) },
+          { key: 'fontsize', value: String(displayFontSize) },
+          { key: 'font-smoothing', value: displayFontSmoothing },
+        ]),
         updateSyncSettings({
           serverUrl: syncServerUrl || null,
           apiKey: syncApiKey || null,
@@ -121,7 +155,7 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [receipt, store, defaultCurrency]);
+  }, [receipt, store, defaultCurrency, userId, displayCardSize, displayFontSize, displayFontSmoothing]);
 
   if (loading) {
     return <div className="settings-page"><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;
@@ -216,6 +250,87 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {/* ── Display section ──────────────────────── */}
+      <Card
+        shadow="sm"
+        header={
+          <Localized id="settings-section-display">
+            <h2 className="settings-section-title">Display</h2>
+          </Localized>
+        }
+      >
+        <div className="settings-form">
+          <label className="settings-field" htmlFor="settings-field-card-size">
+            <Localized id="settings-field-card-size">
+              <span className="settings-label">Menu Card Size</span>
+            </Localized>
+            <div className="settings-size-controls">
+              <button
+                type="button"
+                className="settings-size-btn"
+                disabled={displayCardSize <= 0}
+                onClick={() => setDisplayCardSize((s) => Math.max(0, s - 1))}
+                aria-label="Decrease card size"
+              >
+                &minus;
+              </button>
+              <span className="settings-size-value">{displayCardSize}</span>
+              <button
+                type="button"
+                className="settings-size-btn"
+                disabled={displayCardSize >= 4}
+                onClick={() => setDisplayCardSize((s) => Math.min(4, s + 1))}
+                aria-label="Increase card size"
+              >
+                +
+              </button>
+            </div>
+          </label>
+
+          <label className="settings-field" htmlFor="settings-field-font-size">
+            <Localized id="settings-field-font-size">
+              <span className="settings-label">Font Size</span>
+            </Localized>
+            <div className="settings-size-controls">
+              <button
+                type="button"
+                className="settings-size-btn"
+                disabled={displayFontSize <= 0}
+                onClick={() => setDisplayFontSize((s) => Math.max(0, s - 1))}
+                aria-label="Decrease font size"
+              >
+                &minus;
+              </button>
+              <span className="settings-size-value">{displayFontSize}</span>
+              <button
+                type="button"
+                className="settings-size-btn"
+                disabled={displayFontSize >= 4}
+                onClick={() => setDisplayFontSize((s) => Math.min(4, s + 1))}
+                aria-label="Increase font size"
+              >
+                +
+              </button>
+            </div>
+          </label>
+
+          <label className="settings-field" htmlFor="settings-field-font-smoothing">
+            <Localized id="settings-field-font-smoothing">
+              <span className="settings-label">Font Smoothing</span>
+            </Localized>
+            <select
+              className="settings-select"
+              id="settings-field-font-smoothing"
+              value={displayFontSmoothing}
+              onChange={(e) => setDisplayFontSmoothing(e.target.value)}
+            >
+              <option value="antialiased">Antialiased (crisp)</option>
+              <option value="subpixel">Subpixel (smooth)</option>
+            </select>
+          </label>
+        </div>
+      </Card>
+
       {/* ── Appearance section ──────────────────── */}
       <AppearanceSettings />
 
@@ -248,7 +363,10 @@ export default function SettingsPage() {
               className="settings-select"
               id="settings-field-decimal-separator"
               value={receipt.decimalSeparator}
-              onChange={(e) => setReceipt({ ...receipt, decimalSeparator: e.target.value })}
+              onChange={(e) => {
+                setReceipt({ ...receipt, decimalSeparator: e.target.value });
+                setDecimalSep(e.target.value);
+              }}
             >
               <Localized id="settings-decimal-separator-dot">
                 <option value="dot">1.00 (dot)</option>
@@ -308,6 +426,22 @@ export default function SettingsPage() {
                 value={receipt.footer}
                 onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })}
               />
+            </Localized>
+          </label>
+
+          {/* Show table number */}
+          <label className="settings-toggle" htmlFor="settings-toggle-show-table-number">
+            <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
+              <input
+                type="checkbox"
+                id="settings-toggle-show-table-number"
+                checked={receipt.showTableNumber}
+                onChange={(e) => setReceipt({ ...receipt, showTableNumber: e.target.checked })}
+                aria-label="Show table number on cart and receipts"
+              />
+            </Localized>
+            <Localized id="settings-toggle-show-table-number">
+              <span>Show table number on cart and receipts</span>
             </Localized>
           </label>
 

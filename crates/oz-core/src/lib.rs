@@ -55,6 +55,8 @@ pub mod tax_rate;
 pub mod terminal;
 pub mod terminal_override;
 pub mod user;
+/// Per-user display preferences (card size, font size, etc.).
+pub mod user_preferences;
 
 pub use audit::AuditEntry;
 #[cfg(feature = "cache-redis")]
@@ -69,7 +71,7 @@ pub use db::reports::{
     TopProductRow, WeeklyRevenueRow,
 };
 pub use db::{ProductWithDetails, Store};
-pub use error::CoreError;
+pub use error::{CoreError, CoreErrorKind};
 pub use features::{Feature, FeatureRegistry};
 pub use foundation;
 pub use foundation::{InvalidTransition, SaleStatus};
@@ -79,6 +81,7 @@ pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, Loyalt
 pub use money::{Currency, Money};
 pub use offline::{OfflineQueueItem, OfflineQueueStatus};
 pub use payment::{Payment, PaymentSplitArg};
+pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
 pub use product::Product;
 pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
 pub use product_variant::ProductVariant;
@@ -94,3 +97,4 @@ pub use table::{Table, TableStatus};
 pub use terminal::Terminal;
 pub use terminal_override::TerminalFeatureOverride;
 pub use user::{Role, User, builtin_roles, seed_users};
+pub use user_preferences::UserPreferences;

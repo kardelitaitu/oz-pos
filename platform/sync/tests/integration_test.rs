@@ -789,3 +789,402 @@ async fn server_error_prevents_sync_item_stays_pending() {
 
     handle.abort();
 }
+
+// ── Large-scale throughput test ────────────────────────────────────
+//
+// Verifies that the sync engine can push 100+ items through the relay
+// server and pull them all on the receiving terminal within the 5-second
+// acceptance criterion.
+
+#[tokio::test]
+async fn large_scale_sync_throughput() {
+    const ITEM_COUNT: usize = 100;
+
+    let (relay_port, _relay_state, relay_handle) = spawn_relay_server().await;
+
+    // ── Terminal A: create a product and enqueue 100 stock adjustments ─
+    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
+    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_a).unwrap();
+    let store_a = Store::new(&conn_a);
+
+    store_a
+        .create_product(
+            "THRUPUT",
+            "Throughput Test Product",
+            oz_core::Money {
+                minor_units: 1000,
+                currency: "USD".parse().unwrap(),
+            },
+            None,
+            None,
+            1000,
+        )
+        .unwrap();
+
+    // Enqueue a product.created FIRST so Terminal B can create the product.
+    let product_payload = serde_json::json!({
+        "sku": "THRUPUT",
+        "name": "Throughput Test Product",
+        "price_minor": 1000,
+        "currency": "USD",
+        "initial_stock": 1000,
+    })
+    .to_string();
+    store_a
+        .enqueue_offline("product.created", &product_payload)
+        .unwrap();
+
+    // Enqueue 100 stock adjustment events (each sells 1 unit).
+    for i in 0..ITEM_COUNT {
+        let stock_payload = serde_json::json!({
+            "sku": "THRUPUT",
+            "delta": -1,
+            "new_qty": 1000 - (i as i64) - 1,
+            "reason": "sale",
+        })
+        .to_string();
+        store_a
+            .enqueue_offline("stock.adjusted", &stock_payload)
+            .unwrap();
+    }
+
+    assert_eq!(
+        store_a.pending_offline_count().unwrap(),
+        (ITEM_COUNT + 1) as i64
+    );
+
+    // ── Push: Terminal A → server (all 101 items) ────────────────────
+    let engine_a = SyncEngine::new(test_config(relay_port));
+    let start = std::time::Instant::now();
+    let result_a = engine_a.run_sync_cycle(&store_a).await.unwrap();
+    let push_elapsed = start.elapsed();
+
+    assert_eq!(
+        result_a.pushed,
+        ITEM_COUNT + 1,
+        "Terminal A should push all {} items",
+        ITEM_COUNT + 1
+    );
+    assert_eq!(
+        store_a.pending_offline_count().unwrap(),
+        0,
+        "Terminal A's pending queue should be empty"
+    );
+
+    // ── Terminal B: empty database, pull all items ───────────────────
+    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
+    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn_b).unwrap();
+    let store_b = Store::new(&conn_b);
+
+    // No sleep needed — Terminal A's push is already committed in the relay.
+    let engine_b = SyncEngine::new(test_config(relay_port));
+    let start_pull = std::time::Instant::now();
+    let result_b = engine_b.run_sync_cycle(&store_b).await.unwrap();
+    let pull_elapsed = start_pull.elapsed();
+
+    assert_eq!(
+        result_b.pulled,
+        ITEM_COUNT + 1,
+        "Terminal B should pull all {} items",
+        ITEM_COUNT + 1
+    );
+
+    // ── Verify: product exists with correct final stock ──────────────
+    let products = store_b.list_products().unwrap();
+    assert_eq!(products.len(), 1);
+    assert_eq!(products[0].product.sku.as_str(), "THRUPUT");
+    // Initial stock 1000, minus 100 sales (each -1) = 900.
+    assert_eq!(
+        products[0].stock_qty,
+        Some(900),
+        "Stock should be 1000 - 100 = 900 after all adjustments"
+    );
+
+    // Verify throughput meets a generous 2-second budget (in-memory db +
+    // localhost HTTP for 101 items should complete in well under 1 second).
+    let total_elapsed = push_elapsed + pull_elapsed;
+    assert!(
+        total_elapsed.as_secs() < 2,
+        "{}+item sync should complete in < 2 seconds, took {total_elapsed:?} (push: {push_elapsed:?}, pull: {pull_elapsed:?})",
+        ITEM_COUNT + 1,
+    );
+
+    tracing::info!(
+        items = ITEM_COUNT + 1,
+        push_ms = push_elapsed.as_millis(),
+        pull_ms = pull_elapsed.as_millis(),
+        total_ms = total_elapsed.as_millis(),
+        "large-scale sync throughput"
+    );
+
+    relay_handle.abort();
+}
+
+// ── Retry tests ─────────────────────────────────────────────────────
+//
+// These tests verify that transient failures (server returns 500) leave
+// items in pending state so they can be retried on the next sync cycle.
+
+#[tokio::test]
+async fn transient_failure_then_retry_succeeds() {
+    // Server that fails the first push with 500, then accepts subsequent pushes.
+    let attempt_count = Arc::new(Mutex::new(0u32));
+    let attempt_state = attempt_count.clone();
+
+    let app = Router::new()
+        .route(
+            "/api/sync/push",
+            post(move |Json(items): Json<Vec<OfflineQueueItem>>| async move {
+                let mut count = attempt_state.lock().unwrap();
+                *count += 1;
+                if *count == 1 {
+                    // First attempt: transient failure.
+                    Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                } else {
+                    // Subsequent attempts: accept.
+                    let results: Vec<PushOutcome> =
+                        items.iter().map(|_| PushOutcome::Accepted).collect();
+                    Ok(Json(PushResponse { results }))
+                }
+            }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async { Json(PullResponse { items: vec![] }) }),
+        );
+    let (port, handle) = spawn_custom_server(app).await;
+
+    // ── Cycle 1: transient failure ───────────────────────────────────
+    let store = setup_store();
+    store
+        .enqueue_offline("complete_sale", r#"{"sale_id":"retry-1"}"#)
+        .unwrap();
+    assert_eq!(store.pending_offline_count().unwrap(), 1);
+
+    let engine = SyncEngine::new(test_config(port));
+    let result_1 = engine.run_sync_cycle(&store).await;
+    assert!(
+        result_1.is_err(),
+        "cycle 1 should fail (server returns 500)"
+    );
+    if let Err(e) = &result_1 {
+        let msg = e.to_string();
+        assert!(
+            msg.contains("500"),
+            "error message should contain status 500, got: {msg}"
+        );
+    }
+
+    // Item should remain pending — not marked synced, not marked failed.
+    let pending_after_fail = store.list_pending_offline().unwrap();
+    assert_eq!(
+        pending_after_fail.len(),
+        1,
+        "item should remain pending after transient failure"
+    );
+    assert_eq!(pending_after_fail[0].status, OfflineQueueStatus::Pending);
+    assert_eq!(store.pending_offline_count().unwrap(), 1);
+
+    // ── Cycle 2: retry succeeds ──────────────────────────────────────
+    let result_2 = engine.run_sync_cycle(&store).await;
+    assert!(
+        result_2.is_ok(),
+        "cycle 2 should succeed (server now accepts)"
+    );
+
+    let result_2 = result_2.unwrap();
+    assert_eq!(result_2.pushed, 1, "should have pushed 1 item");
+
+    // Item should now be synced.
+    let all = store.list_all_offline().unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].status, OfflineQueueStatus::Synced);
+    assert!(all[0].synced_at.is_some());
+    assert_eq!(store.pending_offline_count().unwrap(), 0);
+
+    handle.abort();
+}
+
+#[tokio::test]
+async fn transient_failure_on_pull_retry_succeeds() {
+    // Server that accepts push but fails pull with 500 on first attempt.
+    let pull_attempt_count = Arc::new(Mutex::new(0u32));
+    let pull_attempt_state = pull_attempt_count.clone();
+
+    let app = Router::new()
+        .route(
+            "/api/sync/push",
+            post(|| async { Json(PushResponse { results: vec![] }) }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(move || async move {
+                let mut count = pull_attempt_state.lock().unwrap();
+                *count += 1;
+                if *count == 1 {
+                    Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                } else {
+                    Ok(Json(PullResponse { items: vec![] }))
+                }
+            }),
+        );
+    let (port, handle) = spawn_custom_server(app).await;
+
+    let store = setup_store();
+    let engine = SyncEngine::new(test_config(port));
+
+    // Note: no items enqueued — the push phase is skipped (empty queue).
+    // This test specifically verifies pull-only retry after a 500 on pull.
+
+    // ── Cycle 1: push succeeds, pull fails ───────────────────────────
+    let result_1 = engine.run_sync_cycle(&store).await;
+    assert!(result_1.is_err(), "cycle 1 should fail (pull returns 500)");
+
+    // ── Cycle 2: pull succeeds ───────────────────────────────────────
+    let result_2 = engine.run_sync_cycle(&store).await;
+    assert!(
+        result_2.is_ok(),
+        "cycle 2 should succeed (pull now accepts)"
+    );
+    assert_eq!(result_2.unwrap().pulled, 0);
+
+    handle.abort();
+}
+
+// ── Auth failure tests ────────────────────────────────────────────────
+//
+// These tests verify that the sync engine correctly handles authentication
+// and authorisation failures (401 Unauthorized / 403 Forbidden) from the
+// remote server. Items should remain pending so they can be retried after
+// the credentials are updated.
+
+#[tokio::test]
+async fn push_unauthorized_401_returns_error() {
+    // Server that returns 401 Unauthorized on push.
+    let reject_app = Router::new()
+        .route(
+            "/api/sync/push",
+            post(|| async { axum::http::StatusCode::UNAUTHORIZED }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async { Json(PullResponse { items: vec![] }) }),
+        );
+    let (port, handle) = spawn_custom_server(reject_app).await;
+    let store = setup_store();
+    store
+        .enqueue_offline("complete_sale", r#"{"sale_id":"auth-401"}"#)
+        .unwrap();
+
+    let engine = SyncEngine::new(test_config(port));
+    let result = engine.run_sync_cycle(&store).await;
+
+    assert!(result.is_err(), "sync should fail when server returns 401");
+    if let Err(e) = &result {
+        let msg = e.to_string();
+        assert!(
+            msg.contains("401"),
+            "error message should contain status 401, got: {msg}"
+        );
+    }
+
+    // Item should remain pending.
+    let pending = store.list_pending_offline().unwrap();
+    assert_eq!(pending.len(), 1, "item should remain pending after 401");
+    assert_eq!(pending[0].status, OfflineQueueStatus::Pending);
+
+    handle.abort();
+}
+
+#[tokio::test]
+async fn push_forbidden_403_returns_error() {
+    // Server that returns 403 Forbidden on push.
+    let reject_app = Router::new()
+        .route(
+            "/api/sync/push",
+            post(|| async { axum::http::StatusCode::FORBIDDEN }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async { Json(PullResponse { items: vec![] }) }),
+        );
+    let (port, handle) = spawn_custom_server(reject_app).await;
+    let store = setup_store();
+    store
+        .enqueue_offline("complete_sale", r#"{"sale_id":"auth-403"}"#)
+        .unwrap();
+
+    let engine = SyncEngine::new(test_config(port));
+    let result = engine.run_sync_cycle(&store).await;
+
+    assert!(result.is_err(), "sync should fail when server returns 403");
+    if let Err(e) = &result {
+        let msg = e.to_string();
+        assert!(
+            msg.contains("403"),
+            "error message should contain status 403, got: {msg}"
+        );
+    }
+
+    // Item should remain pending.
+    let pending = store.list_pending_offline().unwrap();
+    assert_eq!(pending.len(), 1, "item should remain pending after 403");
+    assert_eq!(pending[0].status, OfflineQueueStatus::Pending);
+
+    handle.abort();
+}
+
+#[tokio::test]
+async fn pull_unauthorized_401_returns_error() {
+    // Server that accepts push but returns 401 on pull.
+    let reject_app = Router::new()
+        .route(
+            "/api/sync/push",
+            post(|| async {
+                Json(PushResponse {
+                    results: vec![PushOutcome::Accepted],
+                })
+            }),
+        )
+        .route(
+            "/api/sync/pull",
+            post(|| async { axum::http::StatusCode::UNAUTHORIZED }),
+        );
+    let (port, handle) = spawn_custom_server(reject_app).await;
+    let store = setup_store();
+    store
+        .enqueue_offline("complete_sale", r#"{"sale_id":"pull-401"}"#)
+        .unwrap();
+
+    let engine = SyncEngine::new(test_config(port));
+    let result = engine.run_sync_cycle(&store).await;
+
+    assert!(result.is_err(), "sync should fail when pull returns 401");
+    if let Err(e) = &result {
+        let msg = e.to_string();
+        assert!(
+            msg.contains("401"),
+            "error message should contain status 401, got: {msg}"
+        );
+    }
+
+    // Push succeeded, so the item should be marked synced.
+    // Only the pull phase failed with 401.
+    let all = store.list_all_offline().unwrap();
+    assert_eq!(all.len(), 1, "item should exist in offline queue");
+    assert_eq!(
+        all[0].status,
+        OfflineQueueStatus::Synced,
+        "push should have synced the item before pull failed"
+    );
+    let pending = store.list_pending_offline().unwrap();
+    assert_eq!(
+        pending.len(),
+        0,
+        "no items should remain pending after push succeeded"
+    );
+
+    handle.abort();
+}

@@ -7,6 +7,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod authz;
 pub mod branding;
 pub mod bundles;
 pub mod categories;

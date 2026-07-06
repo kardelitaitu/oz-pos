@@ -144,6 +144,12 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Access the inner `rlua::Lua` state for advanced operations
+    /// (registry keys, custom bindings, etc.).
+    pub fn inner(&self) -> &rlua::Lua {
+        &self.lua
+    }
+
     /// Load all `.lua` files from a directory (non-recursive).
     pub fn load_dir(&self, dir: impl AsRef<Path>) -> Result<(), LuaError> {
         let dir = dir.as_ref();

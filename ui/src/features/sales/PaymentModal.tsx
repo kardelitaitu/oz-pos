@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
 import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
@@ -12,11 +13,12 @@ import {
   type CurrencyDto,
   type ExchangeRateDto,
 } from '@/api/currency';
+import { listCustomers, type CustomerDto } from '@/api/customers';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { animDuration } from '@/utils/animation';
 import './PaymentModal.css';
 
-type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill';
+type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill' | 'credit';
 
 interface SplitRow {
   id: number;
@@ -33,6 +35,8 @@ export interface PaymentModalProps {
   discountLabel?: string;
   userId: string;
   tableNumber?: string;
+  selectedCustomer?: CustomerDto | null;
+  onCustomerChange?: (customer: CustomerDto | null) => void;
   onComplete: () => void;
   onClose: () => void;
 }
@@ -45,10 +49,13 @@ export default function PaymentModal({
   discountLabel,
   userId,
   tableNumber,
+  selectedCustomer: selectedCustomerProp,
+  onCustomerChange,
   onComplete,
   onClose,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [otherLabel, setOtherLabel] = useState('');
   const [tendered, setTendered] = useState('');
@@ -56,6 +63,19 @@ export default function PaymentModal({
   const [done, setDone] = useState(false);
   const [changeDue, setChangeDue] = useState<Money | null>(null);
   const [customerName, setCustomerName] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDto | null>(selectedCustomerProp ?? null);
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+
+  const notifyCustomerChange = useCallback(
+    (c: CustomerDto | null) => {
+      setSelectedCustomer(c);
+      onCustomerChange?.(c);
+    },
+    [onCustomerChange],
+  );
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState<CustomerDto[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const leaveCb = useRef<(() => void) | null>(null);
 
@@ -81,7 +101,7 @@ export default function PaymentModal({
     { id: 1, method: 'cash', otherLabel: '', amountMinor: '' },
     { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
   ]);
-  let nextSplitId = 3;
+  const nextSplitId = useRef(3);
 
   const { isEnabled } = useFeatures();
   const multiCurrency = isEnabled(FEATURES.MULTI_CURRENCY);
@@ -103,7 +123,7 @@ export default function PaymentModal({
           setExchangeRates(rates);
           if (base) setBaseCurrency(base);
         })
-        .catch(() => {});
+        .catch(() => addToast({ message: 'Failed to load currency data', type: 'error' }));
     }
   }, [open, multiCurrency]);
 
@@ -139,12 +159,38 @@ export default function PaymentModal({
       setShowQr(false);
       setQrReference('');
       setSelectedCurrency(total.currency);
+      notifyCustomerChange(null);
+      setCustomerSearchQuery('');
+      setCustomerSearchResults([]);
       setSplits([
         { id: 1, method: 'cash', otherLabel: '', amountMinor: '' },
         { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
       ]);
     }
   }, [open, total.currency]);
+
+  useEffect(() => {
+    if (!showCustomerSearch) return;
+    setLoadingCustomers(true);
+    listCustomers()
+      .then((customers) => {
+        const q = customerSearchQuery.trim().toLowerCase();
+        if (!q) {
+          setCustomerSearchResults(customers);
+        } else {
+          setCustomerSearchResults(
+            customers.filter(
+              (c) =>
+                c.name.toLowerCase().includes(q) ||
+                (c.phone && c.phone.includes(q)) ||
+                (c.email && c.email.toLowerCase().includes(q)),
+            ),
+          );
+        }
+      })
+      .catch(() => setCustomerSearchResults([]))
+      .finally(() => setLoadingCustomers(false));
+  }, [showCustomerSearch, customerSearchQuery]);
 
   const totalMinor = useMemo(() => BigInt(total.minor_units), [total.minor_units]);
 
@@ -173,7 +219,7 @@ export default function PaymentModal({
       const { cartId } = await startSale({ currency: total.currency });
 
       if (discountPercent > 0) {
-        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent };
+        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
         if (discountLabel) discountArgs.label = discountLabel;
         await setCartDiscount(discountArgs);
       }
@@ -192,6 +238,7 @@ export default function PaymentModal({
         paymentMethod: 'QRIS',
         tenderedMinor: null,
         userId,
+        ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
         paymentSplits: [
           {
             method: 'QRIS',
@@ -259,7 +306,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference]);
+  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference, selectedCustomer]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -301,7 +348,7 @@ export default function PaymentModal({
   const addSplit = useCallback(() => {
     setSplits((prev) => [
       ...prev,
-      { id: nextSplitId++, method: 'cash', otherLabel: '', amountMinor: '' },
+      { id: nextSplitId.current++, method: 'cash', otherLabel: '', amountMinor: '' },
     ]);
   }, []);
 
@@ -344,8 +391,9 @@ export default function PaymentModal({
     if (splitMode) return splitComplete;
     if (method === 'other' && !otherLabel.trim()) return false;
     if (method === 'open_bill') return customerName.trim().length > 0;
+    if (method === 'credit') return customerName.trim().length > 0;
     if (method === 'cash') return sufficient;
-    if (method === 'qris') return true;
+    if (method === 'qris') return qrReference.length > 0;
     return true;
   }, [splitMode, splitComplete, method, otherLabel, sufficient, customerName]);
 
@@ -355,6 +403,7 @@ export default function PaymentModal({
 
   const complete = useCallback(async () => {
     setProcessing(true);
+    console.log('[Sale] Starting sale...');
 
     try {
       // ── Open Bill: save cart without payment ──────────────
@@ -379,19 +428,24 @@ export default function PaymentModal({
           bill_type: 'open_bill',
           customer_name: customerName.trim(),
         });
+        console.log('[Sale] Open bill saved');
         setDone(true);
         return;
       }
 
+      console.log('[Sale] Creating cart...');
       const { cartId } = await startSale({ currency: total.currency });
+      console.log('[Sale] Cart created:', cartId);
 
       if (discountPercent > 0) {
-        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent };
+        console.log('[Sale] Setting discount:', discountPercent);
+        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
         if (discountLabel) discountArgs.label = discountLabel;
         await setCartDiscount(discountArgs);
       }
 
       for (const line of lineItems) {
+        console.log('[Sale] Adding line:', line.sku, 'qty:', line.qty);
         await addLine({
           cartId,
           sku: line.sku,
@@ -420,18 +474,23 @@ export default function PaymentModal({
           ? otherLabel.trim() || 'OTHER'
           : method.toUpperCase();
 
+      console.log('[Sale] Completing sale...');
       const saleResult = await completeSale({
         cartId,
         paymentMethod: methodLabel,
         tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
         userId,
+        ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
         ...(paymentSplits ? { paymentSplits } : {}),
+        ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
       });
+      console.log('[Sale] Sale completed:', saleResult.saleId);
 
       try {
-        // Fetch the completed sale to get computed tax data.
+        console.log('[Sale] Fetching completed sale...');
         const completedSale = await getSale(saleResult.saleId);
 
+        console.log('[Sale] Printing receipt...');
         await printSalesReceipt({
           date: new Date().toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric',
@@ -477,8 +536,8 @@ export default function PaymentModal({
               ],
           ...(tableNumber ? { tableNumber } : {}),
         });
-      } catch {
-        // Printer may not be connected.
+      } catch (e) {
+        console.warn('[Sale] Receipt/KDS step failed (non-blocking):', e);
       }
 
       try {
@@ -488,13 +547,14 @@ export default function PaymentModal({
       }
 
       if (change) setChangeDue(change);
+      console.log('[Sale] Done');
       setDone(true);
     } catch (err) {
-      console.error('Sale failed:', err);
+      console.error('[Sale] FAILED:', err);
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, subtotalMinor, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor]);
+  }, [method, customerName, lineItems, subtotalMinor, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer]);
 
   useEffect(() => {
     if (!done) return;
@@ -531,6 +591,10 @@ export default function PaymentModal({
       <div className={`payment-modal ${modalStateClass}`}>
         {done ? (
           <div className="payment-done">
+            <svg className="payment-done-checkmark" viewBox="0 0 64 64" aria-hidden="true">
+              <circle className="payment-done-checkmark-circle" cx="32" cy="32" r="26" />
+              <path className="payment-done-checkmark-path" d="M20 32 l8 8 l16 -16" />
+            </svg>
             <Localized id="payment-done-title">
               <h2 className="payment-done-title">Sale Complete</h2>
             </Localized>
@@ -673,7 +737,7 @@ export default function PaymentModal({
                     <legend className="payment-section-title">Payment Method</legend>
                   </Localized>
                   <div className="payment-method-options">
-                    {(['cash', 'card', 'qris'] as const).map((m) => (
+                    {(['cash', 'card', 'qris', 'credit'] as const).map((m) => (
                       <label key={m} className="payment-method-label">
                         <input
                           type="radio"
@@ -683,7 +747,7 @@ export default function PaymentModal({
                           onChange={() => setMethod(m)}
                         />
                         <span className="payment-method-name">
-                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : l10n.getString('payment-method-qris')}
+                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : 'Credit'}
                         </span>
                       </label>
                     ))}
@@ -726,12 +790,16 @@ export default function PaymentModal({
                   </div>
                 </fieldset>
 
-                {method === 'open_bill' && (
+                {(method === 'open_bill' || method === 'credit') && (
                   <div className="payment-open-bill-section">
                     <label className="payment-customer-label">
-                      <Localized id="payment-customer-name">
-                        <span>Customer Name</span>
-                      </Localized>
+                      {method === 'credit' ? (
+                        <span>Customer Name (for credit)</span>
+                      ) : (
+                        <Localized id="payment-customer-name">
+                          <span>Customer Name</span>
+                        </Localized>
+                      )}
                       <Localized id="payment-customer-name-aria" attrs={{ 'aria-label': true }}>
                       <input
                         type="text"
@@ -766,7 +834,7 @@ export default function PaymentModal({
                     </label>
 
                     <div className="payment-quick-cash">
-                      {[5, 10, 20, 50, 100].map((amount) => {
+                      {[5000, 10000, 20000, 50000, 100000].map((amount) => {
                         const totalNum = Number(total.minor_units) / 100;
                         const quickVal = Math.ceil(totalNum / amount) * amount;
                         return (
@@ -776,7 +844,7 @@ export default function PaymentModal({
                             className="payment-quick-btn"
                             onClick={() => setTendered(quickVal.toFixed(2))}
                           >
-                            ${quickVal}
+                            Rp {quickVal.toLocaleString('id-ID')}
                           </button>
                           </Localized>
                         );
@@ -963,6 +1031,90 @@ export default function PaymentModal({
               </label>
             </div>
 
+            <div className="payment-customer-section">
+              {selectedCustomer ? (
+                <div className="payment-customer-badge">
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+                    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
+                  </svg>
+                  <span className="payment-customer-name">{selectedCustomer.name}</span>
+                  <button
+                    type="button"
+                    className="payment-customer-change"
+                    onClick={() => setShowCustomerSearch(true)}
+                  >
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    className="payment-customer-remove"
+                    onClick={() => notifyCustomerChange(null)}
+                  >
+                    &times;
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="payment-customer-select-btn"
+                  onClick={() => setShowCustomerSearch(true)}
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+                    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
+                  </svg>
+                  Select Customer
+                </button>
+              )}
+            </div>
+
+            {showCustomerSearch && (
+              <div className="payment-customer-search-overlay" onClick={() => setShowCustomerSearch(false)}>
+                <div className="payment-customer-search-modal" onClick={(e) => e.stopPropagation()}>
+                  <h3 className="payment-customer-search-heading">Select Customer</h3>
+                  <input
+                    className="payment-customer-search-input"
+                    type="text"
+                    placeholder="Search by name, phone, or email..."
+                    value={customerSearchQuery}
+                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="payment-customer-search-list">
+                    {loadingCustomers ? (
+                      <div className="payment-customer-search-loading">Loading...</div>
+                    ) : customerSearchResults.length === 0 ? (
+                      <div className="payment-customer-search-empty">No customers found</div>
+                    ) : (
+                      customerSearchResults.map((c) => (
+                        <button
+                          key={c.id}
+                          className="payment-customer-search-item"
+                          onClick={() => {
+                            notifyCustomerChange(c);
+                            setShowCustomerSearch(false);
+                            setCustomerSearchQuery('');
+                          }}
+                        >
+                          <span className="payment-customer-search-item-name">{c.name}</span>
+                          {(c.phone || c.email) && (
+                            <span className="payment-customer-search-item-detail">
+                              {c.phone || c.email}
+                            </span>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <button
+                    className="payment-customer-search-close"
+                    onClick={() => setShowCustomerSearch(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="payment-actions">
               <Localized id="payment-cancel">
                 <Button variant="ghost" onClick={() => animateLeave(onClose)} disabled={processing}>
@@ -979,6 +1131,8 @@ export default function PaymentModal({
                   <Localized id="payment-open-bill">
                     <span>Open Bill</span>
                   </Localized>
+                ) : method === 'credit' ? (
+                  <span>Credit Sale</span>
                 ) : (
                   <Localized id="payment-complete">
                     <span>Complete Sale</span>

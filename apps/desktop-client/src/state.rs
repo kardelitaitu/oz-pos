@@ -18,18 +18,21 @@
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
+use notify::Watcher as _;
 use oz_core::cache::Cache;
+use oz_plugin::PluginManager;
 
 use rusqlite::Connection;
 use tauri::AppHandle;
 use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
 
-use oz_core::{Cart, CartId, migrations};
+use oz_core::migrations;
 use oz_hal::DriverRegistry;
 use platform_kernel::Kernel;
 use platform_sync::daemon::SyncDaemon;
@@ -52,11 +55,6 @@ pub struct AppState {
     /// Path to the SQLite database file (for diagnostics + `oz-cli` reuse).
     pub db_path: PathBuf,
 
-    /// In-memory cart store shared across sales commands.
-    /// TODO(oz-core): replace with a SQLite-backed `CartStore` so
-    /// carts survive a restart.
-    pub carts: Mutex<HashMap<CartId, Cart>>,
-
     /// Cancel-sender for the active barcode scanner background task.
     /// When `Some`, the scanner polling loop is running; dropping
     /// or signalling it stops the loop gracefully.
@@ -66,11 +64,13 @@ pub struct AppState {
     /// Modules are registered in `lib.rs::run()` during setup.
     pub kernel: Mutex<Kernel>,
 
-    /// Optional Lua scripting runtime for custom business rules.
-    /// `None` when no `scripts/` directory exists or loading failed.
-    /// Wrapped in a `Mutex` because `rlua::Lua` uses interior mutability
-    /// and is not safe for concurrent access from multiple Tauri commands.
-    pub lua: Mutex<Option<oz_lua::LuaRuntime>>,
+    /// Optional plugin manager for custom Lua business rules.
+    /// `None` when no `plugins/` directory exists or loading failed.
+    /// Wrapped in an `Arc<Mutex>` to share with background hot-reload task.
+    pub plugins: Arc<Mutex<Option<PluginManager>>>,
+
+    /// Plugin file watcher (kept alive to prevent dropping).
+    pub plugin_watcher: Option<notify::RecommendedWatcher>,
 
     /// Background sync daemon. Started during app setup via
     /// [`SyncDaemon::start`](platform_sync::daemon::SyncDaemon::start).
@@ -149,30 +149,31 @@ impl AppState {
         let db = Arc::new(Mutex::new(conn));
         let registry = Arc::new(DriverRegistry::default());
 
-        // Load Lua business rule scripts from <app_data_dir>/scripts/.
-        let lua = (|| -> Option<oz_lua::LuaRuntime> {
-            let scripts_dir = app.path().app_data_dir().ok()?.join("scripts");
-            if !scripts_dir.exists() {
+        // Load plugins from <app_data_dir>/plugins/.
+        let plugins_dir = app.path().app_data_dir().ok().map(|d| d.join("plugins"));
+        let plugins: Arc<Mutex<Option<PluginManager>>> =
+            Arc::new(Mutex::new(plugins_dir.as_ref().and_then(
+                |dir| match PluginManager::new(dir) {
+                    Ok(pm) => Some(pm),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "initialising plugin manager");
+                        None
+                    }
+                },
+            )));
+
+        // Start plugin hot-reload file watcher.
+        let plugin_watcher = plugins_dir.as_ref().and_then(|dir| {
+            if !dir.exists() {
                 return None;
             }
-            match oz_lua::LuaRuntime::new() {
-                Ok(runtime) => {
-                    if let Err(e) = runtime.load_dir(&scripts_dir) {
-                        tracing::warn!(error = %e, "loading Lua scripts");
-                    }
-                    Some(runtime)
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "initialising Lua runtime");
-                    None
-                }
-            }
-        })();
+            start_plugin_watcher(plugins.clone(), dir.clone())
+        });
 
         tracing::info!(
             cache_healthy = cache.is_healthy(),
             ?db_path,
-            lua_loaded = lua.is_some(),
+            plugins_loaded = plugins.try_lock().map(|g| g.is_some()).unwrap_or(false),
             "AppState initialised"
         );
 
@@ -181,10 +182,10 @@ impl AppState {
             registry,
             app: Some(app.clone()),
             db_path,
-            carts: Mutex::new(HashMap::new()),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
-            lua: Mutex::new(lua),
+            plugins,
+            plugin_watcher,
             sync_daemon: SyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
@@ -220,12 +221,73 @@ impl AppState {
     }
 }
 
+/// Start a background file watcher that hot-reloads plugins when
+/// `.lua` or `plugin.toml` files change in `plugins_dir`.
+fn start_plugin_watcher(
+    plugins: Arc<Mutex<Option<PluginManager>>>,
+    plugins_dir: PathBuf,
+) -> Option<notify::RecommendedWatcher> {
+    let reload_flag = Arc::new(AtomicBool::new(false));
+    let flag_clone = reload_flag.clone();
+
+    let mut watcher = notify::RecommendedWatcher::new(
+        move |_res: Result<notify::Event, notify::Error>| {
+            flag_clone.store(true, Ordering::SeqCst);
+        },
+        notify::Config::default(),
+    )
+    .map_err(|e| tracing::warn!(error = %e, "failed to create plugin file watcher"))
+    .ok()?;
+
+    watcher
+        .watch(&plugins_dir, notify::RecursiveMode::Recursive)
+        .map_err(|e| tracing::warn!(error = %e, "failed to watch plugins directory"))
+        .ok()?;
+
+    tracing::info!(dir = %plugins_dir.display(), "plugin hot-reload watcher started");
+
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            if reload_flag.swap(false, Ordering::SeqCst) {
+                tracing::info!("plugin change detected, hot-reloading…");
+                let mut guard = plugins.lock().await;
+                match PluginManager::new(&plugins_dir) {
+                    Ok(pm) => {
+                        *guard = Some(pm);
+                        tracing::info!("plugins hot-reloaded successfully");
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "failed to hot-reload plugins, keeping old runtime"
+                        );
+                    }
+                }
+            }
+        }
+    });
+
+    Some(watcher)
+}
+
 fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
     let dir = app
         .path()
         .app_data_dir()
         .map_err(|e| AppError::Internal(format!("resolving app data dir: {e}")))?;
     Ok(dir.join("oz-pos.db"))
+}
+
+impl Drop for AppState {
+    fn drop(&mut self) {
+        tracing::info!("stopping kernel modules");
+        if let Ok(mut kernel) = self.kernel.try_lock() {
+            let _ = kernel.stop_all();
+        } else {
+            tracing::warn!("kernel lock contended, skipping stop_all");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -238,10 +300,10 @@ impl AppState {
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
-            carts: Mutex::new(HashMap::new()),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
-            lua: Mutex::new(None),
+            plugins: Arc::new(Mutex::new(None)),
+            plugin_watcher: None,
             sync_daemon: SyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
@@ -256,10 +318,10 @@ impl AppState {
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
-            carts: Mutex::new(HashMap::new()),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
-            lua: Mutex::new(None),
+            plugins: Arc::new(Mutex::new(None)),
+            plugin_watcher: None,
             sync_daemon: SyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,

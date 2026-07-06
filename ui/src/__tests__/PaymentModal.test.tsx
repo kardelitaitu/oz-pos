@@ -2,12 +2,14 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import salesFtl from '@/locales/sales.ftl?raw';
 import PaymentModal from '@/features/sales/PaymentModal';
 import type { Money, CartLine, Sku, LineId } from '@/types/domain';
 
 function renderWithFluent(ui: React.ReactElement) {
-  return render(withFluent(ui, salesFtl));
+  const wrapped = withFluent(<ToastProvider>{ui}</ToastProvider>, salesFtl);
+  return render(wrapped);
 }
 
 const usd = (minor: number): Money => ({ minor_units: minor, currency: 'USD' });
@@ -65,7 +67,7 @@ describe('PaymentModal', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText(/Total Due/)).toBeInTheDocument();
-    expect(screen.getByText('$7.00')).toBeInTheDocument();
+    expect(screen.getByText('$ 7,00')).toBeInTheDocument();
     expect(screen.getByLabelText(/Cash/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Card/)).toBeInTheDocument();
   });
@@ -101,7 +103,7 @@ describe('PaymentModal', () => {
     await userEvent.type(input, '10');
 
     await waitFor(() => {
-      expect(screen.getByText('$3.00')).toBeInTheDocument();
+      expect(screen.getByText('$ 3,00')).toBeInTheDocument();
     });
   });
 
@@ -141,7 +143,7 @@ describe('PaymentModal', () => {
     await userEvent.type(input, '5');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /complete sale/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /^complete$/i })).toBeDisabled();
     });
   });
 
@@ -161,7 +163,7 @@ describe('PaymentModal', () => {
     await userEvent.type(input, '10');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /complete sale/i })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
     });
   });
 
@@ -179,7 +181,7 @@ describe('PaymentModal', () => {
 
     const input = screen.getByLabelText(/amount tendered/i);
     await userEvent.type(input, '10');
-    await userEvent.click(screen.getByRole('button', { name: /complete sale/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
@@ -201,7 +203,7 @@ describe('PaymentModal', () => {
 
     const input = screen.getByLabelText(/amount tendered/i);
     await userEvent.type(input, '10');
-    await userEvent.click(screen.getByRole('button', { name: /complete sale/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
     // Wait for the done state to render, then the auto-close timer fires.
     await screen.findByText(/sale complete/i);
@@ -226,11 +228,11 @@ describe('PaymentModal', () => {
 
     const input = screen.getByLabelText(/amount tendered/i);
     await userEvent.type(input, '10');
-    await userEvent.click(screen.getByRole('button', { name: /complete sale/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
     expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();
     expect(await screen.findByText(/change due/i)).toBeInTheDocument();
-    expect(await screen.findByText('$3.00')).toBeInTheDocument();
+    expect(await screen.findByText('$ 3,00')).toBeInTheDocument();
   });
 
   it('shows sale complete state for card and prints receipt', async () => {
@@ -246,8 +248,8 @@ describe('PaymentModal', () => {
     );
 
     await userEvent.click(screen.getByLabelText(/Card/));
-    expect(screen.getByRole('button', { name: /complete sale/i })).not.toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: /complete sale/i }));
+    expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
     // The done state should appear after printSalesReceipt resolves.
     expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();

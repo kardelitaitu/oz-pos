@@ -13,7 +13,7 @@ import { useLocalization } from '@fluent/react';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { formatMoney, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
+import { formatMoney, type CartId, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
 import { triggerInteraction } from '@/utils/interaction';
 import { useSwipe } from '@/hooks/useSwipe';
@@ -22,9 +22,11 @@ import {
   listOpenBills,
   getHeldCart,
   deleteHeldCart,
+  startSale,
   type HeldCartRow,
 } from '@/api/sales';
 import { getReceiptSettings } from '@/api/settings';
+import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { lookupByBarcode, lookupProductBySku } from '@/api/products';
 import { lookupBundleBySku } from '@/api/bundles';
 import { expandBundleItems } from './bundleExpansion';
@@ -33,6 +35,8 @@ import { usePosState } from './usePosState';
 import { useBarcodeScanner } from './useBarcodeScanner';
 import { useCustomerDisplay } from './useCustomerDisplay';
 import PaymentModal from './PaymentModal';
+import PriceOverrideModal from './PriceOverrideModal';
+import { overrideLinePrice } from '@/api/sales';
 import {
   getActiveShift,
   openShift,
@@ -137,6 +141,7 @@ interface CartLineItemProps {
   onRemove: (line: CartLine) => void;
   onDecreaseQty: (line: CartLine) => void;
   onIncreaseQty: (line: CartLine) => void;
+  onOverride?: (line: CartLine) => void;
   /**
    * Registers the line DOM node so the parent can move focus during
    * keyboard navigation (↑ / ↓). When omitted the line is rendered
@@ -150,6 +155,7 @@ function CartLineItem({
   onRemove,
   onDecreaseQty,
   onIncreaseQty,
+  onOverride,
   registerRef,
 }: CartLineItemProps) {
   const { l10n } = useLocalization();
@@ -218,6 +224,16 @@ function CartLineItem({
           <div className="pos-cart-line-price">
             <span className="pos-cart-line-price-at">@</span> {formatMoney(line.unit_price)}
           </div>
+          {onOverride && (
+            <button
+              type="button"
+              className="pos-cart-line-override"
+              onClick={() => onOverride(line)}
+              aria-label={`Override price for ${line.name ?? line.sku}`}
+            >
+              Override
+            </button>
+          )}
         </div>
 
         {/* 3 — Qty controls */}
@@ -313,6 +329,7 @@ export default function PosScreen() {
     addProduct,
     removeLine,
     updateQty,
+    updateLinePrice,
     setDiscount,
     setTipPercent,
     setServiceCharge,
@@ -321,7 +338,7 @@ export default function PosScreen() {
   } = usePosState();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
-  const { session, logout } = useAuth();
+  const { session, logout, isManager } = useAuth();
   const { activeWorkspace } = useWorkspace();
   const userId = session!.user_id;
 
@@ -438,9 +455,65 @@ export default function PosScreen() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  const [activeShift, setActiveShift] = useState<ShiftDto | null>(null);
+  const activeShiftRef = useRef(activeShift);
+  activeShiftRef.current = activeShift;
+  const [shiftLoading, setShiftLoading] = useState(true);
+  const [overrideTarget, setOverrideTarget] = useState<CartLine | null>(null);
+  const [cartId, setCartId] = useState<CartId | null>(null);
+  const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
+    if (cartId) return cartId;
+    try {
+      const { cartId: newCartId } = await startSale({ currency });
+      setCartId(newCartId);
+      return newCartId;
+    } catch {
+      addToast({ message: 'Failed to create sale cart', type: 'error' });
+      return null;
+    }
+  }, [cartId, addToast]);
+  const [showCloseShift, setShowCloseShift] = useState(false);
+  const [showOpenShift, setShowOpenShift] = useState(false);
+  const [closingBalance, setClosingBalance] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('');
+  const [shiftNotes, setShiftNotes] = useState('');
+  const [closingShift, setClosingShift] = useState(false);
+  const [openingShift, setOpeningShift] = useState(false);
+  const [closeShiftError, setCloseShiftError] = useState<string | null>(null);
+  const [closedShiftSummary, setClosedShiftSummary] = useState<ShiftDto | null>(null);
+
+  const handleAddProduct = useCallback(
+    (product: Product, qty?: number) => {
+      if (!activeShiftRef.current) {
+        addToast({ message: 'Open a shift first', type: 'warning' });
+        return;
+      }
+      addProduct(product, qty);
+    },
+    [addProduct, addToast],
+  );
+
+  // Load active shift on mount and when session changes.
+  useEffect(() => {
+    if (!userId) {
+      setActiveShift(null);
+      setShiftLoading(false);
+      return;
+    }
+    setShiftLoading(true);
+    getActiveShift(userId)
+      .then((shift) => { setActiveShift(shift); })
+      .catch(() => { setActiveShift(null); })
+      .finally(() => setShiftLoading(false));
+  }, [userId]);
+
   // ── Barcode scanner integration ─────────────────────────────
   useBarcodeScanner({
     onProductFound: useCallback(async (payload: BarcodeScannedPayload) => {
+      if (!activeShiftRef.current) {
+        addToast({ message: 'Open a shift first', type: 'warning' });
+        return;
+      }
       try {
         const code = payload.code;
         // 1. Try product barcode lookup first.
@@ -455,7 +528,7 @@ export default function PosScreen() {
             inStock: dto.in_stock,
             stockQty: dto.stock_qty,
           };
-          addProduct(product);
+          handleAddProduct(product);
           return;
         }
 
@@ -469,7 +542,7 @@ export default function PosScreen() {
             lookupProductBySku,
           );
           for (const item of expanded) {
-            addProduct(item.product, item.qty);
+            handleAddProduct(item.product, item.qty);
           }
           addToast({
             type: 'success',
@@ -481,7 +554,7 @@ export default function PosScreen() {
       } catch {
         // Silently ignore — the scanner will beep, user retries.
       }
-    }, [addProduct, addToast, l10n]),
+    }, [handleAddProduct, addToast, l10n]),
     onError: useCallback(
       (error: string) => {
         addToast({
@@ -498,9 +571,13 @@ export default function PosScreen() {
   });
 
   const handlePay = useCallback(() => {
+    if (!activeShiftRef.current) {
+      addToast({ message: 'Open a shift first', type: 'warning' });
+      return;
+    }
     if (!total) return;
     setShowPayment(true);
-  }, [total]);
+  }, [total, addToast]);
 
   // ── Open Bill state ──────────────────────────────────────────────
   const [activeOpenBillId, setActiveOpenBillId] = useState<string | null>(null);
@@ -517,8 +594,28 @@ export default function PosScreen() {
     total,
   });
 
+  // ── Live tax preview ─────────────────────────────────────────
+  const [cartTax, setCartTax] = useState<number>(0);
+
+  useEffect(() => {
+    if (lines.length === 0 || !subtotal) {
+      setCartTax(0);
+      return;
+    }
+    const currency = subtotal.currency;
+    const taxLines: CartLineTaxInput[] = lines.map((l) => ({
+      sku: String(l.sku),
+      qty: l.qty,
+      unit_price_minor: l.unit_price.minor_units,
+    }));
+    computeCartTax(taxLines, currency)
+      .then(setCartTax)
+      .catch(() => setCartTax(0));
+  }, [lines, subtotal]);
+
   const handlePaymentComplete = useCallback(() => {
     setShowPayment(false);
+    setCartId(null);
     // If this was an open bill being paid, delete it from DB.
     if (activeOpenBillId) {
       deleteHeldCart(activeOpenBillId).catch(() => {
@@ -602,6 +699,33 @@ export default function PosScreen() {
   const handleIncreaseQty = useCallback((line: CartLine) => {
     updateQty(line.id, line.qty + 1);
   }, [updateQty]);
+
+  const handleOverrideConfirm = useCallback(async (newPriceMinor: number, authorizingUserId: string) => {
+    if (!overrideTarget) return;
+    const cId = cartId;
+    if (!cId) {
+      addToast({ message: 'No active sale cart', type: 'error' });
+      setOverrideTarget(null);
+      return;
+    }
+    try {
+      await overrideLinePrice({
+        cartId: cId,
+        lineId: overrideTarget.id,
+        newPriceMinor,
+        userId: authorizingUserId,
+      });
+      updateLinePrice(overrideTarget.id, {
+        minor_units: newPriceMinor,
+        currency: overrideTarget.unit_price.currency,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Override failed';
+      addToast({ message: msg, type: 'error' });
+    } finally {
+      setOverrideTarget(null);
+    }
+  }, [overrideTarget, cartId, addToast, updateLinePrice]);
 
   // ── Keyboard navigation (↑ / ↓ / + / − / Del / Enter) ────────
   // The cart panel handles keys when its focus, or any descendant
@@ -694,39 +818,8 @@ export default function PosScreen() {
   useEffect(() => {
     getReceiptSettings()
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
-      .catch(() => {});
+      .catch(() => addToast({ message: 'Failed to load receipt settings', type: 'error' }));
   }, []);
-
-  // ── Shift management ──────────────────────────────────────────
-  const [activeShift, setActiveShift] = useState<ShiftDto | null>(null);
-  const [shiftLoading, setShiftLoading] = useState(true);
-  const [showCloseShift, setShowCloseShift] = useState(false);
-  const [showOpenShift, setShowOpenShift] = useState(false);
-  const [closingBalance, setClosingBalance] = useState('');
-  const [openingBalance, setOpeningBalance] = useState('');
-  const [shiftNotes, setShiftNotes] = useState('');
-  const [closingShift, setClosingShift] = useState(false);
-  const [openingShift, setOpeningShift] = useState(false);
-  const [closeShiftError, setCloseShiftError] = useState<string | null>(null);
-  const [closedShiftSummary, setClosedShiftSummary] = useState<ShiftDto | null>(null);
-
-  // Load active shift on mount and when session changes.
-  useEffect(() => {
-    if (!userId) {
-      setActiveShift(null);
-      setShiftLoading(false);
-      return;
-    }
-    setShiftLoading(true);
-    getActiveShift(userId)
-      .then((shift) => {
-        setActiveShift(shift);
-      })
-      .catch(() => {
-        setActiveShift(null);
-      })
-      .finally(() => setShiftLoading(false));
-  }, [userId]);
 
   const handleCloseShiftClick = useCallback(() => {
     setCloseShiftError(null);
@@ -749,11 +842,12 @@ export default function PosScreen() {
     setClosingShift(true);
     setCloseShiftError(null);
     try {
-      const closed = await closeShift(
-        activeShift.id,
-        balance,
-        shiftNotes.trim() || null,
-      );
+      const closed = await closeShift({
+        userId,
+        id: activeShift.id,
+        closingBalanceMinor: balance,
+        notes: shiftNotes.trim() || null,
+      });
       setClosedShiftSummary(closed);
       setActiveShift(null); // no longer active
     } catch (err) {
@@ -803,6 +897,10 @@ export default function PosScreen() {
   }, [showOpenBills, loadOpenBills]);
 
   const handleOpenBill = useCallback(async () => {
+    if (!activeShift) {
+      addToast({ message: 'Open a shift first', type: 'warning' });
+      return;
+    }
     if (!subtotal || lines.length === 0) return;
     setOpeningBill(true);
     try {
@@ -884,9 +982,9 @@ export default function PosScreen() {
       {/* ── Left: Product lookup ─────────────────── */}
       <div className="pos-products">
         {activeWorkspace === 'restaurant-pos' ? (
-          <RestaurantMenu onAddProduct={addProduct} />
+          <RestaurantMenu onAddProduct={handleAddProduct} />
         ) : (
-          <ProductLookupScreen onAddProduct={addProduct} />
+          <ProductLookupScreen onAddProduct={handleAddProduct} />
         )}
       </div>
 
@@ -1026,6 +1124,12 @@ export default function PosScreen() {
                 onDecreaseQty={handleDecreaseQty}
                 onIncreaseQty={handleIncreaseQty}
                 registerRef={setCartLineRef}
+                {...(isManager ? {
+                  onOverride: (l: CartLine) => {
+                    setOverrideTarget(l);
+                    ensureCart(l.unit_price.currency);
+                  },
+                } : {})}
               />
             ))
           )}
@@ -1261,6 +1365,16 @@ export default function PosScreen() {
               </div>
             </div>
 
+            {/* ── Tax line (live preview) ──────────────────────── */}
+            {cartTax > 0 && (
+              <div className="pos-cart-tax-row">
+                <span>PPN</span>
+                <span className="pos-cart-money-row-amount">
+                  {formatMoney({ minor_units: cartTax, currency: subtotal?.currency ?? 'IDR' })}
+                </span>
+              </div>
+            )}
+
             {/* ── Section 4: Charge button ──────────────────────── */}
             {/* Action buttons row */}
             <div className="pos-cart-actions-row">
@@ -1269,7 +1383,7 @@ export default function PosScreen() {
                 <button
                   type="button"
                   className="pos-cart-clear-btn"
-                  onClick={resetCart}
+                  onClick={() => { setCartId(null); resetCart(); }}
                   aria-label={l10n.getString('pos-cart-clear-aria')}
                   title={l10n.getString('pos-cart-clear-aria')}
                 >
@@ -1284,8 +1398,9 @@ export default function PosScreen() {
               {/* Pay button */}
               <button
                 type="button"
-                className="pos-cart-pay-btn"
+                className={`pos-cart-pay-btn${!activeShift ? ' pos-cart-pay-btn--disabled' : ''}`}
                 onClick={handlePay}
+                disabled={!activeShift}
                 aria-label={l10n.getString('pos-cart-charge-aria')}
               >
                 <Localized id="pos-cart-pay">
@@ -1297,7 +1412,13 @@ export default function PosScreen() {
         <button
           type="button"
           className="pos-cart-open-bill-btn"
-          onClick={() => setShowOpenBillInput(true)}
+          onClick={() => {
+            if (!activeShift) {
+              addToast({ message: 'Open a shift first', type: 'warning' });
+              return;
+            }
+            setShowOpenBillInput(true);
+          }}
           aria-label={l10n.getString('pos-cart-open-bill-aria')}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
@@ -1342,6 +1463,17 @@ export default function PosScreen() {
           tableNumber={tableNumber}
           onComplete={handlePaymentComplete}
           onClose={() => setShowPayment(false)}
+        />
+      )}
+
+      {/* ── Price Override modal ─────────────────────── */}
+      {overrideTarget && (
+        <PriceOverrideModal
+          open
+          lineDescription={`${overrideTarget.name ?? overrideTarget.sku} — ${formatMoney(overrideTarget.unit_price)}`}
+          currentPrice={overrideTarget.unit_price}
+          onConfirm={handleOverrideConfirm}
+          onClose={() => setOverrideTarget(null)}
         />
       )}
 
@@ -1438,6 +1570,13 @@ export default function PosScreen() {
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('pos-close-shift-overlay-aria')}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setShowCloseShift(false);
+              setCloseShiftError(null);
+            }
+            if (e.key === 'Enter') handleConfirmCloseShift();
+          }}
         >
           <div className="pos-close-shift-modal">
             <Localized id="pos-close-shift-title">
@@ -1468,7 +1607,7 @@ export default function PosScreen() {
             <div className="pos-close-shift-field">
               <Localized id="pos-close-shift-counted-label">
                 <label htmlFor="closing-balance" className="pos-close-shift-label">
-                  Counted cash in drawer (minor units)
+                  Counted cash in drawer
                 </label>
               </Localized>
               <Localized id="pos-close-shift-counted-placeholder" attrs={{ placeholder: true }}>
@@ -1481,6 +1620,7 @@ export default function PosScreen() {
                   value={closingBalance}
                   onChange={(e) => setClosingBalance(e.target.value)}
                   aria-label={l10n.getString('pos-close-shift-balance-aria')}
+                  autoFocus
                 />
               </Localized>
             </div>
@@ -1654,6 +1794,10 @@ export default function PosScreen() {
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('pos-open-shift-overlay-aria')}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setShowOpenShift(false);
+            if (e.key === 'Enter') handleConfirmOpenShift();
+          }}
         >
           <div className="pos-close-shift-modal">
             <Localized id="pos-open-shift-title">
@@ -1663,7 +1807,7 @@ export default function PosScreen() {
             <div className="pos-close-shift-field">
               <Localized id="pos-open-shift-balance-label">
                 <label htmlFor="opening-balance" className="pos-close-shift-label">
-                  Opening balance (minor units)
+                  Opening balance
                 </label>
               </Localized>
               <Localized id="pos-open-shift-balance-placeholder" attrs={{ placeholder: true }}>
@@ -1676,6 +1820,7 @@ export default function PosScreen() {
                   value={openingBalance}
                   onChange={(e) => setOpeningBalance(e.target.value)}
                   aria-label={l10n.getString('pos-open-shift-balance-aria')}
+                  autoFocus
                 />
               </Localized>
             </div>

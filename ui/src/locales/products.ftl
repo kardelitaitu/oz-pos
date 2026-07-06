@@ -1,5 +1,30 @@
 # ui/src/locales/products.ftl — Product management, lookup, variants
 
+# ── Restaurant Menu ──────────────────────────────────────────────────
+restaurant-menu-search-placeholder =
+    .placeholder = Search Menu
+restaurant-menu-hamburger-aria =
+    .aria-label = Menu
+restaurant-menu-back-aria =
+    .aria-label = Back to workspaces
+restaurant-size-decrease-aria =
+    .aria-label = Decrease size
+restaurant-size-increase-aria =
+    .aria-label = Increase size
+restaurant-font-size-decrease-aria =
+    .aria-label = Decrease font size
+restaurant-font-size-increase-aria =
+    .aria-label = Increase font size
+restaurant-font-size-label = Font Size
+restaurant-theme-light = Light Mode
+restaurant-theme-dark = Dark Mode
+restaurant-lock-terminal = Lock Terminal
+restaurant-toggle-fullscreen = Toggle Fullscreen
+restaurant-clear-color-aria =
+    .aria-label = Clear color
+restaurant-categories-aria =
+    .aria-label = Menu categories
+
 # Product Lookup
 product-lookup-title = Products
 product-lookup-dev-fallback = Using sample data (IPC unavailable)

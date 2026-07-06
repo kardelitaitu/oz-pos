@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   listProducts,
   createProduct,
@@ -48,10 +49,13 @@ function dtoToProduct(dto: ProductDto): Product {
     barcode: dto.barcode,
     inStock: dto.in_stock,
     stockQty: dto.stock_qty,
+    priceUpdatedAt: dto.price_updated_at,
   };
 }
 
 export default function ProductManagementScreen() {
+  const { session } = useAuth();
+  const userId = session?.user_id ?? '';
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRateDto[]>([]);
@@ -116,6 +120,7 @@ export default function ProductManagementScreen() {
 
       if (editingSku) {
         await updateProduct({
+          userId,
           sku: editingSku,
           name: form.name,
           priceMinor,
@@ -126,6 +131,7 @@ export default function ProductManagementScreen() {
         });
       } else {
         await createProduct({
+          userId,
           sku: form.sku,
           name: form.name,
           priceMinor,
@@ -148,13 +154,13 @@ export default function ProductManagementScreen() {
   const confirmDelete = useCallback(async (sku: string) => {
     setDeleting(sku);
     try {
-      await deleteProduct(sku);
+      await deleteProduct({ userId, sku });
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
     }
-  }, [load]);
+  }, [load, userId]);
 
   return (
     <div className="product-mgmt">

@@ -6,8 +6,10 @@
 
 pub mod error;
 pub mod loader;
+pub mod manager;
 pub mod manifest;
 
 pub use error::PluginError;
 pub use loader::{LoadedPlugin, PluginRegistry, load_plugins};
+pub use manager::PluginManager;
 pub use manifest::PluginManifest;

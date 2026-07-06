@@ -130,23 +130,33 @@ export default function LoyaltyManagementScreen() {
                   <div className="loyalty-tier-edit-form">
                     <label className="loyalty-tier-field">
                       <Localized id="loyalty-tier-name"><span className="loyalty-tier-label">Name</span></Localized>
-                      <input className="loyalty-tier-input" value={tierForm.name} onChange={(e) => setTierForm({ ...tierForm, name: e.target.value })} aria-label="Tier name" />
+                      <Localized id="loyalty-tier-name-aria" attrs={{ 'aria-label': true }}>
+                      <input className="loyalty-tier-input" value={tierForm.name} onChange={(e) => setTierForm({ ...tierForm, name: e.target.value })} />
+                      </Localized>
                     </label>
                     <label className="loyalty-tier-field">
                       <Localized id="loyalty-tier-min-points"><span className="loyalty-tier-label">Min Points</span></Localized>
-                      <input className="loyalty-tier-input" type="number" value={tierForm.min_points} onChange={(e) => setTierForm({ ...tierForm, min_points: e.target.value })} aria-label="Minimum points" />
+                      <Localized id="loyalty-tier-min-points-aria" attrs={{ 'aria-label': true }}>
+                      <input className="loyalty-tier-input" type="number" value={tierForm.min_points} onChange={(e) => setTierForm({ ...tierForm, min_points: e.target.value })} />
+                      </Localized>
                     </label>
                     <label className="loyalty-tier-field">
                       <Localized id="loyalty-tier-ppu"><span className="loyalty-tier-label">Points/Unit</span></Localized>
-                      <input className="loyalty-tier-input" type="number" value={tierForm.points_per_unit} onChange={(e) => setTierForm({ ...tierForm, points_per_unit: e.target.value })} aria-label="Points per unit" />
+                      <Localized id="loyalty-tier-ppu-aria" attrs={{ 'aria-label': true }}>
+                      <input className="loyalty-tier-input" type="number" value={tierForm.points_per_unit} onChange={(e) => setTierForm({ ...tierForm, points_per_unit: e.target.value })} />
+                      </Localized>
                     </label>
                     <label className="loyalty-tier-field">
                       <Localized id="loyalty-tier-multiplier"><span className="loyalty-tier-label">Multiplier</span></Localized>
-                      <input className="loyalty-tier-input" type="number" step="0.01" value={tierForm.earn_multiplier} onChange={(e) => setTierForm({ ...tierForm, earn_multiplier: e.target.value })} aria-label="Earn multiplier" />
+                      <Localized id="loyalty-tier-multiplier-aria" attrs={{ 'aria-label': true }}>
+                      <input className="loyalty-tier-input" type="number" step="0.01" value={tierForm.earn_multiplier} onChange={(e) => setTierForm({ ...tierForm, earn_multiplier: e.target.value })} />
+                      </Localized>
                     </label>
                     <label className="loyalty-tier-field">
                       <Localized id="loyalty-tier-colour"><span className="loyalty-tier-label">Colour</span></Localized>
-                      <input className="loyalty-tier-input loyalty-tier-colour-input" type="color" value={tierForm.colour} onChange={(e) => setTierForm({ ...tierForm, colour: e.target.value })} aria-label="Tier colour" />
+                      <Localized id="loyalty-tier-colour-aria" attrs={{ 'aria-label': true }}>
+                      <input className="loyalty-tier-input loyalty-tier-colour-input" type="color" value={tierForm.colour} onChange={(e) => setTierForm({ ...tierForm, colour: e.target.value })} />
+                      </Localized>
                     </label>
                     {error && <div className="loyalty-mgmt-error" role="alert">{error}</div>}
                     <div className="loyalty-tier-edit-actions">
@@ -199,6 +209,7 @@ export default function LoyaltyManagementScreen() {
             </Card>
           ) : (
             <div className="loyalty-table-wrap">
+              <Localized id="loyalty-table-aria" attrs={{ 'aria-label': true }}>
               <table className="loyalty-table" aria-label="Loyalty accounts">
                 <thead>
                   <tr>
@@ -208,7 +219,9 @@ export default function LoyaltyManagementScreen() {
                     <Localized id="loyalty-lifetime-points"><th>Lifetime Points</th></Localized>
                     <Localized id="loyalty-next-tier"><th>Next Tier</th></Localized>
                     <Localized id="loyalty-points-to-next"><th>Points to Next</th></Localized>
-                    <th aria-label={l10n.getString('loyalty-table-actions')}> </th>
+                    <Localized id="loyalty-table-actions" attrs={{ 'aria-label': true }}>
+                      <th> </th>
+                    </Localized>
                   </tr>
                 </thead>
                 <tbody>
@@ -248,6 +261,7 @@ export default function LoyaltyManagementScreen() {
                                 {a.recent_transactions.length === 0 ? (
                                   <p className="loyalty-detail-empty"><Localized id="loyalty-no-transactions">No transactions yet</Localized></p>
                                 ) : (
+                                  <Localized id="loyalty-txn-table-aria" attrs={{ 'aria-label': true }}>
                                   <table className="loyalty-txn-table" aria-label="Recent transactions">
                                     <thead>
                                       <tr>
@@ -273,9 +287,9 @@ export default function LoyaltyManagementScreen() {
                                           <td>{txn.description}</td>
                                           <td className="loyalty-txn-date">{new Date(txn.created_at).toLocaleDateString()}</td>
                                         </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                      ))}                                      </tbody>
+                                    </table>
+                                    </Localized>
                                 )}
                               </div>
                             </td>
@@ -283,10 +297,10 @@ export default function LoyaltyManagementScreen() {
                         )}
                       </Fragment>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  })}                  </tbody>
+                </table>
+                </Localized>
+              </div>
           )}
         </div>
       )}

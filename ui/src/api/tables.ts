@@ -22,23 +22,23 @@ export const listTables = (section?: string) =>
 export const getTable = (id: string) =>
   invoke<Table | null>('get_table', { id });
 
-export const createTable = (args: Table) =>
-  invoke<Table>('create_table', { args });
+export const createTable = (userId: string, args: Table) =>
+  invoke<Table>('create_table', { userId, args });
 
-export const updateTable = (table: Table) =>
-  invoke<Table>('update_table', { table });
+export const updateTable = (userId: string, table: Table) =>
+  invoke<Table>('update_table', { userId, table });
 
-export const deleteTable = (id: string) =>
-  invoke<void>('delete_table', { id });
+export const deleteTable = (userId: string, id: string) =>
+  invoke<void>('delete_table', { userId, id });
 
-export const updateTableStatus = (id: string, status: string) =>
-  invoke<Table>('update_table_status', { id, status });
+export const updateTableStatus = (userId: string, id: string, status: string) =>
+  invoke<Table>('update_table_status', { userId, id, status });
 
-export const assignTableOrder = (tableId: string, saleId: string) =>
-  invoke<Table>('assign_table_order', { tableId, saleId });
+export const assignTableOrder = (userId: string, tableId: string, saleId: string) =>
+  invoke<Table>('assign_table_order', { userId, tableId, saleId });
 
-export const releaseTable = (tableId: string) =>
-  invoke<Table>('release_table', { tableId });
+export const releaseTable = (userId: string, tableId: string) =>
+  invoke<Table>('release_table', { userId, tableId });
 
 export const listSections = () =>
   invoke<string[]>('list_sections');

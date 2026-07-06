@@ -3,14 +3,17 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import sharedFtl from '@/locales/shared.ftl?raw';
-import { ThemeProvider } from '@/components/ThemeProvider';
-import ThemeToggle from '@/components/ThemeToggle';
+import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
+import { BrandProvider } from '@/contexts/BrandContext';
+import ThemeToggle from '@/frontend/shell/ThemeToggle';
 
 // ── Wrapper ──────────────────────────────────────────────────────────
 
 function wrap(children: React.ReactNode) {
   return withFluent(
-    <ThemeProvider>{children}</ThemeProvider>,
+    <BrandProvider>
+      <ThemeProvider>{children}</ThemeProvider>
+    </BrandProvider>,
     sharedFtl,
   );
 }

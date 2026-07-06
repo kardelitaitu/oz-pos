@@ -13,9 +13,12 @@ export interface ProductDto {
   in_stock: boolean;
   stock_qty: number | null;
   tax_rate_ids: string[];
+  created_at: string;
+  price_updated_at: string;
 }
 
 export interface CreateProductArgs {
+  userId: string;
   sku: string;
   name: string;
   priceMinor: number;
@@ -27,6 +30,7 @@ export interface CreateProductArgs {
 }
 
 export interface UpdateProductArgs {
+  userId: string;
   sku: string;
   name: string;
   priceMinor: number;
@@ -45,8 +49,8 @@ export const createProduct = (args: CreateProductArgs): Promise<{ sku: string }>
 export const updateProduct = (args: UpdateProductArgs): Promise<{ sku: string }> =>
   invoke('update_product', { args });
 
-export const deleteProduct = (sku: string): Promise<void> =>
-  invoke('delete_product', { args: { sku } });
+export const deleteProduct = (args: { userId: string; sku: string }): Promise<void> =>
+  invoke('delete_product', { args });
 
 // ── Barcode / SKU Lookup ───────────────────────────────────────────
 
@@ -124,12 +128,24 @@ export interface CategoryDto {
   id: string;
   name: string;
   colour: string;
+  /** Icon identifier, e.g. "dots-1". Empty string = no icon. */
+  icon: string;
 }
 
 export interface CreateCategoryArgs {
   id: string;
   name: string;
   colour: string;
+  /** Icon identifier, e.g. "dots-1". */
+  icon: string;
+}
+
+export interface UpdateCategoryArgs {
+  id: string;
+  name: string;
+  colour: string;
+  /** Icon identifier, e.g. "dots-2". */
+  icon: string;
 }
 
 export const listCategories = (): Promise<CategoryDto[]> =>
@@ -137,6 +153,9 @@ export const listCategories = (): Promise<CategoryDto[]> =>
 
 export const createCategory = (args: CreateCategoryArgs): Promise<{ id: string }> =>
   invoke('create_category', { args });
+
+export const updateCategory = (args: UpdateCategoryArgs): Promise<{ id: string }> =>
+  invoke('update_category', { args });
 
 export const deleteCategory = (id: string): Promise<void> =>
   invoke('delete_category', { args: { id } });

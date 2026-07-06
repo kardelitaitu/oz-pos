@@ -178,6 +178,12 @@
   align-items: center;
   gap: var(--space-4);
   margin-top: var(--space-2);
+  outline: none;
+}
+
+.staff-login-pin-section:focus,
+.staff-login-pin-section:focus-visible {
+  outline: none;
 }
 
 .staff-login-pin-dots {
@@ -263,13 +269,6 @@
 }
 
 /* ── Verify hint ─────────────────────────────────────────────────── */
-
-.staff-login-verify-hint {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
-  text-align: center;
-}
 
 /* ── Error ────────────────────────────────────────────────────────── */
 

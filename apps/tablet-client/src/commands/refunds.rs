@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::db::Store;
+use oz_core::permissions;
 use oz_core::{Money, Refund, RefundLine};
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -40,6 +42,8 @@ pub struct ProcessRefundResult {
 }
 
 /// Process a refund against a completed sale.
+///
+/// Requires `sales:refund` permission.
 #[command]
 pub async fn process_refund(
     args: ProcessRefundArgs,
@@ -47,6 +51,9 @@ pub async fn process_refund(
 ) -> Result<ProcessRefundResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    // Permission check: caller must have sales:refund (derived from user_id).
+    require_permission_for_user(&store, &args.user_id, permissions::SALES_REFUND)?;
 
     // Verify the sale exists and is completed.
     let sale = store

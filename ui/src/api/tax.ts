@@ -38,6 +38,19 @@ export interface SetCategoryTaxRatesArgs {
   taxRateIds: string[];
 }
 
+export interface CartLineTaxInput {
+  sku: string;
+  qty: number;
+  unit_price_minor: number;
+}
+
+/** Compute total tax for a set of cart lines (live preview). */
+export const computeCartTax = (
+  lines: CartLineTaxInput[],
+  currency: string,
+): Promise<number> =>
+  invoke<number>('compute_cart_tax', { lines, currency });
+
 export const listTaxRates = (): Promise<TaxRateDto[]> =>
   invoke<TaxRateDto[]>('list_tax_rates');
 

@@ -34,15 +34,15 @@ const MAX_PIN_LENGTH = 6;
 type Step = 'username' | 'pin';
 
 export default function StaffLoginScreen() {
-  const { login, loading, error, clearError } = useAuth();
   const { l10n } = useLocalization();
-
+  const { login, loading, error, clearError } = useAuth();
   const [step, setStep] = useState<Step>('username');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState<string[]>([]);
   const usernameInputRef = useRef<HTMLInputElement>(null);
 
   const pinSectionRef = useRef<HTMLDivElement>(null);
+  const pinSubmitted = useRef(false);
 
   // Focus appropriate element when step changes.
   useEffect(() => {
@@ -73,6 +73,7 @@ export default function StaffLoginScreen() {
 
   const handlePinClear = useCallback(() => {
     setPin([]);
+    pinSubmitted.current = false;
   }, []);
 
   // Auto-submit when PIN reaches max length.
@@ -87,6 +88,7 @@ export default function StaffLoginScreen() {
   const goBack = useCallback(() => {
     setStep('username');
     setPin([]);
+    pinSubmitted.current = false;
   }, []);
 
   // ── Hardware keyboard handler for PIN step ────────────────────
@@ -128,8 +130,12 @@ export default function StaffLoginScreen() {
   }, []);
 
   useEffect(() => {
-    if (pin.length === MAX_PIN_LENGTH && !loading) {
+    if (pin.length === MAX_PIN_LENGTH && !loading && !pinSubmitted.current) {
+      pinSubmitted.current = true;
       attemptLogin();
+    }
+    if (pin.length < MAX_PIN_LENGTH) {
+      pinSubmitted.current = false;
     }
   }, [pin, loading, attemptLogin]);
 
@@ -155,9 +161,9 @@ export default function StaffLoginScreen() {
 
   const renderPinPad = () => {
     const keys = [
-      ['1', '2', '3'],
-      ['4', '5', '6'],
       ['7', '8', '9'],
+      ['4', '5', '6'],
+      ['1', '2', '3'],
     ];
 
     return (
@@ -220,10 +226,19 @@ export default function StaffLoginScreen() {
     );
   };
 
+  // Focus the active input when the screen is tapped anywhere.
+  const handleScreenClick = useCallback(() => {
+    if (step === 'username') {
+      usernameInputRef.current?.focus();
+    } else if (step === 'pin') {
+      pinSectionRef.current?.focus();
+    }
+  }, [step]);
+
   // ── Step label ────────────────────────────────────────────────
 
   return (
-    <div className="staff-login-screen">
+    <div className="staff-login-screen" onClick={handleScreenClick}>
       <div className="staff-login-card">
         {/* Logo */}
         <div className="staff-login-logo">
@@ -309,7 +324,7 @@ export default function StaffLoginScreen() {
               onClick={attemptLogin}
               disabled={pin.length === 0 || loading}
             >
-              {loading ? l10n.getString('staff-login-submitting') : l10n.getString('staff-login-submit')}
+              {l10n.getString(loading ? 'staff-login-submitting' : 'staff-login-submit')}
             </button>
             </div>
           </Localized>

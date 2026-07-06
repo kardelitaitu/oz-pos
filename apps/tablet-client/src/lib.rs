@@ -92,6 +92,7 @@ pub fn run() {
             commands::staff::update_staff,
             commands::categories::list_categories,
             commands::categories::create_category,
+            commands::categories::update_category,
             commands::categories::delete_category,
             commands::currencies::currency_info,
             commands::currencies::list_currencies,
@@ -108,9 +109,14 @@ pub fn run() {
             commands::pos::add_line,
             commands::pos::complete_sale,
             commands::pos::set_cart_discount,
+            commands::pos::override_line_price,
+            commands::pos::list_active_carts,
+            commands::pos::get_active_cart,
             commands::pos::hold_cart,
             commands::pos::list_held_carts,
+            commands::pos::list_open_bills,
             commands::pos::get_held_cart,
+            commands::pos::compute_cart_tax,
             commands::pos::delete_held_cart,
             commands::kds::list_kds_orders,
             commands::kds::get_kds_queue,
@@ -133,8 +139,11 @@ pub fn run() {
             commands::settings::set_receipt_settings,
             commands::settings::get_store_settings,
             commands::settings::set_store_settings,
+            commands::settings::get_user_preferences,
+            commands::settings::set_user_preferences,
             commands::setup::get_enabled_features,
             commands::setup::complete_setup,
+            commands::setup::dismiss_setup_wizard,
             commands::products::list_products,
             commands::products::create_product,
             commands::products::update_product,
@@ -167,6 +176,9 @@ pub fn run() {
             commands::terminals::update_terminal,
             commands::terminals::ping_terminal,
             commands::terminals::delete_terminal,
+            commands::terminals::list_terminal_overrides,
+            commands::terminals::set_terminal_override,
+            commands::terminals::delete_terminal_override,
             commands::offline::enqueue_offline,
             commands::offline::list_pending_offline,
             commands::offline::list_all_offline,
@@ -200,6 +212,7 @@ pub fn run() {
         .map_err(AppError::from);
 
     tracing::info!("tablet: shutting down");
+    // Kernel shutdown happens in AppState::drop() — see state.rs.
 
     if let Err(e) = result {
         tracing::error!(error = %e, "OZ-POS tablet exited with error");

@@ -6,15 +6,12 @@
 //!
 //! On the front-end, `ui/src/types/domain.ts` mirrors this shape.
 //!
-//! # TODO(structured-payload)
-//!
-//! The current `From<oz_core::CoreError>` / `From<oz_hal::HalError>`
-//! impls call `.to_string()` and lose the typed variant. The next
-//! refactor should carry a structured sub-payload — e.g.
-//! `AppError::Core { kind: CoreErrorKind, message: String }` — so the
-//! front-end can branch on both the top-level `kind` and a typed
-//! sub-discriminator. The `tauri-ipc` skill calls this out.
+//! `Core` and `Hardware` variants carry a typed `sub_kind` discriminator
+//! so the front-end can branch on the specific error variant without
+//! parsing the message string.
 
+use oz_core::CoreErrorKind;
+use oz_hal::HalErrorKind;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -24,16 +21,30 @@ use thiserror::Error;
 #[non_exhaustive]
 pub enum AppError {
     /// Wraps any `oz_core::CoreError` (DB, money, currency mismatch, …).
-    #[error("core error: {0}")]
-    Core(String),
+    #[error("core error: {message}")]
+    Core {
+        /// Typed sub-discriminator mirroring the `CoreError` variant.
+        sub_kind: CoreErrorKind,
+        /// Human-readable error message.
+        message: String,
+    },
 
     /// Wraps any `oz_hal::HalError` (device not found, USB timeout, …).
-    #[error("hardware error: {0}")]
-    Hardware(String),
+    #[error("hardware error: {message}")]
+    Hardware {
+        /// Typed sub-discriminator mirroring the `HalError` variant.
+        sub_kind: HalErrorKind,
+        /// Human-readable error message.
+        message: String,
+    },
 
     /// A Tauri-level error (state missing, invalid argument, …).
     #[error("invalid request: {0}")]
     Invalid(String),
+
+    /// The caller's role does not have the required permission.
+    #[error("permission denied: {0}")]
+    PermissionDenied(String),
 
     /// Catch-all for unexpected internal errors. Logged with full context.
     #[error("internal error: {0}")]
@@ -42,13 +53,19 @@ pub enum AppError {
 
 impl From<oz_core::CoreError> for AppError {
     fn from(e: oz_core::CoreError) -> Self {
-        Self::Core(e.to_string())
+        Self::Core {
+            sub_kind: e.kind(),
+            message: e.to_string(),
+        }
     }
 }
 
 impl From<oz_hal::HalError> for AppError {
     fn from(e: oz_hal::HalError) -> Self {
-        Self::Hardware(e.to_string())
+        Self::Hardware {
+            sub_kind: e.kind(),
+            message: e.to_string(),
+        }
     }
 }
 
@@ -66,6 +83,9 @@ impl From<anyhow::Error> for AppError {
 
 impl From<rusqlite::Error> for AppError {
     fn from(e: rusqlite::Error) -> Self {
-        Self::Core(format!("sqlite: {e}"))
+        Self::Core {
+            sub_kind: CoreErrorKind::Db,
+            message: format!("sqlite: {e}"),
+        }
     }
 }

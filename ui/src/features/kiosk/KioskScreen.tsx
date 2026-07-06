@@ -5,6 +5,13 @@ import type { ProductDto, CategoryDto } from '@/api/products';
 import './KioskScreen.css';
 
 const IDLE_TIMEOUT_MS = 60000;
+const PRICE_VOLATILITY_MS = 24 * 60 * 60 * 1000;
+
+function isPriceRecent(p: ProductDto): boolean {
+  if (!p.price_updated_at) return false;
+  const elapsed = Date.now() - new Date(p.price_updated_at).getTime();
+  return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
+}
 
 interface CartItem {
   product: ProductDto;
@@ -153,6 +160,7 @@ export default function KioskScreen() {
             onClick={() => addToCart(p)}
             aria-label={l10n.getString('kiosk-product-label', { name: p.name, price: `$${(p.price.minor_units / 100).toFixed(2)}` })}
           >
+            {isPriceRecent(p) && <span className="kiosk-price-volatility-hint" title="Price changed recently" />}
             <span className="kiosk-product-name">{p.name}</span>
             <span className="kiosk-product-price">${(p.price.minor_units / 100).toFixed(2)}</span>
             {p.stock_qty !== null && p.stock_qty <= 5 && (

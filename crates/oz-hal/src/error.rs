@@ -6,7 +6,33 @@
 //! `.map_err(|e| HalError::Usb(e.to_string()))` at the trait boundary
 //! — never leak `rusb`/`btleplug`/`serialport` types past the driver.
 
+use serde::Serialize;
 use thiserror::Error;
+
+/// Serializable discriminator for [`HalError`] variants.
+///
+/// Mirrored on the front-end as `AppError.subKind` so UI code can branch
+/// on the specific hardware failure mode without parsing the message string.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HalErrorKind {
+    /// Device id not found in the registry.
+    NotFound,
+    /// Device was disconnected.
+    Disconnected,
+    /// I/O transport error.
+    Io,
+    /// USB transport error.
+    Usb,
+    /// Bluetooth transport error.
+    Bluetooth,
+    /// Operation timed out.
+    Timeout,
+    /// Malformed packet or unexpected response.
+    Protocol,
+    /// Device is busy with a prior request.
+    Busy,
+}
 
 /// Errors that can originate in a HAL driver or the HAL runtime.
 #[derive(Debug, Error)]
@@ -43,6 +69,22 @@ pub enum HalError {
     /// The device is busy with a previous request.
     #[error("device busy")]
     Busy,
+}
+
+impl HalError {
+    /// Map a `HalError` to its [`HalErrorKind`] discriminator.
+    pub fn kind(&self) -> HalErrorKind {
+        match self {
+            HalError::NotFound(_) => HalErrorKind::NotFound,
+            HalError::Disconnected => HalErrorKind::Disconnected,
+            HalError::Io(_) => HalErrorKind::Io,
+            HalError::Usb(_) => HalErrorKind::Usb,
+            HalError::Bluetooth(_) => HalErrorKind::Bluetooth,
+            HalError::Timeout(_) => HalErrorKind::Timeout,
+            HalError::Protocol(_) => HalErrorKind::Protocol,
+            HalError::Busy => HalErrorKind::Busy,
+        }
+    }
 }
 
 #[cfg(test)]

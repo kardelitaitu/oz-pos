@@ -18,6 +18,8 @@ use crate::cache::Cache;
 use crate::error::CoreError;
 
 pub mod audit;
+/// Active cart persistence (survives restarts).
+pub mod cart;
 pub mod cash_payouts;
 pub mod customers;
 pub mod kds;
@@ -40,6 +42,7 @@ pub mod tables;
 pub mod tax;
 pub mod terminal_overrides;
 pub mod terminals;
+pub mod workspaces;
 
 // ── Re-exports ──────────────────────────────────────────────────────
 
@@ -48,7 +51,7 @@ pub use reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
 };
-pub use sales::{DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
+pub use sales::{CartLineTaxInput, DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
 pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 
 // ── Store ────────────────────────────────────────────────────────────
@@ -124,5 +127,6 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         barcode: barcode_raw.and_then(|s| foundation::Barcode::new(&s).ok()),
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
+        price_updated_at: row.get("price_updated_at")?,
     })
 }
