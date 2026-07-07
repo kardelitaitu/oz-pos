@@ -93,7 +93,7 @@ oz-pos/
 │       ├─ Cargo.toml
 │       └─ src/
 │           └─ main.rs       # clap entry-point: migrate, backup, export
-├─ src-tauri/                # Tauri v2 application shell
+├─ apps/desktop-client/      # Tauri v2 application shell
 │   ├─ Cargo.toml
 │   ├─ tauri.conf.json       # Window config, bundle targets, updater
 │   ├─ capabilities/
@@ -201,7 +201,7 @@ oz-pos/
 
 ### oz-logging
 - `tracing` + `tracing-subscriber` with env-filter.
-- Single `oz_logging::init()` call wires up log sinks. Used by `src-tauri` and `oz-api`.
+- Single `oz_logging::init()` call wires up log sinks. Used by `apps/desktop-client` and `oz-api`.
 - JSON formatter, syslog, and Windows Event Log outputs planned for Phase 2.
 
 ### apps/desktop-client & apps/tablet-client (Tauri v2 Shells)

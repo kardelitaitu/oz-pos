@@ -1,6 +1,6 @@
 ---
 name: skill-drift-guard
-description: Meta-skill that detects and patches drift in the other OZ-POS skills. Use when a code change is made that touches a path, type, trait, or convention referenced in a skill; when onboarding a new contributor who might have added a crate or module; or as a periodic CI check. Always run before merging a change that touches `oz-*` crates, `src-tauri/`, or `ui/`.
+description: Meta-skill that detects and patches drift in the other OZ-POS skills. Use when a code change is made that touches a path, type, trait, or convention referenced in a skill; when onboarding a new contributor who might have added a crate or module; or as a periodic CI check. Always run before merging a change that touches `oz-*` crates, `apps/desktop-client/`, or `ui/`.
 ---
 
 # Skill Drift Guard
@@ -14,7 +14,7 @@ The drift guard audits each skill against the code it describes, classifies the 
 ## When to run
 
 - After any PR that changes a public API in an `oz-*` crate.
-- After any rename, move, or delete in `src-tauri/`, `ui/`, `hal/`, or `crates/`.
+- After any rename, move, or delete in `apps/desktop-client/`, `ui/`, `hal/`, or `crates/`.
 - After a dependency bump (Tauri, React, `rusqlite`, etc.).
 - After a change to `AGENTS.md` (golden rules).
 - **As a CI job** that runs nightly or on changes to `.agents/skills/**`.

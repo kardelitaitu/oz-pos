@@ -23,7 +23,7 @@ npm run test           # vitest run (33 test files)
 npm run build          # tsc -b && vite build
 ```
 
-`npm run dev` is what `cargo tauri dev` (from `src-tauri/`) launches.
+`npm run dev` is what `cargo tauri dev` (from `apps/desktop-client/`) launches.
 
 ## Structure
 

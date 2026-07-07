@@ -8,7 +8,7 @@
 //! # Quick start
 //!
 //! ```ignore
-//! // In src-tauri/src/main.rs or a background task:
+//! // In apps/desktop-client/src/main.rs or a background task:
 //! oz_api::serve().await?;
 //! ```
 //!

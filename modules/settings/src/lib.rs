@@ -12,7 +12,7 @@
 //! Fluent locale) still live in their original locations:
 //!
 //! - Backend: `crates/oz-core/src/settings.rs` + `crates/oz-core/src/db/settings.rs`
-//! - Commands: `src-tauri/src/commands/settings.rs`, `setup.rs`, `sync.rs`
+//! - Commands: `apps/desktop-client/src/commands/settings.rs`, `setup.rs`, `sync.rs`
 //! - Frontend: `ui/src/features/settings/` + `ui/src/features/setup/`
 //! - API: `ui/src/api/settings.ts`
 //! - Locale: `ui/src/locales/{en,fr,es,de,zh,ja}/settings.ftl`

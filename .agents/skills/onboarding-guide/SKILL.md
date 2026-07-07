@@ -19,7 +19,7 @@ OZ-POS is a Rust + Tauri v2 POS framework. The codebase is organized into clear 
 - **Database**: SQLite via `rusqlite`, all writes in transactions.
 - **Hardware**: `oz-hal` (drivers behind `async` traits, mandatory mocks).
 - **UI**: Tauri v2 + React 18 + TypeScript, strict, accessible, localized.
-- **IPC**: Rust commands in `src-tauri/src/commands/`, front-end wrapper in `ui/src/api/pos.ts`.
+- **IPC**: Rust commands in `apps/desktop-client/src/commands/`, front-end wrappers in `ui/src/api/` (per-domain files).
 - **Scripting**: `rlua` runtime in `oz-lua` for runtime business rules.
 - **Payment**: PCI-aware, swappable processors in `oz-payment`.
 - **CI**: GitHub Actions matrix (Linux, Windows, macOS), blocking fmt/clippy/test/UI lint.

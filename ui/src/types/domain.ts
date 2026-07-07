@@ -49,7 +49,7 @@ export interface Product {
   readonly priceUpdatedAt?: string;
 }
 
-/** Mirrors `AppError` in `src-tauri/src/error.rs`. */
+/** Mirrors `AppError` in `apps/desktop-client/src/error.rs`. */
 export type AppError =
   | { kind: 'core'; subKind: string; message: string }
   | { kind: 'hardware'; subKind: string; message: string }

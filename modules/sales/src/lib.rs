@@ -12,7 +12,7 @@
 //! (DB CRUD, Tauri commands) and frontend (React screens, API calls,
 //! Fluent locale) still live in their original locations:
 //!
-//! - Backend: `crates/oz-core/src/db/sales.rs` + `src-tauri/src/commands/pos.rs`
+//! - Backend: `crates/oz-core/src/db/sales.rs` + `apps/desktop-client/src/commands/pos.rs`
 //! - Frontend: `ui/src/features/sales/` + `ui/src/api/sales.ts`
 //! - Locale: `ui/src/locales/sales.ftl`
 //!

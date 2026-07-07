@@ -25,7 +25,7 @@ export default defineConfig({
       ? { protocol: 'ws', host, port: 1421 }
       : undefined,
     watch: {
-      // Tell vite to ignore watching `src-tauri` so the Rust change
+      // Tell vite to ignore watching `apps/` so the Rust change
       // watcher doesn't trigger a Vite reload.
       ignored: ['**/apps/**'],
     },

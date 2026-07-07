@@ -4,7 +4,7 @@
 //! SKU (unique identifier), display name, price with currency,
 //! optional category and barcode, and timestamps. The struct lives
 //! in `oz-core` so every downstream crate (`oz-api`, `oz-cli`,
-//! `src-tauri`) uses the same definition.
+//! `apps/desktop-client`) uses the same definition.
 
 use serde::{Deserialize, Serialize};
 
