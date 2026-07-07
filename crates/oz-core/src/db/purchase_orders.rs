@@ -493,4 +493,51 @@ mod tests {
             .unwrap();
         assert_eq!(stock, 15);
     }
+
+    #[test]
+    fn create_po_empty_number_rejected() {
+        let conn = fresh();
+        seed_supplier(&conn);
+        let err = store(&conn)
+            .create_purchase_order("  ", "sup-po", "", "", None, &[])
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "po_number"));
+    }
+
+    #[test]
+    fn create_po_negative_qty_rejected() {
+        let conn = fresh();
+        seed_supplier(&conn);
+        let lines = vec![CreatePoLineInput {
+            sku: "SKU-001".into(),
+            product_name: "Widget".into(),
+            qty: -1,
+            unit_cost_minor: 100,
+        }];
+        let err = store(&conn)
+            .create_purchase_order("PO-NEG", "sup-po", "", "", None, &lines)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "qty"));
+    }
+
+    #[test]
+    fn get_po_not_found_returns_none() {
+        let conn = fresh();
+        let result = store(&conn).get_purchase_order("nonexistent").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn receive_po_not_approved_rejected() {
+        let conn = fresh();
+        let sid = seed_supplier(&conn);
+        let po = store(&conn)
+            .create_purchase_order("PO-NOT-APPROVED", &sid, "", "", None, &[])
+            .unwrap();
+        // Still in "draft" status, not "approved".
+        let err = store(&conn)
+            .receive_purchase_order(&po.order.id)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
 }

@@ -623,4 +623,81 @@ mod tests {
         assert_ne!(n1, n2);
         assert!(n2 > n1);
     }
+
+    #[test]
+    fn remove_count_line() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let count_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let count = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-REMOVE".into(),
+            status: StockCountStatus::Draft,
+            count_type: CountType::Full,
+            notes: "".into(),
+            counted_by: None,
+            created_at: now.clone(),
+            completed_at: None,
+            updated_at: now.clone(),
+        };
+        store.create_stock_count(&count).unwrap();
+
+        let line = StockCountLine {
+            id: uuid::Uuid::new_v4().to_string(),
+            count_id: count_id.clone(),
+            sku: "RM-SKU".into(),
+            product_name: "Remove Me".into(),
+            expected_qty: 5,
+            counted_qty: None,
+            difference: 0,
+            notes: "".into(),
+        };
+        store.add_count_line(&line).unwrap();
+        assert_eq!(store.get_count_lines(&count_id).unwrap().len(), 1);
+
+        store.remove_count_line(&line.id).unwrap();
+        assert!(store.get_count_lines(&count_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn complete_already_completed_count_rejected() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let count_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let count = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-COMPLETED".into(),
+            status: StockCountStatus::Completed,
+            count_type: CountType::Full,
+            notes: "".into(),
+            counted_by: None,
+            created_at: now.clone(),
+            completed_at: Some(now.clone()),
+            updated_at: now.clone(),
+        };
+        store.create_stock_count(&count).unwrap();
+
+        let err = store.complete_stock_count(&count_id, None).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
+
+    #[test]
+    fn get_count_line_by_id_not_found_returns_none() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let result = store.get_count_line_by_id("nonexistent").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn get_stock_count_not_found_returns_none() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let result = store.get_stock_count("no-such-count").unwrap();
+        assert!(result.is_none());
+    }
 }
