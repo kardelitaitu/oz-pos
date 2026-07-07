@@ -253,6 +253,13 @@ mod tests {
     }
 
     #[test]
+    fn list_promotions_empty() {
+        let store = setup();
+        let list = store.list_promotions().unwrap();
+        assert!(list.is_empty());
+    }
+
+    #[test]
     fn get_by_id() {
         let store = setup();
         let p = test_promo("p2");

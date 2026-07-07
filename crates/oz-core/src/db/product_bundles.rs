@@ -389,4 +389,11 @@ mod tests {
         let all_items = store.load_all_bundle_items().unwrap();
         assert!(all_items.is_empty());
     }
+
+    #[test]
+    fn delete_nonexistent_bundle_is_noop() {
+        let store = fresh_store();
+        // Deleting a nonexistent bundle should not error.
+        store.delete_bundle("no-such-bundle").unwrap();
+    }
 }
