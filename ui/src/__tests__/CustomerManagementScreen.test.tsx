@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import customersFtl from '@/locales/customers.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/customers', () => ({
   listCustomers: vi.fn(),
@@ -19,13 +19,14 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
-import { listCustomers, createCustomer, updateCustomer } from '@/api/customers';
+import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '@/api/customers';
 
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 const mockCreateCustomer = createCustomer as ReturnType<typeof vi.fn>;
 const mockUpdateCustomer = updateCustomer as ReturnType<typeof vi.fn>;
+const mockDeleteCustomer = deleteCustomer as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, customersFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, customersFtl, sharedFtl);
 
 const sampleCustomers = [
   { id: 'cust-1', name: 'Alice', email: 'alice@example.com', phone: '+1-555-0101', notes: 'Regular' },
