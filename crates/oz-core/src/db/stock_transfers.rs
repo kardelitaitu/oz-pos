@@ -720,4 +720,77 @@ mod tests {
         // Status stays in_transit because 4 < 10.
         assert_eq!(result.status, "in_transit");
     }
+
+    #[test]
+    fn get_transfer_not_found_returns_none() {
+        let conn = fresh();
+        let result = store(&conn).get_transfer("nonexistent").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn cancel_received_transfer_rejected() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_user(&conn, "user-2");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 50);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+        store(&conn).send_transfer(&t.id).unwrap();
+
+        let transfer_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        store(&conn)
+            .receive_transfer(
+                &t.id,
+                "user-2",
+                &[ReceivedLine {
+                    line_id: transfer_lines[0].id.clone(),
+                    received_qty: 10,
+                }],
+            )
+            .unwrap();
+
+        let err = store(&conn).cancel_transfer(&t.id).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
+
+    #[test]
+    fn send_already_in_transit_rejected() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 50);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+        store(&conn).send_transfer(&t.id).unwrap();
+
+        let err = store(&conn).send_transfer(&t.id).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
+
+    #[test]
+    fn add_line_to_non_draft_transfer_rejected() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 100);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+        store(&conn).send_transfer(&t.id).unwrap();
+
+        let err = store(&conn)
+            .add_transfer_line(&t.id, "SKU-001", "Widget", 5)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
 }
