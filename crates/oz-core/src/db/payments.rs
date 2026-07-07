@@ -100,7 +100,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
-        migrations::fresh_db()
+        crate::migrations::fresh_db()
     }
 
     fn store(conn: &Connection) -> Store<'_> {

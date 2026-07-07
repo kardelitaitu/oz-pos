@@ -184,10 +184,7 @@ mod tests {
     use crate::migrations;
 
     fn setup() -> (Store<'static>, String) {
-        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-
+        let conn = migrations::fresh_db();
         let conn: &'static rusqlite::Connection = Box::leak(Box::new(conn));
         let store = Store::new(conn);
 

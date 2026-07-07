@@ -194,11 +194,7 @@ mod tests {
     use crate::migrations;
 
     fn fresh() -> (Store<'static>, String) {
-        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-
-        // Leak so we can return a Store with a 'static lifetime.
+        let conn = migrations::fresh_db();
         let conn: &'static rusqlite::Connection = Box::leak(Box::new(conn));
         let store = Store::new(conn);
 

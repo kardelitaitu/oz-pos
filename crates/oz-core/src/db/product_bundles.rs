@@ -250,13 +250,9 @@ fn assemble(bundles: Vec<ProductBundle>, items: Vec<BundleItem>) -> Vec<BundleWi
 mod tests {
     use super::*;
     use crate::migrations;
-    use rusqlite::Connection;
 
     fn fresh_store() -> Store<'static> {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
-        migrations::run(&mut conn).unwrap();
+        let conn = migrations::fresh_db();
 
         // Seed products so FK constraints are satisfied.
         conn.execute_batch(
