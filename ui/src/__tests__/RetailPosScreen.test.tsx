@@ -45,11 +45,20 @@ vi.mock('@/features/sales/usePosState', () => ({
     discountPercent: 0,
     discountLabel: '',
     discountAmount: null,
+    tipPercent: 0,
+    tipAmount: null,
+    serviceChargeEnabled: false,
+    serviceChargePercent: 0,
+    serviceChargeAmount: null,
     addProduct: vi.fn(),
     removeLine: vi.fn((_id: string) => {}),
     updateQty: vi.fn((_id: string, _qty: number) => {}),
     setDiscount: vi.fn(),
+    updateLinePrice: vi.fn(),
+    setTipPercent: vi.fn(),
+    setServiceCharge: vi.fn(),
     resetCart: vi.fn(),
+    setLines: vi.fn(),
   })),
 }));
 
@@ -228,19 +237,28 @@ describe('RetailPosScreen', () => {
   beforeEach(async () => {
     mockedBarcode.reset();
     const sp = await import('@/features/sales/usePosState');
-    sp.usePosState.mockReset();
-    sp.usePosState.mockImplementation(() => ({
+    vi.mocked(sp.usePosState).mockReset();
+    vi.mocked(sp.usePosState).mockImplementation(() => ({
       lines: [],
       total: null,
       subtotal: null,
       discountPercent: 0,
       discountLabel: '',
       discountAmount: null,
+      tipPercent: 0,
+      tipAmount: null,
+      serviceChargeEnabled: false,
+      serviceChargePercent: 0,
+      serviceChargeAmount: null,
       addProduct: vi.fn(),
       removeLine: vi.fn(),
       updateQty: vi.fn(),
       setDiscount: vi.fn(),
+      updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(),
+      setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
+      setLines: vi.fn(),
     }));
   });
 
@@ -457,11 +475,20 @@ describe('RetailPosScreen', () => {
       discountPercent: 0,
       discountLabel: '',
       discountAmount: null,
+      tipPercent: 0,
+      tipAmount: null,
+      serviceChargeEnabled: false,
+      serviceChargePercent: 0,
+      serviceChargeAmount: null,
       addProduct,
       removeLine: vi.fn(),
       updateQty: vi.fn(),
       setDiscount: vi.fn(),
+      updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(),
+      setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
+      setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -496,11 +523,20 @@ describe('RetailPosScreen', () => {
       discountPercent: 0,
       discountLabel: '',
       discountAmount: null,
+      tipPercent: 0,
+      tipAmount: null,
+      serviceChargeEnabled: false,
+      serviceChargePercent: 0,
+      serviceChargeAmount: null,
       addProduct,
       removeLine: vi.fn(),
       updateQty: vi.fn(),
       setDiscount: vi.fn(),
+      updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(),
+      setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
+      setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -530,8 +566,12 @@ describe('RetailPosScreen', () => {
       lines: [],
       total: null, subtotal: null,
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -552,8 +592,12 @@ describe('RetailPosScreen', () => {
     vi.mocked(posState.usePosState).mockReturnValue({
       lines: [], total: null, subtotal: null,
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -615,8 +659,12 @@ describe('RetailPosScreen', () => {
     vi.mocked(posState.usePosState).mockReturnValue({
       lines: [], total: null, subtotal: null,
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -690,7 +738,9 @@ describe('RetailPosScreen', () => {
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -714,7 +764,9 @@ describe('RetailPosScreen', () => {
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -735,8 +787,11 @@ describe('RetailPosScreen', () => {
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount, resetCart: vi.fn(),
+      updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -762,7 +817,9 @@ describe('RetailPosScreen', () => {
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     const shiftsApi = await import('@/api/shifts');
@@ -832,7 +889,9 @@ describe('RetailPosScreen', () => {
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -849,12 +908,15 @@ describe('RetailPosScreen', () => {
     const posState = await import('@/features/sales/usePosState');
     const resetCart = vi.fn();
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), resetCart,
+      updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -863,7 +925,7 @@ describe('RetailPosScreen', () => {
     await userEvent.click(clearBtn);
 
     const confirmBtns = screen.getAllByRole('button', { name: /^clear$/i });
-    await userEvent.click(confirmBtns[1]);
+    await userEvent.click(confirmBtns[1]!);
 
     expect(resetCart).toHaveBeenCalledTimes(1);
   });
@@ -872,13 +934,15 @@ describe('RetailPosScreen', () => {
 
   it('shows zero credit reminders when no outstanding credits', async () => {
     const sp = await import('@/features/sales/usePosState');
-    sp.usePosState.mockReturnValue({
-      lines: [{ id: crypto.randomUUID(), sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1, line_discount_pct: 0, line_discount_label: '' } as CartLine],
-      total: { minor_units: 3500, currency: 'IDR' } as Money,
-      subtotal: { minor_units: 3500, currency: 'IDR' } as Money,
+    vi.mocked(sp.usePosState).mockReturnValue({
+      lines: [{ id: crypto.randomUUID() as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1, line_discount_pct: 0, line_discount_label: '' }],
+      total: { minor_units: 3500, currency: 'IDR' },
+      subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
     });
 
     render(wrap(<RetailPosScreen />));
@@ -899,8 +963,11 @@ describe('RetailPosScreen', () => {
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), resetCart,
+      updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
     });
 
     const shiftsApi = await import('@/api/shifts');

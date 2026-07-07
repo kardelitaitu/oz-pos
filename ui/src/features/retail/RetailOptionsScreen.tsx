@@ -673,7 +673,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         <div className="retail-preview-overlay" role="button" tabIndex={0} onClick={() => setShowPreview(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(false); } }}>
           <div className="retail-preview-modal" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); } }}>
             <button className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
-            <ReceiptPreview store={store} receipt={receipt} session={session} scale={SCALE} />
+            <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={[]} scale={SCALE} />
           </div>
         </div>
       )}

@@ -35,7 +35,7 @@ function renderComponent() {
 function mockUpdateAvailable(overrides: {
   version?: string;
   notes?: string;
-} = {}) {
+} = {}): void {
   mockCheck.mockResolvedValue({
     version: overrides.version ?? '0.2.0',
     body: overrides.notes ?? null,
@@ -119,7 +119,7 @@ describe('UpdateBanner', () => {
   });
 
   it('does not show notes when not provided', async () => {
-    mockUpdateAvailable({ notes: undefined });
+    mockUpdateAvailable({});
     renderComponent();
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeDefined());

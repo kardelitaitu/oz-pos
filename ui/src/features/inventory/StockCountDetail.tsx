@@ -180,7 +180,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
           </Button>
         )}
         {isEditable && lines.length > 0 && (
-          <Button variant="success" onClick={handleComplete} loading={saving}>
+          <Button variant="primary" onClick={handleComplete} loading={saving}>
             <Localized id="sc-complete-count"><span>Complete Count</span></Localized>
           </Button>
         )}

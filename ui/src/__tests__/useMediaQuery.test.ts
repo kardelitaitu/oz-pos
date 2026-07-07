@@ -18,7 +18,7 @@ function mockMatchMedia(initialMatches: boolean) {
   const matchMediaFn = vi.fn().mockReturnValue(mql);
 
   // Expose helper to simulate a change event
-  (matchMediaFn as unknown as Record<string, unknown>)._dispatchChange = (newMatches: boolean) => {
+  (matchMediaFn as unknown as Record<string, unknown>)['_dispatchChange'] = (newMatches: boolean) => {
     mql.matches = newMatches;
     const event = { matches: newMatches, media: mql.media } as MediaQueryListEvent;
     for (const listener of listeners) {

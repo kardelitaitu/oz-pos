@@ -13,7 +13,7 @@ vi.mock('@/api/terminals', () => ({
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function renderPanel(refreshTrigger?: number) {
+function renderPanel(refreshTrigger: number = 0) {
   return render(<TerminalStatusPanel refreshTrigger={refreshTrigger} />);
 }
 

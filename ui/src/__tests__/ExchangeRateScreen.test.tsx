@@ -162,7 +162,7 @@ describe('ExchangeRateScreen', () => {
 
     const user = userEvent.setup();
     const addBtns = screen.getAllByText('Add');
-    await user.click(addBtns[0]);
+    await user.click(addBtns[0]!);
 
     await waitFor(() => {
       expect(screen.getByText('Add Exchange Rate')).toBeTruthy();
@@ -179,7 +179,7 @@ describe('ExchangeRateScreen', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(screen.getAllByText('Add')[0]);
+    await user.click(screen.getAllByText('Add')[0]!);
 
     await waitFor(() => {
       expect(screen.getByText('Cancel')).toBeTruthy();
@@ -207,7 +207,7 @@ describe('ExchangeRateScreen', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(screen.getAllByText('Add')[0]);
+    await user.click(screen.getAllByText('Add')[0]!);
 
     await waitFor(() => {
       expect(screen.getByText('Add Exchange Rate')).toBeTruthy();

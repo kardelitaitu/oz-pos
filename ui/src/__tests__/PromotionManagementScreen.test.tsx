@@ -226,7 +226,7 @@ describe('PromotionManagementScreen', () => {
 
     // Click Cancel in the delete modal
     const cancelBtns = screen.getAllByText('Cancel');
-    await user.click(cancelBtns[0]);
+    await user.click(cancelBtns[0]!);
 
     await waitFor(() => {
       expect(screen.queryByText(/Are you sure/)).toBeNull();

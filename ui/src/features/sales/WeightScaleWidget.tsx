@@ -42,14 +42,10 @@ export function WeightScaleWidget({
     setWeighing(true);
     setError(null);
     try {
-      const result = await readScaleWeight({
-        vendorId,
-        productId,
-        devicePath,
-      });
+      const result = await readScaleWeight();
       if (!mountedRef.current) return;
       setReading(result);
-      onWeightObtained?.(result);
+      if (result) onWeightObtained?.(result);
     } catch (err) {
       if (!mountedRef.current) return;
       const msg = err instanceof Error ? err.message : 'Scale read failed';
@@ -63,9 +59,9 @@ export function WeightScaleWidget({
   if (!isEnabled(FEATURES.USB_SCALE)) return null;
 
   const displayWeight = reading
-    ? reading.weight_grams >= 1000
-      ? `${(reading.weight_grams / 1000).toFixed(3)} kg`
-      : `${reading.weight_grams.toFixed(1)} g`
+    ? reading.weightGrams >= 1000
+      ? `${(reading.weightGrams / 1000).toFixed(3)} kg`
+      : `${reading.weightGrams.toFixed(1)} g`
     : null;
 
   return (

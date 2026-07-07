@@ -127,7 +127,7 @@ describe('PurchaseOrderForm', () => {
     expect(screen.getAllByPlaceholderText('SKU')).toHaveLength(2);
 
     const removeButtons = screen.getAllByRole('button', { name: /remove line/i });
-    await userEvent.click(removeButtons[0]);
+    await userEvent.click(removeButtons[0]!);
 
     expect(screen.getAllByPlaceholderText('SKU')).toHaveLength(1);
   });

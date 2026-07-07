@@ -175,9 +175,9 @@ export default function StockTransfersScreen() {
     const updated = [...createLines];
     if (field === 'sku') {
       const match = products.find((p) => p.sku === value);
-      updated[index] = { ...updated[index], sku: value, productName: match?.name ?? value };
+      updated[index] = { ...updated[index], sku: value, productName: match?.name ?? value } as LineFormEntry;
     } else {
-      updated[index] = { ...updated[index], [field]: value };
+      updated[index] = { ...updated[index], [field]: value } as LineFormEntry;
     }
     setCreateLines(updated);
   }, [createLines, products]);

@@ -42,7 +42,7 @@ const activeShift = {
 
 const closedShifts = [
   { ...activeShift, id: 'shift-2', status: 'closed', closedAt: '2026-07-06T20:00:00.000Z',
-    closingBalanceMinor: 55000, expectedCashMinor: 54000, cashDifferenceMinor: 1000 } as typeof activeShift,
+    closingBalanceMinor: 55000, expectedCashMinor: 54000, cashDifferenceMinor: 1000 } as unknown as typeof activeShift,
 ];
 
 describe('ShiftManagementScreen', () => {

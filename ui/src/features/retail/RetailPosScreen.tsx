@@ -370,7 +370,7 @@ export default function RetailPosScreen() {
   }, [weighTarget, addToast, l10n]);
 
   /** Stock-aware cart qty increase — checks stock_qty before incrementing. */
-  const handleIncreaseQty = useCallback((line: { sku: string; id: string; qty: number }) => {
+  const handleIncreaseQty = useCallback((line: { sku: string; id: LineId; qty: number }) => {
     const product = products.find((p) => p.sku === line.sku);
     if (product?.stock_qty != null) {
       const otherLinesQty = lines
@@ -622,6 +622,7 @@ export default function RetailPosScreen() {
         discountPercent,
         discountLabel,
       });
+      if (!subtotal) return;
       const { id } = await holdCart({
         label: `Hold #${Date.now()}`,
         cart_data: cartData,
@@ -662,7 +663,7 @@ export default function RetailPosScreen() {
     const held = carts.filter((c) => c.bill_type === 'hold');
     if (held.length === 0) return;
     if (held.length === 1) {
-      await handleResumeCart(held[0].id);
+      await handleResumeCart(held[0]!.id);
       return;
     }
     setHeldCartsList(held);

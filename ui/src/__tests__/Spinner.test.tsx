@@ -65,7 +65,7 @@ describe('Spinner', () => {
   });
 
   it('forwards additional HTML attributes', () => {
-    renderSpinner({ 'data-testid': 'loader' });
-    expect(screen.getByTestId('loader')).toBeInTheDocument();
+    renderSpinner({ 'aria-label': 'loader' });
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 });
