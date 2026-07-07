@@ -350,4 +350,99 @@ mod tests {
         let dto = CustomerDto::from(customer);
         assert!(dto.phone.is_none());
     }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn customer_dto_debug() {
+        let dto = CustomerDto {
+            id: "c1".into(),
+            name: "Alice".into(),
+            email: Some("alice@test.com".into()),
+            phone: None,
+            notes: String::new(),
+            created_at: "2025-01-01".into(),
+            updated_at: "2025-01-01".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Alice"));
+    }
+
+    #[test]
+    fn customer_dto_serialize() {
+        let dto = CustomerDto {
+            id: "c2".into(),
+            name: "Bob".into(),
+            email: None,
+            phone: Some("+123".into()),
+            notes: "VIP".into(),
+            created_at: "2025-02-01".into(),
+            updated_at: "2025-02-01".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["name"], "Bob");
+        assert_eq!(json["notes"], "VIP");
+    }
+
+    #[test]
+    fn create_customer_args_deserialize_minimal() {
+        let json = r##"{"user_id":"u1","name":"Alice"}"##;
+        let args: CreateCustomerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Alice");
+        assert_eq!(args.email, None);
+        assert_eq!(args.notes, None);
+    }
+
+    #[test]
+    fn create_customer_args_debug() {
+        let args = CreateCustomerArgs {
+            user_id: "u1".into(),
+            name: "Test".into(),
+            email: None,
+            phone: None,
+            notes: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("Test"));
+    }
+
+    #[test]
+    fn update_customer_args_deserialize() {
+        let json = r##"{"user_id":"u2","id":"c1","name":"Alice Updated"}"##;
+        let args: UpdateCustomerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Alice Updated");
+        assert_eq!(args.email, None);
+    }
+
+    #[test]
+    fn update_customer_args_debug() {
+        let args = UpdateCustomerArgs {
+            user_id: "u2".into(),
+            id: "c1".into(),
+            name: "U".into(),
+            email: None,
+            phone: None,
+            notes: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("U"));
+    }
+
+    #[test]
+    fn delete_customer_args_deserialize() {
+        let json = r##"{"user_id":"u3","id":"c99"}"##;
+        let args: DeleteCustomerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "c99");
+        assert_eq!(args.user_id, "u3");
+    }
+
+    #[test]
+    fn delete_customer_args_debug() {
+        let args = DeleteCustomerArgs {
+            user_id: "u".into(),
+            id: "c".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("c"));
+    }
 }

@@ -519,4 +519,141 @@ mod tests {
         assert_eq!(result.branch, "Mall");
         assert_eq!(result.logo, "logo_data");
     }
+
+    // ── DTO struct tests ──────────────────────────────────────────
+
+    #[test]
+    fn receipt_settings_dto_debug() {
+        let dto = ReceiptSettingsDto {
+            show_currency: true,
+            decimal_separator: "comma".into(),
+            show_tax: false,
+            footer: "Thank you".into(),
+            paper_width: "narrow".into(),
+            margin_top: 5,
+            margin_bottom: 3,
+            margin_left: 2,
+            margin_right: 2,
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("comma"));
+        assert!(d.contains("narrow"));
+    }
+
+    #[test]
+    fn receipt_settings_dto_serialize() {
+        let dto = ReceiptSettingsDto {
+            show_currency: false,
+            decimal_separator: "dot".into(),
+            show_tax: true,
+            footer: "".into(),
+            paper_width: "standard".into(),
+            margin_top: 0,
+            margin_bottom: 0,
+            margin_left: 0,
+            margin_right: 0,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert!(!json["show_currency"].as_bool().unwrap());
+        assert_eq!(json["decimal_separator"], "dot");
+        assert_eq!(json["paper_width"], "standard");
+    }
+
+    #[test]
+    fn receipt_settings_dto_deserialize() {
+        let json = r#"{"show_currency":true,"decimal_separator":"comma","show_tax":false,"footer":"Thanks","paper_width":"narrow","margin_top":4,"margin_bottom":2,"margin_left":1,"margin_right":1}"#;
+        let dto: ReceiptSettingsDto = serde_json::from_str(json).unwrap();
+        assert!(dto.show_currency);
+        assert_eq!(dto.decimal_separator, "comma");
+        assert_eq!(dto.margin_top, 4);
+    }
+
+    #[test]
+    fn store_settings_dto_debug() {
+        let dto = StoreSettingsDto {
+            name: "My Store".into(),
+            address: "123 Main".into(),
+            tax_id: "TAX-001".into(),
+            currency: "USD".into(),
+            branch: "Main".into(),
+            logo: "abc123".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("My Store"));
+        assert!(d.contains("USD"));
+    }
+
+    #[test]
+    fn store_settings_dto_serialize() {
+        let dto = StoreSettingsDto {
+            name: "Cafe".into(),
+            address: "456 Oak".into(),
+            tax_id: "".into(),
+            currency: "IDR".into(),
+            branch: "Mall".into(),
+            logo: "".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["name"], "Cafe");
+        assert_eq!(json["currency"], "IDR");
+        assert_eq!(json["address"], "456 Oak");
+    }
+
+    #[test]
+    fn store_settings_dto_deserialize() {
+        let json = r#"{"name":"Shop","address":"1 Rd","tax_id":"TX","currency":"EUR","branch":"A","logo":"L"}"#;
+        let dto: StoreSettingsDto = serde_json::from_str(json).unwrap();
+        assert_eq!(dto.name, "Shop");
+        assert_eq!(dto.currency, "EUR");
+        assert_eq!(dto.branch, "A");
+    }
+
+    #[test]
+    fn credit_settings_dto_serialize() {
+        let dto = CreditSettingsDto {
+            enabled: true,
+            reminder_interval_hours: 24,
+            max_limit_minor: 500000,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert!(json["enabled"].as_bool().unwrap());
+        assert_eq!(json["reminder_interval_hours"], 24);
+        assert_eq!(json["max_limit_minor"], 500000);
+    }
+
+    #[test]
+    fn hardware_settings_dto_serialize() {
+        let dto = HardwareSettingsDto {
+            printer_connection: "usb".into(),
+            printer_device_path: "/dev/usb/lp0".into(),
+            printer_paper_size: "80mm".into(),
+            scanner_device_id: "scanner-01".into(),
+            scanner_input_mode: "keyboard".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["printer_connection"], "usb");
+        assert_eq!(json["scanner_input_mode"], "keyboard");
+    }
+
+    #[test]
+    fn user_pref_entry_debug() {
+        let entry = UserPrefEntry {
+            key: "theme".into(),
+            value: "dark".into(),
+        };
+        let d = format!("{entry:?}");
+        assert!(d.contains("theme"));
+        assert!(d.contains("dark"));
+    }
+
+    #[test]
+    fn user_pref_entry_serialize() {
+        let entry = UserPrefEntry {
+            key: "lang".into(),
+            value: "en".into(),
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(json["key"], "lang");
+        assert_eq!(json["value"], "en");
+    }
 }

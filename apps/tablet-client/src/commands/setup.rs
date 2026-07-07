@@ -547,4 +547,78 @@ mod tests {
             .unwrap_or(false);
         assert!(!completed, "absent key means not completed");
     }
+
+    // ── DTO struct tests ──────────────────────────────────────────
+
+    #[test]
+    fn complete_setup_args_deserialize() {
+        let json = r#"{"preset":"simple-retail","features":["cash-payment","receipt-printing"]}"#;
+        let args: CompleteSetupArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.preset, "simple-retail");
+        assert_eq!(args.features.len(), 2);
+        assert_eq!(args.features[0], "cash-payment");
+    }
+
+    #[test]
+    fn complete_setup_args_debug() {
+        let args = CompleteSetupArgs {
+            preset: "restaurant".into(),
+            features: vec!["cash-payment".into()],
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("restaurant"));
+        assert!(d.contains("cash-payment"));
+    }
+
+    #[test]
+    fn setup_status_debug() {
+        let status = SetupStatus {
+            completed: true,
+            preset: Some("simple-retail".into()),
+        };
+        let d = format!("{status:?}");
+        assert!(d.contains("simple-retail"));
+    }
+
+    #[test]
+    fn setup_status_serialize() {
+        let status = SetupStatus {
+            completed: false,
+            preset: None,
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert!(!json["completed"].as_bool().unwrap());
+        assert!(json["preset"].is_null());
+    }
+
+    #[test]
+    fn setup_status_serialize_with_preset() {
+        let status = SetupStatus {
+            completed: true,
+            preset: Some("restaurant".into()),
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert!(json["completed"].as_bool().unwrap());
+        assert_eq!(json["preset"], "restaurant");
+    }
+
+    #[test]
+    fn enabled_features_result_debug() {
+        let result = EnabledFeaturesResult {
+            features: vec!["cash-payment".into(), "tax-engine".into()],
+        };
+        let d = format!("{result:?}");
+        assert!(d.contains("cash-payment"));
+        assert!(d.contains("tax-engine"));
+    }
+
+    #[test]
+    fn enabled_features_result_serialize() {
+        let result = EnabledFeaturesResult {
+            features: vec!["barcode-scanning".into()],
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["features"][0], "barcode-scanning");
+        assert_eq!(json["features"].as_array().unwrap().len(), 1);
+    }
 }
