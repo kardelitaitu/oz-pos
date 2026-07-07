@@ -450,31 +450,33 @@ export default function StaffManagementScreen() {
                       <legend className="staff-mgmt-label">Workspace Access</legend>
                     </Localized>
 
-                    <label className="staff-mgmt-radio">
+                    <div className="staff-mgmt-radio">
                       <input
                         type="radio"
                         name="wsMode"
                         value="default"
                         checked={form.wsMode === 'default'}
                         onChange={() => setForm({ ...form, wsMode: 'default', wsKeys: [] })}
+                        aria-label={l10n.getString('staff-ws-role-defaults')}
                       />
                       <Localized id="staff-ws-role-defaults">
                         <span>Use role defaults</span>
                       </Localized>
-                    </label>
+                    </div>
 
-                    <label className="staff-mgmt-radio">
+                    <div className="staff-mgmt-radio">
                       <input
                         type="radio"
                         name="wsMode"
                         value="custom"
                         checked={form.wsMode === 'custom'}
                         onChange={() => setForm({ ...form, wsMode: 'custom' })}
+                        aria-label={l10n.getString('staff-ws-custom')}
                       />
                       <Localized id="staff-ws-custom">
                         <span>Custom</span>
                       </Localized>
-                    </label>
+                    </div>
 
                     {form.wsMode === 'custom' && (
                       <div className="staff-mgmt-ws-checkboxes">

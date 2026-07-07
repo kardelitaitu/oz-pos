@@ -164,7 +164,6 @@ export default function PriceOverrideModal({
               min="1"
               value={newPriceMinor}
               onChange={(e) => setNewPriceMinor(Math.max(1, parseInt(e.target.value, 10) || 0))}
-              autoFocus
               aria-label="Enter new price in minor units"
             />
             <div className="price-override-actions">

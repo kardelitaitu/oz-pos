@@ -7,8 +7,8 @@ import {
   sendStockTransfer,
   receiveStockTransfer,
   cancelStockTransfer,
-  addStockTransferLine,
-  removeStockTransferLine,
+  addStockTransferLine as _addStockTransferLine,
+  removeStockTransferLine as _removeStockTransferLine,
   type StockTransfer,
   type StockTransferLine,
   type ReceivedLineInput,
@@ -479,14 +479,14 @@ export default function StockTransfersScreen() {
             </div>
             <div className="stock-transfers-modal-body">
               <div className="stock-transfers-form-row">
-                <label className="stock-transfers-field" htmlFor="st-source-location">
+                <div className="stock-transfers-field">
                   <Localized id="stock-transfers-source"><span className="stock-transfers-label">Source</span></Localized>
-                  <input id="st-source-location" className="stock-transfers-input" type="text" value={createSourceLoc} onChange={(e) => setCreateSourceLoc(e.target.value)} placeholder={l10n.getString('stock-transfers-source-placeholder')} />
-                </label>
-                <label className="stock-transfers-field" htmlFor="st-dest-location">
+                  <input id="st-source-location" className="stock-transfers-input" type="text" value={createSourceLoc} onChange={(e) => setCreateSourceLoc(e.target.value)} placeholder={l10n.getString('stock-transfers-source-placeholder')} aria-label={l10n.getString('stock-transfers-source')} />
+                </div>
+                <div className="stock-transfers-field">
                   <Localized id="stock-transfers-destination"><span className="stock-transfers-label">Destination</span></Localized>
-                  <input id="st-dest-location" className="stock-transfers-input" type="text" value={createDestLoc} onChange={(e) => setCreateDestLoc(e.target.value)} placeholder={l10n.getString('stock-transfers-destination-placeholder')} />
-                </label>
+                  <input id="st-dest-location" className="stock-transfers-input" type="text" value={createDestLoc} onChange={(e) => setCreateDestLoc(e.target.value)} placeholder={l10n.getString('stock-transfers-destination-placeholder')} aria-label={l10n.getString('stock-transfers-destination')} />
+                </div>
               </div>
               <div className="stock-transfers-form-row">
                 <label className="stock-transfers-field" htmlFor="st-source-terminal">
@@ -504,10 +504,10 @@ export default function StockTransfersScreen() {
                   </select>
                 </label>
               </div>
-              <label className="stock-transfers-field" htmlFor="st-notes">
+              <div className="stock-transfers-field">
                 <Localized id="stock-transfers-notes"><span className="stock-transfers-label">Notes</span></Localized>
-                <textarea id="st-notes" className="stock-transfers-input stock-transfers-textarea" value={createNotes} onChange={(e) => setCreateNotes(e.target.value)} rows={2} />
-              </label>
+                <textarea id="st-notes" className="stock-transfers-input stock-transfers-textarea" value={createNotes} onChange={(e) => setCreateNotes(e.target.value)} rows={2} aria-label={l10n.getString('stock-transfers-notes')} />
+              </div>
 
               <div className="stock-transfers-lines-section">
                 <div className="stock-transfers-lines-header">

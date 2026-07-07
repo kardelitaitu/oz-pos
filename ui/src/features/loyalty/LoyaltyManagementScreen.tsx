@@ -128,36 +128,36 @@ export default function LoyaltyManagementScreen() {
               <Card key={tier.id} shadow="sm" className="loyalty-tier-card">
                 {editingTier === tier.id ? (
                   <div className="loyalty-tier-edit-form">
-                    <label className="loyalty-tier-field">
+                    <div className="loyalty-tier-field">
                       <Localized id="loyalty-tier-name"><span className="loyalty-tier-label">Name</span></Localized>
                       <Localized id="loyalty-tier-name-aria" attrs={{ 'aria-label': true }}>
                       <input className="loyalty-tier-input" value={tierForm.name} onChange={(e) => setTierForm({ ...tierForm, name: e.target.value })} />
                       </Localized>
-                    </label>
-                    <label className="loyalty-tier-field">
+                    </div>
+                    <div className="loyalty-tier-field">
                       <Localized id="loyalty-tier-min-points"><span className="loyalty-tier-label">Min Points</span></Localized>
                       <Localized id="loyalty-tier-min-points-aria" attrs={{ 'aria-label': true }}>
                       <input className="loyalty-tier-input" type="number" value={tierForm.min_points} onChange={(e) => setTierForm({ ...tierForm, min_points: e.target.value })} />
                       </Localized>
-                    </label>
-                    <label className="loyalty-tier-field">
+                    </div>
+                    <div className="loyalty-tier-field">
                       <Localized id="loyalty-tier-ppu"><span className="loyalty-tier-label">Points/Unit</span></Localized>
                       <Localized id="loyalty-tier-ppu-aria" attrs={{ 'aria-label': true }}>
                       <input className="loyalty-tier-input" type="number" value={tierForm.points_per_unit} onChange={(e) => setTierForm({ ...tierForm, points_per_unit: e.target.value })} />
                       </Localized>
-                    </label>
-                    <label className="loyalty-tier-field">
+                    </div>
+                    <div className="loyalty-tier-field">
                       <Localized id="loyalty-tier-multiplier"><span className="loyalty-tier-label">Multiplier</span></Localized>
                       <Localized id="loyalty-tier-multiplier-aria" attrs={{ 'aria-label': true }}>
                       <input className="loyalty-tier-input" type="number" step="0.01" value={tierForm.earn_multiplier} onChange={(e) => setTierForm({ ...tierForm, earn_multiplier: e.target.value })} />
                       </Localized>
-                    </label>
-                    <label className="loyalty-tier-field">
+                    </div>
+                    <div className="loyalty-tier-field">
                       <Localized id="loyalty-tier-colour"><span className="loyalty-tier-label">Colour</span></Localized>
                       <Localized id="loyalty-tier-colour-aria" attrs={{ 'aria-label': true }}>
                       <input className="loyalty-tier-input loyalty-tier-colour-input" type="color" value={tierForm.colour} onChange={(e) => setTierForm({ ...tierForm, colour: e.target.value })} />
                       </Localized>
-                    </label>
+                    </div>
                     {error && <div className="loyalty-mgmt-error" role="alert">{error}</div>}
                     <div className="loyalty-tier-edit-actions">
                       <Button variant="ghost" onClick={() => setEditingTier(null)} disabled={savingTier}>

@@ -246,4 +246,65 @@ mod tests {
         assert_eq!(manifest.dependencies.len(), 0);
         assert_eq!(manifest.permissions.len(), 0);
     }
+
+    #[test]
+    fn debug_output() {
+        let manifest = ModuleManifest {
+            id: "test".into(),
+            name: "Test Module".into(),
+            version: "1.0.0".into(),
+            dependencies: vec!["core".into()],
+            permissions: vec![],
+            description: "desc".into(),
+        };
+        let debug = format!("{manifest:?}");
+        assert!(debug.contains("test"));
+        assert!(debug.contains("Test Module"));
+        assert!(debug.contains("1.0.0"));
+    }
+
+    #[test]
+    fn validate_version_non_numeric_part() {
+        let manifest = ModuleManifest {
+            id: "test".into(),
+            name: "Test".into(),
+            version: "1.x.0".into(),
+            dependencies: vec![],
+            permissions: vec![],
+            description: String::new(),
+        };
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn validate_version_pre_release_rejected() {
+        let manifest = ModuleManifest {
+            id: "test".into(),
+            name: "Test".into(),
+            version: "1.0.0-alpha".into(),
+            dependencies: vec![],
+            permissions: vec![],
+            description: String::new(),
+        };
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn clone_equality() {
+        let manifest = ModuleManifest {
+            id: "test".into(),
+            name: "Test".into(),
+            version: "1.2.3".into(),
+            dependencies: vec!["a".into()],
+            permissions: vec!["p".into()],
+            description: "desc".into(),
+        };
+        let cloned = manifest.clone();
+        assert_eq!(manifest.id, cloned.id);
+        assert_eq!(manifest.name, cloned.name);
+        assert_eq!(manifest.version, cloned.version);
+        assert_eq!(manifest.dependencies, cloned.dependencies);
+        assert_eq!(manifest.permissions, cloned.permissions);
+        assert_eq!(manifest.description, cloned.description);
+    }
 }

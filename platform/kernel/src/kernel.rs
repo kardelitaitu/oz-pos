@@ -725,4 +725,44 @@ mod tests {
         let mut kernel = Kernel::new();
         assert!(kernel.load_all().is_err());
     }
+
+    // ── Initial state / Default ─────────────────────────────────
+
+    #[test]
+    fn kernel_default_creates_empty_kernel() {
+        let kernel = Kernel::default();
+        assert_eq!(kernel.module_count(), 0);
+        assert!(!kernel.is_loaded());
+        assert!(!kernel.is_started());
+    }
+
+    #[test]
+    fn kernel_new_initial_state() {
+        let kernel = Kernel::new();
+        assert_eq!(kernel.module_count(), 0);
+        assert!(!kernel.is_loaded());
+        assert!(!kernel.is_started());
+        assert!(kernel.module_ids().is_empty());
+    }
+
+    #[test]
+    fn is_registered_returns_false_for_unknown() {
+        let kernel = Kernel::new();
+        assert!(!kernel.is_registered("nonexistent"));
+    }
+
+    #[test]
+    fn event_bus_returns_reference() {
+        let kernel = Kernel::new();
+        let _bus = kernel.event_bus();
+    }
+
+    #[test]
+    fn default_equals_new() {
+        let k1 = Kernel::new();
+        let k2 = Kernel::default();
+        assert_eq!(k1.module_count(), k2.module_count());
+        assert_eq!(k1.is_loaded(), k2.is_loaded());
+        assert_eq!(k1.is_started(), k2.is_started());
+    }
 }

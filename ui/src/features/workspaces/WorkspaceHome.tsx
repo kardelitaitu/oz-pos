@@ -110,7 +110,7 @@ export default function WorkspaceHome() {
           </p>
           <p className="workspace-empty-desc">
             <Localized id="workspace-home-empty-desc">
-              <span>You don't have access to any workspaces yet. Contact an administrator.</span>
+              <span>You don&apos;t have access to any workspaces yet. Contact an administrator.</span>
             </Localized>
           </p>
         </div>

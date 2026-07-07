@@ -114,7 +114,7 @@ export default function PurchaseOrdersScreen() {
           <div className="po-empty">
             {statusFilter === 'all'
               ? <p>No purchase orders yet.</p>
-              : <p>No purchase orders with status "{statusFilter}".</p>}
+              : <p>No purchase orders with status &quot;{statusFilter}&quot;.</p>}
             <Button variant="secondary" onClick={openCreate}>Create Purchase Order</Button>
           </div>
         </Card>

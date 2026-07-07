@@ -314,7 +314,7 @@ export default function SettingsPage() {
             </div>
           </label>
 
-          <label className="settings-field" htmlFor="settings-field-font-smoothing">
+          <div className="settings-field">
             <Localized id="settings-field-font-smoothing">
               <span className="settings-label">Font Smoothing</span>
             </Localized>
@@ -323,6 +323,7 @@ export default function SettingsPage() {
               id="settings-field-font-smoothing"
               value={displayFontSmoothing}
               onChange={(e) => setDisplayFontSmoothing(e.target.value)}
+              aria-label={l10n.getString('settings-field-font-smoothing')}
             >
               <option value="antialiased">Antialiased (crisp)</option>
               <option value="subpixel">Subpixel (smooth)</option>

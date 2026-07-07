@@ -479,7 +479,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </div>
               </div>
             </div>
-              <div className="retail-options-preview" onClick={() => setShowPreview(true)} style={{ cursor: 'pointer' }}>
+              <div className="retail-options-preview" role="button" tabIndex={0} onClick={() => setShowPreview(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(true); } }}>
                 <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={taxRates} />
                 <span className="retail-options-preview-hint">{l10n.getString('settings-click-preview')}</span>
               </div>
@@ -670,8 +670,8 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         </div>
       </div>
       {showPreview && (
-        <div className="retail-preview-overlay" onClick={() => setShowPreview(false)}>
-          <div className="retail-preview-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-preview-overlay" role="button" tabIndex={0} onClick={() => setShowPreview(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(false); } }}>
+          <div className="retail-preview-modal" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); } }}>
             <button className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
             <ReceiptPreview store={store} receipt={receipt} session={session} scale={SCALE} />
           </div>
