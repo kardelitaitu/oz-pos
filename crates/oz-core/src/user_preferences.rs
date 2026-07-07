@@ -122,4 +122,13 @@ mod tests {
         assert_eq!(prefs_a.get("lang").unwrap(), "en");
         assert_eq!(prefs_b.get("lang").unwrap(), "id");
     }
+
+    #[test]
+    fn set_batch_empty_is_noop() {
+        let conn = setup_db();
+        let result = UserPreferences::set_batch(&conn, "user-1", &[]);
+        assert!(result.is_ok(), "empty batch should not error");
+        let prefs = UserPreferences::get_all(&conn, "user-1").unwrap();
+        assert!(prefs.is_empty());
+    }
 }
