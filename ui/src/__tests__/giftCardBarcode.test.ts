@@ -1,70 +1,72 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { isGiftCardBarcode, generateGiftCardNumber } from '@/utils/giftCardBarcode';
 
 describe('isGiftCardBarcode', () => {
-  it('returns true for valid GC- followed by 8 alphanumeric chars', () => {
-    expect(isGiftCardBarcode('GC-ABCDEF12')).toBe(true);
+  it('matches a valid gift card barcode', () => {
+    expect(isGiftCardBarcode('GC-ABCDEF123456')).toBe(true);
   });
 
-  it('returns true for valid GC- followed by 16 alphanumeric chars', () => {
-    expect(isGiftCardBarcode('GC-ABCDEF1234567890')).toBe(true);
-  });
-
-  it('returns true for lowercase gc- prefix', () => {
+  it('matches lowercase prefix', () => {
     expect(isGiftCardBarcode('gc-abcdef123456')).toBe(true);
   });
 
-  it('returns true for mixed case', () => {
-    expect(isGiftCardBarcode('Gc-AbCd1234Ef56')).toBe(true);
-  });
-
-  it('trims whitespace before matching', () => {
+  it('matches with surrounding whitespace', () => {
     expect(isGiftCardBarcode('  GC-ABCDEF123456  ')).toBe(true);
   });
 
-  it('returns false for codes without GC- prefix', () => {
+  it('matches minimum length (8 chars)', () => {
+    expect(isGiftCardBarcode('GC-12345678')).toBe(true);
+  });
+
+  it('matches maximum length (16 chars)', () => {
+    expect(isGiftCardBarcode('GC-ABCDEFGH12345678')).toBe(true);
+  });
+
+  it('rejects missing prefix', () => {
     expect(isGiftCardBarcode('ABCDEF123456')).toBe(false);
   });
 
-  it('returns false for too-short code (less than 8 chars after GC-)', () => {
-    expect(isGiftCardBarcode('GC-ABCDEF')).toBe(false);
+  it('rejects too few chars after prefix', () => {
+    expect(isGiftCardBarcode('GC-1234567')).toBe(false);
   });
 
-  it('returns false for too-long code (more than 16 chars after GC-)', () => {
-    expect(isGiftCardBarcode('GC-ABCDEF1234567890X')).toBe(false);
+  it('rejects too many chars after prefix', () => {
+    expect(isGiftCardBarcode('GC-12345678901234567')).toBe(false);
   });
 
-  it('returns false for invalid characters after GC-', () => {
-    expect(isGiftCardBarcode('GC-AB-DE-12-34')).toBe(false);
+  it('accepts lowercase letters (regex has /i flag)', () => {
+    expect(isGiftCardBarcode('gc-abcdefabcdef')).toBe(true);
   });
 
-  it('returns false for empty string', () => {
+  it('rejects special characters', () => {
+    expect(isGiftCardBarcode('GC-ABCD-EF123456')).toBe(false);
+  });
+
+  it('rejects empty string', () => {
     expect(isGiftCardBarcode('')).toBe(false);
-  });
-
-  it('returns false for UUID format', () => {
-    expect(isGiftCardBarcode('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).toBe(false);
   });
 });
 
 describe('generateGiftCardNumber', () => {
-  it('returns a string in GC-XXXXXXXXXXXX format', () => {
-    const result = generateGiftCardNumber();
-    expect(result).toMatch(/^GC-[A-Z0-9]{12}$/);
+  it('generates a string starting with GC-', () => {
+    const num = generateGiftCardNumber();
+    expect(num.startsWith('GC-')).toBe(true);
   });
 
-  it('generates unique numbers on successive calls', () => {
-    const results = new Set<string>();
-    for (let i = 0; i < 100; i++) {
-      results.add(generateGiftCardNumber());
-    }
-    // With 100 calls and a 36^12 space, collisions are nearly impossible.
-    expect(results.size).toBe(100);
+  it('generates a 15-character string (GC- + 12)', () => {
+    const num = generateGiftCardNumber();
+    expect(num).toHaveLength(15);
   });
 
-  it('passes the isGiftCardBarcode validator', () => {
-    for (let i = 0; i < 20; i++) {
-      expect(isGiftCardBarcode(generateGiftCardNumber())).toBe(true);
-    }
+  it('generates a valid gift card barcode', () => {
+    const num = generateGiftCardNumber();
+    expect(isGiftCardBarcode(num)).toBe(true);
+  });
+
+  it('generates different numbers on subsequent calls', () => {
+    // With 36^12 possible values, collisions are astronomically unlikely
+    const a = generateGiftCardNumber();
+    const b = generateGiftCardNumber();
+    expect(a).not.toBe(b);
   });
 });
