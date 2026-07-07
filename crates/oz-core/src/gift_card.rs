@@ -231,4 +231,184 @@ mod tests {
         assert_eq!(back.card.id, card.id);
         assert_eq!(back.transaction.txn_type, "redeem");
     }
+
+    // ── GiftCard status variants ────────────────────────────────
+
+    #[test]
+    fn gift_card_frozen_status() {
+        let mut card = sample_gift_card();
+        card.status = "frozen".into();
+        let json = serde_json::to_string(&card).unwrap();
+        let back: GiftCard = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.status, "frozen");
+    }
+
+    #[test]
+    fn gift_card_redeemed_status() {
+        let mut card = sample_gift_card();
+        card.status = "redeemed".into();
+        card.current_balance_minor = 0;
+        let json = serde_json::to_string(&card).unwrap();
+        let back: GiftCard = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.status, "redeemed");
+        assert_eq!(back.current_balance_minor, 0);
+    }
+
+    #[test]
+    fn gift_card_expired_status() {
+        let mut card = sample_gift_card();
+        card.status = "expired".into();
+        let json = serde_json::to_string(&card).unwrap();
+        let back: GiftCard = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.status, "expired");
+    }
+
+    #[test]
+    fn gift_card_no_expiry_date() {
+        let mut card = sample_gift_card();
+        card.expiry_date = None;
+        let json = serde_json::to_string(&card).unwrap();
+        let back: GiftCard = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.expiry_date, None);
+    }
+
+    // ── GiftCardTransaction type variants ───────────────────────
+
+    #[test]
+    fn transaction_topup_type() {
+        let txn = GiftCardTransaction {
+            id: "txn-3".into(),
+            gift_card_id: "gc-001".into(),
+            sale_id: None,
+            txn_type: "topup".into(),
+            amount_minor: 50000,
+            balance_after_minor: 125000,
+            notes: "Customer top-up".into(),
+            created_at: "2026-07-02T00:00:00.000Z".into(),
+        };
+        let json = serde_json::to_string(&txn).unwrap();
+        let back: GiftCardTransaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.txn_type, "topup");
+        assert_eq!(back.amount_minor, 50000);
+    }
+
+    #[test]
+    fn transaction_refund_type() {
+        let txn = GiftCardTransaction {
+            id: "txn-4".into(),
+            gift_card_id: "gc-001".into(),
+            sale_id: Some("sale-2".into()),
+            txn_type: "refund".into(),
+            amount_minor: 25000,
+            balance_after_minor: 100000,
+            notes: "Refund to card".into(),
+            created_at: "2026-07-03T00:00:00.000Z".into(),
+        };
+        let json = serde_json::to_string(&txn).unwrap();
+        let back: GiftCardTransaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.txn_type, "refund");
+        assert_eq!(back.amount_minor, 25000);
+    }
+
+    // ── IssueGiftCardInput minimal fields ───────────────────────
+
+    #[test]
+    fn issue_gift_card_input_minimal() {
+        let input = IssueGiftCardInput {
+            card_number: "GC-MIN".into(),
+            pin: None,
+            initial_amount_minor: 10000,
+            currency: "USD".into(),
+            issued_to: None,
+            created_by: "staff-1".into(),
+            expiry_date: None,
+        };
+        let json = serde_json::to_string(&input).unwrap();
+        let back: IssueGiftCardInput = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.card_number, "GC-MIN");
+        assert_eq!(back.pin, None);
+        assert_eq!(back.issued_to, None);
+        assert_eq!(back.expiry_date, None);
+    }
+
+    // ── GiftCardFilter with filters set ─────────────────────────
+
+    #[test]
+    fn gift_card_filter_with_status() {
+        let filter = GiftCardFilter {
+            status: Some("active".into()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&filter).unwrap();
+        let back: GiftCardFilter = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.status, Some("active".into()));
+        assert!(back.search.is_none());
+        assert!(back.issued_to.is_none());
+        assert!(back.min_balance.is_none());
+    }
+
+    #[test]
+    fn gift_card_filter_all_fields_set() {
+        let filter = GiftCardFilter {
+            search: Some("GC-".into()),
+            status: Some("active".into()),
+            issued_to: Some("Alice".into()),
+            min_balance: Some(1000),
+        };
+        let json = serde_json::to_string(&filter).unwrap();
+        let back: GiftCardFilter = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.search, Some("GC-".into()));
+        assert_eq!(back.status, Some("active".into()));
+        assert_eq!(back.issued_to, Some("Alice".into()));
+        assert_eq!(back.min_balance, Some(1000));
+    }
+
+    // ── GiftCardWithTransactions edge cases ─────────────────────
+
+    #[test]
+    fn gift_card_with_transactions_empty() {
+        let card = sample_gift_card();
+        let combined = GiftCardWithTransactions {
+            card: card.clone(),
+            transactions: vec![],
+        };
+        let json = serde_json::to_string(&combined).unwrap();
+        let back: GiftCardWithTransactions = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.card.id, card.id);
+        assert!(back.transactions.is_empty());
+    }
+
+    #[test]
+    fn gift_card_with_transactions_multiple() {
+        let card = sample_gift_card();
+        let txn1 = GiftCardTransaction {
+            id: "txn-1".into(),
+            gift_card_id: "gc-001".into(),
+            sale_id: None,
+            txn_type: "issue".into(),
+            amount_minor: 100000,
+            balance_after_minor: 100000,
+            notes: "Issue".into(),
+            created_at: "2026-07-01T00:00:00.000Z".into(),
+        };
+        let txn2 = GiftCardTransaction {
+            id: "txn-2".into(),
+            gift_card_id: "gc-001".into(),
+            sale_id: Some("sale-1".into()),
+            txn_type: "redeem".into(),
+            amount_minor: -25000,
+            balance_after_minor: 75000,
+            notes: "Redeem".into(),
+            created_at: "2026-07-02T00:00:00.000Z".into(),
+        };
+        let combined = GiftCardWithTransactions {
+            card,
+            transactions: vec![txn1, txn2],
+        };
+        let json = serde_json::to_string(&combined).unwrap();
+        let back: GiftCardWithTransactions = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.transactions.len(), 2);
+        assert_eq!(back.transactions[0].txn_type, "issue");
+        assert_eq!(back.transactions[1].txn_type, "redeem");
+    }
 }
