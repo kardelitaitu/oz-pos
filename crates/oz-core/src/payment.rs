@@ -216,4 +216,186 @@ mod tests {
         };
         assert_ne!(p1, p2);
     }
+
+    // ── Debug output ────────────────────────────────────────────
+
+    #[test]
+    fn payment_debug_output() {
+        let payment = Payment {
+            id: "pay-1".into(),
+            sale_id: "sale-1".into(),
+            method: "cash".into(),
+            amount: Money {
+                minor_units: 50000,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: "2025-07-07T12:00:00.000Z".into(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        let debug = format!("{:?}", payment);
+        assert!(debug.contains("pay-1"));
+        assert!(debug.contains("cash"));
+    }
+
+    #[test]
+    fn payment_split_arg_debug_output() {
+        let split = PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 30000,
+            gateway_reference: Some("txn_123".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: None,
+        };
+        let debug = format!("{:?}", split);
+        assert!(debug.contains("card"));
+        assert!(debug.contains("txn_123"));
+    }
+
+    // ── Edge cases ──────────────────────────────────────────────
+
+    #[test]
+    fn payment_zero_amount() {
+        let payment = Payment {
+            id: "pay-zero".into(),
+            sale_id: "sale-1".into(),
+            method: "voucher".into(),
+            amount: Money {
+                minor_units: 0,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        assert_eq!(payment.amount.minor_units, 0);
+    }
+
+    #[test]
+    fn payment_empty_method() {
+        let payment = Payment {
+            id: "pay-empty".into(),
+            sale_id: "sale-1".into(),
+            method: String::new(),
+            amount: Money {
+                minor_units: 100,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        assert_eq!(payment.method, "");
+    }
+
+    #[test]
+    fn payment_declined_gateway() {
+        let payment = Payment {
+            id: "pay-declined".into(),
+            sale_id: "sale-1".into(),
+            method: "card".into(),
+            amount: Money {
+                minor_units: 50000,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: Some("txn_fail".into()),
+            gateway_status: Some("declined".into()),
+            gateway_response: Some(r#"{"error":"insufficient_funds"}"#.into()),
+        };
+        assert_eq!(payment.gateway_status.as_deref(), Some("declined"));
+        assert!(payment.gateway_response.is_some());
+    }
+
+    #[test]
+    fn payment_split_arg_all_gateway_fields() {
+        let split = PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 75000,
+            gateway_reference: Some("txn_full".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: Some(r#"{"id":"txn_full","amount":75000}"#.into()),
+        };
+        assert_eq!(split.gateway_reference.as_deref(), Some("txn_full"));
+        assert_eq!(split.gateway_status.as_deref(), Some("approved"));
+        assert!(split.gateway_response.is_some());
+    }
+
+    #[test]
+    fn payment_amount_large() {
+        let payment = Payment {
+            id: "pay-large".into(),
+            sale_id: "sale-1".into(),
+            method: "card".into(),
+            amount: Money {
+                minor_units: i64::MAX,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        assert_eq!(payment.amount.minor_units, i64::MAX);
+    }
+
+    #[test]
+    fn payment_json_field_names() {
+        let payment = Payment {
+            id: "pay-fields".into(),
+            sale_id: "sale-1".into(),
+            method: "cash".into(),
+            amount: Money {
+                minor_units: 50000,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: Some("ref_1".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: None,
+        };
+        let json = serde_json::to_value(&payment).unwrap();
+        assert_eq!(json["method"], "cash");
+        assert_eq!(json["sale_id"], "sale-1");
+        assert_eq!(json["gateway_reference"], "ref_1");
+        assert_eq!(json["gateway_status"], "approved");
+        assert!(json.get("gateway_response").unwrap().is_null());
+    }
+
+    #[test]
+    fn payment_split_arg_json_field_names() {
+        let split = PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 50000,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        let json = serde_json::to_value(&split).unwrap();
+        assert_eq!(json["method"], "card");
+        assert_eq!(json["amount_minor"], 50000);
+        assert!(json.get("gateway_reference").unwrap().is_null());
+    }
+
+    #[test]
+    fn payment_clone_preserves_all_fields() {
+        let p1 = Payment {
+            id: "p1".into(),
+            sale_id: "s1".into(),
+            method: "card".into(),
+            amount: Money {
+                minor_units: 25000,
+                currency: "USD".parse().unwrap(),
+            },
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+            gateway_reference: Some("txn_abc".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: Some(r#"{"ok":true}"#.into()),
+        };
+        let p2 = p1.clone();
+        assert_eq!(p1, p2);
+    }
 }

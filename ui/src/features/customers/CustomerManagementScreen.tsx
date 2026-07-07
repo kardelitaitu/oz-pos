@@ -7,6 +7,8 @@ import {
   updateCustomer,
   deleteCustomer,
   type CustomerDto,
+  type UpdateCustomerArgs,
+  type CreateCustomerArgs,
 } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -113,13 +115,13 @@ export default function CustomerManagementScreen() {
       const name = form.name.trim();
 
       if (editingId) {
-        const args: import('@/api/customers').UpdateCustomerArgs = { userId, id: editingId, name };
+        const args: UpdateCustomerArgs = { userId, id: editingId, name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
         await updateCustomer(args);
       } else {
-        const args: import('@/api/customers').CreateCustomerArgs = { userId, name };
+        const args: CreateCustomerArgs = { userId, name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
@@ -132,7 +134,7 @@ export default function CustomerManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load, l10n]);
+  }, [form, editingId, closeModal, load, userId, l10n]);
 
   // ── Delete ─────────────────────────────────────────────────────
 
@@ -304,7 +306,7 @@ export default function CustomerManagementScreen() {
               </div>
 
               <div className="customer-mgmt-modal-body">
-                <label className="customer-mgmt-field" htmlFor="customer-field-name">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-name">
                     <span className="customer-mgmt-label">Name *</span>
                   </Localized>                    <Localized id="customer-mgmt-name-aria" attrs={{ 'aria-label': true }}>
@@ -313,6 +315,7 @@ export default function CustomerManagementScreen() {
                         className="customer-mgmt-input"
                         type="text"
                         id="customer-field-name"
+                        aria-label="Name"
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="e.g. Jane Smith"
@@ -320,9 +323,9 @@ export default function CustomerManagementScreen() {
                       />
                     </Localized>
                     </Localized>
-                </label>
+                </div>
 
-                <label className="customer-mgmt-field" htmlFor="customer-field-email">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-email">
                     <span className="customer-mgmt-label">Email</span>
                   </Localized>                    <Localized id="customer-mgmt-email-aria" attrs={{ 'aria-label': true }}>
@@ -331,6 +334,7 @@ export default function CustomerManagementScreen() {
                         className="customer-mgmt-input"
                         type="email"
                         id="customer-field-email"
+                        aria-label="Email"
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
                         placeholder="jane@example.com"
@@ -338,9 +342,9 @@ export default function CustomerManagementScreen() {
                       />
                     </Localized>
                     </Localized>
-                </label>
+                </div>
 
-                <label className="customer-mgmt-field" htmlFor="customer-field-phone">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-phone">
                     <span className="customer-mgmt-label">Phone</span>
                   </Localized>                    <Localized id="customer-mgmt-phone-aria" attrs={{ 'aria-label': true }}>
@@ -349,6 +353,7 @@ export default function CustomerManagementScreen() {
                         className="customer-mgmt-input"
                         type="tel"
                         id="customer-field-phone"
+                        aria-label="Phone"
                         value={form.phone}
                         onChange={(e) => setForm({ ...form, phone: e.target.value })}
                         placeholder="+1-555-0100"
@@ -356,9 +361,9 @@ export default function CustomerManagementScreen() {
                       />
                     </Localized>
                     </Localized>
-                </label>
+                </div>
 
-                <label className="customer-mgmt-field" htmlFor="customer-field-notes">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-notes">
                     <span className="customer-mgmt-label">Notes</span>
                   </Localized>                    <Localized id="customer-mgmt-notes-aria" attrs={{ 'aria-label': true }}>
@@ -366,6 +371,7 @@ export default function CustomerManagementScreen() {
                       <textarea
                         className="customer-mgmt-input customer-mgmt-textarea"
                         id="customer-field-notes"
+                        aria-label="Notes"
                         value={form.notes}
                         onChange={(e) => setForm({ ...form, notes: e.target.value })}
                         placeholder="Preferences, special notes…"
@@ -373,7 +379,7 @@ export default function CustomerManagementScreen() {
                       />
                     </Localized>
                     </Localized>
-                </label>
+                </div>
 
                 {error && (
                   <div className="customer-mgmt-error" role="alert">

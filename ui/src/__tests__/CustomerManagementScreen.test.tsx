@@ -24,7 +24,7 @@ import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '@
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 const mockCreateCustomer = createCustomer as ReturnType<typeof vi.fn>;
 const mockUpdateCustomer = updateCustomer as ReturnType<typeof vi.fn>;
-const mockDeleteCustomer = deleteCustomer as ReturnType<typeof vi.fn>;
+const _mockDeleteCustomer = deleteCustomer as ReturnType<typeof vi.fn>;
 
 const wrap = (children: React.ReactNode) => withFluent(children, customersFtl, sharedFtl);
 

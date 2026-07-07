@@ -51,7 +51,7 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
   };
 }
 
-function pendingPromise() {
+function _pendingPromise() {
   return new Promise<KdsOrder[]>(() => {});
 }
 

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useLocalization } from '@fluent/react';
 import { getGiftCardBalance, redeemGiftCard } from '@/api/giftCards';
 import { Button } from '@/components/Button';
-import type { Money } from '@/types/domain';
+
 
 export interface GiftCardPaymentProps {
   /** Total amount to pay in minor units. */
@@ -114,7 +114,6 @@ export default function GiftCardPayment({
           onChange={(e) => { setCardInput(e.target.value); setCardBalance(null); setError(''); }}
           disabled={loading}
           aria-label="Gift card number"
-          autoFocus
         />
         <Button variant="primary" onClick={handleLookup} disabled={loading || !cardInput.trim()}>
           Check

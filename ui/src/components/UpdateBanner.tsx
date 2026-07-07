@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import './UpdateBanner.css';
+import type * as UpdaterModule from '@tauri-apps/plugin-updater';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ interface UpdateInfo {
 
 interface UpdateState {
   info: UpdateInfo;
-  instance: Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater')['check']>> | null;
+  instance: Awaited<ReturnType<typeof UpdaterModule.check>> | null;
 }
 
 function useUpdateCheck(): UpdateState {

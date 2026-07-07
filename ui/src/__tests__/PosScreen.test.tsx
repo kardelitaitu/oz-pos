@@ -11,6 +11,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { withFluent } from '@/locales/test-utils';
 import { ScannerError } from '@/api/hardware';
+import type * as HardwareModule from '@/api/hardware';
 import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -56,7 +57,7 @@ const mockedBarcode = vi.hoisted(() => {
 
 // Mock hardware functions used by useCustomerDisplay.
 vi.mock('@/api/hardware', async () => {
-  const actual = await vi.importActual<typeof import('@/api/hardware')>('@/api/hardware');
+  const actual = await vi.importActual<typeof HardwareModule>('@/api/hardware');
   return {
     ...actual,
     listDisplays: vi.fn(() => Promise.resolve([])),

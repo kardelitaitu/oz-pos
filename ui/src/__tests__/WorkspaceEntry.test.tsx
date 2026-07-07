@@ -105,7 +105,7 @@ import { registerNavItem } from '@/platform/ui/menu-registry';
 beforeEach(() => {
   clearPages();
   registerPage({ route: 'products', component: () => <div data-testid="products-page">Products</div>, label: 'Products' });
-  registerNavItem({ route: 'products', label: 'Products', i18nKey: 'nav-products', icon: null as any });
+  registerNavItem({ route: 'products', label: 'Products', i18nKey: 'nav-products', icon: null as unknown as React.ReactNode });
 });
 
 describe('Workspace entry', () => {

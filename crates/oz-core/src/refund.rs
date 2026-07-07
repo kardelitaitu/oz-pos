@@ -355,4 +355,271 @@ mod tests {
         assert!(debug.contains("reason"));
         assert!(debug.contains("note"));
     }
+
+    #[test]
+    fn test_refund_zero_total() {
+        let r = Refund::new(
+            "sale-1",
+            Money {
+                minor_units: 0,
+                currency: usd(),
+            },
+            "free return",
+            "",
+            "user-1",
+            vec![],
+        );
+        assert_eq!(r.total.minor_units, 0);
+    }
+
+    #[test]
+    fn test_refund_empty_reason() {
+        let r = Refund::new(
+            "sale-1",
+            Money {
+                minor_units: 500,
+                currency: usd(),
+            },
+            "",
+            "",
+            "user-1",
+            vec![],
+        );
+        assert_eq!(r.reason, "");
+    }
+
+    #[test]
+    fn test_refund_empty_note() {
+        let r = Refund::new(
+            "sale-1",
+            Money {
+                minor_units: 500,
+                currency: usd(),
+            },
+            "broken",
+            "",
+            "user-1",
+            vec![],
+        );
+        assert_eq!(r.note, "");
+    }
+
+    #[test]
+    fn test_refund_large_total() {
+        let r = Refund::new(
+            "sale-1",
+            Money {
+                minor_units: i64::MAX,
+                currency: usd(),
+            },
+            "test",
+            "",
+            "user-1",
+            vec![],
+        );
+        assert_eq!(r.total.minor_units, i64::MAX);
+    }
+
+    // ── RefundLine edge cases ──────────────────────────────────
+
+    #[test]
+    fn test_refund_line_debug_output() {
+        let line = RefundLine::new(
+            "sl-1",
+            "COFFEE",
+            2,
+            Money {
+                minor_units: 350,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 700,
+                currency: usd(),
+            },
+        );
+        let debug = format!("{:?}", line);
+        assert!(debug.contains("COFFEE"));
+        assert!(debug.contains("sl-1"));
+    }
+
+    #[test]
+    fn test_refund_line_zero_qty() {
+        let line = RefundLine::new(
+            "sl-1",
+            "COFFEE",
+            0,
+            Money {
+                minor_units: 350,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 0,
+                currency: usd(),
+            },
+        );
+        assert_eq!(line.qty, 0);
+        assert_eq!(line.line_total.minor_units, 0);
+    }
+
+    #[test]
+    fn test_refund_line_large_qty() {
+        let line = RefundLine::new(
+            "sl-1",
+            "BULK",
+            999,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 99900,
+                currency: usd(),
+            },
+        );
+        assert_eq!(line.qty, 999);
+        assert_eq!(line.line_total.minor_units, 99900);
+    }
+
+    #[test]
+    fn test_refund_line_empty_sku() {
+        let line = RefundLine::new(
+            "sl-1",
+            "",
+            1,
+            Money {
+                minor_units: 0,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 0,
+                currency: usd(),
+            },
+        );
+        assert_eq!(line.sku, "");
+    }
+
+    #[test]
+    fn test_refund_line_serde_roundtrip() {
+        let line = RefundLine::new(
+            "sl-1",
+            "COFFEE",
+            2,
+            Money {
+                minor_units: 350,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 700,
+                currency: usd(),
+            },
+        );
+        let json = serde_json::to_string(&line).unwrap();
+        let back: RefundLine = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sale_line_id, "sl-1");
+        assert_eq!(back.sku, "COFFEE");
+        assert_eq!(back.qty, 2);
+        assert_eq!(back.unit_price.minor_units, 350);
+        assert_eq!(back.line_total.minor_units, 700);
+    }
+
+    #[test]
+    fn test_refund_line_clone_eq() {
+        let line = RefundLine::new(
+            "sl-1",
+            "COFFEE",
+            2,
+            Money {
+                minor_units: 350,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 700,
+                currency: usd(),
+            },
+        );
+        let cloned = line.clone();
+        assert_eq!(line, cloned);
+    }
+
+    #[test]
+    fn test_refund_line_generates_uuid() {
+        let line = RefundLine::new(
+            "sl-1",
+            "COFFEE",
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        );
+        assert_eq!(line.id.len(), 36);
+        assert_eq!(line.id.chars().filter(|&c| c == '-').count(), 4);
+    }
+
+    #[test]
+    fn test_refund_line_sale_line_id_empty() {
+        let line = RefundLine::new(
+            "",
+            "COFFEE",
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        );
+        assert_eq!(line.sale_line_id, "");
+    }
+
+    #[test]
+    fn test_refund_two_unique_ids() {
+        let r1 = Refund::new(
+            "sale-1",
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+            "a",
+            "",
+            "user-1",
+            vec![],
+        );
+        let r2 = Refund::new(
+            "sale-2",
+            Money {
+                minor_units: 200,
+                currency: usd(),
+            },
+            "b",
+            "",
+            "user-1",
+            vec![],
+        );
+        assert_ne!(r1.id, r2.id);
+    }
+
+    #[test]
+    fn test_refund_serde_empty_reason() {
+        let r = Refund::new(
+            "sale-1",
+            Money {
+                minor_units: 500,
+                currency: usd(),
+            },
+            "",
+            "",
+            "user-1",
+            vec![],
+        );
+        let json = serde_json::to_value(&r).unwrap();
+        assert_eq!(json["reason"], "");
+        assert_eq!(json["note"], "");
+    }
 }

@@ -32,8 +32,8 @@ import {
 } from '@/api/inventoryCounts';
 
 const mockGetStockCount = getStockCount as ReturnType<typeof vi.fn>;
-const mockAddCountLine = addCountLine as ReturnType<typeof vi.fn>;
-const mockUpdateLine = updateCountLine as ReturnType<typeof vi.fn>;
+const _mockAddCountLine = addCountLine as ReturnType<typeof vi.fn>;
+const _mockUpdateLine = updateCountLine as ReturnType<typeof vi.fn>;
 const mockComplete = completeStockCount as ReturnType<typeof vi.fn>;
 const mockUpdateStatus = updateStockCountStatus as ReturnType<typeof vi.fn>;
 const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
