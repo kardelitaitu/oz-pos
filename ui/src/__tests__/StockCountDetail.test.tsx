@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 // getCountLines is dynamically imported — vi.fn() inside factory avoids hoisting issues.
 vi.mock('@/api/inventoryCounts', () => ({
@@ -23,17 +23,23 @@ vi.mock('@/api/products', () => ({}));
 import StockCountDetail from '@/features/inventory/StockCountDetail';
 import {
   getStockCount,
+  addCountLine,
+  updateCountLine,
   completeStockCount,
   updateStockCountStatus,
+  listProducts,
   getCountLines,
 } from '@/api/inventoryCounts';
 
 const mockGetStockCount = getStockCount as ReturnType<typeof vi.fn>;
+const mockAddCountLine = addCountLine as ReturnType<typeof vi.fn>;
+const mockUpdateLine = updateCountLine as ReturnType<typeof vi.fn>;
 const mockComplete = completeStockCount as ReturnType<typeof vi.fn>;
 const mockUpdateStatus = updateStockCountStatus as ReturnType<typeof vi.fn>;
+const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
 const mockGetLines = getCountLines as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl, sharedFtl);
 
 const sampleCount = {
   id: 'sc-1', count_number: 'SC-001', status: 'draft' as const,
@@ -51,6 +57,7 @@ const sampleLines = [
 describe('StockCountDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockListProducts.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
   });
 
