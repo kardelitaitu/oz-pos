@@ -385,8 +385,6 @@ fn updated_at_increases_on_update() {
         .create_customer("Update Tracker", None, None, None)
         .unwrap();
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
-
     let updated = s
         .update_customer(&c.id, "Update Tracker", None, None, None)
         .unwrap();

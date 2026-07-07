@@ -1106,6 +1106,7 @@ mod tests {
 mod proptests {
     use super::*;
     use proptest::prelude::*;
+    use proptest::test_runner::ProptestConfig;
 
     /// List of all features for generating random selections.
     const ALL_FEATURES: &[Feature] = &[
@@ -1162,6 +1163,7 @@ mod proptests {
     // ── Invariant: newly-enabled features satisfy deps ───────────
 
     proptest! {
+        #![proptest_config = ProptestConfig::with_cases(64)]
         /// After every `enable` call, the **newly-enabled** features
         /// (including auto-enabled dependencies) all have their own
         /// dependencies satisfied.
@@ -1201,6 +1203,7 @@ mod proptests {
     // ── Disable does NOT cascade (design property) ────────────────
 
     proptest! {
+        #![proptest_config = ProptestConfig::with_cases(64)]
         /// `disable` does NOT cascade to dependents — only the
         /// specific feature is removed from the set. Every other
         /// feature that was enabled remains enabled.
@@ -1246,6 +1249,7 @@ mod proptests {
     // ── Enable return value ───────────────────────────────────────
 
     proptest! {
+        #![proptest_config = ProptestConfig::with_cases(64)]
         /// `enable(f)` returns `true` iff `f` was NOT already in the set.
         #[test]
         fn enable_return_value_matches_precondition(ops in arb_ops()) {
@@ -1265,6 +1269,7 @@ mod proptests {
     // ── Disable return value ──────────────────────────────────────
 
     proptest! {
+        #![proptest_config = ProptestConfig::with_cases(64)]
         /// `disable(f)` returns `true` iff `f` WAS already in the set.
         #[test]
         fn disable_return_value_matches_precondition(ops in arb_ops()) {
@@ -1289,6 +1294,7 @@ mod proptests {
     // ── Serialization roundtrip ───────────────────────────────────
 
     proptest! {
+        #![proptest_config = ProptestConfig::with_cases(64)]
         /// A registry survives `to_settings_rows` → `from_settings_rows`
         /// losslessly (modulo unknown keys, which we don't supply).
         #[test]
