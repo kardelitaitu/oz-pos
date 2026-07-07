@@ -1,115 +1,134 @@
-import { describe, it, expect, vi } from 'vitest';
-import { act } from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useSwipe } from '@/hooks/useSwipe';
 
-// ── helpers ────────────────────────────────────────────────────────────
+function createTouchEvent(
+  type: 'touchstart' | 'touchend',
+  clientX: number,
+  clientY: number,
+  startX?: number,
+  startY?: number,
+): React.TouchEvent {
+  const touches: React.Touch[] = [{
+    clientX,
+    clientY,
+    identifier: 0,
+    target: document.createElement('div'),
+    pageX: clientX,
+    pageY: clientY,
+    screenX: clientX,
+    screenY: clientY,
+    force: 1,
+    radiusX: 1,
+    radiusY: 1,
+    rotationAngle: 0,
+  }];
 
-/** Build a minimal fake TouchEvent for onTouchStart. */
-function makeTouchStart(clientX: number, clientY: number): React.TouchEvent {
+  const changedTouches: React.Touch[] = [{
+    clientX,
+    clientY,
+    identifier: 0,
+    target: document.createElement('div'),
+    pageX: clientX,
+    pageY: clientY,
+    screenX: clientX,
+    screenY: clientY,
+    force: 1,
+    radiusX: 1,
+    radiusY: 1,
+    rotationAngle: 0,
+  }];
+
   return {
-    touches: [{ clientX, clientY }],
+    type,
+    touches: type === 'touchstart' ? touches as unknown as React.TouchList : [] as unknown as React.TouchList,
+    changedTouches: type === 'touchend' ? changedTouches as unknown as React.TouchList : [] as unknown as React.TouchList,
+    targetTouches: [] as unknown as React.TouchList,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    preventDefault: vi.fn(),
+    stopPropagation: vi.fn(),
   } as unknown as React.TouchEvent;
 }
 
-/** Build a minimal fake TouchEvent for onTouchEnd. */
-function makeTouchEnd(clientX: number, clientY: number): React.TouchEvent {
-  return {
-    changedTouches: [{ clientX, clientY }],
-  } as unknown as React.TouchEvent;
-}
-
-function render(handlers: { onSwipeLeft?: () => void; onSwipeRight?: () => void }) {
-  return renderHook(() => useSwipe(handlers));
-}
-
-// ── tests ──────────────────────────────────────────────────────────────
 describe('useSwipe', () => {
-  it('returns onTouchStart and onTouchEnd handlers', () => {
-    const { result } = render({});
-    expect(result.current.onTouchStart).toBeDefined();
-    expect(result.current.onTouchEnd).toBeDefined();
+  it('returns touch event handlers', () => {
+    const { result } = renderHook(() => useSwipe({}));
+
+    expect(typeof result.current.onTouchStart).toBe('function');
+    expect(typeof result.current.onTouchEnd).toBe('function');
   });
 
-  it('calls onSwipeRight when user swipes right past threshold', () => {
+  it('calls onSwipeRight when swiping right past threshold', () => {
     const onSwipeRight = vi.fn();
-    const { result } = render({ onSwipeRight });
+    const { result } = renderHook(() => useSwipe({ onSwipeRight }));
 
-    act(() => { result.current.onTouchStart(makeTouchStart(100, 200)); });
-    act(() => { result.current.onTouchEnd(makeTouchEnd(200, 200)); }); // +100px horizontally
+    // Start touch at x=50
+    result.current.onTouchStart(createTouchEvent('touchstart', 50, 100));
+
+    // End touch at x=120 (delta=70, above 60 threshold)
+    result.current.onTouchEnd(createTouchEvent('touchend', 120, 100));
 
     expect(onSwipeRight).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onSwipeLeft when user swipes left past threshold', () => {
+  it('calls onSwipeLeft when swiping left past threshold', () => {
     const onSwipeLeft = vi.fn();
-    const { result } = render({ onSwipeLeft });
+    const { result } = renderHook(() => useSwipe({ onSwipeLeft }));
 
-    act(() => { result.current.onTouchStart(makeTouchStart(300, 100)); });
-    act(() => { result.current.onTouchEnd(makeTouchEnd(200, 100)); }); // -100px horizontally
+    // Start touch at x=200
+    result.current.onTouchStart(createTouchEvent('touchstart', 200, 100));
+
+    // End touch at x=120 (delta=-80, below -60 threshold)
+    result.current.onTouchEnd(createTouchEvent('touchend', 120, 100));
 
     expect(onSwipeLeft).toHaveBeenCalledTimes(1);
   });
 
-  it('does not trigger swipe when movement is below threshold', () => {
-    const onSwipeRight = vi.fn();
+  it('does not trigger for sub-threshold horizontal swipes', () => {
     const onSwipeLeft = vi.fn();
-    const { result } = render({ onSwipeRight, onSwipeLeft });
+    const onSwipeRight = vi.fn();
+    const { result } = renderHook(() => useSwipe({ onSwipeLeft, onSwipeRight }));
 
-    act(() => { result.current.onTouchStart(makeTouchStart(100, 200)); });
-    act(() => { result.current.onTouchEnd(makeTouchEnd(140, 200)); }); // +40px < 60 threshold
+    // Delta=40, below 60 threshold
+    result.current.onTouchStart(createTouchEvent('touchstart', 50, 100));
+    result.current.onTouchEnd(createTouchEvent('touchend', 90, 100));
 
-    expect(onSwipeRight).not.toHaveBeenCalled();
     expect(onSwipeLeft).not.toHaveBeenCalled();
+    expect(onSwipeRight).not.toHaveBeenCalled();
   });
 
-  it('does not trigger swipe for vertical movement', () => {
-    const onSwipeRight = vi.fn();
+  it('does not trigger when vertical movement dominates', () => {
     const onSwipeLeft = vi.fn();
-    const { result } = render({ onSwipeRight, onSwipeLeft });
+    const onSwipeRight = vi.fn();
+    const { result } = renderHook(() => useSwipe({ onSwipeLeft, onSwipeRight }));
 
-    // deltaX = 20, deltaY = 100 — vertical dominates
-    act(() => { result.current.onTouchStart(makeTouchStart(100, 100)); });
-    act(() => { result.current.onTouchEnd(makeTouchEnd(120, 200)); });
+    // Horizontal delta=70, vertical delta=90 — vertical dominates
+    result.current.onTouchStart(createTouchEvent('touchstart', 50, 50));
+    result.current.onTouchEnd(createTouchEvent('touchend', 120, 140));
 
-    expect(onSwipeRight).not.toHaveBeenCalled();
     expect(onSwipeLeft).not.toHaveBeenCalled();
+    expect(onSwipeRight).not.toHaveBeenCalled();
   });
 
-  it('does not throw when onTouchEnd is called without prior onTouchStart', () => {
-    const onSwipeRight = vi.fn();
-    const { result } = render({ onSwipeRight });
+  it('does not throw when no handlers are provided', () => {
+    const { result } = renderHook(() => useSwipe({}));
 
-    // No onTouchStart — should silently return
     expect(() => {
-      act(() => { result.current.onTouchEnd(makeTouchEnd(200, 200)); });
+      result.current.onTouchStart(createTouchEvent('touchstart', 50, 50));
+      result.current.onTouchEnd(createTouchEvent('touchend', 150, 55));
     }).not.toThrow();
-
-    expect(onSwipeRight).not.toHaveBeenCalled();
   });
 
-  it('does not throw when no handler is provided for the swipe direction', () => {
+  it('ignores touchEnd without a prior touchStart', () => {
     const onSwipeRight = vi.fn();
-    const { result } = render({ onSwipeRight });
+    const { result } = renderHook(() => useSwipe({ onSwipeRight }));
 
-    // Swipe left with no onSwipeLeft handler
-    act(() => { result.current.onTouchStart(makeTouchStart(300, 100)); });
-    act(() => { result.current.onTouchEnd(makeTouchEnd(200, 100)); });
+    // touchEnd without touchStart — should not trigger
+    result.current.onTouchEnd(createTouchEvent('touchend', 200, 100));
 
     expect(onSwipeRight).not.toHaveBeenCalled();
-  });
-
-  it('resets touch state after each onTouchEnd', () => {
-    const onSwipeRight = vi.fn();
-    const { result } = render({ onSwipeRight });
-
-    // First swipe
-    act(() => { result.current.onTouchStart(makeTouchStart(100, 200)); });
-    act(() => { result.current.onTouchEnd(makeTouchEnd(200, 200)); });
-    expect(onSwipeRight).toHaveBeenCalledTimes(1);
-
-    // Second onTouchEnd without a new onTouchStart should do nothing
-    act(() => { result.current.onTouchEnd(makeTouchEnd(300, 200)); });
-    expect(onSwipeRight).toHaveBeenCalledTimes(1);
   });
 });

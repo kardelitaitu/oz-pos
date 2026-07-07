@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act } from 'react';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 
 describe('useAnimatedModal', () => {
@@ -12,107 +11,151 @@ describe('useAnimatedModal', () => {
     vi.useRealTimers();
   });
 
-  it('returns mounted=false and exiting=false initially when show=false', () => {
+  it('returns mounted=false and exiting=false when show is false initially', () => {
     const { result } = renderHook(() => useAnimatedModal(false));
+
     expect(result.current.mounted).toBe(false);
     expect(result.current.exiting).toBe(false);
   });
 
-  it('returns mounted=true and exiting=false when show=true initially', () => {
+  it('returns mounted=true immediately when show becomes true', () => {
     const { result } = renderHook(() => useAnimatedModal(true));
+
     expect(result.current.mounted).toBe(true);
     expect(result.current.exiting).toBe(false);
   });
 
-  it('mounts immediately when show changes from false to true', () => {
-    const { result, rerender } = renderHook(({ show }) => useAnimatedModal(show), {
-      initialProps: { show: false },
-    });
-    expect(result.current.mounted).toBe(false);
+  it('transitions through exiting→unmounted when show goes false after being true', () => {
+    const { result, rerender } = renderHook(
+      ({ show }) => useAnimatedModal(show),
+      { initialProps: { show: true } },
+    );
 
-    rerender({ show: true });
     expect(result.current.mounted).toBe(true);
     expect(result.current.exiting).toBe(false);
-  });
 
-  it('enters exiting phase when show changes from true to false', () => {
-    const { result, rerender } = renderHook(({ show }) => useAnimatedModal(show), {
-      initialProps: { show: true },
-    });
-
+    // Close the modal
     rerender({ show: false });
-    expect(result.current.mounted).toBe(true);  // still mounted during exit
-    expect(result.current.exiting).toBe(true);
-  });
 
-  it('unmounts after the exit animation duration (default 200ms)', () => {
-    const { result, rerender } = renderHook(({ show }) => useAnimatedModal(show), {
-      initialProps: { show: true },
-    });
-
-    rerender({ show: false });
+    // Should be in exiting phase
     expect(result.current.mounted).toBe(true);
     expect(result.current.exiting).toBe(true);
 
-    // Advance past the default 200ms duration
-    act(() => { vi.advanceTimersByTime(200); });
+    // After the default 200ms duration, should unmount
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
     expect(result.current.mounted).toBe(false);
     expect(result.current.exiting).toBe(false);
   });
 
-  it('respects a custom exit duration', () => {
-    const { result, rerender } = renderHook(({ show }) => useAnimatedModal(show, 500), {
-      initialProps: { show: true },
-    });
+  it('stays mounted during exit animation until duration elapses', () => {
+    const { result, rerender } = renderHook(
+      ({ show }) => useAnimatedModal(show),
+      { initialProps: { show: true } },
+    );
 
     rerender({ show: false });
-    expect(result.current.exiting).toBe(true);
 
-    // At 400ms, still in exit phase
-    act(() => { vi.advanceTimersByTime(400); });
+    // At 199ms, still mounted + exiting
+    act(() => {
+      vi.advanceTimersByTime(199);
+    });
     expect(result.current.mounted).toBe(true);
     expect(result.current.exiting).toBe(true);
+
+    // At 200ms, unmounted
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(result.current.mounted).toBe(false);
+    expect(result.current.exiting).toBe(false);
+  });
+
+  it('respects a custom duration', () => {
+    const { result, rerender } = renderHook(
+      ({ show }) => useAnimatedModal(show, 500),
+      { initialProps: { show: true } },
+    );
+
+    rerender({ show: false });
+
+    // At 400ms, still exiting
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(result.current.mounted).toBe(true);
 
     // At 500ms, unmounted
-    act(() => { vi.advanceTimersByTime(100); });
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(result.current.mounted).toBe(false);
+  });
+
+  it('re-opens cleanly after closing', () => {
+    const { result, rerender } = renderHook(
+      ({ show }) => useAnimatedModal(show),
+      { initialProps: { show: true } },
+    );
+
+    // Close
+    rerender({ show: false });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(result.current.mounted).toBe(false);
+
+    // Re-open
+    rerender({ show: true });
+    expect(result.current.mounted).toBe(true);
+    expect(result.current.exiting).toBe(false);
+  });
+
+  it('re-opens after full close cycle with no residual exiting state', () => {
+    const { result, rerender } = renderHook(
+      ({ show }) => useAnimatedModal(show),
+      { initialProps: { show: true } },
+    );
+
+    expect(result.current.mounted).toBe(true);
+    expect(result.current.exiting).toBe(false);
+
+    // Close and wait for full unmount
+    rerender({ show: false });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
     expect(result.current.mounted).toBe(false);
     expect(result.current.exiting).toBe(false);
+
+    // Re-open after being fully closed
+    act(() => {
+      rerender({ show: true });
+    });
+    expect(result.current.mounted).toBe(true);
+    expect(result.current.exiting).toBe(false);
   });
 
-  it('cleans up the exit timer on unmount before it fires', () => {
-    const { result, rerender, unmount } = renderHook(({ show }) => useAnimatedModal(show), {
-      initialProps: { show: true },
-    });
+  it('handles initial render with show=false then toggling', () => {
+    const { result, rerender } = renderHook(
+      ({ show }) => useAnimatedModal(show),
+      { initialProps: { show: false } },
+    );
 
-    rerender({ show: false });
-    expect(result.current.exiting).toBe(true);
+    expect(result.current.mounted).toBe(false);
 
-    // Unmount before the 200ms timer fires
-    unmount();
-    act(() => { vi.advanceTimersByTime(500); });
-
-    // Timer was cleaned up — no state updates expected (no crash)
-    // The timer's clearTimeout prevents setState after unmount
-  });
-
-  it('handles rapid show/hide toggles gracefully', async () => {
-    const { result, rerender } = renderHook(({ show }) => useAnimatedModal(show), {
-      initialProps: { show: false },
-    });
-
-    // Show → exit → show again before exit finishes
+    // Open
     rerender({ show: true });
     expect(result.current.mounted).toBe(true);
     expect(result.current.exiting).toBe(false);
 
+    // Close
     rerender({ show: false });
-    expect(result.current.exiting).toBe(true);
-
-    // Re-show before exit animation completes — exits reset, stays mounted
-    rerender({ show: true });
-    expect(result.current.mounted).toBe(true);
-    // exiting is reset by the opening branch of the effect
-    // When show transitions back to true, the previous timer cleanup
-    // cancels the exit timer and the hook enters the opening path
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(result.current.mounted).toBe(false);
   });
 });

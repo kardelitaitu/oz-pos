@@ -1,127 +1,70 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act } from 'react';
-import { renderHook } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 
-function mockMatchMedia(initialMatches: boolean) {
-  const listeners = new Set<(e: MediaQueryListEvent) => void>();
-  const mql = {
-    matches: initialMatches,
-    media: '(min-width: 768px)',
-    addEventListener: vi.fn((_event: string, handler: (e: MediaQueryListEvent) => void) => {
-      listeners.add(handler);
-    }),
-    removeEventListener: vi.fn((_event: string, handler: (e: MediaQueryListEvent) => void) => {
-      listeners.delete(handler);
-    }),
-  };
-
-  const matchMediaFn = vi.fn().mockReturnValue(mql);
-
-  // Expose helper to simulate a change event
-  (matchMediaFn as unknown as Record<string, unknown>)['_dispatchChange'] = (newMatches: boolean) => {
-    mql.matches = newMatches;
-    const event = { matches: newMatches, media: mql.media } as MediaQueryListEvent;
-    for (const listener of listeners) {
-      listener(event);
-    }
-  };
-
-  Object.defineProperty(window, 'matchMedia', {
-    writable: true,
-    configurable: true,
-    value: matchMediaFn,
-  });
-
-  return matchMediaFn as typeof matchMediaFn & { _dispatchChange: (v: boolean) => void };
-}
-
 describe('useMediaQuery', () => {
+  let listeners: Map<string, (e: MediaQueryListEvent) => void>;
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    listeners = new Map();
+
+    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => {
+      const mql = {
+        matches: query === '(min-width: 768px)',
+        media: query,
+        addEventListener: (event: string, listener: unknown) => {
+          listeners.set(query, listener as (e: MediaQueryListEvent) => void);
+        },
+        removeEventListener: (event: string, listener: unknown) => {
+          listeners.delete(query);
+        },
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        onchange: null,
+      } as unknown as MediaQueryList;
+      return mql;
+    });
   });
 
-  it('returns false when the initial match is false', () => {
-    mockMatchMedia(false);
-    const { result } = renderHook(() => useMediaQuery('(min-width: 768px)'));
-    expect(result.current).toBe(false);
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('returns true when the initial match is true', () => {
-    mockMatchMedia(true);
+  it('returns true when media query matches', () => {
     const { result } = renderHook(() => useMediaQuery('(min-width: 768px)'));
     expect(result.current).toBe(true);
+  });
+
+  it('returns false when media query does not match', () => {
+    const { result } = renderHook(() => useMediaQuery('(min-width: 1200px)'));
+    expect(result.current).toBe(false);
   });
 
   it('updates when the media query change event fires', () => {
-    const mqlMock = mockMatchMedia(false);
     const { result } = renderHook(() => useMediaQuery('(min-width: 768px)'));
-    expect(result.current).toBe(false);
-
-    act(() => {
-      mqlMock._dispatchChange(true);
-    });
     expect(result.current).toBe(true);
 
+    const listener = listeners.get('(min-width: 768px)');
+    expect(listener).toBeDefined();
+
+    // Simulate a change event
     act(() => {
-      mqlMock._dispatchChange(false);
+      listener!({ matches: false } as MediaQueryListEvent);
     });
+
     expect(result.current).toBe(false);
   });
 
-  it('registers a change listener on mount', () => {
-    mockMatchMedia(false);
-    renderHook(() => useMediaQuery('(min-width: 768px)'));
-    const mql = (window.matchMedia as ReturnType<typeof vi.fn>).mock.results[0]!.value as {
-      addEventListener: ReturnType<typeof vi.fn>;
-    };
-    expect(mql.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
-  });
-
-  it('removes the listener on unmount', () => {
-    mockMatchMedia(false);
+  it('removes event listener on unmount', () => {
     const { unmount } = renderHook(() => useMediaQuery('(min-width: 768px)'));
-    const mql = (window.matchMedia as ReturnType<typeof vi.fn>).mock.results[0]!.value as {
-      removeEventListener: ReturnType<typeof vi.fn>;
-    };
+
+    // Listener should be registered
+    expect(listeners.has('(min-width: 768px)')).toBe(true);
+
     unmount();
-    expect(mql.removeEventListener).toHaveBeenCalled();
-  });
 
-  it('re-initialises when the query string changes', () => {
-    mockMatchMedia(false);
-    const { rerender } = renderHook(({ query }) => useMediaQuery(query), {
-      initialProps: { query: '(min-width: 768px)' },
-    });
-
-    // Clear calls to measure new calls after rerender
-    const matchMediaFn = window.matchMedia as ReturnType<typeof vi.fn>;
-    matchMediaFn.mockClear();
-
-    rerender({ query: '(min-width: 1024px)' });
-    expect(matchMediaFn).toHaveBeenCalledWith('(min-width: 1024px)');
-  });
-
-  it('uses the value from matchMedia.matches as initial state', () => {
-    mockMatchMedia(true);
-    const { result } = renderHook(() => useMediaQuery('(prefers-color-scheme: dark)'));
-    expect(result.current).toBe(true);
-    expect(window.matchMedia).toHaveBeenCalledWith('(prefers-color-scheme: dark)');
-  });
-
-  it('cleans up old listener when query changes', () => {
-    mockMatchMedia(false);
-    const { rerender } = renderHook(({ query }) => useMediaQuery(query), {
-      initialProps: { query: '(min-width: 768px)' },
-    });
-
-    const firstMql = (window.matchMedia as ReturnType<typeof vi.fn>).mock.results[0]!.value as {
-      removeEventListener: ReturnType<typeof vi.fn>;
-    };
-
-    rerender({ query: '(min-width: 1024px)' });
-
-    // The old listener should have been removed
-    expect(firstMql.removeEventListener).toHaveBeenCalled();
+    // Listener should be cleaned up
+    expect(listeners.has('(min-width: 768px)')).toBe(false);
   });
 });

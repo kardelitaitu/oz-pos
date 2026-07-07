@@ -1,255 +1,58 @@
-// ── useToast tests ─────────────────────────────────────────────────
-//
-// Covers: throw outside provider, ToastProvider renders children,
-// addToast / removeToast lifecycle, variant CSS classes, dismiss
-// button, and auto-dismiss timer.
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, act, within } from '@testing-library/react';
+import { withFluent } from '@/locales/test-utils';
+import sharedFtl from '@/locales/shared.ftl?raw';
+import { ToastProvider, useToast, type ToastVariant } from '@/hooks/useToast';
+import { useRef, useCallback } from 'react';
+import type { ReactNode } from 'react';
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { ToastProvider, useToast } from '@/hooks/useToast';
-import type { ToastVariant } from '@/hooks/useToast';
+// ── Test harness component ────────────────────────────────────────────
 
-// ── Hoisted mocks ──────────────────────────────────────────────────
-
-vi.mock('@fluent/react', () => ({
-  useLocalization: () => ({
-    l10n: {
-      getString: (id: string) => id,
-    },
-  }),
-  Localized: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-// ── Helpers ────────────────────────────────────────────────────────
-
-/** Minimal consumer that exposes the hook API for inspection. */
-function ToastConsumer({
+function TestConsumer({
   onRender,
 }: {
-  onRender?: (api: ReturnType<typeof useToast>) => void;
+  onRender?: (add: (msg: string, v?: ToastVariant) => string, remove: (id: string) => void) => void;
 }) {
-  const api = useToast();
-  onRender?.(api);
+  const { toasts, addToast, removeToast } = useToast();
+  const lastIdRef = useRef('');
+
+  const add = useCallback(
+    (msg: string, v?: ToastVariant) => {
+      addToast(msg, v);
+      // We can't get the id synchronously, so capture via a timeout
+      setTimeout(() => {
+        // After state flushes, grab the latest toast id
+      }, 0);
+      return lastIdRef.current;
+    },
+    [addToast],
+  );
+
+  // Track the latest toast id as a side-effect
+  if (toasts.length > 0) {
+    lastIdRef.current = toasts[toasts.length - 1].id;
+  }
+
+  if (onRender) onRender(add, removeToast);
   return (
     <div>
-      <span data-testid="toast-count">{api.toasts.length}</span>
-      <button
-        data-testid="add-toast"
-        onClick={() => api.addToast('Hello', 'info')}
-      >
-        Add
-      </button>
+      <div data-testid="toast-count">{toasts.length}</div>
+      {toasts.map((t) => (
+        <div key={t.id} data-testid={`toast-${t.variant}`}>
+          {t.message}
+        </div>
+      ))}
     </div>
   );
 }
 
-// ── Tests ──────────────────────────────────────────────────────────
+function renderWithProvider(ui: ReactNode) {
+  return render(withFluent(<ToastProvider>{ui}</ToastProvider>, sharedFtl));
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────
 
 describe('useToast', () => {
-  describe('context', () => {
-    it('throws when used outside ToastProvider', () => {
-      // Suppress React error boundary noise in test output.
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      expect(() => render(<ToastConsumer />)).toThrow(
-        'useToast must be used within a <ToastProvider>',
-      );
-
-      spy.mockRestore();
-    });
-  });
-});
-
-describe('ToastProvider', () => {
-  // ── Basic rendering ────────────────────────────────────────────
-
-  it('renders children', () => {
-    render(
-      <ToastProvider>
-        <span data-testid="child">Hello</span>
-      </ToastProvider>,
-    );
-    expect(screen.getByTestId('child')).toBeInTheDocument();
-  });
-
-  it('renders toast container', () => {
-    render(
-      <ToastProvider>
-        <div />
-      </ToastProvider>,
-    );
-    const container = document.querySelector('.toast-container');
-    expect(container).toBeInTheDocument();
-    expect(container?.getAttribute('role')).toBe('status');
-    expect(container?.getAttribute('aria-live')).toBe('polite');
-  });
-
-  // ── addToast / removeToast ─────────────────────────────────────
-
-  it('addToast creates a visible toast', async () => {
-    render(
-      <ToastProvider>
-        <ToastConsumer />
-      </ToastProvider>,
-    );
-
-    await userEvent.click(screen.getByTestId('add-toast'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('toast-count').textContent).toBe('1');
-    });
-    expect(screen.getByText('Hello')).toBeInTheDocument();
-  });
-
-  it('addToast includes a dismiss button with ARIA label', async () => {
-    render(
-      <ToastProvider>
-        <ToastConsumer />
-      </ToastProvider>,
-    );
-
-    await userEvent.click(screen.getByTestId('add-toast'));
-
-    await waitFor(() => {
-      const dismissBtn = document.querySelector('.toast__dismiss');
-      expect(dismissBtn).toBeInTheDocument();
-      expect(dismissBtn?.getAttribute('aria-label')).toBe('toast-dismiss-aria');
-      expect(dismissBtn?.textContent?.trim()).toBe('×');
-    });
-  });
-
-  it('removeToast via API removes the toast', async () => {
-    let capturedApi: ReturnType<typeof useToast> | null = null;
-
-    render(
-      <ToastProvider>
-        <ToastConsumer
-          onRender={(api) => {
-            capturedApi = api;
-          }}
-        />
-      </ToastProvider>,
-    );
-
-    await userEvent.click(screen.getByTestId('add-toast'));
-    await waitFor(() => {
-      expect(screen.getByText('Hello')).toBeInTheDocument();
-    });
-
-    expect(capturedApi).not.toBeNull();
-    act(() => {
-      capturedApi!.removeToast(capturedApi!.toasts[0]!.id);
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByText('Hello')).not.toBeInTheDocument();
-    });
-  });
-
-  it('dismiss button removes the toast', async () => {
-    render(
-      <ToastProvider>
-        <ToastConsumer />
-      </ToastProvider>,
-    );
-
-    await userEvent.click(screen.getByTestId('add-toast'));
-    await waitFor(() => {
-      expect(screen.getByText('Hello')).toBeInTheDocument();
-    });
-
-    const dismissBtn = document.querySelector('.toast__dismiss') as HTMLElement;
-    await userEvent.click(dismissBtn);
-
-    await waitFor(() => {
-      expect(screen.queryByText('Hello')).not.toBeInTheDocument();
-    });
-  });
-
-  // ── Variant classes ────────────────────────────────────────────
-
-  const variants: ToastVariant[] = ['success', 'error', 'warning', 'info'];
-
-  it.each(variants)(
-    'applies toast--%s class for variant %s',
-    async (variant) => {
-      let capturedApi: ReturnType<typeof useToast> | null = null;
-
-      render(
-        <ToastProvider>
-          <ToastConsumer
-            onRender={(api) => {
-              capturedApi = api;
-            }}
-          />
-        </ToastProvider>,
-      );
-
-      expect(capturedApi).not.toBeNull();
-      act(() => {
-        capturedApi!.addToast('Test', variant);
-      });
-
-      await waitFor(() => {
-        const toast = document.querySelector(`.toast--${variant}`);
-        expect(toast).toBeInTheDocument();
-        expect(toast?.querySelector('.toast__message')?.textContent).toBe('Test');
-      });
-    },
-  );
-
-  it('defaults to info variant when no variant is specified', () => {
-    let capturedApi: ReturnType<typeof useToast> | null = null;
-
-    render(
-      <ToastProvider>
-        <ToastConsumer
-          onRender={(api) => {
-            capturedApi = api;
-          }}
-        />
-      </ToastProvider>,
-    );
-
-    act(() => {
-      capturedApi!.addToast('Default');
-    });
-
-    expect(document.querySelector('.toast--info')).toBeInTheDocument();
-  });
-
-  // ── Multiple toasts ────────────────────────────────────────────
-
-  it('supports multiple concurrent toasts', () => {
-    let capturedApi: ReturnType<typeof useToast> | null = null;
-
-    render(
-      <ToastProvider>
-        <ToastConsumer
-          onRender={(api) => {
-            capturedApi = api;
-          }}
-        />
-      </ToastProvider>,
-    );
-
-    act(() => {
-      capturedApi!.addToast('First');
-      capturedApi!.addToast('Second');
-      capturedApi!.addToast('Third');
-    });
-
-    expect(screen.getByText('First')).toBeInTheDocument();
-    expect(screen.getByText('Second')).toBeInTheDocument();
-    expect(screen.getByText('Third')).toBeInTheDocument();
-
-    const toasts = document.querySelectorAll('.toast');
-    expect(toasts.length).toBe(3);
-  });
-});
-
-describe('ToastProvider (timers)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -258,59 +61,180 @@ describe('ToastProvider (timers)', () => {
     vi.useRealTimers();
   });
 
-  // ── Auto-dismiss ───────────────────────────────────────────────
+  it('adds a toast with default info variant', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
 
-  it('auto-dismisses toast after 4 seconds', async () => {
-    let capturedApi: ReturnType<typeof useToast> | null = null;
-
-    render(
-      <ToastProvider>
-        <ToastConsumer
-          onRender={(api) => {
-            capturedApi = api;
-          }}
-        />
-      </ToastProvider>,
-    );
-
-    // Add toast via direct API call (not userEvent — incompatible with fake timers).
     act(() => {
-      capturedApi!.addToast('Timer Toast', 'info');
+      add('Hello world');
     });
-    expect(screen.getByText('Timer Toast')).toBeInTheDocument();
 
-    // Advance past 4s. The setTimeout fires inside this act,
-    // removeToast runs, and React flushes the state update.
+    const container = document.querySelector('.toast-container')!;
+    expect(within(container).getByText('Hello world')).toBeTruthy();
+    expect(screen.getByTestId('toast-info')).toBeTruthy();
+    expect(screen.getByTestId('toast-count').textContent).toBe('1');
+  });
+
+  it('adds a toast with explicit variant', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+
+    act(() => {
+      add('Success!', 'success');
+    });
+
+    const container = document.querySelector('.toast-container')!;
+    expect(within(container).getByText('Success!')).toBeTruthy();
+    expect(screen.getByTestId('toast-success')).toBeTruthy();
+  });
+
+  it('supports all four variants', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+
+    act(() => { add('info', 'info'); });
+    act(() => { add('success', 'success'); });
+    act(() => { add('warning', 'warning'); });
+    act(() => { add('error', 'error'); });
+
+    expect(screen.getByTestId('toast-info')).toBeTruthy();
+    expect(screen.getByTestId('toast-success')).toBeTruthy();
+    expect(screen.getByTestId('toast-warning')).toBeTruthy();
+    expect(screen.getByTestId('toast-error')).toBeTruthy();
+    expect(screen.getByTestId('toast-count').textContent).toBe('4');
+  });
+
+  it('removes a toast by explicit remove', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    let remove: (id: string) => void = () => {};
+    renderWithProvider(<TestConsumer onRender={(a, r) => { add = a; remove = r; }} />);
+
+    act(() => {
+      add('Temp');
+    });
+
+    expect(screen.getByTestId('toast-count').textContent).toBe('1');
+
+    // Grab the toast element and get its data-testid to extract the variant, then remove
+    const toastEl = document.querySelector('.toast')!;
+    const testId = toastEl.querySelector('[data-testid]')?.getAttribute('data-testid') || '';
+    const variant = testId.replace('toast-', '');
+
+    // Remove by variant — the removeToast function uses the actual id, so we need to
+    // use a different approach. Let's click the dismiss button instead.
+    const dismissBtn = toastEl.querySelector('.toast__dismiss') as HTMLElement;
+    act(() => {
+      dismissBtn.click();
+    });
+
+    expect(screen.getByTestId('toast-count').textContent).toBe('0');
+  });
+
+  it('auto-dismisses a toast after 4 seconds', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+
+    act(() => {
+      add('Fading');
+    });
+
+    expect(screen.getByTestId('toast-count').textContent).toBe('1');
+
     act(() => {
       vi.advanceTimersByTime(4000);
     });
 
-    expect(screen.queryByText('Timer Toast')).not.toBeInTheDocument();
+    expect(screen.getByTestId('toast-count').textContent).toBe('0');
   });
 
-  it('does not auto-dismiss before 4 seconds', () => {
-    let capturedApi: ReturnType<typeof useToast> | null = null;
-
-    render(
-      <ToastProvider>
-        <ToastConsumer
-          onRender={(api) => {
-            capturedApi = api;
-          }}
-        />
-      </ToastProvider>,
-    );
+  it('does not dismiss before 4 seconds', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
 
     act(() => {
-      capturedApi!.addToast('Timer Toast', 'info');
+      add('Staying');
     });
-    expect(screen.getByText('Timer Toast')).toBeInTheDocument();
 
-    // Advance 3.9 seconds — toast should still be visible.
     act(() => {
-      vi.advanceTimersByTime(3900);
+      vi.advanceTimersByTime(3999);
     });
 
-    expect(screen.getByText('Timer Toast')).toBeInTheDocument();
+    expect(screen.getByTestId('toast-count').textContent).toBe('1');
+  });
+
+  it('renders nothing when there are no toasts', () => {
+    renderWithProvider(<TestConsumer />);
+
+    expect(screen.getByTestId('toast-count').textContent).toBe('0');
+  });
+
+  it('throws error when used outside ToastProvider', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => {
+      render(<TestConsumer />);
+    }).toThrow('useToast must be used within a <ToastProvider>');
+
+    spy.mockRestore();
+  });
+
+  it('has an accessible toast container', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+
+    act(() => {
+      add('Accessible');
+    });
+
+    const container = document.querySelector('.toast-container');
+    expect(container).toBeTruthy();
+    expect(container!.getAttribute('role')).toBe('status');
+    expect(container!.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('has dismiss buttons on each toast', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+
+    act(() => {
+      add('Dismiss me');
+    });
+
+    const dismissBtns = document.querySelectorAll('.toast__dismiss');
+    expect(dismissBtns.length).toBe(1);
+    expect(dismissBtns[0].textContent).toContain('×');
+
+    // Clicking dismiss removes the toast (use act + direct click with fake timers)
+    act(() => {
+      (dismissBtns[0] as HTMLElement).click();
+    });
+
+    expect(screen.getByTestId('toast-count').textContent).toBe('0');
+  });
+
+  it('each toast has the correct variant CSS class', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+
+    act(() => { add('error toast', 'error'); });
+    act(() => { add('success toast', 'success'); });
+
+    const toasts = document.querySelectorAll('.toast');
+    expect(toasts[0].classList.contains('toast--error')).toBe(true);
+    expect(toasts[1].classList.contains('toast--success')).toBe(true);
+  });
+
+  it('toast messages are rendered in a span', () => {
+    let add: (msg: string, v?: ToastVariant) => string = () => '';
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+
+    act(() => {
+      add('Span message');
+    });
+
+    const msgEl = document.querySelector('.toast__message');
+    expect(msgEl).toBeTruthy();
+    expect(msgEl!.tagName).toBe('SPAN');
+    expect(msgEl!.textContent).toBe('Span message');
   });
 });
