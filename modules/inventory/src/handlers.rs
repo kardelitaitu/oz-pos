@@ -179,4 +179,54 @@ mod tests {
         let result = handler.handle(&event);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn handler_multiple_line_items() {
+        let db = fresh_db();
+        {
+            let conn = db.lock().unwrap();
+            // Add a second product.
+            conn.execute_batch(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+                 VALUES ('p2', 'TEA', 'Tea', 250, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+                 INSERT INTO inventory (product_id, qty, updated_at) VALUES ('p2', 15, '2025-01-01T00:00:00.000Z');",
+            )
+            .unwrap();
+            seed_product(&conn);
+        }
+
+        let handler = InventoryStockHandler::new(db.clone());
+
+        let event = SaleCompleted {
+            sale_id: "sale-4".into(),
+            line_items: vec![
+                oz_core::events::SaleCompletedLine {
+                    sku: "COFFEE".into(),
+                    qty: 2,
+                    unit_price_minor: 350,
+                    tax_minor: 0,
+                    tax_rate_id: None,
+                },
+                oz_core::events::SaleCompletedLine {
+                    sku: "TEA".into(),
+                    qty: 5,
+                    unit_price_minor: 250,
+                    tax_minor: 0,
+                    tax_rate_id: None,
+                },
+            ],
+            total_minor: 1950,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        handler.handle(&event).unwrap();
+
+        let conn = db.lock().unwrap();
+        let store = Store::new(&conn);
+        let coffee_id = store.product_id_by_sku("COFFEE").unwrap().unwrap();
+        let tea_id = store.product_id_by_sku("TEA").unwrap().unwrap();
+        assert_eq!(store.get_stock(&coffee_id).unwrap(), 8); // 10 - 2
+        assert_eq!(store.get_stock(&tea_id).unwrap(), 10); // 15 - 5
+    }
 }

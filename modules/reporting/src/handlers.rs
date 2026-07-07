@@ -214,4 +214,53 @@ mod tests {
             .unwrap();
         assert_eq!(total, 250);
     }
+
+    #[test]
+    fn handler_stores_line_items_as_json() {
+        let db = fresh_db();
+        let handler = SaleCompletedReporter::new(db.clone());
+
+        let event = SaleCompleted {
+            sale_id: "sale-4".into(),
+            line_items: vec![
+                SaleCompletedLine {
+                    sku: "BURGER".into(),
+                    qty: 2,
+                    unit_price_minor: 500,
+                    tax_minor: 0,
+                    tax_rate_id: None,
+                },
+                SaleCompletedLine {
+                    sku: "FRIES".into(),
+                    qty: 1,
+                    unit_price_minor: 300,
+                    tax_minor: 0,
+                    tax_rate_id: None,
+                },
+            ],
+            total_minor: 1300,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        handler.handle(&event).unwrap();
+
+        let conn = db.lock().unwrap();
+        let line_items_json: String = conn
+            .query_row(
+                "SELECT line_items FROM report_sales WHERE sale_id = ?1",
+                ["sale-4"],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&line_items_json).expect("line_items should be valid JSON");
+        let arr = parsed.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["sku"], "BURGER");
+        assert_eq!(arr[0]["qty"], 2);
+        assert_eq!(arr[1]["sku"], "FRIES");
+        assert_eq!(arr[1]["qty"], 1);
+    }
 }
