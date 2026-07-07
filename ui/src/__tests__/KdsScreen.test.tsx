@@ -1,0 +1,219 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { FluentBundle, FluentResource } from '@fluent/bundle';
+import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import KdsScreen from '@/features/kds/KdsScreen';
+import kdsFtl from '@/locales/kds.ftl?raw';
+import type { KdsOrder } from '@/api/kds';
+
+const { mockGetKdsQueue, mockUpdateKdsStatus } = vi.hoisted(() => ({
+  mockGetKdsQueue: vi.fn(),
+  mockUpdateKdsStatus: vi.fn(),
+}));
+
+vi.mock('@/api/kds', () => ({
+  getKdsQueue: () => mockGetKdsQueue(),
+  updateKdsStatus: (id: string, status: string) => mockUpdateKdsStatus(id, status),
+}));
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ role: { id: 'admin', name: 'Admin' } }),
+}));
+
+const bundle = new FluentBundle('en-US');
+bundle.addResource(new FluentResource(kdsFtl));
+const l10n = new ReactLocalization([bundle]);
+
+function renderScreen() {
+  return render(
+    <LocalizationProvider l10n={l10n}>
+      <KdsScreen />
+    </LocalizationProvider>,
+  );
+}
+
+function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
+  return {
+    id: 'o-1',
+    sale_id: 's-1',
+    status: 'pending',
+    items_summary: 'Burger x1, Fries x1',
+    item_count: 2,
+    display_number: 101,
+    received_at: new Date().toISOString(),
+    started_at: null,
+    ready_at: null,
+    served_at: null,
+    prep_time_seconds: 0,
+    notes: '',
+    ...overrides,
+  };
+}
+
+function pendingPromise() {
+  return new Promise<KdsOrder[]>(() => {});
+}
+
+describe('KdsScreen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetKdsQueue.mockResolvedValue([]);
+  });
+
+  it('renders the title', async () => {
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Kitchen Display')).toBeDefined());
+  });
+
+  it('shows three columns: Pending, Preparing, Ready', async () => {
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Pending')).toBeDefined();
+      expect(screen.getByText('Preparing')).toBeDefined();
+      expect(screen.getByText('Ready')).toBeDefined();
+    });
+  });
+
+  it('shows order count in the header', async () => {
+    mockGetKdsQueue.mockResolvedValue([makeOrder(), makeOrder({ id: 'o-2' })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Kitchen Display')).toBeDefined());
+    const countEl = document.querySelector('.kds-order-count');
+    expect(countEl).toBeDefined();
+    // Fluent renders "2 orders" with Bidi chars, match pattern
+    expect(countEl?.textContent).toMatch(/2/);
+  });
+
+  it('shows empty state in each column when no orders', async () => {
+    renderScreen();
+    await waitFor(() => {
+      const empties = screen.getAllByText('No orders yet');
+      // Three columns, each with an empty message
+      expect(empties.length).toBe(3);
+    });
+  });
+
+  it('renders tickets in the correct column by status', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, items_summary: 'Burger' }),
+      makeOrder({ id: 'o-2', status: 'preparing', display_number: 102, items_summary: 'Fries' }),
+      makeOrder({ id: 'o-3', status: 'ready', display_number: 103, items_summary: 'Drink' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      // Ticket numbers rendered as #display_number
+      expect(screen.getByText('#101')).toBeDefined();
+      expect(screen.getByText('#102')).toBeDefined();
+      expect(screen.getByText('#103')).toBeDefined();
+    });
+  });
+
+  it('shows items summary on each ticket', async () => {
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+  });
+
+  it('shows item count on each ticket', async () => {
+    mockGetKdsQueue.mockResolvedValue([makeOrder({ item_count: 3 })]);
+    renderScreen();
+    await waitFor(() => {
+      // Fluent Localized wraps the text in <span>, so use a custom matcher
+      const countEl = document.querySelector('.kds-ticket-count');
+      expect(countEl?.textContent).toMatch(/3/);
+      expect(countEl?.textContent).toMatch(/items/);
+    });
+  });
+
+  it('shows notes on ticket when present', async () => {
+    mockGetKdsQueue.mockResolvedValue([makeOrder({ notes: 'No onions' })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('No onions')).toBeDefined());
+  });
+
+  it('advances pending order to preparing on click', async () => {
+    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'pending' })]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+    // After status update, re-fetch
+    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'preparing' })]);
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const ticket = document.querySelector('.kds-ticket')!;
+    await userEvent.click(ticket);
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
+    );
+  });
+
+  it('advances preparing order to ready on click', async () => {
+    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'preparing' })]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'ready' })]);
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const ticket = document.querySelector('.kds-ticket')!;
+    await userEvent.click(ticket);
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'ready'),
+    );
+  });
+
+  it('displays error when getKdsQueue fails', async () => {
+    mockGetKdsQueue.mockRejectedValue(new Error('Network down'));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Network down')).toBeDefined());
+  });
+
+  it('shows time ago on tickets', async () => {
+    const recentTime = new Date(Date.now() - 5 * 60000).toISOString(); // 5 min ago
+    mockGetKdsQueue.mockResolvedValue([makeOrder({ received_at: recentTime })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+    const timeCell = document.querySelector('.kds-ticket-time');
+    // timeAgo should show "5m" for 5 minutes ago
+    expect(timeCell?.textContent).toMatch(/m/);
+  });
+
+  it('shows column counts', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending' }),
+      makeOrder({ id: 'o-2', status: 'pending' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      const counts = document.querySelectorAll('.kds-column-count');
+      expect(counts.length).toBe(3);
+      // Pending column should show count of 2
+      expect(counts[0]?.textContent).toBe('2');
+    });
+  });
+
+  it('has aria-label on the KDS region', async () => {
+    renderScreen();
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'Kitchen Display System' })).toBeDefined(),
+    );
+  });
+
+  it('does not render cancelled orders in any column', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'cancelled', display_number: 999, items_summary: 'Cancel Item' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      // All three columns should be empty
+      const empties = screen.getAllByText('No orders yet');
+      expect(empties.length).toBe(3);
+    });
+    // Cancelled order should not be visible
+    expect(screen.queryByText('#999')).toBeNull();
+    expect(screen.queryByText('Cancel Item')).toBeNull();
+  });
+});
