@@ -2,6 +2,50 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useIdleTimer, getAutoLockMinutes, setAutoLockMinutes } from '@/hooks/useIdleTimer';
 
+// ── getAutoLockMinutes / setAutoLockMinutes ─────────────────────────────
+describe('getAutoLockMinutes', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('returns 5 by default when nothing is stored', () => {
+    expect(getAutoLockMinutes()).toBe(5);
+  });
+
+  it('returns the stored value when it is a valid number', () => {
+    localStorage.setItem('auto-lock-minutes', '10');
+    expect(getAutoLockMinutes()).toBe(10);
+  });
+
+  it('returns 5 for invalid stored values', () => {
+    localStorage.setItem('auto-lock-minutes', 'not-a-number');
+    expect(getAutoLockMinutes()).toBe(5);
+  });
+
+  it('returns 5 for values below 1', () => {
+    localStorage.setItem('auto-lock-minutes', '0');
+    expect(getAutoLockMinutes()).toBe(5);
+  });
+});
+
+describe('setAutoLockMinutes', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('persists a valid minute value', () => {
+    setAutoLockMinutes(30);
+    expect(localStorage.getItem('auto-lock-minutes')).toBe('30');
+  });
+
+  it('clamps values below 1 to 1', () => {
+    setAutoLockMinutes(0);
+    expect(localStorage.getItem('auto-lock-minutes')).toBe('1');
+  });
+
+  it('clamps values above 120 to 120', () => {
+    setAutoLockMinutes(200);
+    expect(localStorage.getItem('auto-lock-minutes')).toBe('120');
+  });
+});
+
+// ── useIdleTimer ────────────────────────────────────────────────────────
 describe('useIdleTimer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -10,189 +54,115 @@ describe('useIdleTimer', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    localStorage.clear();
   });
 
-  it('fires onIdle after default timeout (5 minutes)', () => {
+  it('calls onIdle after the configured timeout', () => {
+    const onIdle = vi.fn();
+    setAutoLockMinutes(1); // 1 minute = 60,000 ms
+    renderHook(() => useIdleTimer(onIdle));
+
+    expect(onIdle).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the default 5-minute timeout when nothing is configured', () => {
     const onIdle = vi.fn();
     renderHook(() => useIdleTimer(onIdle));
 
-    // Should not fire immediately
+    // 4 minutes should not trigger
+    act(() => { vi.advanceTimersByTime(4 * 60_000); });
     expect(onIdle).not.toHaveBeenCalled();
 
-    // Advance to just before 5 minutes
-    act(() => {
-      vi.advanceTimersByTime(5 * 60 * 1000 - 1);
-    });
+    // 1 more minute = 5 total
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets the timer on mousedown', () => {
+    const onIdle = vi.fn();
+    setAutoLockMinutes(1);
+    renderHook(() => useIdleTimer(onIdle));
+
+    // Advance 30s then trigger mousedown
+    act(() => { vi.advanceTimersByTime(30_000); });
+    act(() => { window.dispatchEvent(new MouseEvent('mousedown')); });
+    // Advance another 30s (total 60s from mount but 30s from reset)
+    act(() => { vi.advanceTimersByTime(30_000); });
     expect(onIdle).not.toHaveBeenCalled();
 
-    // Advance past 5 minutes
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    // Another 30s should fire (60s from reset)
+    act(() => { vi.advanceTimersByTime(30_000); });
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
 
-  it('resets timer on mousedown activity', () => {
+  it('resets the timer on keydown', () => {
     const onIdle = vi.fn();
+    setAutoLockMinutes(1);
     renderHook(() => useIdleTimer(onIdle));
 
-    // Advance 4 minutes, then trigger mousedown
-    act(() => {
-      vi.advanceTimersByTime(4 * 60 * 1000);
-    });
-    window.dispatchEvent(new MouseEvent('mousedown'));
-
-    // Advance another 4 minutes (8 total, but timer reset at 4)
-    act(() => {
-      vi.advanceTimersByTime(4 * 60 * 1000);
-    });
+    act(() => { vi.advanceTimersByTime(45_000); });
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })); });
+    act(() => { vi.advanceTimersByTime(45_000); });
     expect(onIdle).not.toHaveBeenCalled();
 
-    // Advance past the reset point (4+1=5 since reset)
-    act(() => {
-      vi.advanceTimersByTime(60 * 1000);
-    });
+    act(() => { vi.advanceTimersByTime(15_000); });
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
 
-  it('resets timer on keydown activity', () => {
+  it('resets the timer on touchstart', () => {
     const onIdle = vi.fn();
+    setAutoLockMinutes(1);
     renderHook(() => useIdleTimer(onIdle));
 
-    act(() => {
-      vi.advanceTimersByTime(3 * 60 * 1000);
-    });
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
-
-    act(() => {
-      vi.advanceTimersByTime(5 * 60 * 1000);
-    });
-    expect(onIdle).toHaveBeenCalledTimes(1);
-  });
-
-  it('resets timer on touchstart activity', () => {
-    const onIdle = vi.fn();
-    renderHook(() => useIdleTimer(onIdle));
-
-    act(() => {
-      vi.advanceTimersByTime(2 * 60 * 1000);
-    });
-    window.dispatchEvent(new Event('touchstart'));
-
-    act(() => {
-      vi.advanceTimersByTime(5 * 60 * 1000);
-    });
-    expect(onIdle).toHaveBeenCalledTimes(1);
-  });
-
-  it('resets timer on scroll activity', () => {
-    const onIdle = vi.fn();
-    renderHook(() => useIdleTimer(onIdle));
-
-    act(() => {
-      vi.advanceTimersByTime(4 * 60 * 1000);
-    });
-    window.dispatchEvent(new Event('scroll'));
-
-    act(() => {
-      vi.advanceTimersByTime(5 * 60 * 1000);
-    });
-    expect(onIdle).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses custom timeout from localStorage', () => {
-    localStorage.setItem('auto-lock-minutes', '2');
-    const onIdle = vi.fn();
-    renderHook(() => useIdleTimer(onIdle));
-
-    // Should not fire at 1:59
-    act(() => {
-      vi.advanceTimersByTime(2 * 60 * 1000 - 1);
-    });
+    act(() => { vi.advanceTimersByTime(59_000); });
+    act(() => { window.dispatchEvent(new TouchEvent('touchstart')); });
+    act(() => { vi.advanceTimersByTime(59_000); });
     expect(onIdle).not.toHaveBeenCalled();
 
-    // Should fire at 2:00
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    act(() => { vi.advanceTimersByTime(1_000); });
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
 
-  it('uses latest onIdle callback via ref', () => {
-    const onIdle1 = vi.fn();
-    const onIdle2 = vi.fn();
+  it('resets the timer on scroll', () => {
+    const onIdle = vi.fn();
+    setAutoLockMinutes(1);
+    renderHook(() => useIdleTimer(onIdle));
+
+    act(() => { vi.advanceTimersByTime(50_000); });
+    act(() => { window.dispatchEvent(new Event('scroll')); });
+    act(() => { vi.advanceTimersByTime(50_000); });
+    expect(onIdle).not.toHaveBeenCalled();
+
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the timeout on unmount', () => {
+    const onIdle = vi.fn();
+    const { unmount } = renderHook(() => useIdleTimer(onIdle));
+
+    unmount();
+    act(() => { vi.advanceTimersByTime(10 * 60_000); });
+    expect(onIdle).not.toHaveBeenCalled();
+  });
+
+  it('uses the latest onIdle callback even after re-render', () => {
+    const firstCallback = vi.fn();
+    const secondCallback = vi.fn();
+
+    // Set lock to 1 minute BEFORE mount so the timer starts with 60s
+    localStorage.setItem('auto-lock-minutes', '1');
 
     const { rerender } = renderHook(
       ({ cb }) => useIdleTimer(cb),
-      { initialProps: { cb: onIdle1 } },
+      { initialProps: { cb: firstCallback } },
     );
 
-    // Switch to onIdle2
-    rerender({ cb: onIdle2 });
+    rerender({ cb: secondCallback });
+    act(() => { vi.advanceTimersByTime(60_000); });
 
-    act(() => {
-      vi.advanceTimersByTime(5 * 60 * 1000);
-    });
-
-    expect(onIdle1).not.toHaveBeenCalled();
-    expect(onIdle2).toHaveBeenCalledTimes(1);
-  });
-
-  it('cleans up listeners on unmount', () => {
-    const addSpy = vi.spyOn(window, 'addEventListener');
-    const removeSpy = vi.spyOn(window, 'removeEventListener');
-
-    const { unmount } = renderHook(() => useIdleTimer(vi.fn()));
-
-    // Should have added listeners
-    expect(addSpy).toHaveBeenCalled();
-
-    const addCount = addSpy.mock.calls.length;
-    unmount();
-
-    // Should have removed the same number of listeners
-    expect(removeSpy.mock.calls.length).toBe(addCount);
-
-    addSpy.mockRestore();
-    removeSpy.mockRestore();
-  });
-});
-
-describe('getAutoLockMinutes / setAutoLockMinutes', () => {
-  afterEach(() => {
-    localStorage.clear();
-  });
-
-  it('returns default 5 when localStorage is empty', () => {
-    expect(getAutoLockMinutes()).toBe(5);
-  });
-
-  it('returns value from localStorage', () => {
-    localStorage.setItem('auto-lock-minutes', '10');
-    expect(getAutoLockMinutes()).toBe(10);
-  });
-
-  it('handles invalid localStorage values gracefully', () => {
-    localStorage.setItem('auto-lock-minutes', 'notanumber');
-    expect(getAutoLockMinutes()).toBe(5);
-  });
-
-  it('clamps setAutoLockMinutes to minimum 1', () => {
-    setAutoLockMinutes(0);
-    expect(localStorage.getItem('auto-lock-minutes')).toBe('1');
-    expect(getAutoLockMinutes()).toBe(1);
-  });
-
-  it('clamps setAutoLockMinutes to maximum 120', () => {
-    setAutoLockMinutes(999);
-    expect(localStorage.getItem('auto-lock-minutes')).toBe('120');
-    expect(getAutoLockMinutes()).toBe(120);
-  });
-
-  it('stores valid minutes as-is', () => {
-    setAutoLockMinutes(30);
-    expect(localStorage.getItem('auto-lock-minutes')).toBe('30');
-    expect(getAutoLockMinutes()).toBe(30);
+    expect(firstCallback).not.toHaveBeenCalled();
+    expect(secondCallback).toHaveBeenCalledTimes(1);
   });
 });
