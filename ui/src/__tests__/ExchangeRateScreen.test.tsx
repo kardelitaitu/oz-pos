@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import currencyFtl from '@/locales/currency.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ function makeCurrency(code: string, name: string) {
 }
 
 const wrap = (children: React.ReactNode) =>
-  withFluent(children, currencyFtl);
+  withFluent(children, currencyFtl, sharedFtl);
 
 function renderScreen() {
   return render(wrap(<ExchangeRateScreen />));
@@ -162,7 +162,7 @@ describe('ExchangeRateScreen', () => {
 
     const user = userEvent.setup();
     const addBtns = screen.getAllByText('Add');
-    await user.click(addBtns[0]!);
+    await user.click(addBtns[0]);
 
     await waitFor(() => {
       expect(screen.getByText('Add Exchange Rate')).toBeTruthy();
@@ -179,7 +179,7 @@ describe('ExchangeRateScreen', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(screen.getAllByText('Add')[0]!);
+    await user.click(screen.getAllByText('Add')[0]);
 
     await waitFor(() => {
       expect(screen.getByText('Cancel')).toBeTruthy();
@@ -207,7 +207,7 @@ describe('ExchangeRateScreen', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(screen.getAllByText('Add')[0]!);
+    await user.click(screen.getAllByText('Add')[0]);
 
     await waitFor(() => {
       expect(screen.getByText('Add Exchange Rate')).toBeTruthy();
