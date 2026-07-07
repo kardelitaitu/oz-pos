@@ -292,11 +292,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     #[test]

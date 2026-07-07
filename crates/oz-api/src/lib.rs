@@ -147,12 +147,9 @@ mod tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
-    /// Helper: open an in-memory connection, turn on FKs, run migrations.
+    /// Helper: open an in-memory connection with all migrations pre-applied.
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
-        conn
+        oz_core::migrations::fresh_db()
     }
 
     /// Helper: build a router backed by an empty in-memory database.

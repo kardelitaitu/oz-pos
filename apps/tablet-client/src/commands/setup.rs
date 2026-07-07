@@ -151,10 +151,7 @@ mod tests {
 
     /// Create a fresh in-memory connection with migrations applied.
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     /// Run the same logic as `complete_setup` but with a plain
