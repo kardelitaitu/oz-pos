@@ -245,3 +245,58 @@ impl PluginManager {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pending_discount_new() {
+        let d = PendingDiscount {
+            target: "COFFEE".into(),
+            percent: 10,
+        };
+        assert_eq!(d.target, "COFFEE");
+        assert_eq!(d.percent, 10);
+    }
+
+    #[test]
+    fn pending_discount_debug() {
+        let d = PendingDiscount {
+            target: "COFFEE".into(),
+            percent: 10,
+        };
+        let debug = format!("{d:?}");
+        assert!(debug.contains("COFFEE"));
+        assert!(debug.contains("10"));
+    }
+
+    #[test]
+    fn pending_discount_clone() {
+        let d = PendingDiscount {
+            target: "TEA".into(),
+            percent: 25,
+        };
+        let cloned = d.clone();
+        assert_eq!(d.target, cloned.target);
+        assert_eq!(d.percent, cloned.percent);
+    }
+
+    #[test]
+    fn pending_discount_zero_percent() {
+        let d = PendingDiscount {
+            target: "ITEM".into(),
+            percent: 0,
+        };
+        assert_eq!(d.percent, 0);
+    }
+
+    #[test]
+    fn pending_discount_large_percent() {
+        let d = PendingDiscount {
+            target: "ITEM".into(),
+            percent: 100,
+        };
+        assert_eq!(d.percent, 100);
+    }
+}
