@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import shiftsFtl from '@/locales/shifts.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/shifts', () => ({
   listShifts: vi.fn(),
@@ -21,13 +21,14 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
-import { listShifts, getActiveShift, getShiftReport } from '@/api/shifts';
+import { listShifts, getActiveShift, openShift, getShiftReport } from '@/api/shifts';
 
 const mockListShifts = listShifts as ReturnType<typeof vi.fn>;
 const mockGetActiveShift = getActiveShift as ReturnType<typeof vi.fn>;
+const mockOpenShift = openShift as ReturnType<typeof vi.fn>;
 const mockGetShiftReport = getShiftReport as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, shiftsFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, shiftsFtl, sharedFtl);
 
 const activeShift = {
   id: 'shift-1', userId: 'user-1', terminalId: null,
@@ -42,7 +43,7 @@ const activeShift = {
 
 const closedShifts = [
   { ...activeShift, id: 'shift-2', status: 'closed', closedAt: '2026-07-06T20:00:00.000Z',
-    closingBalanceMinor: 55000, expectedCashMinor: 54000, cashDifferenceMinor: 1000 } as unknown as typeof activeShift,
+    closingBalanceMinor: 55000, expectedCashMinor: 54000, cashDifferenceMinor: 1000 } as typeof activeShift,
 ];
 
 describe('ShiftManagementScreen', () => {
