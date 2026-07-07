@@ -42,6 +42,8 @@ export interface PaymentModalProps {
   onClose: () => void;
   /** Serial numbers captured per SKU for track_serial products. */
   serialNumbers?: Record<string, string>;
+  /** Custom quick tender preset amounts (in minor units). Defaults to standard Rp denominations. */
+  tenderPresets?: number[];
 }
 
 export default function PaymentModal({
@@ -57,6 +59,7 @@ export default function PaymentModal({
   onComplete,
   onClose,
   serialNumbers,
+  tenderPresets,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
@@ -936,7 +939,7 @@ export default function PaymentModal({
                     </div>
 
                     <div className="payment-quick-cash">
-                      {[5000, 10000, 20000, 50000, 100000].map((amount) => {
+                      {(tenderPresets ?? [5000, 10000, 20000, 50000, 100000]).map((amount) => {
                         const totalNum = Number(total.minor_units) / 100;
                         const quickVal = Math.ceil(totalNum / amount) * amount;
                         return (

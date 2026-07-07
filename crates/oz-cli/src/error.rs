@@ -46,7 +46,6 @@ mod tests {
         let err = CliError::OpenDatabase(rusqlite::Error::InvalidParameterName("bad".into()));
         let msg = err.to_string();
         assert!(msg.starts_with("could not open database:"));
-        // The rusqlite::Error's Display impl is appended after the prefix.
         assert!(msg.len() > "could not open database: ".len());
     }
 
@@ -77,5 +76,39 @@ mod tests {
     fn empty_args() {
         let err = CliError::Args("".into());
         assert_eq!(err.to_string(), "invalid arguments: ");
+    }
+
+    // --- Tests migrated from the old lib.rs test block ---
+
+    #[test]
+    fn subcommand_error_display() {
+        let err = CliError::Subcommand("migrate", "failed".into());
+        assert_eq!(err.to_string(), "subcommand `migrate` failed: failed");
+    }
+
+    #[test]
+    fn open_database_error_display_lib() {
+        let inner = rusqlite::Error::InvalidParameterName("x".into());
+        let err = CliError::OpenDatabase(inner);
+        assert!(err.to_string().contains("could not open database"));
+    }
+
+    #[test]
+    fn args_error_display_lib() {
+        let err = CliError::Args("missing <sku>".into());
+        assert_eq!(err.to_string(), "invalid arguments: missing <sku>");
+    }
+
+    #[test]
+    fn error_is_debug_lib() {
+        let err = CliError::Args("test".into());
+        assert!(!format!("{err:?}").is_empty());
+    }
+
+    #[test]
+    fn open_database_from_rusqlite() {
+        let inner = rusqlite::Error::InvalidParameterName("foo".into());
+        let err: CliError = inner.into();
+        assert!(err.to_string().contains("could not open database"));
     }
 }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
-import { useLocalization } from '@fluent/react';
+import { useLocalization, Localized } from '@fluent/react';
+import { invoke } from '@tauri-apps/api/core';
 import {
   getReceiptSettings,
   setReceiptSettings,
@@ -16,12 +17,18 @@ import {
   type HardwareSettingsDto,
   type CreditSettingsDto,
 } from '@/api/settings';
-import { listScanners, type ScannerInfo } from '@/api/hardware';
+import { getGatewayStatus, type GatewayStatus } from '@/api/gateway';
+import { listScanners, listDisplays, type ScannerInfo } from '@/api/hardware';
 import { listTaxRates, type TaxRateDto } from '@/api/tax';
 import { getAutoLockMinutes, setAutoLockMinutes } from '@/hooks/useIdleTimer';
+import { useCloudSync } from '@/hooks/useCloudSync';
+import { LanguageSelector } from '@/i18n/LanguageSelector';
+import { AppearanceSettings } from '@/features/settings/AppearanceSettings';
+import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
+import DataManagementScreen from '@/features/settings/DataManagementScreen';
 import './RetailPosScreen.css';
 
-type TabId = 'general' | 'receipt' | 'printer' | 'scanner' | 'credit' | 'system';
+type TabId = 'general' | 'receipt' | 'printer' | 'scanner' | 'credit' | 'payments' | 'system' | 'appearance' | 'features' | 'data' | 'sync';
 
 interface RetailOptionsScreenProps {
   onClose: () => void;
@@ -35,7 +42,12 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'printer', label: 'Printer' },
   { id: 'scanner', label: 'Scanner' },
   { id: 'credit', label: 'Credit' },
+  { id: 'payments', label: 'Payments' },
   { id: 'system', label: 'System' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'features', label: 'Features' },
+  { id: 'data', label: 'Data' },
+  { id: 'sync', label: 'Sync' },
 ];
 
 
@@ -269,6 +281,51 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
     listScanners().then(setScanners).catch(() => addToast({ message: l10n.getString('settings-toast-failed-scanners') || 'Failed to load scanners', type: 'error' }));
   }, []);
 
+  // ── Payment gateway config ─────────────────────────────────────
+
+  const [gateways, setGateways] = useState<GatewayStatus[]>([]);
+  const [stripeKey, setStripeKey] = useState('');
+  const [squareKey, setSquareKey] = useState('');
+  const [midtransKey, setMidtransKey] = useState('');
+  useEffect(() => {
+    getGatewayStatus().then(setGateways).catch(() => addToast({ message: 'Failed to load gateway status', type: 'error' }));
+    // Load existing keys from secure DB-backed settings
+    (async () => {
+      try {
+        const sk: string | null = await invoke('get_setting', { key: 'stripe.api_key' });
+        const sq: string | null = await invoke('get_setting', { key: 'square.api_key' });
+        const mt: string | null = await invoke('get_setting', { key: 'midtrans.server_key' });
+        if (sk) setStripeKey(sk);
+        if (sq) setSquareKey(sq);
+        if (mt) setMidtransKey(mt);
+      } catch { /* ignore — settings DB may not be available yet */ }
+    })();
+  }, []);
+
+  // ── Quick tender presets ───────────────────────────────────────
+
+  const [tenderPresets, setTenderPresets] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem('retail-tender-presets');
+      if (saved) return JSON.parse(saved) as number[];
+    } catch { /* ignore */ }
+    return [5000, 10000, 20000, 50000, 100000];
+  });
+
+  // ── Sound toggle ───────────────────────────────────────────────
+
+  const [soundEnabled, setSoundEnabledLocal] = useState(() => {
+    try {
+      return localStorage.getItem('retail-sound-enabled') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  // ── Cloud sync ────────────────────────────────────────────────
+
+  const { persist: persistSync, ...sync } = useCloudSync({ addToast, l10n });
+
   // ── Keyboard shortcuts ───────────────────────────────────────
 
   useEffect(() => {
@@ -284,6 +341,15 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose, showPreview]);
 
+  // ── Customer display ────────────────────────────────────────
+
+  const [displays, setDisplays] = useState<string[]>([]);
+  const [displayTestMsg, setDisplayTestMsg] = useState('');
+
+  useEffect(() => {
+    listDisplays().then(setDisplays).catch(() => addToast({ message: l10n.getString('settings-toast-failed-displays') || 'Failed to load displays', type: 'error' }));
+  }, []);
+
   // ── Save ──────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
@@ -293,13 +359,33 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       await setReceiptSettings(receipt, userId);
       await setCreditSettings(credit, userId);
       await setHardwareSettings(hardware, userId);
+
+      // Save payment gateway keys via secure settings IPC
+      try {
+        if (stripeKey) await invoke('set_setting', { key: 'stripe.api_key', value: stripeKey, user_id: userId });
+        else await invoke('set_setting', { key: 'stripe.api_key', value: '', user_id: userId });
+        if (squareKey) await invoke('set_setting', { key: 'square.api_key', value: squareKey, user_id: userId });
+        else await invoke('set_setting', { key: 'square.api_key', value: '', user_id: userId });
+        if (midtransKey) await invoke('set_setting', { key: 'midtrans.server_key', value: midtransKey, user_id: userId });
+        else await invoke('set_setting', { key: 'midtrans.server_key', value: '', user_id: userId });
+      } catch { /* ignore — settings DB may not be available */ }
+
+      // Save cloud sync settings (non-secret config to localStorage,
+      // auth token to the secure DB-backed setting channel).
+      await persistSync(userId);
+
+      // Save tender presets to localStorage
+      localStorage.setItem('retail-tender-presets', JSON.stringify(tenderPresets));
+      // Save sound preference
+      localStorage.setItem('retail-sound-enabled', String(soundEnabled));
+
       addToast({ message: l10n.getString('settings-toast-saved') || 'Settings saved', type: 'success' });
     } catch {
       addToast({ message: l10n.getString('settings-toast-failed-save') || 'Failed to save settings', type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [store, receipt, credit, hardware, userId, addToast]);
+  }, [store, receipt, credit, hardware, stripeKey, squareKey, midtransKey, tenderPresets, soundEnabled, persistSync, userId, addToast, l10n]);
 
   if (!storeLoaded || !receiptLoaded || !creditLoaded || !hardwareLoaded) {
     return (
@@ -613,6 +699,155 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
             </div>
           )}
 
+          {activeTab === 'payments' && (
+            <div className="retail-options-section">
+              <h3 className="retail-options-heading">{l10n.getString('settings-payments-heading') || 'Payment Gateways'}</h3>
+
+              {/* ── Gateway status badges ────────── */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                {gateways.length === 0 ? (
+                  <span style={{ fontSize: 12, color: '#888' }}>{l10n.getString('settings-payments-no-gateways') || 'No payment gateways configured'}</span>
+                ) : (
+                  gateways.map((g) => (
+                    <span
+                      key={g.name}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '4px 10px', borderRadius: 4, fontSize: 12,
+                        background: g.configured ? '#e8f4e8' : '#f8e8e8',
+                        color: g.configured ? '#2a6a2a' : '#8a2a2a',
+                        border: `1px solid ${g.configured ? '#b0d8b0' : '#d8b0b0'}`,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: g.configured && g.online ? '#2a6a2a' : g.configured ? '#d8a030' : '#8a2a2a',
+                          display: 'inline-block',
+                        }}
+                      />
+                      {g.name}
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {/* ── Stripe ──────────────────────── */}
+              <details style={{ marginBottom: 12 }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }}>
+                  💳 Stripe
+                </summary>
+                <div className="retail-options-field" style={{ marginTop: 8 }}>
+                  <label>{l10n.getString('settings-stripe-api-key') || 'Stripe API Key'}</label>
+                  <input
+                    type="password"
+                    placeholder={l10n.getString('settings-stripe-key-placeholder') || 'sk_live_...'}
+                    value={stripeKey}
+                    onChange={(e) => setStripeKey(e.target.value)}
+                  />
+                  <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                    {l10n.getString('settings-stripe-key-hint') || 'Enter your Stripe secret key to enable card payments'}
+                  </span>
+                </div>
+              </details>
+
+              {/* ── Square ─────────────────────── */}
+              <details style={{ marginBottom: 12 }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }}>
+                  🟦 Square
+                </summary>
+                <div className="retail-options-field" style={{ marginTop: 8 }}>
+                  <label>{l10n.getString('settings-square-api-key') || 'Square API Key'}</label>
+                  <input
+                    type="password"
+                    placeholder={l10n.getString('settings-square-key-placeholder') || 'sq0atp-...'}
+                    value={squareKey}
+                    onChange={(e) => setSquareKey(e.target.value)}
+                  />
+                  <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                    {l10n.getString('settings-square-key-hint') || 'Enter your Square access token to enable card payments'}
+                  </span>
+                </div>
+              </details>
+
+              {/* ── QRIS (Midtrans) ────────────── */}
+              <details style={{ marginBottom: 12 }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }}>
+                  📱 QRIS (Midtrans)
+                </summary>
+                <div className="retail-options-field" style={{ marginTop: 8 }}>
+                  <label>{l10n.getString('settings-midtrans-key') || 'Midtrans Server Key'}</label>
+                  <input
+                    type="password"
+                    placeholder={l10n.getString('settings-midtrans-key-placeholder') || 'Mid-server-...'}
+                    value={midtransKey}
+                    onChange={(e) => setMidtransKey(e.target.value)}
+                  />
+                  <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                    {l10n.getString('settings-midtrans-key-hint') || 'Enter your Midtrans server key for QRIS payments'}
+                  </span>
+                </div>
+              </details>
+
+              {/* ── Quick tender presets ───────── */}
+              <h4 style={{ margin: '20px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>
+                {l10n.getString('settings-tender-presets-heading') || 'Quick Cash Tender Buttons'}
+              </h4>
+              <p style={{ fontSize: 12, color: '#666', margin: '0 0 8px' }}>
+                {l10n.getString('settings-tender-presets-desc') || 'Customize the quick tender buttons shown on the cash payment screen. Values are in rupiah (e.g., 50000 = Rp 50,000).'}
+              </p>
+              {tenderPresets.map((val, idx) => (
+                <div key={idx} className="retail-options-field" style={{ marginBottom: 4 }}>
+                  <Localized id="settings-tender-preset-label" vars={{ n: idx + 1 }}>
+                    <label>{`Preset ${idx + 1}`}</label>
+                  </Localized>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      style={{ width: 120 }}
+                      value={val}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.round(Number(e.target.value) / 100) * 100);
+                        setTenderPresets((prev) => prev.map((p, i) => (i === idx ? v : p)));
+                      }}
+                      aria-label={`Preset ${idx + 1} amount`}
+                    />
+                    <span style={{ fontSize: 12, color: '#888' }}>
+                      Rp {(val).toLocaleString('id-ID')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTenderPresets((prev) => prev.filter((_, i) => i !== idx))}
+                      disabled={tenderPresets.length <= 2}
+                      style={{
+                        padding: '2px 6px', fontSize: 12, background: 'none',
+                        border: '1px solid #ccc', cursor: tenderPresets.length <= 2 ? 'not-allowed' : 'pointer',
+                        opacity: tenderPresets.length <= 2 ? 0.4 : 1,
+                      }}
+                      aria-label={`Remove preset ${idx + 1}`}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setTenderPresets((prev) => [...prev, 0])}
+                disabled={tenderPresets.length >= 8}
+                style={{
+                  marginTop: 4, padding: '4px 12px', fontSize: 12, cursor: tenderPresets.length >= 8 ? 'not-allowed' : 'pointer',
+                  background: '#1a3a5c', color: '#fff', border: 'none',
+                  opacity: tenderPresets.length >= 8 ? 0.4 : 1,
+                }}
+              >
+                + {l10n.getString('settings-tender-preset-add') || 'Add preset'}
+              </button>
+            </div>
+          )}
+
           {activeTab === 'system' && (
             <div className="retail-options-section">
               <h3 className="retail-options-heading">{l10n.getString('settings-system-heading')}</h3>
@@ -639,6 +874,19 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   <option value="dark">{l10n.getString('settings-theme-dark')}</option>
                 </select>
               </div>
+              <div className="retail-options-field retail-options-field--row">
+                <label>{l10n.getString('settings-sound-label') || 'Sound Effects'}</label>
+                <input
+                  type="checkbox"
+                  checked={soundEnabled}
+                  onChange={(e) => setSoundEnabledLocal(e.target.checked)}
+                  aria-label={l10n.getString('settings-sound-aria') || 'Toggle sound effects'}
+                />
+              </div>
+              <div className="retail-options-field">
+                <label>{l10n.getString('settings-language-label') || 'Language'}</label>
+                <LanguageSelector />
+              </div>
               <div className="retail-options-field">
                 <label>{l10n.getString('settings-auto-lock-label')}</label>
                 <input
@@ -655,6 +903,218 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   {l10n.getString('settings-auto-lock-hint')}
                 </span>
               </div>
+
+              {/* ── Quick links to other configuration screens ─── */}
+              <h4 style={{ margin: '20px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>
+                {l10n.getString('settings-quick-links-heading') || 'More Configuration'}
+              </h4>
+              <div style={{ padding: '8px 12px', background: '#f0f0f0', border: '1px solid #ddd', fontSize: 12, color: '#666', lineHeight: 1.5 }}>
+                {l10n.getString('settings-quick-links-note') || 'Tax rates and feature toggles can be configured from the main Settings page, accessible via the sidebar.'}
+              </div>
+
+              {/* ── Customer Display ──────────────────────────────── */}
+              <h4 style={{ margin: '20px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>
+                {l10n.getString('settings-display-heading') || 'Customer-Facing Display'}
+              </h4>
+              {displays.length === 0 ? (
+                <div style={{ padding: 12, background: '#f5f5f5', border: '1px solid #ddd', fontSize: 12, color: '#888' }}>
+                  {l10n.getString('settings-display-none') || 'No pole displays detected. Connect a customer-facing display to enable this feature.'}
+                </div>
+              ) : (
+                <>
+                  <p style={{ fontSize: 12, color: '#666', margin: '0 0 8px' }}>
+                    {l10n.getString('settings-display-count', { count: displays.length }) || `${displays.length} display(s) connected`}
+                  </p>
+                  <div className="retail-options-field">
+                    <label>{l10n.getString('settings-display-test-label') || 'Test Message'}</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        style={{ flex: 1 }}
+                        placeholder={l10n.getString('settings-display-test-placeholder') || 'Welcome to our store!'}
+                        value={displayTestMsg}
+                        onChange={(e) => setDisplayTestMsg(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!displayTestMsg.trim()) return;
+                          try {
+                            const { displayShow } = await import('@/api/hardware');
+                            await displayShow({
+                              displayId: displays[0]!,
+                              line1: displayTestMsg,
+                              line2: '',
+                            });
+                            addToast({ message: l10n.getString('settings-display-test-sent') || 'Message sent to display', type: 'success' });
+                          } catch {
+                            addToast({ message: l10n.getString('settings-display-test-failed') || 'Failed to send to display', type: 'error' });
+                          }
+                        }}
+                        disabled={!displayTestMsg.trim()}
+                        style={{
+                          padding: '4px 12px', fontSize: 11, background: '#1a3a5c', color: '#fff',
+                          border: 'none', cursor: displayTestMsg.trim() ? 'pointer' : 'not-allowed',
+                          opacity: displayTestMsg.trim() ? 1 : 0.5,
+                        }}
+                      >
+                        {l10n.getString('settings-display-test-btn') || 'Show'}
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ padding: '8px 12px', background: '#f0f0f0', border: '1px solid #ddd', fontSize: 11, color: '#888', marginTop: 8 }}>
+                    {l10n.getString('settings-display-info') || 'The customer-facing display shows item names and totals as they are scanned during a sale.'}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'appearance' && (
+            <div className="retail-options-section retail-options-section--full">
+              <AppearanceSettings />
+            </div>
+          )}
+
+          {activeTab === 'features' && (
+            <div className="retail-options-section retail-options-section--full">
+              <FeatureToggleScreen />
+            </div>
+          )}
+
+          {activeTab === 'data' && (
+            <div className="retail-options-section retail-options-section--full">
+              <DataManagementScreen />
+            </div>
+          )}
+
+          {activeTab === 'sync' && (
+            <div className="retail-options-section">
+              <h3 className="retail-options-heading">{l10n.getString('settings-sync-heading') || 'Cloud Sync'}</h3>
+
+              <div className="retail-options-field retail-options-field--row">
+                <label>{l10n.getString('settings-sync-enabled-label') || 'Enable cloud sync'}</label>
+                <input
+                  type="checkbox"
+                  checked={sync.enabled}
+                  onChange={(e) => sync.setEnabled(e.target.checked)}
+                  disabled={!sync.serverURL.trim()}
+                  aria-label={l10n.getString('settings-sync-enabled-label') || 'Enable cloud sync'}
+                />
+              </div>
+
+              <div className="retail-options-field">
+                <label htmlFor="sync-server-url">{l10n.getString('settings-sync-server-label') || 'Server URL'}</label>
+                <input
+                  id="sync-server-url"
+                  type="url"
+                  placeholder={l10n.getString('settings-sync-server-placeholder') || 'https://sync.oz-pos.example.com'}
+                  value={sync.serverURL}
+                  onChange={(e) => sync.setServerURL(e.target.value)}
+                />
+                <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                  {l10n.getString('settings-sync-server-hint') || 'The endpoint that receives your encrypted backup snapshots'}
+                </span>
+              </div>
+
+              <div className="retail-options-field">
+                <label htmlFor="sync-auth-token">{l10n.getString('settings-sync-token-label') || 'Authentication Token'}</label>
+                <input
+                  id="sync-auth-token"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={l10n.getString('settings-sync-token-placeholder') || 'paste sync token here'}
+                  value={sync.token}
+                  onChange={(e) => sync.setToken(e.target.value)}
+                />
+                <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                  {l10n.getString('settings-sync-token-hint') || 'Stored securely in the database — never in localStorage'}
+                </span>
+              </div>
+
+              <div className="retail-options-field">
+                <label htmlFor="sync-auto-interval">{l10n.getString('settings-sync-interval-label') || 'Auto-sync interval (minutes)'}</label>
+                <input
+                  id="sync-auto-interval"
+                  type="number"
+                  min={0}
+                  max={1440}
+                  style={{ width: 80 }}
+                  value={sync.autoMinutes}
+                  onChange={(e) => sync.setAutoMinutes(Math.max(0, Math.min(1440, Number(e.target.value))))}
+                />
+                <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                  {l10n.getString('settings-sync-interval-hint') || 'Set to 0 to disable automatic sync'}
+                </span>
+              </div>
+
+              <div className="retail-options-field retail-options-field--row" style={{ gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={sync.testConnection}
+                  disabled={sync.syncing || sync.pulling || !sync.serverURL.trim()}
+                  className="retail-options-btn"
+                >
+                  {l10n.getString('settings-sync-test-connection-btn') || 'Test connection'}
+                </button>
+                <button
+                  type="button"
+                  onClick={sync.syncNow}
+                  disabled={sync.syncing || sync.pulling || !sync.serverURL.trim()}
+                  className="retail-options-btn retail-options-btn--primary"
+                >
+                  {sync.syncing
+                    ? (l10n.getString('settings-sync-testing-btn') || 'Testing…')
+                    : (l10n.getString('settings-sync-now-btn') || 'Sync now')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const message =
+                      l10n.getString('settings-sync-confirm-overwrite') ||
+                      'Overwrite local data with the server snapshot?';
+                    if (window.confirm(message)) {
+                      void sync.pullFromServer();
+                    }
+                  }}
+                  disabled={sync.syncing || sync.pulling || !sync.serverURL.trim()}
+                  className="retail-options-btn"
+                  data-testid="sync-pull-btn"
+                >
+                  {sync.pulling
+                    ? (l10n.getString('settings-sync-pulling-btn') || 'Pulling…')
+                    : (l10n.getString('settings-sync-force-pull-btn') || 'Pull from server')}
+                </button>
+              </div>
+
+              {/* ── Status & last sync ─────────── */}
+              <div style={{ marginTop: 16, padding: 12, background: sync.status === 'online' ? '#e8f4e8' : '#f8e8e8', border: `1px solid ${sync.status === 'online' ? '#b0d8b0' : '#d8b0b0'}`, fontSize: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: sync.status === 'online' ? '#2a6a2a' : '#8a2a2a',
+                    display: 'inline-block',
+                  }} />
+                  <strong>
+                    {sync.status === 'online'
+                      ? (l10n.getString('settings-sync-status-online') || 'Online')
+                      : (l10n.getString('settings-sync-status-offline') || 'Offline')}
+                  </strong>
+                </div>
+                <div>
+                  {l10n.getString('settings-sync-last') || 'Last sync'}:{' '}
+                  {sync.lastAt ?? (l10n.getString('settings-sync-status-never') || 'Never synced')}
+                </div>
+                <div>
+                  {l10n.getString('settings-sync-pending') || 'Pending changes'}: {sync.pending}
+                </div>
+              </div>
+
+              {!sync.tokenLoaded && (
+                <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>
+                  {l10n.getString('loading') || 'Loading…'}
+                </div>
+              )}
             </div>
           )}
 

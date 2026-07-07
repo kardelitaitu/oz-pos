@@ -464,3 +464,89 @@ settings-paper-a4 = A4 (210 × 297 mm)
 settings-paper-letter = Letter (8.5 × 11 in)
 settings-paper-9x11 = 9.5 × 11 in (3-ply NCR / continuous)
 settings-paper-9x5 = 9.5 × 5.5 in (half-sheet continuous)
+
+# Payments tab
+settings-payments-tab = Payments
+settings-payments-heading = Payment Gateways
+settings-payments-no-gateways = No payment gateways configured
+settings-stripe-api-key = Stripe API Key
+settings-stripe-key-placeholder = sk_live_...
+settings-stripe-key-hint = Enter your Stripe secret key to enable card payments
+settings-square-api-key = Square API Key
+settings-square-key-placeholder = sq0atp-...
+settings-square-key-hint = Enter your Square access token to enable card payments
+settings-midtrans-key = Midtrans Server Key
+settings-midtrans-key-placeholder = Mid-server-...
+settings-midtrans-key-hint = Enter your Midtrans server key for QRIS payments
+
+# Tender presets
+settings-tender-presets-heading = Quick Cash Tender Buttons
+settings-tender-presets-desc = Customize the quick tender buttons shown on the cash payment screen. Values are in rupiah (e.g., 50000 = Rp 50,000).
+settings-tender-preset-label = Preset { $n }
+settings-tender-preset-aria = Preset { $n } amount
+settings-tender-preset-remove-aria = Remove preset { $n }
+settings-tender-preset-add = Add preset
+
+# Sound & language
+settings-sound-label = Sound Effects
+settings-sound-aria = Toggle sound effects
+settings-language-label = Language
+
+# Quick links
+settings-quick-links-heading = More Configuration
+settings-quick-links-note = Tax rates and feature toggles can be configured from the main Settings page, accessible via the sidebar.
+
+# Customer-facing display
+settings-display-heading = Customer-Facing Display
+settings-display-none = No pole displays detected. Connect a customer-facing display to enable this feature.
+settings-display-count = { $count } display(s) connected
+settings-display-test-label = Test Message
+settings-display-test-placeholder = Welcome to our store!
+settings-display-test-btn = Show
+settings-display-test-sent = Message sent to display
+settings-display-test-failed = Failed to send to display
+settings-display-info = The customer-facing display shows item names and totals as they are scanned during a sale.
+settings-toast-failed-displays = Failed to load displays
+
+# New tab labels
+settings-appearance-tab = Appearance
+settings-features-tab = Features
+settings-data-tab = Data
+settings-sync-tab = Sync
+
+# Section headings (when a sub-screen doesn't render its own)
+settings-appearance-heading = Appearance
+settings-features-heading = Feature Toggles
+settings-data-heading = Data Management
+settings-sync-heading = Cloud Sync
+
+# Sync tab
+settings-sync-enabled-label = Enable cloud sync
+settings-sync-server-label = Server URL
+settings-sync-server-placeholder = https://sync.oz-pos.example.com
+settings-sync-server-hint = The endpoint that receives your encrypted backup snapshots
+settings-sync-token-label = Authentication Token
+settings-sync-token-placeholder = paste sync token here
+settings-sync-token-hint = Stored securely in the database — never in localStorage
+settings-sync-interval-label = Auto-sync interval (minutes)
+settings-sync-interval-hint = Set to 0 to disable automatic sync
+settings-sync-now-btn = Sync now
+settings-sync-testing-btn = Testing…
+settings-sync-test-connection-btn = Test connection
+settings-sync-status-online = Online
+settings-sync-status-offline = Offline
+settings-sync-status-never = Never synced
+settings-sync-last = Last sync
+settings-sync-last-at = Last sync: { $when }
+settings-sync-pending = Pending changes
+settings-sync-toast-success = Sync completed successfully
+settings-sync-toast-fail = Sync failed — check server URL and token
+settings-sync-toast-test-success = Connection test passed
+settings-sync-toast-test-fail = Could not reach server
+settings-sync-confirm-overwrite = Overwrite local data with the server snapshot?
+settings-sync-force-pull-btn = Pull from server
+settings-sync-pulling-btn = Pulling…
+settings-sync-pull-toast-success = Pulled { $products } products, { $tax_rates } tax rates, { $users } users from server
+settings-sync-pull-toast-empty = Server snapshot was empty — nothing to pull
+settings-sync-pull-toast-fail = Pull failed — check server URL and token
+settings-toast-failed-sync = Failed to load sync settings

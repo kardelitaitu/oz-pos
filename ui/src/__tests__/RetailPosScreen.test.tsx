@@ -188,6 +188,22 @@ vi.mock('@/api/kds', () => ({
   createKdsOrderFromSale: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock('@/features/tables/TableManagementScreen', () => ({
+  default: () => <div data-testid="table-management-screen">Table Management Floor Plan</div>,
+}));
+
+vi.mock('@/features/kds/KdsScreen', () => ({
+  default: () => <div data-testid="kds-screen">Kitchen Display System</div>,
+}));
+
+vi.mock('@/features/sales/SalesHistoryScreen', () => ({
+  default: () => <div data-testid="sales-history-screen">Sales History</div>,
+}));
+
+vi.mock('@/features/products/ProductLookupScreen', () => ({
+  default: () => <div data-testid="stock-inquiry-screen">Stock Inquiry</div>,
+}));
+
 vi.mock('@/api/currency', () => ({
   listCurrencies: vi.fn(() => Promise.resolve([])),
   listExchangeRates: vi.fn(() => Promise.resolve([])),
@@ -1024,5 +1040,247 @@ describe('RetailPosScreen', () => {
     );
 
     expect(salesApi.printSalesReceipt).toHaveBeenCalled();
+  });
+
+  // ── Table Management button ───────────────────────────────────
+
+  it('renders the Tables button when TABLE_MANAGEMENT feature is enabled', async () => {
+    // By default getEnabledFeatures rejects → useFeatures enables ALL features,
+    // so the Tables button should be visible.
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /tables/i })).toBeInTheDocument();
+  });
+
+  it('hides the Tables button when TABLE_MANAGEMENT feature is disabled', async () => {
+    const settingsApi = await import('@/api/settings');
+    vi.mocked(settingsApi.getEnabledFeatures).mockResolvedValueOnce({
+      features: ['simple-retail', 'cash-payment'],
+    });
+
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('button', { name: /tables/i })).not.toBeInTheDocument();
+  });
+
+  it('opens TableManagementScreen when the Tables button is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /tables/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('table-management-screen')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Table Management Floor Plan')).toBeInTheDocument();
+  });
+
+  it('dismisses TableManagementScreen when the back button is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /tables/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('table-management-screen')).toBeInTheDocument();
+    });
+
+    // The back button renders as "← back" (larr + localized "back" text)
+    await userEvent.click(screen.getByRole('button', { name: /back/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('table-management-screen')).not.toBeInTheDocument();
+    });
+    // Should be back on the main POS screen
+    expect(screen.getByText('F1')).toBeInTheDocument();
+  });
+
+  // ── KDS (F12) shortcut ────────────────────────────────────────
+
+  it('opens KdsScreen when F12 is pressed', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.keyboard('{F12}');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Kitchen Display System')).toBeInTheDocument();
+  });
+
+  it('opens KdsScreen when the F12 button in the function bar is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /F12/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+    });
+  });
+
+  it('dismisses KdsScreen when the back button is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.keyboard('{F12}');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /back/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('kds-screen')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('F1')).toBeInTheDocument();
+  });
+
+  it('suppresses F-keys while KdsScreen is shown', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    // Open KDS via F12
+    await userEvent.keyboard('{F12}');
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+    });
+
+    // Pressing F9 while KDS is shown should NOT open the shift modal
+    await userEvent.keyboard('{F9}');
+    expect(screen.queryByRole('heading', { name: /open shift/i })).not.toBeInTheDocument();
+
+    // KDS should still be visible
+    expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+  });
+
+  // ── F6 Sales History shortcut ─────────────────────────────────
+
+  it('opens SalesHistoryScreen when F6 is pressed', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.keyboard('{F6}');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sales-history-screen')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Sales History')).toBeInTheDocument();
+  });
+
+  it('opens SalesHistoryScreen when the F6 button is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /F6/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sales-history-screen')).toBeInTheDocument();
+    });
+  });
+
+  it('dismisses SalesHistoryScreen when the back button is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.keyboard('{F6}');
+    await waitFor(() => {
+      expect(screen.getByTestId('sales-history-screen')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /back/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('sales-history-screen')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('F1')).toBeInTheDocument();
+  });
+
+  // ── F8 Stock Inquiry shortcut ─────────────────────────────────
+
+  it('opens ProductLookupScreen when F8 is pressed', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.keyboard('{F8}');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stock-inquiry-screen')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Stock Inquiry')).toBeInTheDocument();
+  });
+
+  it('opens ProductLookupScreen when the F8 button is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /F8/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stock-inquiry-screen')).toBeInTheDocument();
+    });
+  });
+
+  it('dismisses ProductLookupScreen when the back button is clicked', async () => {
+    render(wrap(<RetailPosScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('F1')).toBeInTheDocument();
+    });
+
+    await userEvent.keyboard('{F8}');
+    await waitFor(() => {
+      expect(screen.getByTestId('stock-inquiry-screen')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /back/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('stock-inquiry-screen')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('F1')).toBeInTheDocument();
   });
 });

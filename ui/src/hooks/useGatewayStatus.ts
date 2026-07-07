@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 
-interface GatewayStatus {
+export interface GatewayStatus {
+  name: string;
   configured: boolean;
   online: boolean;
 }
 
 export function useGatewayStatus(): GatewayStatus {
-  const [status, setStatus] = useState<GatewayStatus>({ configured: false, online: false });
+  const [status, setStatus] = useState<GatewayStatus>({ name: 'Stripe', configured: false, online: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -17,11 +18,11 @@ export function useGatewayStatus(): GatewayStatus {
         const key: string | null = await invoke('get_setting', { key: 'stripe.api_key' });
         if (!cancelled) {
           const configured = key !== null && key !== '';
-          setStatus({ configured, online: configured });
+          setStatus({ name: 'Stripe', configured, online: configured });
         }
       } catch {
         if (!cancelled) {
-          setStatus({ configured: false, online: false });
+          setStatus({ name: 'Stripe', configured: false, online: false });
         }
       }
     }

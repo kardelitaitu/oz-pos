@@ -21,7 +21,7 @@ import {
 import {
   getSyncSettings,
   updateSyncSettings,
-  triggerSync,
+  syncRun,
   type SyncSettingsDto,
   type SyncAttemptResult,
 } from '@/api/offline';
@@ -571,7 +571,7 @@ export default function SettingsPage() {
                 onClick={async () => {
                   setSyncing(true);
                   try {
-                    const result = await triggerSync();
+                    const result = await syncRun();
                     setSyncResult(result);
                   } catch {
                     setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });

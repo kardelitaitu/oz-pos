@@ -20,6 +20,10 @@ import { formatMoney, type CartId, type LineId, type Money, type Sku } from '@/t
 import { useSound } from '@/frontend/shared/useSound';
 import ScaleIndicator from './ScaleIndicator';
 import RetailOptionsScreen from './RetailOptionsScreen';
+import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
+import ProductLookupScreen from '@/features/products/ProductLookupScreen';
+import KdsScreen from '@/features/kds/KdsScreen';
+import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import './RetailPosScreen.css';
 
 // ── Cart panel width, viewport-aware ──────────────────────────────────
@@ -67,7 +71,32 @@ export default function RetailPosScreen() {
 
   const lineCount = lines.reduce((a, l) => a + l.qty, 0);
 
-  const { playBeep, playError, playSuccess, setSoundEnabled: _setSoundEnabled } = useSound();
+  const { playBeep, playError, playSuccess, setSoundEnabled } = useSound();
+
+  // ── Sound toggle from options ─────────────────────────────────
+  useEffect(() => {
+    const check = () => {
+      const enabled = localStorage.getItem('retail-sound-enabled') !== 'false';
+      setSoundEnabled(enabled);
+    };
+    check();
+    window.addEventListener('storage', check);
+    return () => window.removeEventListener('storage', check);
+  }, [setSoundEnabled]);
+
+  // ── Tender presets from options ───────────────────────────────
+  const tenderPresets = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('retail-tender-presets');
+      if (saved) {
+        const parsed = JSON.parse(saved) as number[];
+        // Filter out zero/NaN values to avoid division-by-zero in PaymentModal
+        const filtered = parsed.filter((n) => Number.isFinite(n) && n > 0);
+        if (filtered.length > 0) return filtered;
+      }
+    } catch { /* ignore */ }
+    return [5000, 10000, 20000, 50000, 100000];
+  }, []);
 
   const { isEnabled } = useFeatures();
 
@@ -697,6 +726,10 @@ export default function RetailPosScreen() {
   // ── Options full-screen page ─────────────────────────────────
 
   const [showOptions, setShowOptions] = useState(false);
+  const [showSalesHistory, setShowSalesHistory] = useState(false);
+  const [showStockInquiry, setShowStockInquiry] = useState(false);
+  const [showKds, setShowKds] = useState(false);
+  const [showTables, setShowTables] = useState(false);
 
   // ── Credit reminders ──────────────────────────────────────────
 
@@ -752,30 +785,27 @@ export default function RetailPosScreen() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (showOptions || showPayment || showOpenShift || showCloseShift || showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm) return;
+      if (showOptions || showPayment || showOpenShift || showCloseShift || showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm || showSalesHistory || showStockInquiry || showKds || showTables) return;
       switch (e.key) {
         case 'F1': handlePay(); break;
         case 'F2': if (lines.length > 0) handleRequestClear(); break;
         case 'F3': if (lines.length > 0) setShowDiscount(true); break;
         case 'F4': heldCartId ? handleResume() : handleHold(); break;
         case 'F5': skuInputRef.current?.focus(); break;
-        case 'F6': addToast({ message: l10n.getString('retail-toast-sales-history-soon') || 'Sales history coming soon', type: 'info' }); break;
+        case 'F6': setShowSalesHistory(true); break;
         case 'F7': setShowCustomerSearch(true); break;
-        case 'F8': addToast({ message: l10n.getString('retail-toast-stock-inquiry-soon') || 'Stock inquiry coming soon', type: 'info' }); break;
+        case 'F8': setShowStockInquiry(true); break;
         case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
         case 'F10': if (session?.role_name !== 'cashier') setShowOptions(true); break;
         case 'F11': case '?': setShowShortcuts((v) => !v); break;
+        case 'F12': setShowKds(true); break;
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast]);
+  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showSalesHistory, showStockInquiry, showKds, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast]);
 
   // ── Render ───────────────────────────────────────────────────
-
-  if (showOptions) {
-    return <RetailOptionsScreen onClose={() => setShowOptions(false)} theme={theme} onThemeChange={handleThemeChange} />;
-  }
 
   if (showPayment && total) {
     return (
@@ -791,9 +821,108 @@ export default function RetailPosScreen() {
         selectedCustomer={selectedCustomer}
         {...(isEnabled(FEATURES.SERIAL_TRACKING) ? { serialNumbers } : {})}
         onCustomerChange={(c) => setSelectedCustomer(c)}
-        onClose={() => setShowPayment(false)}
+        tenderPresets={tenderPresets}
         onComplete={() => { setShowPayment(false); resetCart(); setSelectedCustomer(null); playSuccess(); addToast({ message: l10n.getString('retail-toast-sale-complete') || 'Sale complete', type: 'success' }); }}
+        onClose={() => setShowPayment(false)}
       />
+    );
+  }
+
+  // ── Options screen ──────────────────────────────────────────
+  if (showOptions) {
+    return <RetailOptionsScreen onClose={() => setShowOptions(false)} theme={theme} onThemeChange={handleThemeChange} />;
+  }
+
+  // ── Sales History screen ────────────────────────────────────
+  if (showSalesHistory) {
+    return (
+      <div className="retail-pos" data-theme={theme}>
+        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
+          <div className="retail-header-store">
+            <span className="retail-header-name">{l10n.getString('retail-fn-history') || 'Sales History'}</span>
+          </div>
+          <button
+            className="retail-options-tab retail-options-tab--danger"
+            onClick={() => setShowSalesHistory(false)}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </header>
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <SalesHistoryScreen />
+        </div>
+      </div>
+    );
+  }
+
+  // ── KDS screen ─────────────────────────────────────────────
+  if (showKds) {
+    return (
+      <div className="retail-pos" data-theme={theme}>
+        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
+          <div className="retail-header-store">
+            <span className="retail-header-name">{l10n.getString('kds-title') || 'Kitchen Display'}</span>
+          </div>
+          <button
+            className="retail-options-tab retail-options-tab--danger"
+            onClick={() => setShowKds(false)}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </header>
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <KdsScreen />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Table Management screen ────────────────────────────────
+  if (showTables) {
+    return (
+      <div className="retail-pos" data-theme={theme}>
+        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
+          <div className="retail-header-store">
+            <span className="retail-header-name">{l10n.getString('tables-title') || 'Table Management'}</span>
+          </div>
+          <button
+            className="retail-options-tab retail-options-tab--danger"
+            onClick={() => setShowTables(false)}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </header>
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <TableManagementScreen />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Stock Inquiry screen ────────────────────────────────────
+  if (showStockInquiry) {
+    return (
+      <div className="retail-pos" data-theme={theme}>
+        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
+          <div className="retail-header-store">
+            <span className="retail-header-name">{l10n.getString('retail-fn-stok') || 'Stock Inquiry'}</span>
+          </div>
+          <button
+            className="retail-options-tab retail-options-tab--danger"
+            onClick={() => setShowStockInquiry(false)}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </header>
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <ProductLookupScreen onAddProduct={(p) => handleAdd({
+            sku: p.sku, name: p.name, category: p.category,
+            price: p.price, barcode: p.barcode ?? null,
+            in_stock: p.inStock, stock_qty: p.stockQty ?? null,
+            tax_rate_ids: [], created_at: '', price_updated_at: '',
+          })} />
+        </div>
+      </div>
     );
   }
 
@@ -1174,13 +1303,13 @@ export default function RetailPosScreen() {
         <button className="retail-fn-btn" onClick={() => skuInputRef.current?.focus()}>
           <span className="retail-fn-key">F5</span> {l10n.getString('retail-fn-cari')}
         </button>
-        <button className="retail-fn-btn" onClick={() => addToast({ message: l10n.getString('retail-toast-sales-history-soon') || 'Sales history coming soon', type: 'info' })}>
+        <button className="retail-fn-btn" onClick={() => setShowSalesHistory(true)}>
           <span className="retail-fn-key">F6</span> {l10n.getString('retail-fn-history')}
         </button>
         <button className="retail-fn-btn" onClick={() => setShowCustomerSearch(true)}>
           <span className="retail-fn-key">F7</span> {l10n.getString('retail-fn-pelanggan')}
         </button>
-        <button className="retail-fn-btn" onClick={() => addToast({ message: l10n.getString('retail-toast-stock-inquiry-soon') || 'Stock inquiry coming soon', type: 'info' })}>
+        <button className="retail-fn-btn" onClick={() => setShowStockInquiry(true)}>
           <span className="retail-fn-key">F8</span> {l10n.getString('retail-fn-stok')}
         </button>
         <button
@@ -1195,6 +1324,14 @@ export default function RetailPosScreen() {
         {isEnabled(FEATURES.QUICK_RETURN) && (
           <button className="retail-fn-btn" onClick={() => setShowQuickReturn(true)}>
             <span className="retail-fn-key">F11</span> {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
+          </button>
+        )}
+        <button className="retail-fn-btn" onClick={() => setShowKds(true)}>
+          <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
+        </button>
+        {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
+          <button className="retail-fn-btn" onClick={() => setShowTables(true)}>
+            🪑 {l10n.getString('tables-title') || 'Tables'}
           </button>
         )}
       </div>
@@ -1553,9 +1690,13 @@ export default function RetailPosScreen() {
               <span className="retail-shortcuts-key">F3</span><span>{l10n.getString('retail-shortcut-discount')}</span>
               <span className="retail-shortcuts-key">F4</span><span>{l10n.getString('retail-shortcut-hold')}</span>
               <span className="retail-shortcuts-key">F5</span><span>{l10n.getString('retail-shortcut-sku')}</span>
+              <span className="retail-shortcuts-key">F6</span><span>{l10n.getString('retail-fn-history')}</span>
+              <span className="retail-shortcuts-key">F7</span><span>{l10n.getString('retail-fn-pelanggan')}</span>
+              <span className="retail-shortcuts-key">F8</span><span>{l10n.getString('retail-fn-stok')}</span>
               <span className="retail-shortcuts-key">F9</span><span>{l10n.getString('retail-shortcut-shift')}</span>
               <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
               <span className="retail-shortcuts-key">F11 / ?</span><span>{l10n.getString('retail-shortcut-list')}</span>
+              <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
               <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
             </div>
             <button className="retail-shortcuts-close" onClick={() => setShowShortcuts(false)}>{l10n.getString('close')}</button>

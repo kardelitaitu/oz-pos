@@ -346,6 +346,46 @@ pub async fn set_user_preferences(
     Ok(UserPreferences::set_batch(&conn, &user_id, &pairs)?)
 }
 
+// ── Generic key-value settings ────────────────────────────────
+
+/// Read a single setting value by key.
+///
+/// Returns `None` when the key does not exist.
+#[command]
+pub async fn get_setting(
+    key: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, AppError> {
+    let conn = state.db.lock().await;
+    run_get_setting(&conn, &key)
+}
+
+/// Business logic for `get_setting` (extracted for testing).
+fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<String>, AppError> {
+    Ok(Settings::get(conn, key)?)
+}
+
+/// Write (or overwrite) a single setting value.
+///
+/// Pass an empty string to store an empty value.
+#[command]
+pub async fn set_setting(
+    key: String,
+    value: String,
+    user_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let conn = state.db.lock().await;
+    let store = oz_core::db::Store::new(&conn);
+    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
+    run_set_setting(&conn, &key, &value)
+}
+
+/// Business logic for `set_setting` (extracted for testing).
+fn run_set_setting(conn: &rusqlite::Connection, key: &str, value: &str) -> Result<(), AppError> {
+    Ok(Settings::set(conn, key, value)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -632,5 +672,50 @@ mod tests {
         let entry: UserPrefEntry = serde_json::from_str(json).unwrap();
         assert_eq!(entry.key, "theme");
         assert_eq!(entry.value, "dark");
+    }
+
+    // ── Generic get_setting / set_setting tests ──────────────────
+
+    #[test]
+    fn get_setting_returns_none_for_missing_key() {
+        let conn = fresh_conn();
+        let result = run_get_setting(&conn, "nonexistent.key").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn set_setting_persists_and_get_returns_it() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "payment.stripe_key", "sk_test_abc123").unwrap();
+        let result = run_get_setting(&conn, "payment.stripe_key").unwrap();
+        assert_eq!(result, Some("sk_test_abc123".into()));
+    }
+
+    #[test]
+    fn set_setting_overwrites_previous_value() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "my.key", "v1").unwrap();
+        run_set_setting(&conn, "my.key", "v2").unwrap();
+        let result = run_get_setting(&conn, "my.key").unwrap();
+        assert_eq!(result, Some("v2".into()));
+    }
+
+    #[test]
+    fn set_setting_empty_string_clears_value() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "key", "hello").unwrap();
+        run_set_setting(&conn, "key", "").unwrap();
+        let result = run_get_setting(&conn, "key").unwrap();
+        assert_eq!(result, Some("".into()));
+    }
+
+    #[test]
+    fn get_setting_after_multiple_keys_only_returns_requested() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "a", "1").unwrap();
+        run_set_setting(&conn, "b", "2").unwrap();
+        run_set_setting(&conn, "c", "3").unwrap();
+        assert_eq!(run_get_setting(&conn, "b").unwrap(), Some("2".into()));
+        assert_eq!(run_get_setting(&conn, "d").unwrap(), None);
     }
 }

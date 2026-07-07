@@ -1,6 +1,6 @@
 //! Cloud sync commands — configure and trigger sync from the UI.
 //!
-//! The `trigger_sync` command runs a sync cycle immediately (instead of
+//! The `sync_run` command runs a sync cycle immediately (instead of
 //! waiting for the background daemon's interval). The settings commands
 //! let the user configure the server URL and API key.
 
@@ -9,7 +9,7 @@ use tauri::{State, command};
 
 use oz_core::db::Store;
 use oz_core::settings::Settings;
-use oz_core::sync_client::{self, SyncAttemptResult, SyncConfig};
+use oz_core::sync_client::{self, PullResult, SyncAttemptResult, SyncConfig};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -51,20 +51,22 @@ pub async fn update_sync_settings(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    if let Some(url) = &args.server_url {
-        Settings::set_sync_server_url(&db, url)?;
-    }
-    if let Some(key) = &args.api_key {
-        Settings::set_sync_api_key(&db, key)?;
-    }
+    // Always write — passing `null` from the front-end is the UI's
+    // signal to clear the field. `SyncConfig::from_settings` treats
+    // an empty string as "not configured", so the round-trip is safe.
+    let url = args.server_url.as_deref().unwrap_or("");
+    let key = args.api_key.as_deref().unwrap_or("");
+    Settings::set_sync_server_url(&db, url)?;
+    Settings::set_sync_api_key(&db, key)?;
     Settings::set_sync_enabled(&db, args.enabled)?;
     drop(db);
     Ok(())
 }
 
-/// Immediately trigger a sync cycle.
+/// Immediately run a sync cycle that pushes pending sales, credit, and
+/// other queued offline transactions to the configured cloud server.
 #[command]
-pub async fn trigger_sync(state: State<'_, AppState>) -> Result<SyncAttemptResult, AppError> {
+pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let config = SyncConfig::from_settings(&store)?;
@@ -88,6 +90,27 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
     let count = store.pending_offline_count()?;
     drop(db);
     Ok(count)
+}
+
+/// Pull a server snapshot and overwrite the local cache for products,
+/// tax rates, and users. The UI is expected to confirm the overwrite
+/// before invoking this command.
+#[command]
+pub async fn sync_pull(state: State<'_, AppState>) -> Result<PullResult, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let config = SyncConfig::from_settings(&store)?;
+    let result = match config {
+        Some(cfg) => sync_client::pull_snapshot(&store, &cfg)?,
+        None => PullResult {
+            products_pulled: 0,
+            tax_rates_pulled: 0,
+            users_pulled: 0,
+            error: Some("Sync is not configured or disabled".into()),
+        },
+    };
+    drop(db);
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -144,5 +167,32 @@ mod tests {
         };
         let debug = format!("{:?}", args);
         assert!(debug.contains("url"));
+    }
+
+    #[test]
+    fn pull_result_serialize_no_error() {
+        let r = PullResult {
+            products_pulled: 10,
+            tax_rates_pulled: 2,
+            users_pulled: 3,
+            error: None,
+        };
+        let json = serde_json::to_value(&r).unwrap();
+        assert_eq!(json["products_pulled"], 10);
+        assert_eq!(json["tax_rates_pulled"], 2);
+        assert_eq!(json["users_pulled"], 3);
+        assert!(json["error"].is_null());
+    }
+
+    #[test]
+    fn pull_result_serialize_with_error() {
+        let r = PullResult {
+            products_pulled: 0,
+            tax_rates_pulled: 0,
+            users_pulled: 0,
+            error: Some("network unreachable".into()),
+        };
+        let json = serde_json::to_value(&r).unwrap();
+        assert_eq!(json["error"], "network unreachable");
     }
 }

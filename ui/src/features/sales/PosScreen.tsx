@@ -13,6 +13,10 @@ import { useLocalization } from '@fluent/react';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useFeatures, FEATURES } from '@/hooks/useFeatures';
+import TableManagementScreen from '@/features/tables/TableManagementScreen';
+import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
+import KdsScreen from '@/features/kds/KdsScreen';
 import { formatMoney, type CartId, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
 import { triggerInteraction } from '@/utils/interaction';
@@ -340,6 +344,7 @@ export default function PosScreen() {
   const { l10n } = useLocalization();
   const { session, logout, isManager } = useAuth();
   const { activeWorkspace } = useWorkspace();
+  const { isEnabled } = useFeatures();
   const userId = session!.user_id;
 
   // ── Restore locked cart on mount ────────────────────────────────
@@ -372,6 +377,10 @@ export default function PosScreen() {
     } catch { /* ignore */ }
   }, [setLines, setDiscount, setTipPercent, setServiceCharge]);
   const [showOptions, setShowOptions] = useState(false);
+  const [showTables, setShowTables] = useState(false);
+  const [showSalesHistory, setShowSalesHistory] = useState(false);
+  const [showStockInquiry, setShowStockInquiry] = useState(false);
+  const [showKds, setShowKds] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
@@ -962,6 +971,90 @@ export default function PosScreen() {
     }
   }, [setLines, setDiscount, setTableNumber, addToast]);
 
+  // ── Sub-screen: Table Management ─────────────────────────────
+  if (showTables) {
+    return (
+      <div className="pos-screen">
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <TableManagementScreen />
+        </div>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border, #ddd)' }}>
+          <button
+            type="button"
+            className="pos-cart-pay-btn"
+            onClick={() => setShowTables(false)}
+            style={{ width: '100%' }}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sub-screen: Sales History (F6) ───────────────────────────
+  if (showSalesHistory) {
+    return (
+      <div className="pos-screen">
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <SalesHistoryScreen />
+        </div>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border, #ddd)' }}>
+          <button
+            type="button"
+            className="pos-cart-pay-btn"
+            onClick={() => setShowSalesHistory(false)}
+            style={{ width: '100%' }}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sub-screen: Stock Inquiry (F8) ───────────────────────────
+  if (showStockInquiry) {
+    return (
+      <div className="pos-screen">
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <ProductLookupScreen onAddProduct={handleAddProduct} />
+        </div>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border, #ddd)' }}>
+          <button
+            type="button"
+            className="pos-cart-pay-btn"
+            onClick={() => setShowStockInquiry(false)}
+            style={{ width: '100%' }}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sub-screen: KDS (F12) ────────────────────────────────────
+  if (showKds) {
+    return (
+      <div className="pos-screen">
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <KdsScreen />
+        </div>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border, #ddd)' }}>
+          <button
+            type="button"
+            className="pos-cart-pay-btn"
+            onClick={() => setShowKds(false)}
+            style={{ width: '100%' }}
+          >
+            &larr; {l10n.getString('back')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!session) {
     return (
       <div className="pos-screen">
@@ -1051,6 +1144,52 @@ export default function PosScreen() {
                 </button>
               </>
             )}
+
+            {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
+              <button
+                type="button"
+                className="pos-cart-lock-btn"
+                onClick={() => setShowTables(true)}
+                aria-label={l10n.getString('tables-title') || 'Tables'}
+                title={l10n.getString('tables-title') || 'Table Management'}
+                style={{ marginRight: 4 }}
+              >
+                🪑
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="pos-cart-lock-btn"
+              onClick={() => setShowSalesHistory(true)}
+              aria-label={l10n.getString('retail-fn-history') || 'Sales History'}
+              title={l10n.getString('retail-fn-history') || 'Sales History'}
+              style={{ marginRight: 4 }}
+            >
+              📋
+            </button>
+
+            <button
+              type="button"
+              className="pos-cart-lock-btn"
+              onClick={() => setShowStockInquiry(true)}
+              aria-label={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
+              title={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
+              style={{ marginRight: 4 }}
+            >
+              📦
+            </button>
+
+            <button
+              type="button"
+              className="pos-cart-lock-btn"
+              onClick={() => setShowKds(true)}
+              aria-label={l10n.getString('kds-title') || 'KDS'}
+              title={l10n.getString('kds-title') || 'KDS'}
+              style={{ marginRight: 4 }}
+            >
+              👨‍🍳
+            </button>
 
             <button
               type="button"
