@@ -22,6 +22,12 @@ pub struct PluginManager {
     pending_discounts: Arc<Mutex<Vec<PendingDiscount>>>,
 }
 
+impl std::fmt::Debug for PluginManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginManager").finish_non_exhaustive()
+    }
+}
+
 impl PluginManager {
     pub fn new(plugins_dir: &Path) -> Result<Self, PluginError> {
         let registry = load_plugins(plugins_dir)?;
@@ -249,6 +255,39 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    // ── Helpers ────────────────────────────────────────────────────────
+
+    /// Create a temp plugin directory with `plugin.toml` and `script.lua`.
+    /// Returns (TempDir, plugins_root_dir) — the TempDir must be kept alive.
+    fn create_plugin_dir(name: &str, lua_content: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let plugin_dir = dir.path().join(name);
+        std::fs::create_dir(&plugin_dir).unwrap();
+
+        let manifest = format!(
+            "[plugin]\nname = \"{}\"\nversion = \"1.0.0\"\n\n[capabilities]\nscripts = [\"script.lua\"]\n",
+            name
+        );
+        std::fs::write(plugin_dir.join("plugin.toml"), manifest).unwrap();
+        std::fs::write(plugin_dir.join("script.lua"), lua_content).unwrap();
+
+        let plugins_root = dir.path().to_path_buf();
+        (dir, plugins_root)
+    }
+
+    /// Helper to build a single `CartLineData`.
+    fn line(sku: &str, qty: i64, unit_price_minor: i64, currency: &str) -> CartLineData {
+        CartLineData {
+            sku: sku.into(),
+            qty,
+            unit_price_minor,
+            currency: currency.into(),
+        }
+    }
+
+    // ── PendingDiscount tests (existing) ───────────────────────────────
 
     #[test]
     fn pending_discount_new() {
@@ -298,5 +337,345 @@ mod tests {
             percent: 100,
         };
         assert_eq!(d.percent, 100);
+    }
+
+    // ── PluginManager::new() tests ─────────────────────────────────────
+
+    #[test]
+    fn plugin_manager_new_with_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn plugin_manager_new_with_nonexistent_dir() {
+        let mgr = PluginManager::new(Path::new("/nonexistent/plugin/dir")).unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn plugin_manager_new_with_empty_script() {
+        let (_dir, plugins_root) = create_plugin_dir("empty-plugin", "");
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn plugin_manager_new_with_hook_registration_and_no_side_effects() {
+        let lua = r#"
+function my_hook(sale)
+    -- no-op hook
+end
+oz.register_hook("sale.before_complete", "my_hook")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("hook-plugin", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+        // Hook was registered but not fired — no discounts pushed
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn plugin_manager_new_with_top_level_discount_push() {
+        let lua = r#"
+oz.apply_discount("cart", 10)
+oz.apply_discount("line:SKU123", 20)
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("discount-plugin", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 2);
+        assert_eq!(discounts[0].target, "cart");
+        assert_eq!(discounts[0].percent, 10);
+        assert_eq!(discounts[1].target, "line:SKU123");
+        assert_eq!(discounts[1].percent, 20);
+    }
+
+    #[test]
+    fn plugin_manager_new_with_invalid_lua_syntax() {
+        let lua = "function broken(syntax";
+        let (_dir, plugins_root) = create_plugin_dir("broken-plugin", lua);
+        let result = PluginManager::new(&plugins_root);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Lua") || err.contains("script"),
+            "expected Lua error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn plugin_manager_new_with_real_example_discount_plugin() {
+        // Use the real example-discount plugin from the workspace.
+        let plugins_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let mgr = PluginManager::new(&plugins_dir).unwrap();
+        // The example-discount registers a hook, no top-level discount push.
+        let discounts = mgr.drain_pending_discounts();
+        assert!(discounts.is_empty());
+    }
+
+    // ── drain_pending_discounts tests ──────────────────────────────────
+
+    #[test]
+    fn drain_pending_discounts_empty_after_fresh_init() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn drain_pending_discounts_drains_after_top_level_push() {
+        let lua = r#"
+oz.apply_discount("cart", 5)
+oz.apply_discount("cart", 15)
+oz.apply_discount("line:A", 25)
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("multi-discount", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 3);
+
+        // Second drain is empty (already drained)
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn drain_pending_discounts_after_hook_fire() {
+        let lua = r#"
+function my_hook(sale)
+    oz.apply_discount("cart", 15)
+end
+oz.register_hook("sale.before_complete", "my_hook")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("hook-discount", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        // Fire the hook — it should push a discount
+        let lines = [line("ITEM", 1, 1000, "USD")];
+        mgr.fire_sale_before_complete(&lines, 1000, "USD", "user-1")
+            .unwrap();
+
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 1);
+        assert_eq!(discounts[0].target, "cart");
+        assert_eq!(discounts[0].percent, 15);
+    }
+
+    // ── fire_sale_before_complete tests ────────────────────────────────
+
+    #[test]
+    fn fire_sale_before_complete_no_hooks() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+
+        let result = mgr.fire_sale_before_complete(&[], 0, "USD", "anon");
+        assert!(result.is_ok());
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn fire_sale_before_complete_with_hook_discounts() {
+        let lua = r#"
+function on_sale(sale)
+    if sale.total_minor >= 5000 then
+        oz.apply_discount("cart", 10)
+    end
+end
+oz.register_hook("sale.before_complete", "on_sale")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("threshold-hook", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        // Below threshold — no discount
+        mgr.fire_sale_before_complete(&[line("CHEAP", 1, 100, "IDR")], 100, "IDR", "user-1")
+            .unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+
+        // Above threshold — discount should fire
+        mgr.fire_sale_before_complete(
+            &[line("EXPENSIVE", 1, 10000, "IDR")],
+            10000,
+            "IDR",
+            "user-1",
+        )
+        .unwrap();
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 1);
+        assert_eq!(discounts[0].percent, 10);
+    }
+
+    #[test]
+    fn fire_sale_before_complete_with_multiple_lines() {
+        let lua = r#"
+function count_lines(sale)
+    local count = 0
+    for i = 1, #sale.lines do
+        count = count + 1
+    end
+    oz.apply_discount("cart", count * 5)
+end
+oz.register_hook("sale.before_complete", "count_lines")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("count-hook", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        mgr.fire_sale_before_complete(
+            &[
+                line("A", 1, 500, "USD"),
+                line("B", 2, 300, "USD"),
+                line("C", 1, 1000, "USD"),
+            ],
+            2100,
+            "USD",
+            "user-1",
+        )
+        .unwrap();
+
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 1);
+        // 3 lines × 5 = 15
+        assert_eq!(discounts[0].percent, 15);
+    }
+
+    #[test]
+    fn fire_sale_before_complete_preserves_sale_fields() {
+        let lua = r#"
+function check_sale(sale)
+    -- Verify fields then push a discount to signal success
+    if sale.total_minor == 5000 and sale.currency == "IDR" and sale.user_id == "cashier-1" then
+        oz.apply_discount("cart", 1)
+    end
+end
+oz.register_hook("sale.before_complete", "check_sale")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("fields-hook", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        mgr.fire_sale_before_complete(&[line("ITEM", 2, 2500, "IDR")], 5000, "IDR", "cashier-1")
+            .unwrap();
+
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 1, "hook should verify sale fields");
+    }
+
+    #[test]
+    fn fire_sale_before_complete_multiple_hooks_same_event() {
+        let lua = r#"
+function hook_a(sale)
+    oz.apply_discount("cart", 5)
+end
+function hook_b(sale)
+    oz.apply_discount("cart", 10)
+end
+oz.register_hook("sale.before_complete", "hook_a")
+oz.register_hook("sale.before_complete", "hook_b")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("multi-hook", lua);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        mgr.fire_sale_before_complete(&[line("X", 1, 100, "USD")], 100, "USD", "u1")
+            .unwrap();
+
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 2, "both hooks should fire");
+        assert_eq!(discounts[0].percent, 5);
+        assert_eq!(discounts[1].percent, 10);
+    }
+
+    // ── Delegation method tests ────────────────────────────────────────
+
+    #[test]
+    fn validate_order_returns_empty_when_no_hook() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        let errors = mgr.validate_order(&[], 0, "USD").unwrap();
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn apply_discount_returns_none_when_no_hook() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        let result = mgr.apply_discount(&[]).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn calc_line_tax_returns_none_when_no_hook() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        let result = mgr.calc_line_tax("SKU", 1, 100, "USD").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn validate_order_with_non_empty_lines_no_hook() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        let lines = [line("A", 1, 500, "IDR"), line("B", 2, 250, "IDR")];
+        let errors = mgr.validate_order(&lines, 1000, "IDR").unwrap();
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn apply_discount_with_non_empty_lines_no_hook() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        let lines = [line("A", 3, 500, "USD")];
+        let result = mgr.apply_discount(&lines).unwrap();
+        assert!(result.is_none());
+    }
+
+    // ── fire_event tests ───────────────────────────────────────────────
+
+    #[test]
+    fn fire_event_unregistered_event_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+
+        let _lua = mgr.runtime.inner();
+        let value = rlua::Value::Nil;
+        let result = mgr.fire_event("some.event.never_registered", value);
+        assert!(result.is_ok());
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn fire_event_with_registered_hook_executes() {
+        let lua_script = r#"
+function custom_hook(arg)
+    oz.apply_discount("custom", 42)
+end
+oz.register_hook("custom.event", "custom_hook")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("custom-event", lua_script);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        let lua = mgr.runtime.inner();
+        let value = lua.create_table().unwrap();
+        mgr.fire_event("custom.event", rlua::Value::Table(value))
+            .unwrap();
+
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(discounts.len(), 1);
+        assert_eq!(discounts[0].target, "custom");
+        assert_eq!(discounts[0].percent, 42);
+    }
+
+    #[test]
+    fn fire_event_registered_but_function_missing_is_ok() {
+        let lua_script = r#"
+-- Register a hook but don't define the function — manager should warn + continue
+oz.register_hook("missing.event", "no_such_function")
+"#;
+        let (_dir, plugins_root) = create_plugin_dir("missing-func", lua_script);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        let _lua = mgr.runtime.inner();
+        let value = rlua::Value::Nil;
+        let result = mgr.fire_event("missing.event", value);
+        // Should not panic; the missing function is logged and skipped.
+        assert!(result.is_ok());
     }
 }

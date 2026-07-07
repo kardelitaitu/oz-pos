@@ -9,4 +9,4 @@ function apply_tuesday_discount(sale)
   end
 end
 
-oz.register_hook("sale.before_complete", apply_tuesday_discount)
+oz.register_hook("sale.before_complete", "apply_tuesday_discount")

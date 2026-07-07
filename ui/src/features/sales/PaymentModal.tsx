@@ -923,8 +923,7 @@ export default function PaymentModal({
                       <Localized id="payment-amount-tendered">
                         <span>Amount Tendered</span>
                       </Localized>
-                      <Localized id="payment-tendered-aria" attrs={{ 'aria-label': true }}>
-                      <Localized id="payment-tendered-placeholder" attrs={{ placeholder: true }}>
+                      <Localized id="payment-tendered-input" attrs={{ placeholder: true, 'aria-label': true }}>
                         <input
                           type="text"
                           className="payment-tendered-input"
@@ -933,7 +932,6 @@ export default function PaymentModal({
                           value={tendered}
                           onChange={(e) => setTendered(e.target.value)}
                         />
-                      </Localized>
                       </Localized>
                     </div>
 
