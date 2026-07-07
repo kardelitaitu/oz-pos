@@ -86,3 +86,63 @@ pub async fn delete_exchange_rate(id: String, state: State<'_, AppState>) -> Res
     store.delete_exchange_rate(&id)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exchange_rate_dto_debug() {
+        let dto = ExchangeRateDto {
+            id: "er1".into(),
+            from_currency: "USD".into(),
+            to_currency: "IDR".into(),
+            rate: 15600.0,
+            source: "manual".into(),
+            effective_date: "2026-01-15".into(),
+            created_at: "2026-01-15T10:00:00Z".into(),
+        };
+        let debug = format!("{:?}", dto);
+        assert!(debug.contains("USD"));
+        assert!(debug.contains("15600"));
+    }
+
+    #[test]
+    fn exchange_rate_dto_serialize() {
+        let dto = ExchangeRateDto {
+            id: "er1".into(),
+            from_currency: "EUR".into(),
+            to_currency: "USD".into(),
+            rate: 1.08,
+            source: "api".into(),
+            effective_date: "2026-01-15".into(),
+            created_at: "2026-01-15T10:00:00Z".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["id"], "er1");
+        assert_eq!(json["from_currency"], "EUR");
+        assert_eq!(json["rate"], 1.08);
+    }
+
+    #[test]
+    fn create_exchange_rate_args_deserialize() {
+        let json = r#"{"from_currency":"USD","to_currency":"IDR","rate":15600.0,"source":"api","effective_date":"2026-01-15"}"#;
+        let args: CreateExchangeRateArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.from_currency, "USD");
+        assert_eq!(args.rate, 15600.0);
+        assert_eq!(args.source.unwrap(), "api");
+    }
+
+    #[test]
+    fn create_exchange_rate_args_debug() {
+        let args = CreateExchangeRateArgs {
+            from_currency: "USD".into(),
+            to_currency: "EUR".into(),
+            rate: 0.92,
+            source: None,
+            effective_date: None,
+        };
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("0.92"));
+    }
+}

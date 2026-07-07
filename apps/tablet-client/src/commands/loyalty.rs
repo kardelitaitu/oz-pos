@@ -117,3 +117,65 @@ pub async fn get_or_create_loyalty_account(
     drop(db);
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redeem_result_debug() {
+        let tx = LoyaltyTransaction {
+            id: "tx1".into(),
+            account_id: "a1".into(),
+            points: -200,
+            txn_type: "redeem".into(),
+            sale_id: Some("s1".into()),
+            description: "Redeemed 200 points".into(),
+            created_at: "2026-01-15T10:00:00Z".into(),
+        };
+        let r = RedeemResult {
+            transaction: tx,
+            discount_minor: 1000,
+        };
+        let debug = format!("{:?}", r);
+        assert!(debug.contains("1000"));
+    }
+
+    #[test]
+    fn redeem_result_serialize() {
+        let tx = LoyaltyTransaction {
+            id: "tx2".into(),
+            account_id: "a2".into(),
+            points: -100,
+            txn_type: "redeem".into(),
+            sale_id: Some("s2".into()),
+            description: "Redeemed".into(),
+            created_at: "2026-01-15T10:00:00Z".into(),
+        };
+        let r = RedeemResult {
+            transaction: tx,
+            discount_minor: 500,
+        };
+        let json = serde_json::to_value(&r).unwrap();
+        assert_eq!(json["discount_minor"], 500);
+        assert_eq!(json["transaction"]["points"], -100);
+    }
+
+    #[test]
+    fn redeem_result_zero_discount() {
+        let tx = LoyaltyTransaction {
+            id: "tx3".into(),
+            account_id: "a3".into(),
+            points: 0,
+            txn_type: "check".into(),
+            sale_id: None,
+            description: "Balance check".into(),
+            created_at: "2026-01-15T10:00:00Z".into(),
+        };
+        let r = RedeemResult {
+            transaction: tx,
+            discount_minor: 0,
+        };
+        assert_eq!(r.discount_minor, 0);
+    }
+}

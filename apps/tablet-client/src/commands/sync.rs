@@ -89,3 +89,60 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
     drop(db);
     Ok(count)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sync_settings_serialize() {
+        let dto = SyncSettingsDto {
+            server_url: Some("https://sync.example.com".into()),
+            has_api_key: true,
+            enabled: true,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["server_url"], "https://sync.example.com");
+        assert_eq!(json["has_api_key"], true);
+        assert_eq!(json["enabled"], true);
+    }
+
+    #[test]
+    fn sync_settings_no_url_disabled() {
+        let dto = SyncSettingsDto {
+            server_url: None,
+            has_api_key: false,
+            enabled: false,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert!(json["server_url"].is_null());
+        assert!(!json["enabled"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn update_sync_settings_deserialize() {
+        let json = r#"{"server_url":"https://sync.example.com","api_key":"sk-123","enabled":true}"#;
+        let args: UpdateSyncSettingsArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.server_url.unwrap(), "https://sync.example.com");
+        assert_eq!(args.api_key.unwrap(), "sk-123");
+    }
+
+    #[test]
+    fn update_sync_settings_deserialize_no_key() {
+        let json = r#"{"server_url":null,"api_key":null,"enabled":false}"#;
+        let args: UpdateSyncSettingsArgs = serde_json::from_str(json).unwrap();
+        assert!(args.server_url.is_none());
+        assert!(args.api_key.is_none());
+    }
+
+    #[test]
+    fn update_sync_settings_debug() {
+        let args = UpdateSyncSettingsArgs {
+            server_url: Some("url".into()),
+            api_key: None,
+            enabled: true,
+        };
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("url"));
+    }
+}

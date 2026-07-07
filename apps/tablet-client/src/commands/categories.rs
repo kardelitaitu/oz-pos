@@ -122,3 +122,65 @@ pub async fn delete_category(
     store.delete_category(&args.id)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn category_dto_debug() {
+        let dto = CategoryDto {
+            id: "cat-1".into(),
+            name: "Drinks".into(),
+            colour: "#06b6d4".into(),
+            icon: "coffee".into(),
+        };
+        let debug = format!("{:?}", dto);
+        assert!(debug.contains("Drinks"));
+    }
+
+    #[test]
+    fn category_dto_serialize() {
+        let dto = CategoryDto {
+            id: "cat-1".into(),
+            name: "Food".into(),
+            colour: "#ff0000".into(),
+            icon: "utensils".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["id"], "cat-1");
+        assert_eq!(json["name"], "Food");
+        assert_eq!(json["colour"], "#ff0000");
+    }
+
+    #[test]
+    fn create_category_args_deserialize() {
+        let json = r##"{"id":"cat-bakery","name":"Bakery","colour":"#f59e0b","icon":"croissant"}"##;
+        let args: CreateCategoryArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "cat-bakery");
+        assert_eq!(args.name, "Bakery");
+    }
+
+    #[test]
+    fn create_category_args_debug() {
+        let args = CreateCategoryArgs {
+            id: "cat-test".into(),
+            name: "Test".into(),
+            colour: "#000".into(),
+            icon: "test".into(),
+        };
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("cat-test"));
+    }
+
+    #[test]
+    fn create_category_result_debug_and_serialize() {
+        let result = CreateCategoryResult {
+            id: "cat-99".into(),
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("cat-99"));
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], "cat-99");
+    }
+}

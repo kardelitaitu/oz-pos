@@ -215,6 +215,98 @@ fn device_hostname() -> String {
         .unwrap_or_else(|_| "unknown-device".to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oz_core::features::feature_key;
+
+    #[test]
+    fn feature_dto_debug_output() {
+        let dto = FeatureDto {
+            key: "cash-payment".into(),
+            name: "Cash Payment",
+            description: "Accept cash",
+            group: "Payments",
+            enabled: true,
+            dependencies: vec![],
+        };
+        let debug = format!("{:?}", dto);
+        assert!(debug.contains("Cash Payment"));
+    }
+
+    #[test]
+    fn feature_dto_serialize_json() {
+        let dto = FeatureDto {
+            key: "card-payment".into(),
+            name: "Card Payment",
+            description: "Credit/debit",
+            group: "Payments",
+            enabled: false,
+            dependencies: vec!["cash-payment".into()],
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["key"], "card-payment");
+        assert_eq!(json["name"], "Card Payment");
+        assert!(!json["enabled"].as_bool().unwrap());
+        assert_eq!(json["dependencies"][0], "cash-payment");
+    }
+
+    #[test]
+    fn set_feature_args_deserialize() {
+        let json = r#"{"key":"barcode-scanning","enabled":true}"#;
+        let args: SetFeatureArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.key, "barcode-scanning");
+        assert!(args.enabled);
+    }
+
+    #[test]
+    fn set_feature_args_debug() {
+        let args = SetFeatureArgs {
+            key: "tax-engine".into(),
+            enabled: false,
+        };
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("tax-engine"));
+    }
+
+    #[test]
+    fn set_feature_result_debug() {
+        let result = SetFeatureResult {
+            success: true,
+            features: vec![],
+            auto_enabled: vec![],
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("true"));
+    }
+
+    #[test]
+    fn list_all_features_result_serialize() {
+        let result = ListAllFeaturesResult { features: vec![] };
+        let json = serde_json::to_value(&result).unwrap();
+        assert!(json["features"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn all_feature_metadata_non_empty() {
+        let meta = all_feature_metadata();
+        assert!(!meta.is_empty());
+    }
+
+    #[test]
+    fn all_feature_metadata_no_duplicate_keys() {
+        let meta = all_feature_metadata();
+        let mut keys: Vec<String> = meta
+            .iter()
+            .map(|(f, _, _, _)| feature_key(*f).to_string())
+            .collect();
+        keys.sort();
+        let len_before = keys.len();
+        keys.dedup();
+        assert_eq!(keys.len(), len_before, "duplicate feature keys found");
+    }
+}
+
 // ── Feature metadata ────────────────────────────────────────────────
 
 /// Returns all 32 features with their human-readable name, description,
