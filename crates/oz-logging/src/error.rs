@@ -60,10 +60,7 @@ mod tests {
     #[test]
     fn variants_are_distinct() {
         let a = format!("{:?}", LoggingError::InvalidLevel("x".into()));
-        let b = format!(
-            "{:?}",
-            LoggingError::OpenFile(std::io::Error::new(std::io::ErrorKind::Other, "x"))
-        );
+        let b = format!("{:?}", LoggingError::OpenFile(std::io::Error::other("x")));
         assert_ne!(a, b);
     }
 }
