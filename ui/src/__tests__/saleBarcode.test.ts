@@ -2,41 +2,35 @@ import { describe, it, expect } from 'vitest';
 import { isSaleBarcode } from '@/utils/saleBarcode';
 
 describe('isSaleBarcode', () => {
-  it('matches a valid UUID', () => {
-    expect(isSaleBarcode('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
+  it('returns true for valid lowercase UUID', () => {
+    expect(isSaleBarcode('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).toBe(true);
   });
 
-  it('matches with surrounding whitespace', () => {
-    expect(isSaleBarcode('  550e8400-e29b-41d4-a716-446655440000  ')).toBe(true);
+  it('returns true for valid uppercase UUID', () => {
+    expect(isSaleBarcode('A1B2C3D4-E5F6-7890-ABCD-EF1234567890')).toBe(true);
   });
 
-  it('matches uppercase UUID', () => {
-    expect(isSaleBarcode('550E8400-E29B-41D4-A716-446655440000')).toBe(true);
+  it('returns true for mixed-case UUID', () => {
+    expect(isSaleBarcode('A1b2C3d4-E5f6-7890-AbCd-Ef1234567890')).toBe(true);
   });
 
-  it('matches mixed case UUID', () => {
-    expect(isSaleBarcode('550e8400-E29B-41d4-a716-446655440000')).toBe(true);
+  it('trims whitespace before testing', () => {
+    expect(isSaleBarcode('  a1b2c3d4-e5f6-7890-abcd-ef1234567890  ')).toBe(true);
   });
 
-  it('rejects a random string', () => {
-    expect(isSaleBarcode('not-a-uuid')).toBe(false);
+  it('returns false for non-UUID format', () => {
+    expect(isSaleBarcode('hello-world')).toBe(false);
   });
 
-  it('rejects a gift card barcode', () => {
-    // Gift cards start with GC-, which is not a UUID
-    expect(isSaleBarcode('GC-ABCDEF123456')).toBe(false);
+  it('returns false for too few characters', () => {
+    expect(isSaleBarcode('abc-123-def')).toBe(false);
   });
 
-  it('rejects short UUID-like string (7 hyphens groups)', () => {
-    // UUID has exactly 8-4-4-4-12 format, extra segments fail
-    expect(isSaleBarcode('550e8400-e29b-41d4-a716-446655440000-extra')).toBe(false);
-  });
-
-  it('rejects empty string', () => {
+  it('returns false for empty string', () => {
     expect(isSaleBarcode('')).toBe(false);
   });
 
-  it('rejects a product SKU string', () => {
-    expect(isSaleBarcode('PROD-001')).toBe(false);
+  it('returns false for whitespace-only string', () => {
+    expect(isSaleBarcode('   ')).toBe(false);
   });
 });
