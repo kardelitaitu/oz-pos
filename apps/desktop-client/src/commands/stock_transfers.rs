@@ -162,3 +162,85 @@ pub async fn cancel_stock_transfer(
     drop(db);
     Ok(result)
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── ReceivedLineInput ───────────────────────────────────────────────
+
+    #[test]
+    fn received_line_input_deserialize() {
+        let json = r#"{"line_id":"l1","received_qty":5}"#;
+        let args: ReceivedLineInput = serde_json::from_str(json).unwrap();
+        assert_eq!(args.line_id, "l1");
+        assert_eq!(args.received_qty, 5);
+    }
+
+    #[test]
+    fn received_line_input_debug() {
+        let args = ReceivedLineInput {
+            line_id: "l2".into(),
+            received_qty: 10,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("l2"));
+    }
+
+    // ── TransferWithLines ───────────────────────────────────────────────
+
+    #[test]
+    fn transfer_with_lines_debug() {
+        let transfer = StockTransfer {
+            id: "t1".into(),
+            transfer_number: "TRF-001".into(),
+            source_location: Some("WH-A".into()),
+            destination_location: Some("WH-B".into()),
+            source_terminal_id: None,
+            destination_terminal_id: None,
+            status: "draft".into(),
+            notes: String::new(),
+            created_by: "admin".into(),
+            received_by: None,
+            sent_at: None,
+            received_at: None,
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+            updated_at: "2025-01-01T00:00:00.000Z".into(),
+        };
+        let twl = TransferWithLines {
+            transfer,
+            lines: vec![],
+        };
+        let d = format!("{twl:?}");
+        assert!(d.contains("TRF-001"));
+    }
+
+    #[test]
+    fn transfer_with_lines_serialize() {
+        let transfer = StockTransfer {
+            id: "t2".into(),
+            transfer_number: "TRF-002".into(),
+            source_location: None,
+            destination_location: None,
+            source_terminal_id: None,
+            destination_terminal_id: None,
+            status: "in_transit".into(),
+            notes: "Rush".into(),
+            created_by: "user1".into(),
+            received_by: None,
+            sent_at: None,
+            received_at: None,
+            created_at: "2025-02-01T00:00:00.000Z".into(),
+            updated_at: "2025-02-01T00:00:00.000Z".into(),
+        };
+        let twl = TransferWithLines {
+            transfer,
+            lines: vec![],
+        };
+        let json = serde_json::to_value(&twl).unwrap();
+        assert_eq!(json["transfer"]["transfer_number"], "TRF-002");
+        assert_eq!(json["transfer"]["status"], "in_transit");
+    }
+}

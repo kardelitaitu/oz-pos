@@ -132,3 +132,62 @@ pub async fn list_workspace_screens(
         })
         .collect())
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── WorkspaceDto ────────────────────────────────────────────────────
+
+    #[test]
+    fn workspace_dto_debug() {
+        let dto = WorkspaceDto {
+            key: "retail".into(),
+            name: "Retail".into(),
+            description: "Retail POS".into(),
+            icon: "store".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("retail"));
+        assert!(d.contains("Retail POS"));
+    }
+
+    #[test]
+    fn workspace_dto_serialize() {
+        let dto = WorkspaceDto {
+            key: "restaurant".into(),
+            name: "Restaurant".into(),
+            description: String::new(),
+            icon: "utensils".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["key"], "restaurant");
+        assert_eq!(json["description"], "");
+    }
+
+    // ── WorkspaceScreenDto ──────────────────────────────────────────────
+
+    #[test]
+    fn workspace_screen_dto_debug() {
+        let dto = WorkspaceScreenDto {
+            screen_key: "pos".into(),
+            sort_order: 1,
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("pos"));
+        assert!(d.contains("1"));
+    }
+
+    #[test]
+    fn workspace_screen_dto_serialize() {
+        let dto = WorkspaceScreenDto {
+            screen_key: "history".into(),
+            sort_order: 5,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["screen_key"], "history");
+        assert_eq!(json["sort_order"], 5);
+    }
+}

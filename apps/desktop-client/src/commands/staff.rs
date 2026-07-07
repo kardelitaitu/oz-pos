@@ -160,3 +160,115 @@ pub async fn update_staff(
 
     Ok(to_staff_dto(&user, &roles))
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── StaffMemberDto ──────────────────────────────────────────────────
+
+    #[test]
+    fn staff_member_dto_debug() {
+        let dto = StaffMemberDto {
+            id: "u1".into(),
+            username: "jdoe".into(),
+            display_name: "John Doe".into(),
+            role_id: "r1".into(),
+            role_name: "Manager".into(),
+            is_active: true,
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("jdoe"));
+        assert!(d.contains("Manager"));
+    }
+
+    #[test]
+    fn staff_member_dto_serialize() {
+        let dto = StaffMemberDto {
+            id: "u2".into(),
+            username: "asmith".into(),
+            display_name: "Alice Smith".into(),
+            role_id: "r2".into(),
+            role_name: "Cashier".into(),
+            is_active: false,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["username"], "asmith");
+        assert_eq!(json["is_active"], false);
+    }
+
+    // ── RoleDto ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn role_dto_debug() {
+        let dto = RoleDto {
+            id: "r1".into(),
+            name: "Admin".into(),
+            description: "Full access".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Admin"));
+    }
+
+    #[test]
+    fn role_dto_serialize() {
+        let dto = RoleDto {
+            id: "r2".into(),
+            name: "Viewer".into(),
+            description: String::new(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["name"], "Viewer");
+        assert_eq!(json["description"], "");
+    }
+
+    // ── CreateStaffArgs ─────────────────────────────────────────────────
+
+    #[test]
+    fn create_staff_args_deserialize() {
+        let json = r##"{"username":"jdoe","pin":"1234","display_name":"John Doe","role_id":"r1","caller_user_id":"admin1"}"##;
+        let args: CreateStaffArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.username, "jdoe");
+        assert_eq!(args.role_id, "r1");
+    }
+
+    #[test]
+    fn create_staff_args_debug() {
+        let args = CreateStaffArgs {
+            username: "u".into(),
+            pin: "0000".into(),
+            display_name: "D".into(),
+            role_id: "r".into(),
+            caller_user_id: "c".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("u"));
+        assert!(d.contains("r"));
+    }
+
+    // ── UpdateStaffArgs ─────────────────────────────────────────────────
+
+    #[test]
+    fn update_staff_args_deserialize() {
+        let json = r##"{"id":"u1","username":"jdoe2","display_name":"John D","role_id":"r2","is_active":false,"caller_user_id":"admin1"}"##;
+        let args: UpdateStaffArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "u1");
+        assert_eq!(args.is_active, false);
+    }
+
+    #[test]
+    fn update_staff_args_debug() {
+        let args = UpdateStaffArgs {
+            id: "x".into(),
+            username: "y".into(),
+            display_name: "z".into(),
+            role_id: "r".into(),
+            is_active: true,
+            caller_user_id: "c".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("z"));
+    }
+}

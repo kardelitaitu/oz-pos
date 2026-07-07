@@ -164,3 +164,141 @@ pub async fn set_category_tax_rates(
     drop(db);
     Ok(())
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── TaxRateDto ──────────────────────────────────────────────────────
+
+    #[test]
+    fn tax_rate_dto_debug() {
+        let dto = TaxRateDto {
+            id: "t1".into(),
+            name: "VAT".into(),
+            rate_bps: 1100,
+            is_default: true,
+            is_inclusive: false,
+            display_rate: "11.00%".into(),
+            created_at: "2025-01-01".into(),
+            updated_at: "2025-01-01".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("VAT"));
+        assert!(d.contains("1100"));
+    }
+
+    #[test]
+    fn tax_rate_dto_serialize() {
+        let dto = TaxRateDto {
+            id: "t2".into(),
+            name: "GST".into(),
+            rate_bps: 1000,
+            is_default: false,
+            is_inclusive: true,
+            display_rate: "10.00%".into(),
+            created_at: "2025-02-01".into(),
+            updated_at: "2025-02-01".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["name"], "GST");
+        assert_eq!(json["is_inclusive"], true);
+    }
+
+    // ── CreateTaxRateArgs ───────────────────────────────────────────────
+
+    #[test]
+    fn create_tax_rate_args_deserialize() {
+        let json = r##"{"name":"VAT","rate_bps":1100,"is_default":true,"is_inclusive":false}"##;
+        let args: CreateTaxRateArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "VAT");
+        assert!(args.is_default);
+    }
+
+    #[test]
+    fn create_tax_rate_args_debug() {
+        let args = CreateTaxRateArgs {
+            name: "T".into(),
+            rate_bps: 500,
+            is_default: false,
+            is_inclusive: false,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("T"));
+    }
+
+    // ── UpdateTaxRateArgs ───────────────────────────────────────────────
+
+    #[test]
+    fn update_tax_rate_args_deserialize() {
+        let json = r##"{"id":"t1","name":"VAT Updated","rate_bps":1200,"is_default":false,"is_inclusive":true}"##;
+        let args: UpdateTaxRateArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "t1");
+        assert_eq!(args.rate_bps, 1200);
+    }
+
+    #[test]
+    fn update_tax_rate_args_debug() {
+        let args = UpdateTaxRateArgs {
+            id: "x".into(),
+            name: "N".into(),
+            rate_bps: 0,
+            is_default: true,
+            is_inclusive: false,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("N"));
+    }
+
+    // ── SetCategoryTaxRatesArgs ─────────────────────────────────────────
+
+    #[test]
+    fn set_category_tax_rates_args_deserialize() {
+        let json = r##"{"category_id":"cat1","tax_rate_ids":["t1","t2"]}"##;
+        let args: SetCategoryTaxRatesArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.category_id, "cat1");
+        assert_eq!(args.tax_rate_ids, vec!["t1", "t2"]);
+    }
+
+    #[test]
+    fn set_category_tax_rates_args_deserialize_empty() {
+        let json = r##"{"category_id":"cat2","tax_rate_ids":[]}"##;
+        let args: SetCategoryTaxRatesArgs = serde_json::from_str(json).unwrap();
+        assert!(args.tax_rate_ids.is_empty());
+    }
+
+    #[test]
+    fn set_category_tax_rates_args_debug() {
+        let args = SetCategoryTaxRatesArgs {
+            category_id: "c".into(),
+            tax_rate_ids: vec!["t1".into()],
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("c"));
+    }
+
+    // ── CategoryTaxRateRow ──────────────────────────────────────────────
+
+    #[test]
+    fn category_tax_rate_row_debug() {
+        let row = CategoryTaxRateRow {
+            category_id: "cat1".into(),
+            tax_rate_ids: vec!["t1".into()],
+        };
+        let d = format!("{row:?}");
+        assert!(d.contains("cat1"));
+    }
+
+    #[test]
+    fn category_tax_rate_row_serialize() {
+        let row = CategoryTaxRateRow {
+            category_id: "cat2".into(),
+            tax_rate_ids: vec![],
+        };
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["category_id"], "cat2");
+        assert!(json["tax_rate_ids"].as_array().unwrap().is_empty());
+    }
+}

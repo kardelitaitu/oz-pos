@@ -41,3 +41,31 @@ pub async fn void_sale(
     tracing::info!(sale_id = %args.sale_id, reason = %args.reason, "sale voided");
     Ok(sale)
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn void_sale_args_deserialize() {
+        let json = r##"{"sale_id":"s1","user_id":"u1","reason":"Wrong item"}"##;
+        let args: VoidSaleArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sale_id, "s1");
+        assert_eq!(args.user_id, "u1");
+        assert_eq!(args.reason, "Wrong item");
+    }
+
+    #[test]
+    fn void_sale_args_debug() {
+        let args = VoidSaleArgs {
+            sale_id: "s2".into(),
+            user_id: "u2".into(),
+            reason: "Test".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("s2"));
+        assert!(d.contains("Test"));
+    }
+}

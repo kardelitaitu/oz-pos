@@ -322,3 +322,242 @@ pub async fn list_stock_adjustments(
     let adjustments = store.list_stock_adjustments()?;
     Ok(adjustments.into_iter().map(|a| a.into()).collect())
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── StockCountDto ───────────────────────────────────────────────────
+
+    #[test]
+    fn stock_count_dto_debug() {
+        let dto = StockCountDto {
+            id: "c1".into(),
+            count_number: "CNT-001".into(),
+            status: "draft".into(),
+            count_type: "full".into(),
+            notes: "Monthly count".into(),
+            counted_by: Some("user1".into()),
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+            completed_at: None,
+            updated_at: "2025-01-01T00:00:00.000Z".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("CNT-001"));
+        assert!(d.contains("draft"));
+    }
+
+    #[test]
+    fn stock_count_dto_serialize() {
+        let dto = StockCountDto {
+            id: "c2".into(),
+            count_number: "CNT-002".into(),
+            status: "in_progress".into(),
+            count_type: "cyclic".into(),
+            notes: String::new(),
+            counted_by: None,
+            created_at: "2025-02-01T00:00:00.000Z".into(),
+            completed_at: None,
+            updated_at: "2025-02-01T00:00:00.000Z".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["count_number"], "CNT-002");
+        assert!(json["counted_by"].is_null());
+        assert!(json["completed_at"].is_null());
+    }
+
+    // ── StockCountLineDto ───────────────────────────────────────────────
+
+    #[test]
+    fn stock_count_line_dto_debug() {
+        let dto = StockCountLineDto {
+            id: "l1".into(),
+            count_id: "c1".into(),
+            sku: "SKU-A".into(),
+            product_name: "Widget".into(),
+            expected_qty: 100,
+            counted_qty: Some(95),
+            difference: -5,
+            notes: "Short".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("SKU-A"));
+        assert!(d.contains("Widget"));
+    }
+
+    #[test]
+    fn stock_count_line_dto_serialize() {
+        let dto = StockCountLineDto {
+            id: "l2".into(),
+            count_id: "c2".into(),
+            sku: "SKU-B".into(),
+            product_name: "Gadget".into(),
+            expected_qty: 50,
+            counted_qty: None,
+            difference: 0,
+            notes: String::new(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["sku"], "SKU-B");
+        assert_eq!(json["expected_qty"], 50);
+        assert!(json["counted_qty"].is_null());
+    }
+
+    // ── StockAdjustmentDto ──────────────────────────────────────────────
+
+    #[test]
+    fn stock_adjustment_dto_debug() {
+        let dto = StockAdjustmentDto {
+            id: "a1".into(),
+            count_id: Some("c1".into()),
+            sku: "SKU-A".into(),
+            product_name: "Widget".into(),
+            previous_qty: 100,
+            adjusted_qty: 95,
+            reason: "Cycle count adjustment".into(),
+            created_by: None,
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("SKU-A"));
+    }
+
+    #[test]
+    fn stock_adjustment_dto_serialize() {
+        let dto = StockAdjustmentDto {
+            id: "a2".into(),
+            count_id: None,
+            sku: "SKU-C".into(),
+            product_name: "Manual adj".into(),
+            previous_qty: 200,
+            adjusted_qty: 210,
+            reason: "Correction".into(),
+            created_by: Some("admin".into()),
+            created_at: "2025-03-01T00:00:00.000Z".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["sku"], "SKU-C");
+        assert!(json["count_id"].is_null());
+    }
+
+    // ── CreateStockCountArgs ────────────────────────────────────────────
+
+    #[test]
+    fn create_stock_count_args_deserialize() {
+        let json = r#"{"count_type":"full","notes":"Q1 count","counted_by":"user1"}"#;
+        let args: CreateStockCountArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.count_type, "full");
+        assert_eq!(args.notes, "Q1 count");
+        assert_eq!(args.counted_by.as_deref(), Some("user1"));
+    }
+
+    #[test]
+    fn create_stock_count_args_debug() {
+        let args = CreateStockCountArgs {
+            count_type: "spot".into(),
+            notes: "Quick check".into(),
+            counted_by: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("spot"));
+    }
+
+    // ── AddCountLineArgs ────────────────────────────────────────────────
+
+    #[test]
+    fn add_count_line_args_deserialize() {
+        let json = r#"{"count_id":"c1","sku":"SKU-A","product_name":"Widget","expected_qty":100}"#;
+        let args: AddCountLineArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.count_id, "c1");
+        assert_eq!(args.sku, "SKU-A");
+        assert_eq!(args.expected_qty, 100);
+    }
+
+    #[test]
+    fn add_count_line_args_debug() {
+        let args = AddCountLineArgs {
+            count_id: "c2".into(),
+            sku: "SKU-B".into(),
+            product_name: "Gadget".into(),
+            expected_qty: 50,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("Gadget"));
+    }
+
+    // ── UpdateCountLineArgs ─────────────────────────────────────────────
+
+    #[test]
+    fn update_count_line_args_deserialize() {
+        let json = r#"{"line_id":"l1","counted_qty":95,"notes":"Found 95"}"#;
+        let args: UpdateCountLineArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.line_id, "l1");
+        assert_eq!(args.counted_qty, Some(95));
+        assert_eq!(args.notes, "Found 95");
+    }
+
+    #[test]
+    fn update_count_line_args_deserialize_no_counted_qty() {
+        let json = r#"{"line_id":"l2","notes":"Skipped"}"#;
+        let args: UpdateCountLineArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.counted_qty, None);
+    }
+
+    #[test]
+    fn update_count_line_args_debug() {
+        let args = UpdateCountLineArgs {
+            line_id: "l3".into(),
+            counted_qty: Some(10),
+            notes: String::new(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("l3"));
+    }
+
+    // ── RemoveCountLineArgs ─────────────────────────────────────────────
+
+    #[test]
+    fn remove_count_line_args_deserialize() {
+        let json = r#"{"line_id":"l99"}"#;
+        let args: RemoveCountLineArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.line_id, "l99");
+    }
+
+    #[test]
+    fn remove_count_line_args_debug() {
+        let args = RemoveCountLineArgs {
+            line_id: "l42".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("l42"));
+    }
+
+    // ── CompleteStockCountArgs ──────────────────────────────────────────
+
+    #[test]
+    fn complete_stock_count_args_deserialize() {
+        let json = r#"{"count_id":"c1","completed_by":"user1"}"#;
+        let args: CompleteStockCountArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.count_id, "c1");
+        assert_eq!(args.completed_by.as_deref(), Some("user1"));
+    }
+
+    #[test]
+    fn complete_stock_count_args_deserialize_no_completed_by() {
+        let json = r#"{"count_id":"c2"}"#;
+        let args: CompleteStockCountArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.completed_by, None);
+    }
+
+    #[test]
+    fn complete_stock_count_args_debug() {
+        let args = CompleteStockCountArgs {
+            count_id: "c3".into(),
+            completed_by: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("c3"));
+    }
+}
