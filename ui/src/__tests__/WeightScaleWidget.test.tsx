@@ -63,7 +63,7 @@ describe('WeightScaleWidget', () => {
   });
 
   it('calls readScaleWeight on weigh click', async () => {
-    mockReadScaleWeight.mockResolvedValueOnce({ weight_grams: 500, stable: true });
+    mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 500, stable: true });
     render(wrap(<WeightScaleWidget />));
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
@@ -71,7 +71,7 @@ describe('WeightScaleWidget', () => {
   });
 
   it('displays weight after successful read', async () => {
-    mockReadScaleWeight.mockResolvedValueOnce({ weight_grams: 500, stable: true });
+    mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 500, stable: true });
     render(wrap(<WeightScaleWidget />));
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
@@ -82,7 +82,7 @@ describe('WeightScaleWidget', () => {
   });
 
   it('displays kilograms for weights >= 1000g', async () => {
-    mockReadScaleWeight.mockResolvedValueOnce({ weight_grams: 2500, stable: true });
+    mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 2500, stable: true });
     render(wrap(<WeightScaleWidget />));
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
@@ -93,7 +93,7 @@ describe('WeightScaleWidget', () => {
   });
 
   it('shows stable indicator when reading is stable', async () => {
-    mockReadScaleWeight.mockResolvedValueOnce({ weight_grams: 100, stable: true });
+    mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 100, stable: true });
     render(wrap(<WeightScaleWidget />));
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
@@ -104,7 +104,7 @@ describe('WeightScaleWidget', () => {
   });
 
   it('shows unstable indicator when reading is not stable', async () => {
-    mockReadScaleWeight.mockResolvedValueOnce({ weight_grams: 432, stable: false });
+    mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 432, stable: false });
     render(wrap(<WeightScaleWidget />));
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
@@ -127,7 +127,7 @@ describe('WeightScaleWidget', () => {
   });
 
   it('calls onWeightObtained callback after successful read', async () => {
-    const reading = { weight_grams: 750, stable: true };
+    const reading = { weightGrams: 750, stable: true };
     mockReadScaleWeight.mockResolvedValueOnce(reading);
     const onWeightObtained = vi.fn();
 
