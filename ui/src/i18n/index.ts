@@ -1,51 +1,73 @@
 import { FluentBundle, FluentResource } from '@fluent/bundle';
-import sharedFtl from '../locales/shared.ftl?raw';
-import salesFtl from '../locales/sales.ftl?raw';
-import productsFtl from '../locales/products.ftl?raw';
-import settingsFtl from '../locales/settings.ftl?raw';
-import staffFtl from '../locales/staff.ftl?raw';
-import customersFtl from '../locales/customers.ftl?raw';
-import taxFtl from '../locales/tax.ftl?raw';
-import currencyFtl from '../locales/currency.ftl?raw';
-import inventoryFtl from '../locales/inventory.ftl?raw';
-import tablesFtl from '../locales/tables.ftl?raw';
-import terminalsFtl from '../locales/terminals.ftl?raw';
-import offlineFtl from '../locales/offline.ftl?raw';
-import bundlesFtl from '../locales/bundles.ftl?raw';
-import promotionsFtl from '../locales/promotions.ftl?raw';
-import kdsFtl from '../locales/kds.ftl?raw';
-import kioskFtl from '../locales/kiosk.ftl?raw';
-import loyaltyFtl from '../locales/loyalty.ftl?raw';
-import shiftsFtl from '../locales/shifts.ftl?raw';
-import reportsFtl from '../locales/reports.ftl?raw';
-import multiStoreFtl from '../locales/multi-store.ftl?raw';
-import stockTransfersFtl from '../locales/stock-transfers.ftl?raw';
-import idFTL from './id.ftl?raw';
+
+// English domain files
+import sharedEn from '../locales/shared.ftl?raw';
+import salesEn from '../locales/sales.ftl?raw';
+import productsEn from '../locales/products.ftl?raw';
+import settingsEn from '../locales/settings.ftl?raw';
+import staffEn from '../locales/staff.ftl?raw';
+import customersEn from '../locales/customers.ftl?raw';
+import taxEn from '../locales/tax.ftl?raw';
+import currencyEn from '../locales/currency.ftl?raw';
+import inventoryEn from '../locales/inventory.ftl?raw';
+import tablesEn from '../locales/tables.ftl?raw';
+import terminalsEn from '../locales/terminals.ftl?raw';
+import offlineEn from '../locales/offline.ftl?raw';
+import bundlesEn from '../locales/bundles.ftl?raw';
+import promotionsEn from '../locales/promotions.ftl?raw';
+import kdsEn from '../locales/kds.ftl?raw';
+import kioskEn from '../locales/kiosk.ftl?raw';
+import loyaltyEn from '../locales/loyalty.ftl?raw';
+import shiftsEn from '../locales/shifts.ftl?raw';
+import reportsEn from '../locales/reports.ftl?raw';
+import multiStoreEn from '../locales/multi-store.ftl?raw';
+import stockTransfersEn from '../locales/stock-transfers.ftl?raw';
+import giftCardsEn from '../locales/gift-cards.ftl?raw';
+import purchasingEn from '../locales/purchasing.ftl?raw';
+import stockCountingEn from '../locales/stock-counting.ftl?raw';
+
+// Indonesian domain files
+import sharedId from '../locales/shared.id.ftl?raw';
+import salesId from '../locales/sales.id.ftl?raw';
+import productsId from '../locales/products.id.ftl?raw';
+import settingsId from '../locales/settings.id.ftl?raw';
+import staffId from '../locales/staff.id.ftl?raw';
+import customersId from '../locales/customers.id.ftl?raw';
+import taxId from '../locales/tax.id.ftl?raw';
+import currencyId from '../locales/currency.id.ftl?raw';
+import inventoryId from '../locales/inventory.id.ftl?raw';
+import tablesId from '../locales/tables.id.ftl?raw';
+import terminalsId from '../locales/terminals.id.ftl?raw';
+import offlineId from '../locales/offline.id.ftl?raw';
+import bundlesId from '../locales/bundles.id.ftl?raw';
+import promotionsId from '../locales/promotions.id.ftl?raw';
+import kdsId from '../locales/kds.id.ftl?raw';
+import kioskId from '../locales/kiosk.id.ftl?raw';
+import loyaltyId from '../locales/loyalty.id.ftl?raw';
+import shiftsId from '../locales/shifts.id.ftl?raw';
+import reportsId from '../locales/reports.id.ftl?raw';
+import multiStoreId from '../locales/multi-store.id.ftl?raw';
+import stockTransfersId from '../locales/stock-transfers.id.ftl?raw';
+import giftCardsId from '../locales/gift-cards.id.ftl?raw';
+import purchasingId from '../locales/purchasing.id.ftl?raw';
+import stockCountingId from '../locales/stock-counting.id.ftl?raw';
 
 export type LocaleCode = 'en' | 'id';
 
 const enFTL = [
-  sharedFtl,
-  salesFtl,
-  productsFtl,
-  settingsFtl,
-  staffFtl,
-  customersFtl,
-  taxFtl,
-  currencyFtl,
-  inventoryFtl,
-  tablesFtl,
-  terminalsFtl,
-  offlineFtl,
-  bundlesFtl,
-  promotionsFtl,
-  kdsFtl,
-  kioskFtl,
-  loyaltyFtl,
-  shiftsFtl,
-  reportsFtl,
-  multiStoreFtl,
-  stockTransfersFtl,
+  sharedEn, salesEn, productsEn, settingsEn, staffEn,
+  customersEn, taxEn, currencyEn, inventoryEn, tablesEn,
+  terminalsEn, offlineEn, bundlesEn, promotionsEn, kdsEn,
+  kioskEn, loyaltyEn, shiftsEn, reportsEn, multiStoreEn,
+  stockTransfersEn, giftCardsEn, purchasingEn, stockCountingEn,
+].join('\n');
+
+const idFTL = [
+  sharedId, salesId, productsId, settingsId, staffId,
+  customersId, taxId, currencyId, inventoryId, tablesId,
+  terminalsId, offlineId, bundlesId, promotionsId, kdsId,
+  kioskId, loyaltyId, shiftsId, reportsId, multiStoreId,
+  stockTransfersId, giftCardsId, purchasingId, stockCountingId,
 ].join('\n');
 
 const RESOURCES: Record<LocaleCode, string> = {
