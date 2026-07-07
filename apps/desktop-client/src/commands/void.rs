@@ -68,4 +68,12 @@ mod tests {
         assert!(d.contains("s2"));
         assert!(d.contains("Test"));
     }
+
+    #[test]
+    fn void_sale_args_deserialize_empty_reason() {
+        let json = r##"{"sale_id":"s3","user_id":"u3","reason":""}"##;
+        let args: VoidSaleArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sale_id, "s3");
+        assert_eq!(args.reason, "");
+    }
 }
