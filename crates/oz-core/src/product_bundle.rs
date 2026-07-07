@@ -190,4 +190,93 @@ mod tests {
         let back: BundleWithItems = serde_json::from_str(&json).unwrap();
         assert!(back.items.is_empty());
     }
+
+    // ── Debug ────────────────────────────────────────────────────
+
+    #[test]
+    fn product_bundle_debug() {
+        let pb = ProductBundle {
+            id: "b1".into(),
+            bundle_sku: "GIFT-BOX".into(),
+            name: "Gift Box".into(),
+            description: String::new(),
+            bundle_price_minor: None,
+            currency: "IDR".into(),
+            active: true,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+        };
+        let debug = format!("{:?}", pb);
+        assert!(debug.contains("GIFT-BOX"));
+        assert!(debug.contains("Gift Box"));
+    }
+
+    #[test]
+    fn bundle_item_debug() {
+        let item = BundleItem {
+            id: "i1".into(),
+            bundle_id: "b1".into(),
+            sku: "SKU-001".into(),
+            qty: 5,
+            unit_price_minor: Some(999),
+        };
+        let debug = format!("{:?}", item);
+        assert!(debug.contains("SKU-001"));
+        assert!(debug.contains("5"));
+    }
+
+    #[test]
+    fn bundle_with_items_debug() {
+        let bundle = ProductBundle {
+            id: "b9".into(),
+            bundle_sku: "DBG".into(),
+            name: "Debug Bundle".into(),
+            description: String::new(),
+            bundle_price_minor: None,
+            currency: "IDR".into(),
+            active: true,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+        };
+        let bwi = BundleWithItems {
+            bundle,
+            items: vec![],
+        };
+        let debug = format!("{:?}", bwi);
+        assert!(debug.contains("Debug Bundle"));
+    }
+
+    // ── Edge cases ───────────────────────────────────────────────
+
+    #[test]
+    fn bundle_item_large_qty() {
+        let item = BundleItem {
+            id: "i3".into(),
+            bundle_id: "b1".into(),
+            sku: "BULK".into(),
+            qty: 999,
+            unit_price_minor: Some(1),
+        };
+        let json = serde_json::to_string(&item).unwrap();
+        let back: BundleItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.qty, 999);
+    }
+
+    #[test]
+    fn product_bundle_zero_price() {
+        let pb = ProductBundle {
+            id: "b6".into(),
+            bundle_sku: "FREE".into(),
+            name: "Freebie".into(),
+            description: String::new(),
+            bundle_price_minor: Some(0),
+            currency: "USD".into(),
+            active: true,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+        };
+        let json = serde_json::to_string(&pb).unwrap();
+        let back: ProductBundle = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.bundle_price_minor, Some(0));
+    }
 }
