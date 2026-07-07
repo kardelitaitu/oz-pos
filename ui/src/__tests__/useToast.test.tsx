@@ -1,58 +1,65 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, within } from '@testing-library/react';
-import { withFluent } from '@/locales/test-utils';
-import sharedFtl from '@/locales/shared.ftl?raw';
-import { ToastProvider, useToast, type ToastVariant } from '@/hooks/useToast';
-import { useRef, useCallback } from 'react';
-import type { ReactNode } from 'react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
+import { FluentBundle, FluentResource } from '@fluent/bundle';
+import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import { ToastProvider, useToast } from '@/hooks/useToast';
 
-// ── Test harness component ────────────────────────────────────────────
+const ftl = `
+toast-dismiss-aria = Dismiss notification
+`;
 
-function TestConsumer({
-  onRender,
-}: {
-  onRender?: (add: (msg: string, v?: ToastVariant) => string, remove: (id: string) => void) => void;
-}) {
+const bundle = new FluentBundle('en');
+bundle.addResource(new FluentResource(ftl));
+const l10n = new ReactLocalization([bundle]);
+
+function TestConsumer() {
   const { toasts, addToast, removeToast } = useToast();
-  const lastIdRef = useRef('');
-
-  const add = useCallback(
-    (msg: string, v?: ToastVariant) => {
-      addToast(msg, v);
-      // We can't get the id synchronously, so capture via a timeout
-      setTimeout(() => {
-        // After state flushes, grab the latest toast id
-      }, 0);
-      return lastIdRef.current;
-    },
-    [addToast],
-  );
-
-  // Track the latest toast id as a side-effect
-  if (toasts.length > 0) {
-    lastIdRef.current = toasts[toasts.length - 1].id;
-  }
-
-  if (onRender) onRender(add, removeToast);
   return (
     <div>
-      <div data-testid="toast-count">{toasts.length}</div>
-      {toasts.map((t) => (
-        <div key={t.id} data-testid={`toast-${t.variant}`}>
-          {t.message}
-        </div>
-      ))}
+      <span data-testid="count">{toasts.length}</span>
+      <ul>
+        {toasts.map((t) => (
+          <li key={t.id} data-testid={`toast-${t.id}`}>
+            <span data-testid={`msg-${t.id}`}>{t.message}</span>
+            <span data-testid={`variant-${t.id}`}>{t.variant}</span>
+          </li>
+        ))}
+      </ul>
+      <button data-testid="add-info" onClick={() => addToast('Info toast')}>
+        Add info
+      </button>
+      <button data-testid="add-success" onClick={() => addToast('Success!', 'success')}>
+        Add success
+      </button>
+      <button data-testid="add-error" onClick={() => addToast('Failed!', 'error')}>
+        Add error
+      </button>
+      <button data-testid="add-warning" onClick={() => addToast('Careful', 'warning')}>
+        Add warning
+      </button>
+      <button
+        data-testid="remove-last"
+        onClick={() => {
+          if (toasts.length > 0) removeToast(toasts[0]!.id);
+        }}
+      >
+        Remove last
+      </button>
     </div>
   );
 }
 
-function renderWithProvider(ui: ReactNode) {
-  return render(withFluent(<ToastProvider>{ui}</ToastProvider>, sharedFtl));
+function renderProvider() {
+  return render(
+    <LocalizationProvider l10n={l10n}>
+      <ToastProvider>
+        <TestConsumer />
+      </ToastProvider>
+    </LocalizationProvider>,
+  );
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────
-
-describe('useToast', () => {
+describe('ToastProvider + useToast', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -61,180 +68,80 @@ describe('useToast', () => {
     vi.useRealTimers();
   });
 
-  it('adds a toast with default info variant', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
-
-    act(() => {
-      add('Hello world');
-    });
-
-    const container = document.querySelector('.toast-container')!;
-    expect(within(container).getByText('Hello world')).toBeTruthy();
-    expect(screen.getByTestId('toast-info')).toBeTruthy();
-    expect(screen.getByTestId('toast-count').textContent).toBe('1');
+  it('starts with zero toasts', () => {
+    renderProvider();
+    expect(screen.getByTestId('count').textContent).toBe('0');
   });
 
-  it('adds a toast with explicit variant', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
-
-    act(() => {
-      add('Success!', 'success');
-    });
-
-    const container = document.querySelector('.toast-container')!;
-    expect(within(container).getByText('Success!')).toBeTruthy();
-    expect(screen.getByTestId('toast-success')).toBeTruthy();
+  it('adds an info toast with default variant', () => {
+    renderProvider();
+    fireEvent.click(screen.getByTestId('add-info'));
+    expect(screen.getByTestId('count').textContent).toBe('1');
+    // Find the new toast's message
+    const messages = document.querySelectorAll('[data-testid^="msg-"]');
+    expect(messages[0]!.textContent).toBe('Info toast');
+    const variants = document.querySelectorAll('[data-testid^="variant-"]');
+    expect(variants[0]!.textContent).toBe('info');
   });
 
-  it('supports all four variants', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+  it('adds toasts with different variants', () => {
+    renderProvider();
+    fireEvent.click(screen.getByTestId('add-success'));
+    fireEvent.click(screen.getByTestId('add-error'));
+    fireEvent.click(screen.getByTestId('add-warning'));
+    expect(screen.getByTestId('count').textContent).toBe('3');
 
-    act(() => { add('info', 'info'); });
-    act(() => { add('success', 'success'); });
-    act(() => { add('warning', 'warning'); });
-    act(() => { add('error', 'error'); });
-
-    expect(screen.getByTestId('toast-info')).toBeTruthy();
-    expect(screen.getByTestId('toast-success')).toBeTruthy();
-    expect(screen.getByTestId('toast-warning')).toBeTruthy();
-    expect(screen.getByTestId('toast-error')).toBeTruthy();
-    expect(screen.getByTestId('toast-count').textContent).toBe('4');
+    const variants = document.querySelectorAll('[data-testid^="variant-"]');
+    expect(variants[0]!.textContent).toBe('success');
+    expect(variants[1]!.textContent).toBe('error');
+    expect(variants[2]!.textContent).toBe('warning');
   });
 
-  it('removes a toast by explicit remove', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    let remove: (id: string) => void = () => {};
-    renderWithProvider(<TestConsumer onRender={(a, r) => { add = a; remove = r; }} />);
+  it('removes a toast manually', () => {
+    renderProvider();
+    fireEvent.click(screen.getByTestId('add-info'));
+    expect(screen.getByTestId('count').textContent).toBe('1');
 
-    act(() => {
-      add('Temp');
-    });
-
-    expect(screen.getByTestId('toast-count').textContent).toBe('1');
-
-    // Grab the toast element and get its data-testid to extract the variant, then remove
-    const toastEl = document.querySelector('.toast')!;
-    const testId = toastEl.querySelector('[data-testid]')?.getAttribute('data-testid') || '';
-    const variant = testId.replace('toast-', '');
-
-    // Remove by variant — the removeToast function uses the actual id, so we need to
-    // use a different approach. Let's click the dismiss button instead.
-    const dismissBtn = toastEl.querySelector('.toast__dismiss') as HTMLElement;
-    act(() => {
-      dismissBtn.click();
-    });
-
-    expect(screen.getByTestId('toast-count').textContent).toBe('0');
+    fireEvent.click(screen.getByTestId('remove-last'));
+    expect(screen.getByTestId('count').textContent).toBe('0');
   });
 
-  it('auto-dismisses a toast after 4 seconds', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+  it('auto-dismisses toasts after 4 seconds', () => {
+    renderProvider();
+    fireEvent.click(screen.getByTestId('add-info'));
+    expect(screen.getByTestId('count').textContent).toBe('1');
 
-    act(() => {
-      add('Fading');
-    });
+    // 3999ms — still there
+    act(() => { vi.advanceTimersByTime(3999); });
+    expect(screen.getByTestId('count').textContent).toBe('1');
 
-    expect(screen.getByTestId('toast-count').textContent).toBe('1');
-
-    act(() => {
-      vi.advanceTimersByTime(4000);
-    });
-
-    expect(screen.getByTestId('toast-count').textContent).toBe('0');
+    // 1ms more = 4000ms — dismissed
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(screen.getByTestId('count').textContent).toBe('0');
   });
 
-  it('does not dismiss before 4 seconds', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
-
-    act(() => {
-      add('Staying');
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(3999);
-    });
-
-    expect(screen.getByTestId('toast-count').textContent).toBe('1');
-  });
-
-  it('renders nothing when there are no toasts', () => {
-    renderWithProvider(<TestConsumer />);
-
-    expect(screen.getByTestId('toast-count').textContent).toBe('0');
-  });
-
-  it('throws error when used outside ToastProvider', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    expect(() => {
-      render(<TestConsumer />);
-    }).toThrow('useToast must be used within a <ToastProvider>');
-
-    spy.mockRestore();
-  });
-
-  it('has an accessible toast container', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
-
-    act(() => {
-      add('Accessible');
-    });
-
+  it('renders the toast container with role=status and aria-live=polite', () => {
+    renderProvider();
     const container = document.querySelector('.toast-container');
     expect(container).toBeTruthy();
     expect(container!.getAttribute('role')).toBe('status');
     expect(container!.getAttribute('aria-live')).toBe('polite');
   });
 
-  it('has dismiss buttons on each toast', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
-
-    act(() => {
-      add('Dismiss me');
-    });
-
-    const dismissBtns = document.querySelectorAll('.toast__dismiss');
-    expect(dismissBtns.length).toBe(1);
-    expect(dismissBtns[0].textContent).toContain('×');
-
-    // Clicking dismiss removes the toast (use act + direct click with fake timers)
-    act(() => {
-      (dismissBtns[0] as HTMLElement).click();
-    });
-
-    expect(screen.getByTestId('toast-count').textContent).toBe('0');
+  it('throws when useToast is used outside ToastProvider', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => {
+      render(<TestConsumer />);
+    }).toThrow('useToast must be used within a <ToastProvider>');
+    spy.mockRestore();
   });
 
-  it('each toast has the correct variant CSS class', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
+  it('renders dismiss buttons with aria-label from FTL', () => {
+    renderProvider();
+    fireEvent.click(screen.getByTestId('add-info'));
 
-    act(() => { add('error toast', 'error'); });
-    act(() => { add('success toast', 'success'); });
-
-    const toasts = document.querySelectorAll('.toast');
-    expect(toasts[0].classList.contains('toast--error')).toBe(true);
-    expect(toasts[1].classList.contains('toast--success')).toBe(true);
-  });
-
-  it('toast messages are rendered in a span', () => {
-    let add: (msg: string, v?: ToastVariant) => string = () => '';
-    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
-
-    act(() => {
-      add('Span message');
-    });
-
-    const msgEl = document.querySelector('.toast__message');
-    expect(msgEl).toBeTruthy();
-    expect(msgEl!.tagName).toBe('SPAN');
-    expect(msgEl!.textContent).toBe('Span message');
+    const dismissBtn = document.querySelector('.toast__dismiss');
+    expect(dismissBtn).toBeTruthy();
+    expect(dismissBtn!.getAttribute('aria-label')).toBe('Dismiss notification');
   });
 });

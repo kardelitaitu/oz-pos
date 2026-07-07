@@ -696,10 +696,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn seed_everything(conn: &Connection) {

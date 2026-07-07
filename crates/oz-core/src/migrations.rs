@@ -215,6 +215,43 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
     Ok(platform_core::database::run(conn, ALL)?)
 }
 
+/// Create a fresh in-memory database with all migrations already applied.
+///
+/// Uses a shared template cached in a `OnceLock` so the 47 migrations are
+/// run only **once** per test process instead of once per test case.
+///
+/// # Panics
+///
+/// Panics if the template cannot be created or a connection cannot be cloned.
+#[doc(hidden)]
+pub fn fresh_db() -> rusqlite::Connection {
+    use rusqlite::backup::Backup;
+    use std::sync::{Mutex, OnceLock};
+
+    static TEMPLATE: OnceLock<Mutex<rusqlite::Connection>> = OnceLock::new();
+
+    {
+        let _init = TEMPLATE.get_or_init(|| {
+            let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+            conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+            run(&mut conn).unwrap();
+            Mutex::new(conn)
+        });
+    }
+
+    let mut dst = rusqlite::Connection::open_in_memory().unwrap();
+    dst.pragma_update(None, "foreign_keys", "ON").unwrap();
+
+    let src = TEMPLATE.get().unwrap().lock().unwrap();
+    let backup = Backup::new(&*src, &mut dst).unwrap();
+    backup
+        .run_to_completion(-1, std::time::Duration::ZERO, None)
+        .unwrap();
+    drop(src);
+
+    dst
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
