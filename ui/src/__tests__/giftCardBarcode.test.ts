@@ -1,72 +1,78 @@
 import { describe, it, expect } from 'vitest';
 import { isGiftCardBarcode, generateGiftCardNumber } from '@/utils/giftCardBarcode';
 
+// ── isGiftCardBarcode ───────────────────────────────────────────────
+
 describe('isGiftCardBarcode', () => {
-  it('matches a valid gift card barcode', () => {
-    expect(isGiftCardBarcode('GC-ABCDEF123456')).toBe(true);
+  it('returns true for valid 8-char code', () => {
+    expect(isGiftCardBarcode('GC-ABCD1234')).toBe(true);
   });
 
-  it('matches lowercase prefix', () => {
-    expect(isGiftCardBarcode('gc-abcdef123456')).toBe(true);
+  it('returns true for valid 16-char code', () => {
+    expect(isGiftCardBarcode('GC-ABCDEF1234567890')).toBe(true);
   });
 
-  it('matches with surrounding whitespace', () => {
-    expect(isGiftCardBarcode('  GC-ABCDEF123456  ')).toBe(true);
+  it('returns true for valid 12-char code', () => {
+    expect(isGiftCardBarcode('GC-ABC123DEF456')).toBe(true);
   });
 
-  it('matches minimum length (8 chars)', () => {
-    expect(isGiftCardBarcode('GC-12345678')).toBe(true);
+  it('is case insensitive', () => {
+    expect(isGiftCardBarcode('gc-abcd1234efgh')).toBe(true);
   });
 
-  it('matches maximum length (16 chars)', () => {
-    expect(isGiftCardBarcode('GC-ABCDEFGH12345678')).toBe(true);
+  it('trims whitespace before testing', () => {
+    expect(isGiftCardBarcode('  GC-ABCDEF1234  ')).toBe(true);
   });
 
-  it('rejects missing prefix', () => {
-    expect(isGiftCardBarcode('ABCDEF123456')).toBe(false);
+  it('returns false when missing GC- prefix', () => {
+    expect(isGiftCardBarcode('ABCDEF1234')).toBe(false);
   });
 
-  it('rejects too few chars after prefix', () => {
-    expect(isGiftCardBarcode('GC-1234567')).toBe(false);
+  it('returns false for too few chars (fewer than 8)', () => {
+    expect(isGiftCardBarcode('GC-ABC123')).toBe(false);
   });
 
-  it('rejects too many chars after prefix', () => {
-    expect(isGiftCardBarcode('GC-12345678901234567')).toBe(false);
+  it('returns false for too many chars (more than 16)', () => {
+    expect(isGiftCardBarcode('GC-ABCDEF12345678901')).toBe(false);
   });
 
-  it('accepts lowercase letters (regex has /i flag)', () => {
-    expect(isGiftCardBarcode('gc-abcdefabcdef')).toBe(true);
+  it('returns false for special characters in code', () => {
+    expect(isGiftCardBarcode('GC-ABCD@#$%EFGH')).toBe(false);
   });
 
-  it('rejects special characters', () => {
-    expect(isGiftCardBarcode('GC-ABCD-EF123456')).toBe(false);
-  });
-
-  it('rejects empty string', () => {
+  it('returns false for empty string', () => {
     expect(isGiftCardBarcode('')).toBe(false);
+  });
+
+  it('returns false for whitespace-only string', () => {
+    expect(isGiftCardBarcode('   ')).toBe(false);
   });
 });
 
+// ── generateGiftCardNumber ──────────────────────────────────────────
+
 describe('generateGiftCardNumber', () => {
-  it('generates a string starting with GC-', () => {
+  it('starts with "GC-"', () => {
     const num = generateGiftCardNumber();
     expect(num.startsWith('GC-')).toBe(true);
   });
 
-  it('generates a 15-character string (GC- + 12)', () => {
+  it('has total length of 15 (GC- + 12 chars)', () => {
     const num = generateGiftCardNumber();
-    expect(num).toHaveLength(15);
+    expect(num.length).toBe(15);
   });
 
-  it('generates a valid gift card barcode', () => {
+  it('only contains valid characters after prefix', () => {
     const num = generateGiftCardNumber();
-    expect(isGiftCardBarcode(num)).toBe(true);
+    const code = num.slice(3); // after "GC-"
+    expect(/^[A-Z0-9]{12}$/.test(code)).toBe(true);
   });
 
-  it('generates different numbers on subsequent calls', () => {
-    // With 36^12 possible values, collisions are astronomically unlikely
-    const a = generateGiftCardNumber();
-    const b = generateGiftCardNumber();
-    expect(a).not.toBe(b);
+  it('generates different values on successive calls', () => {
+    const results = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      results.add(generateGiftCardNumber());
+    }
+    expect(results.size).toBeGreaterThan(1);
   });
 });
