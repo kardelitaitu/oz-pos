@@ -21,7 +21,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
-import { listShifts, getActiveShift, openShift, getShiftReport } from '@/api/shifts';
+import { listShifts, getActiveShift, getShiftReport } from '@/api/shifts';
 
 const mockListShifts = listShifts as ReturnType<typeof vi.fn>;
 const mockGetActiveShift = getActiveShift as ReturnType<typeof vi.fn>;

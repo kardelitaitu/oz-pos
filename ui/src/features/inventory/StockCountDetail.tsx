@@ -56,7 +56,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
   useEffect(() => {
     load();
-    listProducts().then(setProducts).catch(() => {});
+    import('@/api/products').then(({ listProducts }) => listProducts().then(setProducts)).catch(() => {});
   }, [load]);
 
   const isEditable = count?.status === 'draft' || count?.status === 'in_progress';

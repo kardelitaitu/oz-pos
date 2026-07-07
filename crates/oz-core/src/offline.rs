@@ -117,4 +117,118 @@ mod tests {
         }
         assert_eq!(OfflineQueueStatus::from_stored_str("unknown"), None);
     }
+
+    // ── OfflineQueueItem additional tests ────────────────────────────
+
+    #[test]
+    fn queue_item_debug_output() {
+        let item = OfflineQueueItem::new("complete_sale", r#"{"total":1000}"#);
+        let debug = format!("{item:?}");
+        assert!(debug.contains("complete_sale"));
+        assert!(debug.contains("Pending"));
+        assert!(debug.contains(&item.id));
+    }
+
+    #[test]
+    fn queue_item_clone_eq() {
+        let item = OfflineQueueItem::new("void_sale", "{}");
+        let cloned = item.clone();
+        assert_eq!(item, cloned);
+        assert_eq!(item.id, cloned.id);
+        assert_eq!(item.action, cloned.action);
+        assert_eq!(item.payload, cloned.payload);
+        assert_eq!(item.status, cloned.status);
+        assert_eq!(item.retry_count, cloned.retry_count);
+        assert_eq!(item.last_error, cloned.last_error);
+    }
+
+    #[test]
+    fn queue_item_json_field_names() {
+        let item = OfflineQueueItem::new("complete_sale", r#"{"total":1000}"#);
+        let json = serde_json::to_value(&item).unwrap();
+        let obj = json.as_object().unwrap();
+        assert!(obj.contains_key("id"));
+        assert!(obj.contains_key("action"));
+        assert!(obj.contains_key("payload"));
+        assert!(obj.contains_key("status"));
+        assert!(obj.contains_key("retry_count"));
+        assert!(obj.contains_key("last_error"));
+        assert!(obj.contains_key("created_at"));
+        assert!(obj.contains_key("synced_at"));
+    }
+
+    #[test]
+    fn queue_item_with_error_field() {
+        let mut item = OfflineQueueItem::new("void_sale", "{}");
+        item.last_error = Some("timeout".into());
+        let json = serde_json::to_string(&item).unwrap();
+        let roundtripped: OfflineQueueItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.last_error, Some("timeout".into()));
+    }
+
+    // ── OfflineQueueStatus additional tests ──────────────────────────
+
+    #[test]
+    fn status_debug_output() {
+        assert!(format!("{:?}", OfflineQueueStatus::Pending).contains("Pending"));
+        assert!(format!("{:?}", OfflineQueueStatus::Synced).contains("Synced"));
+        assert!(format!("{:?}", OfflineQueueStatus::Failed).contains("Failed"));
+    }
+
+    #[test]
+    fn status_serde_json_format() {
+        assert_eq!(
+            serde_json::to_value(OfflineQueueStatus::Pending).unwrap(),
+            "pending"
+        );
+        assert_eq!(
+            serde_json::to_value(OfflineQueueStatus::Synced).unwrap(),
+            "synced"
+        );
+        assert_eq!(
+            serde_json::to_value(OfflineQueueStatus::Failed).unwrap(),
+            "failed"
+        );
+    }
+
+    #[test]
+    fn status_serde_roundtrip() {
+        for status in &[
+            OfflineQueueStatus::Pending,
+            OfflineQueueStatus::Synced,
+            OfflineQueueStatus::Failed,
+        ] {
+            let json = serde_json::to_string(status).unwrap();
+            let rt: OfflineQueueStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(*status, rt);
+        }
+    }
+
+    #[test]
+    fn status_from_stored_str_invalid_cases() {
+        assert_eq!(OfflineQueueStatus::from_stored_str(""), None);
+        assert_eq!(OfflineQueueStatus::from_stored_str("PENDING"), None);
+        assert_eq!(OfflineQueueStatus::from_stored_str("  pending  "), None);
+    }
+
+    #[test]
+    fn status_as_stored_str_all_variants() {
+        assert_eq!(OfflineQueueStatus::Pending.as_stored_str(), "pending");
+        assert_eq!(OfflineQueueStatus::Synced.as_stored_str(), "synced");
+        assert_eq!(OfflineQueueStatus::Failed.as_stored_str(), "failed");
+    }
+
+    #[test]
+    fn queue_item_new_generates_unique_ids() {
+        let a = OfflineQueueItem::new("act", "{}");
+        let b = OfflineQueueItem::new("act", "{}");
+        assert_ne!(a.id, b.id);
+    }
+
+    #[test]
+    fn queue_item_new_has_rfc3339_timestamp() {
+        let item = OfflineQueueItem::new("act", "{}");
+        assert!(item.created_at.contains('T'));
+        assert!(item.created_at.ends_with('Z'));
+    }
 }

@@ -14,7 +14,7 @@ import salesFtl from '@/locales/sales.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
-import type { CartLine, Money, LineId } from '@/types/domain';
+import type { LineId } from '@/types/domain';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 
@@ -461,7 +461,7 @@ describe('RetailPosScreen', () => {
     await waitFor(() => {
       const qtyModal = screen.getByRole('heading', { name: /Indomie Goreng/i })
         .closest('.retail-qty-modal')!;
-      expect(within(qtyModal).getAllByText(/35[.,]00/)[0]).toBeInTheDocument();
+      expect(within(qtyModal as HTMLElement).getAllByText(/35[.,]00/)[0]).toBeInTheDocument();
     });
   });
 
@@ -737,6 +737,8 @@ describe('RetailPosScreen', () => {
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
@@ -763,6 +765,8 @@ describe('RetailPosScreen', () => {
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
@@ -816,6 +820,8 @@ describe('RetailPosScreen', () => {
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
@@ -888,6 +894,8 @@ describe('RetailPosScreen', () => {
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
@@ -935,10 +943,12 @@ describe('RetailPosScreen', () => {
   it('shows zero credit reminders when no outstanding credits', async () => {
     const sp = await import('@/features/sales/usePosState');
     vi.mocked(sp.usePosState).mockReturnValue({
-      lines: [{ id: crypto.randomUUID() as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1, line_discount_pct: 0, line_discount_label: '' }],
+      lines: [{ id: crypto.randomUUID() as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1 }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),

@@ -37,7 +37,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
         card_number: cardNumber.trim(),
         initial_amount_minor: initialAmountMinor,
         currency: 'IDR',
-        issued_to: issuedTo.trim() || undefined,
+        issued_to: issuedTo.trim() || null,
         created_by: 'staff',
         pin: pin.trim() || null,
       };

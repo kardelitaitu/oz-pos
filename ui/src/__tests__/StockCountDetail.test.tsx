@@ -23,8 +23,6 @@ vi.mock('@/api/products', () => ({}));
 import StockCountDetail from '@/features/inventory/StockCountDetail';
 import {
   getStockCount,
-  addCountLine,
-  updateCountLine,
   completeStockCount,
   updateStockCountStatus,
   getCountLines,
@@ -53,7 +51,6 @@ const sampleLines = [
 describe('StockCountDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListProducts.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
   });
 

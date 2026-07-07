@@ -19,7 +19,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
-import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '@/api/customers';
+import { listCustomers, createCustomer, updateCustomer } from '@/api/customers';
 
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 const mockCreateCustomer = createCustomer as ReturnType<typeof vi.fn>;
