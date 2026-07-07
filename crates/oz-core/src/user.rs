@@ -250,4 +250,30 @@ mod tests {
         let back: User = serde_json::from_str(&json).unwrap();
         assert_eq!(back, u);
     }
+
+    #[test]
+    fn role_serde_roundtrip() {
+        let r = Role::new("role-manager", "Manager")
+            .with_description("Manages staff")
+            .with_permissions_json("[\"sales:void\",\"staff:read\"]");
+        let json = serde_json::to_string(&r).unwrap();
+        let back: Role = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, r);
+    }
+
+    #[test]
+    fn user_debug_output() {
+        let u = User::new("bob", "hash", "Bob", "role-cashier");
+        let debug = format!("{u:?}");
+        assert!(debug.contains("bob"));
+        assert!(debug.contains("Bob"));
+    }
+
+    #[test]
+    fn role_debug_output() {
+        let r = Role::new("role-owner", "Owner");
+        let debug = format!("{r:?}");
+        assert!(debug.contains("role-owner"));
+        assert!(debug.contains("Owner"));
+    }
 }
