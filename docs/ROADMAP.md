@@ -88,7 +88,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Bluetooth (SPP) receipt printer driver
 - [x] TCP/network receipt printer driver (port 9100, raw ESC/POS)
 - [x] Shared ESC/POS formatting module (`escpos.rs`)
-- [x] Mock HAL driver for unit tests (`hal/src/drivers/mock.rs`)
+- [x] Mock HAL driver for unit tests (`crates/oz-hal/src/drivers/mock.rs`)
 
 ### UI — Design System & Component Library
 - [x] CSS design tokens: colour palette, spacing scale, border-radius, shadows (`styles/tokens.css`)
@@ -287,7 +287,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 ### Transaction Lifecycle
 - [x] Audit log SQL migration + domain type (`010_audit_log.sql`, `audit.rs`)
 - [x] Store methods: `log_audit`, `list_audit_entries`, `void_sale` (atomic tx with stock restoration)
-- [x] `void_sale` Tauri IPC command (`src-tauri/src/commands/sales.rs`)
+- [x] `void_sale` Tauri IPC command (`apps/desktop-client/src/commands/sales.rs`)
 - [x] **Void Sale UI** — Orders screen with search, status filters, detail view, reason picker, void confirmation
 - [x] Refund / return flow (partial or full, linked to original order) — `RefundModal.tsx`, `SalesHistoryScreen.tsx` integration, previous refunds display
 - [x] Hold order (park a sale, resume later — multiple holds simultaneously)
@@ -452,9 +452,9 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 ### Accessibility & i18n
 - [x] WCAG-2.1 AA audit checklist (`docs/a11y.md`)
 - [x] ARIA labels on all interactive elements
-- [x] `ui/src/i18n/en.ftl` — English locale (all strings)
+- [x] `ui/src/locales/en-US.ftl` — English locale (all strings)
 - [x] `ui/src/i18n/id.ftl` — Bahasa Indonesia locale
-- [x] `ui/src/i18n/th.ftl` — Thai locale
+- [x] `ui/src/locales/*.ftl` — 25 translation files for domains
 - [x] `@fluent/react` integration — no hardcoded strings in JSX
 - [x] `docs/a11y.md` — accessibility compliance checklist
 - [ ] Lighthouse a11y score ≥ 90 on all pages (requires audit tooling)

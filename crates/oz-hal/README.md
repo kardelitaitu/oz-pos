@@ -9,18 +9,34 @@ Hardware Abstraction Layer — the seam between business logic and physical devi
 | `BarcodeScanner` | `traits/barcode.rs` | `connect`, `poll`, `cancel` |
 | `ReceiptPrinter` | `traits/printer.rs` | `print_receipt`, `print_raw`, `cut` |
 | `CashDrawer` | `traits/cash_drawer.rs` | `open`, `is_open` |
+| `CustomerDisplay` | `traits/customer_display.rs` | Pole/line display for customer-facing screen |
+| `WeightScale` | `drivers/scale.rs` | `WeightScale`, `WeightReading` — re-exported at crate root |
 
 Business code never imports a specific driver — only traits via `DriverRegistry`.
+
+### Public modules
+
+| Module | Contents |
+|--------|----------|
+| `error` | `HalError`, `HalErrorKind` — `thiserror`-based error types |
+| `transport` | USB/serial/BT/TCP transport abstractions |
+| `types` | `Barcode`, `BarcodeSymbology`, `DeviceInfo` |
+| `registry` | `DriverRegistry` — auto-discovery and manual registration |
 
 ## Drivers
 
 | Driver | File | Status |
 |--------|------|--------|
 | `UsbHidBarcodeScanner` | `drivers/usb_scanner.rs` | Real — USB HID interrupt + keycode→ASCII |
+| `BtBarcodeScanner` | `drivers/bt_scanner.rs` | Stub |
 | `SerialBarcodeScanner` | `drivers/serial_scanner.rs` | Stub |
+| `Scanner` | `drivers/scanner.rs` | Scanner abstraction |
 | `UsbReceiptPrinter` | `drivers/usb_printer.rs` | Stub |
 | `BtReceiptPrinter` | `drivers/bt_printer.rs` | Stub |
 | `TcpReceiptPrinter` | `drivers/tcp_printer.rs` | Stub |
+| `CashDrawer` | `drivers/drawer.rs` | Cash drawer driver |
+| `SerialCustomerDisplay` | `drivers/serial_display.rs` | Stub |
+| `WeightScale` | `drivers/scale.rs` | Scale driver |
 | `MockBarcodeScanner` | `drivers/mock.rs` | Programmable mock |
 | `MockReceiptPrinter` | `drivers/mock.rs` | Programmable mock |
 | `MockCashDrawer` | `drivers/mock.rs` | Programmable mock |
@@ -63,4 +79,4 @@ scanner.push(Barcode::new("ABC123"));
 - No `unwrap()` in driver code — map errors to `HalError` at the trait boundary.
 - Wrap blocking I/O in `tokio::task::spawn_blocking`.
 
-> last audited 28-06-26 by docs-auditor
+> last audited 2026-07-07 by docs-auditor

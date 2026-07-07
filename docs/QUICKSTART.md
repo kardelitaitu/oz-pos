@@ -57,7 +57,7 @@ cargo test --workspace --all-features
 cd ui && npm run test
 ```
 
-The Rust test suite is fully offline — no browser, no network, no hardware. Mocks live in `hal/src/drivers/mock.rs` and are gated by the `mock` feature.
+The Rust test suite is fully offline — no browser, no network, no hardware. Mocks live in `crates/oz-hal/src/drivers/mock.rs` and are gated by the `mock` feature.
 
 ---
 
@@ -93,10 +93,10 @@ oz-pos/
 │   ├── oz-reporting/           # analytics + CSV export
 │   ├── oz-logging/             # structured logging
 │   └── oz-cli/                 # migrations, backup, export CLI
-├── src-tauri/                  # the desktop/mobile shell
+├── apps/desktop-client/        # the desktop Tauri shell
 │   └── src/commands/           # Tauri commands (one folder per feature)
 ├── ui/                         # React + TypeScript front-end
-│   └── src/api/pos.ts          # the ONLY place that calls invoke()
+│   └── src/api/                # per-domain invoke() wrappers
 ├── crates/oz-core/migrations/  # SQL migration files
 ├── docs/                       # project documentation
 ├── .agents/skills/             # agent skills (read these when contributing)
@@ -196,4 +196,4 @@ Welcome to OZ-POS. Keep the curtain closed, the merchant happy, and the money in
 
 ---
 
-> last audited 28-06-26 by project-scaffold
+> last audited 2026-07-07 by docs-auditor

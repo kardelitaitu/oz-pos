@@ -393,6 +393,24 @@
   box-shadow: none;
 }
 
+/* Pinned badge on menu cards */
+.restaurant-card-pin-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--color-accent);
+  color: var(--color-accent-fg, #fff);
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  z-index: 2;
+  pointer-events: none;
+}
+
 /* Card body — name area to the left of the diagonal */
 .restaurant-card-body {
   padding: calc(var(--space-1_5) + var(--card-size, 0) * 4px) 30%;

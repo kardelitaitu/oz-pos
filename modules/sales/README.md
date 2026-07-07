@@ -18,7 +18,7 @@ The Sales module is the core point-of-sale vertical. It owns the entire sale pip
 ## Currently Owns
 
 - **Backend** — Sales CRUD and business logic (`crates/oz-core/src/db/sales.rs`)
-- **Commands** — POS pipeline Tauri commands (`src-tauri/src/commands/pos.rs`)
+- **Commands** — POS pipeline Tauri commands (`apps/desktop-client/src/commands/pos.rs`)
 - **Frontend** — Sale screens (`ui/src/features/sales/`)
 - **API** — TypeScript API client (`ui/src/api/sales.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/sales.ftl`)
@@ -58,3 +58,5 @@ kernel.start_all()?;
   "permissions": ["sales:void", "sales:refund", "reports:view"]
 }
 ```
+
+> last audited 2026-07-07 by docs-auditor

@@ -1,3 +1,8 @@
+/* ── Form field wrapper ────────────────────────────────── */
+.appearance-field {
+  margin-bottom: var(--space-4);
+}
+
 /* ── Colour picker row ────────────────────────────────── */
 .appearance-colour-row {
   display: flex;

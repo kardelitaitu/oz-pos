@@ -27,14 +27,14 @@ git config core.hooksPath .githooks   # enable pre-commit hook (auto cargo fmt)
 - Use `rusqlite` with transactions for all database writes; never write outside a transaction.
 
 ### Tauri / UI Standards
-- Tauri commands must be defined in `src-tauri/src/commands/` and registered in `main.rs`.
-- Front-end API calls go through `ui/src/api/pos.ts`; do not call `invoke` directly in components.
+- Tauri commands must be defined in `apps/desktop-client/src/commands/` or `apps/tablet-client/src/commands/` and registered in their respective `lib.rs`.
+- Front-end API calls go through `ui/src/api/` (per-domain files); do not call `invoke` directly in components.
 - All React components must have ARIA labels and pass `eslint-plugin-jsx-a11y` checks.
 - Use `@fluent/react` for all user-visible strings; no hardcoded English strings in JSX.
 
 ### Testing Standards
 - Every new Rust module must include a `#[cfg(test)]` block with at least one unit test.
-- HAL drivers must have a mock implementation in `hal/src/drivers/mock.rs` for testing.
+- HAL drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs` for testing.
 - Front-end components must have a corresponding test in `ui/src/__tests__/`.
 
 ### Git & Branch Policy

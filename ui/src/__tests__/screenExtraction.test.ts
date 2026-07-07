@@ -257,6 +257,11 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'sales/EodReportScreen.tsx',
     css: ['sales/EodReportScreen.css'],
   },
+  {
+    name: 'RefundModal',
+    tsx: 'sales/RefundModal.tsx',
+    css: ['sales/RefundModal.css'],
+  },
 
   // ── Reports ───────────────────────────────────────────
   {
@@ -347,6 +352,35 @@ const SCREENS: ScreenEntry[] = [
     name: 'PurchaseOrderForm',
     tsx: 'purchasing/PurchaseOrderForm.tsx',
     css: ['purchasing/PurchaseOrderForm.css'],
+  },
+
+  // ── Restaurant ─────────────────────────────────────────
+  {
+    name: 'RestaurantMenu',
+    tsx: 'restaurant/RestaurantMenu.tsx',
+    css: ['restaurant/RestaurantMenu.css'],
+    dynamicClassPrefixes: ['restaurant-hamburger-item--', 'restaurant-card--'],
+    externalClasses: ['restaurant-card', 'restaurant-pill-dot'],
+  },
+
+  // ── Appearance Settings ────────────────────────────────
+  {
+    name: 'AppearanceSettings',
+    tsx: 'settings/AppearanceSettings.tsx',
+    css: ['settings/AppearanceSettings.css', 'settings/SettingsPage.css'],
+    externalClasses: [
+      'settings-page',
+      'settings-title',
+      'card',
+      'tab-list',
+      'settings-toggle',
+      'settings-field',
+      'settings-select',
+      'settings-hint',
+      'settings-size-controls',
+      'settings-size-btn',
+      'settings-size-value',
+    ],
   },
 ];
 

@@ -18,7 +18,7 @@ The Tax module owns the tax configuration vertical. It handles tax rate CRUD, pr
 ## Currently Owns
 
 - **Backend** — Tax rate CRUD and assignments (`crates/oz-core/src/db/tax.rs`)
-- **Commands** — Tax Tauri commands (`src-tauri/src/commands/tax.rs`)
+- **Commands** — Tax Tauri commands (`apps/desktop-client/src/commands/tax.rs`)
 - **Frontend** — Tax configuration screen (`ui/src/features/tax/`)
 - **API** — TypeScript API client (`ui/src/api/tax.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/*/tax.ftl`)
@@ -58,3 +58,5 @@ kernel.start_all()?;
   "permissions": ["tax:view", "tax:edit"]
 }
 ```
+
+> last audited 2026-07-07 by docs-auditor

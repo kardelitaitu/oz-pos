@@ -11,7 +11,6 @@ import { ToastProvider } from '@/frontend/shared/Toast';
 import { withFluent } from '@/locales/test-utils';
 import salesFtl from '@/locales/sales.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
-import productsFtl from '@/locales/products.ftl?raw';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import RetailOptionsScreen from '@/features/retail/RetailOptionsScreen';
 

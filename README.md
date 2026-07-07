@@ -8,7 +8,7 @@ A modular Point-of-Sale framework built with Rust + Tauri v2.
 oz-pos/
 ├── apps/
 │   ├── desktop-client/     # Tauri v2 shell: IPC commands, app state, plugins
-│   │   └── src/commands/   # 65+ Tauri commands grouped by domain
+│   │   └── src/commands/   # 200+ Tauri commands grouped by domain
 │   └── tablet-client/      # Tablet-optimised Tauri shell
 ├── crates/
 │   ├── oz-cli/             # CLI tool (backup, export/import .ozpkg, migrations)
@@ -31,9 +31,9 @@ oz-pos/
 │       │   ├── shared/     # Button, Card, Modal, Badge, Toast, Spinner, etc.
 │       │   ├── shell/      # AppLayout, RoleBadge, ThemeProvider, ThemeToggle
 │       │   └── themes/     # Design tokens, reset, components CSS
-│       ├── features/       # 15+ screen components by domain
-│       ├── locales/        # Fluent (.ftl) files — 280+ IDs
-│       └── __tests__/      # Vitest + testing-library (122 tests, 12 files)
+│       ├── features/       # 21+ screen components by domain
+│       ├── locales/        # Fluent (.ftl) files — 1900+ IDs across 25 files
+│       └── __tests__/      # Vitest + testing-library (33 files)
 ├── docs/
 │   ├── ROADMAP.md          # Phased delivery plan (Phase 3 complete)
 │   ├── decisions/          # Architecture decision records
@@ -49,7 +49,7 @@ oz-pos/
 | Backend | Rust | Domain logic, DB access, hardware control |
 | Frontend | React 18 + TS + Vite | POS UI |
 | Shell | Tauri v2 | IPC bridge, native window, updater |
-| DB | SQLite (rusqlite) | On-device persistence, 25 migrations |
+| DB | SQLite (rusqlite) | On-device persistence, 51 migrations |
 | i18n | @fluent/react | All UI strings in `.ftl` files |
 | Hardware HAL | oz-hal traits | USB/TCP/BT/serial/mock drivers for printer, scanner, drawer, display |
 | Money | i64 minor units | Never f64 — `Currency`, `Money` structs |
@@ -70,7 +70,7 @@ cd apps/desktop-client && cargo tauri dev
 | Command | Action |
 |---------|--------|
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | `vitest run` (122 tests, 12 files) |
+| `npm run test` | `vitest run` (33 files) |
 | `npm run lint` | ESLint + jsx-a11y |
 
 ### Key scripts (root)
@@ -78,7 +78,7 @@ cd apps/desktop-client && cargo tauri dev
 | Command | Action |
 |---------|--------|
 | `cargo clippy --all-targets` | Rust lint |
-| `cargo test --workspace` | Rust tests (400+) |
+| `cargo test --workspace` | Rust tests (1900+) |
 | `bash scripts/coverage.sh` | Rust + UI coverage (HTML + JSON in `coverage/`) |
 
 ### Measuring test coverage
@@ -118,8 +118,8 @@ Prerequisites: `cargo install cargo-llvm-cov` (plus LLVM tools on PATH: `apt ins
 
 ## Status
 
-**Phase 3 (Transactions & Staff) complete.** 25 migrations, 65+ IPC commands, 15+ screen components, 122 front-end tests, 400+ Rust tests.
+**Phase 3 (Transactions & Staff) complete.** 51 migrations, 200+ IPC commands, 21+ screen components, 33 front-end test files, 1900+ Rust tests.
 
 See [ROADMAP.md](./docs/ROADMAP.md) for the phased delivery plan.
 
-> last audited 30-06-26 by docs-auditor
+> last audited 2026-07-07 by docs-auditor
