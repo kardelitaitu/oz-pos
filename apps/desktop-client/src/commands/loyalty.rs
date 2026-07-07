@@ -15,6 +15,56 @@ pub struct RedeemResult {
     pub discount_minor: i64,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_txn() -> LoyaltyTransaction {
+        LoyaltyTransaction {
+            id: "txn-1".into(),
+            account_id: "acct-1".into(),
+            sale_id: Some("sale-1".into()),
+            points: -100,
+            txn_type: "redeem".into(),
+            description: "Redeemed 100 points".into(),
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+        }
+    }
+
+    #[test]
+    fn redeem_result_debug() {
+        let result = RedeemResult {
+            transaction: sample_txn(),
+            discount_minor: 100,
+        };
+        let debug = format!("{result:?}");
+        assert!(debug.contains("redeem"));
+        assert!(debug.contains("100"));
+    }
+
+    #[test]
+    fn redeem_result_serialize() {
+        let result = RedeemResult {
+            transaction: sample_txn(),
+            discount_minor: 50,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["discount_minor"], 50);
+        assert!(json["transaction"].is_object());
+        assert_eq!(json["transaction"]["txn_type"], "redeem");
+        assert_eq!(json["transaction"]["points"], -100);
+    }
+
+    #[test]
+    fn redeem_result_zero_discount() {
+        let result = RedeemResult {
+            transaction: sample_txn(),
+            discount_minor: 0,
+        };
+        assert_eq!(result.discount_minor, 0);
+    }
+}
+
 #[command]
 pub async fn get_loyalty_account(
     customer_id: String,

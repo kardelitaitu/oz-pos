@@ -215,6 +215,157 @@ fn device_hostname() -> String {
         .unwrap_or_else(|_| "unknown-device".to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── FeatureDto ───────────────────────────────────────────────
+
+    #[test]
+    fn feature_dto_debug_output() {
+        let dto = FeatureDto {
+            key: "simple-retail".into(),
+            name: "Simple Retail",
+            description: "Core POS: scan, sell, print receipt",
+            group: "Core",
+            enabled: true,
+            dependencies: vec!["cash-payment".into()],
+        };
+        let debug = format!("{dto:?}");
+        assert!(debug.contains("simple-retail"));
+        assert!(debug.contains("Simple Retail"));
+        assert!(debug.contains("Core"));
+    }
+
+    #[test]
+    fn feature_dto_serialize_json() {
+        let dto = FeatureDto {
+            key: "tax-engine".into(),
+            name: "Tax Engine",
+            description: "Tax calculation with configurable rates",
+            group: "Business Rules",
+            enabled: false,
+            dependencies: vec![],
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["key"], "tax-engine");
+        assert_eq!(json["name"], "Tax Engine");
+        assert_eq!(json["group"], "Business Rules");
+        assert_eq!(json["enabled"], false);
+        assert_eq!(json["dependencies"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn feature_dto_with_dependencies_serialize() {
+        let dto = FeatureDto {
+            key: "analytics".into(),
+            name: "Analytics",
+            description: "Advanced charts",
+            group: "Reporting",
+            enabled: true,
+            dependencies: vec!["reporting".into()],
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        let deps = json["dependencies"].as_array().unwrap();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(deps[0], "reporting");
+    }
+
+    // ── SetFeatureArgs ───────────────────────────────────────────
+
+    #[test]
+    fn set_feature_args_deserialize() {
+        let json = r#"{"key": "tax-engine", "enabled": true}"#;
+        let args: SetFeatureArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.key, "tax-engine");
+        assert!(args.enabled);
+    }
+
+    #[test]
+    fn set_feature_args_deserialize_disable() {
+        let json = r#"{"key": "loyalty-program", "enabled": false}"#;
+        let args: SetFeatureArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.key, "loyalty-program");
+        assert!(!args.enabled);
+    }
+
+    #[test]
+    fn set_feature_args_debug() {
+        let args = SetFeatureArgs {
+            key: "gift-cards".into(),
+            enabled: true,
+        };
+        let debug = format!("{args:?}");
+        assert!(debug.contains("gift-cards"));
+        assert!(debug.contains("true"));
+    }
+
+    // ── SetFeatureResult ─────────────────────────────────────────
+
+    #[test]
+    fn set_feature_result_debug() {
+        let dto = FeatureDto {
+            key: "simple-retail".into(),
+            name: "Simple Retail",
+            description: "Core POS",
+            group: "Core",
+            enabled: true,
+            dependencies: vec![],
+        };
+        let result = SetFeatureResult {
+            success: true,
+            features: vec![dto],
+            auto_enabled: vec!["cash-payment".into()],
+        };
+        let debug = format!("{result:?}");
+        assert!(debug.contains("true"));
+        assert!(debug.contains("Simple Retail"));
+        assert!(debug.contains("cash-payment"));
+    }
+
+    #[test]
+    fn set_feature_result_empty_auto_enabled() {
+        let result = SetFeatureResult {
+            success: true,
+            features: vec![],
+            auto_enabled: vec![],
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["auto_enabled"].as_array().unwrap().len(), 0);
+    }
+
+    // ── ListAllFeaturesResult ────────────────────────────────────
+
+    #[test]
+    fn list_all_features_result_serialize_empty() {
+        let result = ListAllFeaturesResult { features: vec![] };
+        let json = serde_json::to_value(&result).unwrap();
+        assert!(json["features"].as_array().unwrap().is_empty());
+    }
+
+    // ── all_feature_metadata ─────────────────────────────────────
+
+    #[test]
+    fn all_feature_metadata_non_empty() {
+        let metadata = all_feature_metadata();
+        assert!(!metadata.is_empty(), "should have at least one feature");
+    }
+
+    #[test]
+    fn all_feature_metadata_no_duplicate_keys() {
+        let metadata = all_feature_metadata();
+        let keys: Vec<String> = metadata
+            .iter()
+            .map(|(feat, _, _, _)| oz_core::features::feature_key(*feat).to_string())
+            .collect();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), keys.len(), "feature keys must be unique");
+    }
+}
+
 // ── Feature metadata ────────────────────────────────────────────────
 
 /// Returns all 32 features with their human-readable name, description,
