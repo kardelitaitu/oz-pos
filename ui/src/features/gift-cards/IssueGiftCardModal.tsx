@@ -51,8 +51,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   };
 
   return (
-    <div className="gift-cards-modal-overlay" onClick={onClose}>
-      <div className="gift-cards-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="gift-cards-modal-overlay" role="button" tabIndex={0} aria-label="Close" onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}>
+      <div className="gift-cards-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
         <Localized id="gift-cards-issue-title">
           <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
         </Localized>

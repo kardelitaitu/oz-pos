@@ -1201,8 +1201,8 @@ export default function RetailPosScreen() {
 
       {/* ── Open Shift modal ────────────────── */}
       {showOpenShift && (
-        <div className="retail-shift-overlay" onClick={() => setShowOpenShift(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowOpenShift(false); } }}>
-          <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-shift-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowOpenShift(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowOpenShift(false); } }}>
+          <div className="retail-shift-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('pos-open-shift-title')}</h3>
             <label htmlFor="retail-opening">{l10n.getString('retail-open-shift-opening-label')}</label>
             <input
@@ -1224,8 +1224,8 @@ export default function RetailPosScreen() {
 
       {/* ── Close Shift modal ───────────────── */}
       {showCloseShift && activeShift && !closedShiftSummary && (
-        <div className="retail-shift-overlay" onClick={() => setShowCloseShift(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCloseShift(false); } }}>
-          <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-shift-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowCloseShift(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCloseShift(false); } }}>
+          <div className="retail-shift-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {closeShiftError && <div className="retail-shift-error">{closeShiftError}</div>}
             <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>
@@ -1276,8 +1276,8 @@ export default function RetailPosScreen() {
 
       {/* ── Credit list overlay ─────────────── */}
       {showCreditList && (
-        <div className="retail-shift-overlay" onClick={() => setShowCreditList(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCreditList(false); } }}>
-          <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
+        <div className="retail-shift-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowCreditList(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCreditList(false); } }}>
+          <div className="retail-shift-modal" role="presentation" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
             <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
             {creditSales.length === 0 ? (
               <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
@@ -1327,8 +1327,8 @@ export default function RetailPosScreen() {
 
       {/* ── Clear confirm modal ────────────── */}
       {showClearConfirm && (
-        <div className="retail-shift-overlay" onClick={() => setShowClearConfirm(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowClearConfirm(false); } }}>
-          <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-shift-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowClearConfirm(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowClearConfirm(false); } }}>
+          <div className="retail-shift-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>
             <p style={{ fontSize: 13, margin: '0 0 16px', color: '#555' }}>
               {l10n.getString('retail-clear-cart-confirm', { count: lineCount }) || `Remove all ${lineCount} item${lineCount !== 1 ? 's' : ''} from the cart?`}
@@ -1343,8 +1343,8 @@ export default function RetailPosScreen() {
 
       {/* ── Discount modal ──────────────────── */}
       {showDiscount && (
-        <div className="retail-discount-overlay" onClick={() => setShowDiscount(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowDiscount(false); } }}>
-          <div className="retail-discount-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-discount-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowDiscount(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowDiscount(false); } }}>
+          <div className="retail-discount-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-discount-title')}</h3>
             <div className="retail-discount-tabs">
               <button
@@ -1400,8 +1400,8 @@ export default function RetailPosScreen() {
 
       {/* ── Customer search modal ──────────── */}
       {showCustomerSearch && (
-        <div className="retail-customer-overlay" onClick={() => setShowCustomerSearch(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCustomerSearch(false); } }}>
-          <div className="retail-customer-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-customer-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowCustomerSearch(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCustomerSearch(false); } }}>
+          <div className="retail-customer-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-customer-search-title')}</h3>
             <input
               className="retail-customer-search-input"
@@ -1455,8 +1455,8 @@ export default function RetailPosScreen() {
 
       {/* ── Quantity picker modal ──────────── */}
       {showQtyPicker && pendingProduct && (
-        <div className="retail-qty-overlay" onClick={() => setShowQtyPicker(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowQtyPicker(false); } }}>
-          <div className="retail-qty-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-qty-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowQtyPicker(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowQtyPicker(false); } }}>
+          <div className="retail-qty-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3 className="retail-qty-heading">{pendingProduct.name}</h3>
             <div className="retail-qty-price">{formatMoney(pendingProduct.price)}</div>
             <div className="retail-qty-controls">
@@ -1513,8 +1513,8 @@ export default function RetailPosScreen() {
 
       {/* ── Held carts list modal ──────────── */}
       {showHeldCartsList && (
-        <div className="retail-held-carts-overlay" onClick={() => setShowHeldCartsList(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowHeldCartsList(false); } }}>
-          <div className="retail-held-carts-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-held-carts-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowHeldCartsList(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowHeldCartsList(false); } }}>
+          <div className="retail-held-carts-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-held-carts-title')}</h3>
             {heldCartsList.length === 0 ? (
               <p className="retail-held-carts-empty">{l10n.getString('retail-held-carts-empty')}</p>
@@ -1522,7 +1522,7 @@ export default function RetailPosScreen() {
               <div className="retail-held-carts-list">
                 {heldCartsList.map((c) => (
                   <div key={c.id} className="retail-held-cart-row">
-                    <div className="retail-held-cart-info" onClick={() => handleResumeCart(c.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResumeCart(c.id); } }}>
+                    <div className="retail-held-cart-info" role="button" tabIndex={0} aria-label="Resume cart" onClick={() => handleResumeCart(c.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResumeCart(c.id); } }}>
                       <span className="retail-held-cart-label">{c.label}</span>
                       <span className="retail-held-cart-meta">
                         {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
@@ -1544,8 +1544,8 @@ export default function RetailPosScreen() {
 
       {/* ── Shortcuts overlay ──────────────── */}
       {showShortcuts && (
-        <div className="retail-shortcuts-overlay" onClick={() => setShowShortcuts(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowShortcuts(false); } }}>
-          <div className="retail-shortcuts-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-shortcuts-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowShortcuts(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowShortcuts(false); } }}>
+          <div className="retail-shortcuts-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
             <div className="retail-shortcuts-grid">
               <span className="retail-shortcuts-key">F1</span><span>{l10n.getString('retail-shortcut-pay')}</span>
@@ -1576,8 +1576,8 @@ export default function RetailPosScreen() {
 
       {/* ── Quick Return modal ──────────────── */}
       {showQuickReturn && (
-        <div className="retail-shift-overlay" onClick={() => { setShowQuickReturn(false); setQuickReturnBarcode(''); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowQuickReturn(false); setQuickReturnBarcode(''); } }}>
-          <div className="retail-shift-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="retail-shift-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => { setShowQuickReturn(false); setQuickReturnBarcode(''); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowQuickReturn(false); setQuickReturnBarcode(''); } }}>
+          <div className="retail-shift-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
             <p style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
               {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
