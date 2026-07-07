@@ -63,3 +63,157 @@ pub struct PaymentSplitArg {
     /// Optional raw response returned by the payment gateway.
     pub gateway_response: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::money::Money;
+
+    // ── Payment serde roundtrip ────────────────────────────────────
+
+    #[test]
+    fn payment_serde_roundtrip_basic() {
+        let payment = Payment {
+            id: "pay-1".into(),
+            sale_id: "sale-1".into(),
+            method: "cash".into(),
+            amount: Money {
+                minor_units: 50000,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: "2025-07-07T12:00:00.000Z".into(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        let json = serde_json::to_string(&payment).unwrap();
+        let back: Payment = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, "pay-1");
+        assert_eq!(back.method, "cash");
+        assert_eq!(back.amount.minor_units, 50000);
+        assert_eq!(back.amount.currency.to_string(), "IDR");
+    }
+
+    #[test]
+    fn payment_serde_roundtrip_with_gateway() {
+        let payment = Payment {
+            id: "pay-2".into(),
+            sale_id: "sale-2".into(),
+            method: "card".into(),
+            amount: Money {
+                minor_units: 25000,
+                currency: "USD".parse().unwrap(),
+            },
+            created_at: "2025-07-07T12:00:00.000Z".into(),
+            gateway_reference: Some("txn_abc123".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: Some(r#"{"id":"txn_abc123"}"#.into()),
+        };
+        let json = serde_json::to_string(&payment).unwrap();
+        let back: Payment = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.gateway_reference.as_deref(), Some("txn_abc123"));
+        assert_eq!(back.gateway_status.as_deref(), Some("approved"));
+        assert!(back.gateway_response.is_some());
+    }
+
+    #[test]
+    fn payment_split_arg_serde_roundtrip() {
+        let split = PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 30000,
+            gateway_reference: Some("txn_def456".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: None,
+        };
+        let json = serde_json::to_string(&split).unwrap();
+        let back: PaymentSplitArg = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.method, "card");
+        assert_eq!(back.amount_minor, 30000);
+        assert_eq!(back.gateway_reference.as_deref(), Some("txn_def456"));
+        assert_eq!(back.gateway_status.as_deref(), Some("approved"));
+        assert!(back.gateway_response.is_none());
+    }
+
+    #[test]
+    fn payment_split_arg_minimal() {
+        let split = PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: 50000,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        assert_eq!(split.method, "cash");
+        assert_eq!(split.amount_minor, 50000);
+        assert!(split.gateway_reference.is_none());
+    }
+
+    #[test]
+    fn payment_equality() {
+        let p1 = Payment {
+            id: "p1".into(),
+            sale_id: "s1".into(),
+            method: "cash".into(),
+            amount: Money {
+                minor_units: 100,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        let p2 = p1.clone();
+        assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn payment_split_arg_equality() {
+        let s1 = PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: 100,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        let s2 = PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: 100,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn payment_different_methods_not_equal() {
+        let p1 = Payment {
+            id: "p1".into(),
+            sale_id: "s1".into(),
+            method: "cash".into(),
+            amount: Money {
+                minor_units: 100,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        let p2 = Payment {
+            id: "p1".into(),
+            sale_id: "s1".into(),
+            method: "card".into(),
+            amount: Money {
+                minor_units: 100,
+                currency: "IDR".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        };
+        assert_ne!(p1, p2);
+    }
+}
