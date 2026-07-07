@@ -117,4 +117,48 @@ mod tests {
         assert_eq!(back.display_name, "Alice");
         assert_eq!(back.role_name, "cashier");
     }
+
+    #[test]
+    fn login_session_debug() {
+        let session = LoginSession {
+            user_id: "u1".into(),
+            display_name: "Alice".into(),
+            role_name: "manager".into(),
+            role_id: "role-manager".into(),
+        };
+        let debug = format!("{session:?}");
+        assert!(debug.contains("u1"));
+        assert!(debug.contains("Alice"));
+        assert!(debug.contains("manager"));
+    }
+
+    #[test]
+    fn login_session_clone_eq() {
+        let s1 = LoginSession {
+            user_id: "u1".into(),
+            display_name: "Bob".into(),
+            role_name: "owner".into(),
+            role_id: "role-owner".into(),
+        };
+        let s2 = s1.clone();
+        assert_eq!(s1.user_id, s2.user_id);
+        assert_eq!(s1.display_name, s2.display_name);
+        assert_eq!(s1.role_name, s2.role_name);
+        assert_eq!(s1.role_id, s2.role_id);
+    }
+
+    #[test]
+    fn login_session_json_field_names() {
+        let session = LoginSession {
+            user_id: "u1".into(),
+            display_name: "Alice".into(),
+            role_name: "cashier".into(),
+            role_id: "role-cashier".into(),
+        };
+        let json = serde_json::to_value(&session).unwrap();
+        assert_eq!(json["user_id"], "u1");
+        assert_eq!(json["display_name"], "Alice");
+        assert_eq!(json["role_name"], "cashier");
+        assert_eq!(json["role_id"], "role-cashier");
+    }
 }

@@ -688,6 +688,21 @@ mod tests {
         assert_eq!(p.to_string(), "products:edit");
     }
 
+    #[test]
+    fn permission_serde_roundtrip() {
+        let p = Permission::new("sales:void").with_description("Void a sale");
+        let json = serde_json::to_string(&p).unwrap();
+        let back: Permission = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.name, "sales:void");
+        assert_eq!(back.description, "Void a sale");
+    }
+
+    #[test]
+    fn permission_clone_eq() {
+        let p = Permission::new("test:action");
+        assert_eq!(p, p.clone());
+    }
+
     // ── Built-in constants sanity ─────────────────────────────────
 
     #[test]
@@ -812,6 +827,25 @@ mod tests {
         let role = Role::new("role-test", "Test").with_permissions_json("[]");
         assert!(!role.has_permission("sales:void"));
         assert!(!role.has_permission("*"));
+    }
+
+    #[test]
+    fn role_authorize_with_domain_wildcard() {
+        let role = Role::new("role-test", "Test").with_permissions_json("[\"sales:*\"]");
+        assert!(role.authorize("sales:void").is_ok());
+        assert!(role.authorize("sales:process").is_ok());
+        assert!(role.authorize("products:read").is_err());
+    }
+
+    #[test]
+    fn authorization_error_debug() {
+        let err = AuthorizationError {
+            required: "sales:void".into(),
+            role_name: "Cashier".into(),
+        };
+        let debug = format!("{err:?}");
+        assert!(debug.contains("sales:void"));
+        assert!(debug.contains("Cashier"));
     }
 
     // ── Permission constants well-formedness ──────────────────────
@@ -950,5 +984,42 @@ mod tests {
         for &p in &all {
             assert!(seen.insert(p), "duplicate permission constant: {p}");
         }
+    }
+
+    // ── has_permission edge cases ────────────────────────────────
+
+    #[test]
+    fn no_colon_permission_exact_match() {
+        // Permissions without a colon are matched exactly.
+        assert!(has_permission(&["admin".into()], "admin"));
+        assert!(!has_permission(&["admin".into()], "user"));
+        // A no-colon granted permission is treated as its own domain,
+        // so a domain wildcard can match it.
+        assert!(has_permission(&["admin:*".into()], "admin"));
+    }
+
+    #[test]
+    fn no_colon_required_matches_global_wildcard() {
+        // A required permission without a colon should match the global wildcard.
+        assert!(has_permission(&["*".into()], "admin"));
+    }
+
+    #[test]
+    fn role_preset_empty_permissions_json() {
+        let preset = RolePreset {
+            id: "role-empty",
+            name: "Empty",
+            description: "No permissions",
+            permissions: &[],
+        };
+        assert_eq!(preset.permissions_json(), "[]");
+    }
+
+    #[test]
+    fn role_preset_into_role_timestamps() {
+        let role = ROLE_PRESETS[0].into_role();
+        assert!(!role.created_at.is_empty());
+        assert!(!role.updated_at.is_empty());
+        assert!(role.created_at.contains('T'));
     }
 }
