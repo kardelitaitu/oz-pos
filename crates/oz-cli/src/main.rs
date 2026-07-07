@@ -303,10 +303,7 @@ mod tests {
     use rusqlite::{Connection, params};
 
     fn setup_in_memory_db() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
-        conn
+        oz_core::migrations::fresh_db()
     }
 
     fn make_store(conn: &Connection) -> Store<'_> {
@@ -915,8 +912,7 @@ mod tests {
 
     #[test]
     fn run_init_db_simple_retail() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
+        let conn = oz_core::migrations::fresh_db();
         let args = InitDbArgs {
             preset: "simple-retail".into(),
         };
@@ -929,8 +925,7 @@ mod tests {
 
     #[test]
     fn run_init_db_unknown_preset_falls_back_to_custom() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
+        let conn = oz_core::migrations::fresh_db();
         let args = InitDbArgs {
             preset: "unknown-preset".into(),
         };
@@ -940,8 +935,7 @@ mod tests {
 
     #[test]
     fn run_init_db_full_store() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
+        let conn = oz_core::migrations::fresh_db();
         let args = InitDbArgs {
             preset: "full-store".into(),
         };

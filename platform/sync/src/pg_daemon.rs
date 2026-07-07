@@ -318,13 +318,9 @@ impl Default for PgSyncDaemon {
 mod tests {
     use super::*;
     use oz_core::migrations;
-    use rusqlite::Connection;
 
     fn setup_db() -> DbConnection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        Arc::new(Mutex::new(conn))
+        Arc::new(Mutex::new(migrations::fresh_db()))
     }
 
     #[tokio::test]

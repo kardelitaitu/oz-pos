@@ -91,10 +91,7 @@ async fn spawn_custom_server(app: Router) -> (u16, tokio::task::JoinHandle<()>) 
 
 /// Create an in-memory SQLite database with migrations.
 fn setup_store() -> Store<'static> {
-    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn).unwrap();
-    let conn: &'static rusqlite::Connection = Box::leak(Box::new(conn));
+    let conn: &'static rusqlite::Connection = Box::leak(Box::new(migrations::fresh_db()));
     Store::new(conn)
 }
 
@@ -495,9 +492,7 @@ async fn product_created_on_terminal_a_appears_on_terminal_b() {
     let (relay_port, relay_state, relay_handle) = spawn_relay_server().await;
 
     // ── Terminal A: create a product and enqueue it for sync ────────
-    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
-    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_a).unwrap();
+    let conn_a = migrations::fresh_db();
     let store_a = Store::new(&conn_a);
 
     // Create a product on Terminal A
@@ -552,9 +547,7 @@ async fn product_created_on_terminal_a_appears_on_terminal_b() {
     }
 
     // ── Terminal B: empty database, pull from server ────────────────
-    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
-    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_b).unwrap();
+    let conn_b = migrations::fresh_db();
     let store_b = Store::new(&conn_b);
 
     // Verify Terminal B has no products yet
@@ -608,9 +601,7 @@ async fn stock_adjustment_on_terminal_a_reflected_on_terminal_b() {
     let (relay_port, _relay_state, relay_handle) = spawn_relay_server().await;
 
     // ── Terminal A: create a product with stock, adjust it ──────────
-    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
-    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_a).unwrap();
+    let conn_a = migrations::fresh_db();
     let store_a = Store::new(&conn_a);
 
     store_a
@@ -665,9 +656,7 @@ async fn stock_adjustment_on_terminal_a_reflected_on_terminal_b() {
     assert_eq!(result_a.pushed, 2);
 
     // ── Terminal B: pull both items ─────────────────────────────────
-    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
-    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_b).unwrap();
+    let conn_b = migrations::fresh_db();
     let store_b = Store::new(&conn_b);
 
     let engine_b = SyncEngine::new(test_config(relay_port));
@@ -696,9 +685,7 @@ async fn full_sync_cycle_completes_under_one_second() {
     let (relay_port, _relay_state, relay_handle) = spawn_relay_server().await;
 
     // Setup Terminal A with data to sync (BEFORE the timed section)
-    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
-    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_a).unwrap();
+    let conn_a = migrations::fresh_db();
     let store_a = Store::new(&conn_a);
 
     store_a
@@ -727,9 +714,7 @@ async fn full_sync_cycle_completes_under_one_second() {
         .unwrap();
 
     // Prepare Terminal B's database ahead of time too
-    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
-    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_b).unwrap();
+    let conn_b = migrations::fresh_db();
     let store_b = Store::new(&conn_b);
 
     // Time the full Terminal A push + Terminal B pull cycle
@@ -803,9 +788,7 @@ async fn large_scale_sync_throughput() {
     let (relay_port, _relay_state, relay_handle) = spawn_relay_server().await;
 
     // ── Terminal A: create a product and enqueue 100 stock adjustments ─
-    let mut conn_a = rusqlite::Connection::open_in_memory().unwrap();
-    conn_a.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_a).unwrap();
+    let conn_a = migrations::fresh_db();
     let store_a = Store::new(&conn_a);
 
     store_a
@@ -873,9 +856,7 @@ async fn large_scale_sync_throughput() {
     );
 
     // ── Terminal B: empty database, pull all items ───────────────────
-    let mut conn_b = rusqlite::Connection::open_in_memory().unwrap();
-    conn_b.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn_b).unwrap();
+    let conn_b = migrations::fresh_db();
     let store_b = Store::new(&conn_b);
 
     // No sleep needed — Terminal A's push is already committed in the relay.

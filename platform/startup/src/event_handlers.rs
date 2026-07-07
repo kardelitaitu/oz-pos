@@ -392,10 +392,7 @@ mod tests {
     use platform_kernel::EventBus;
 
     fn fresh_db() -> Arc<Mutex<Connection>> {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        Arc::new(Mutex::new(conn))
+        Arc::new(Mutex::new(migrations::fresh_db()))
     }
 
     #[test]

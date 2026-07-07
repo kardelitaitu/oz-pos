@@ -201,10 +201,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn setup_store() -> Store<'static> {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        let conn: &'static Connection = Box::leak(Box::new(conn));
+        let conn: &'static Connection = Box::leak(Box::new(migrations::fresh_db()));
         Store::new(conn)
     }
 
