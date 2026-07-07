@@ -534,4 +534,103 @@ mod tests {
         assert_eq!(result.branch, "Mall");
         assert_eq!(result.logo, "logo_data");
     }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn receipt_settings_dto_debug() {
+        let dto = ReceiptSettingsDto {
+            show_currency: false,
+            decimal_separator: "dot".into(),
+            show_tax: true,
+            footer: "Thanks".into(),
+            paper_width: "standard".into(),
+            show_table_number: false,
+            margin_top: 0,
+            margin_bottom: 0,
+            margin_left: 0,
+            margin_right: 0,
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Thanks"));
+        assert!(d.contains("dot"));
+    }
+
+    #[test]
+    fn receipt_settings_dto_deserialize() {
+        let json = r##"{"show_currency":true,"decimal_separator":"comma","show_tax":false,"footer":"","paper_width":"narrow","show_table_number":true,"margin_top":5,"margin_bottom":3,"margin_left":2,"margin_right":2}"##;
+        let dto: ReceiptSettingsDto = serde_json::from_str(json).unwrap();
+        assert!(dto.show_currency);
+        assert_eq!(dto.decimal_separator, "comma");
+        assert_eq!(dto.margin_top, 5);
+    }
+
+    #[test]
+    fn store_settings_dto_debug() {
+        let dto = StoreSettingsDto {
+            name: "Test Store".into(),
+            address: "123 Rd".into(),
+            tax_id: "T1".into(),
+            currency: "IDR".into(),
+            branch: "Main".into(),
+            logo: String::new(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Test Store"));
+    }
+
+    #[test]
+    fn store_settings_dto_serialize() {
+        let dto = StoreSettingsDto {
+            name: "S".into(),
+            address: "A".into(),
+            tax_id: "T".into(),
+            currency: "USD".into(),
+            branch: "B".into(),
+            logo: "L".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["name"], "S");
+        assert_eq!(json["currency"], "USD");
+    }
+
+    #[test]
+    fn credit_settings_dto_deserialize() {
+        let json = r##"{"enabled":true,"reminder_interval_hours":24,"max_limit_minor":500000}"##;
+        let dto: CreditSettingsDto = serde_json::from_str(json).unwrap();
+        assert!(dto.enabled);
+        assert_eq!(dto.reminder_interval_hours, 24);
+    }
+
+    #[test]
+    fn credit_settings_dto_debug() {
+        let dto = CreditSettingsDto {
+            enabled: false,
+            reminder_interval_hours: 12,
+            max_limit_minor: 100000,
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("100000"));
+    }
+
+    #[test]
+    fn hardware_settings_dto_serialize() {
+        let dto = HardwareSettingsDto {
+            printer_connection: "USB".into(),
+            printer_device_path: "/dev/usb/lp0".into(),
+            printer_paper_size: "80mm".into(),
+            scanner_device_id: "scanner-1".into(),
+            scanner_input_mode: "keyboard".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["printer_connection"], "USB");
+    }
+
+    #[test]
+    fn user_pref_entry_deserialize() {
+        let json = r##"{"key":"theme","value":"dark"}"##;
+        let entry: UserPrefEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.key, "theme");
+        assert_eq!(entry.value, "dark");
+    }
 }

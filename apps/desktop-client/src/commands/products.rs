@@ -560,4 +560,164 @@ mod tests {
         assert!(!dto.in_stock);
         assert_eq!(dto.stock_qty, None);
     }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn product_dto_serialize() {
+        let dto = ProductDto {
+            sku: "COFFEE".into(),
+            name: "Caffe Latte".into(),
+            category: Some("Drinks".into()),
+            price: MoneyDto {
+                minor_units: 450,
+                currency: "USD".into(),
+            },
+            barcode: Some("4901234567890".into()),
+            in_stock: true,
+            stock_qty: Some(50),
+            tax_rate_ids: vec!["t1".into()],
+            created_at: "2025-01-01".into(),
+            price_updated_at: "2025-01-01".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["sku"], "COFFEE");
+        assert_eq!(json["price"]["minor_units"], 450);
+    }
+
+    #[test]
+    fn product_dto_debug() {
+        let dto = ProductDto {
+            sku: "TEA".into(),
+            name: "Green Tea".into(),
+            category: None,
+            price: MoneyDto {
+                minor_units: 275,
+                currency: "USD".into(),
+            },
+            barcode: None,
+            in_stock: false,
+            stock_qty: None,
+            tax_rate_ids: vec![],
+            created_at: "2025-01-01".into(),
+            price_updated_at: "2025-01-01".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Green Tea"));
+    }
+
+    #[test]
+    fn money_dto_serialize() {
+        let dto = MoneyDto {
+            minor_units: 1550,
+            currency: "IDR".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["minor_units"], 1550);
+        assert_eq!(json["currency"], "IDR");
+    }
+
+    #[test]
+    fn money_dto_debug() {
+        let dto = MoneyDto {
+            minor_units: 100,
+            currency: "EUR".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("EUR"));
+    }
+
+    #[test]
+    fn adjust_stock_args_deserialize() {
+        let json = r##"{"sku":"COFFEE","delta":10,"reason":"restock"}"##;
+        let args: AdjustStockArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku, "COFFEE");
+        assert_eq!(args.delta, 10);
+    }
+
+    #[test]
+    fn adjust_stock_args_debug() {
+        let args = AdjustStockArgs {
+            sku: "S".into(),
+            delta: -5,
+            reason: "damaged".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("damaged"));
+    }
+
+    #[test]
+    fn create_product_args_deserialize() {
+        let json = r##"{"user_id":"u1","sku":"LATTE","name":"Latte","price_minor":450,"currency":"USD","category_id":null,"barcode":null,"initial_stock":0,"tax_rate_ids":[]}"##;
+        let args: CreateProductArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku, "LATTE");
+        assert_eq!(args.price_minor, 450);
+    }
+
+    #[test]
+    fn create_product_args_debug() {
+        let args = CreateProductArgs {
+            user_id: "u".into(),
+            sku: "S".into(),
+            name: "N".into(),
+            price_minor: 100,
+            currency: "USD".into(),
+            category_id: None,
+            barcode: None,
+            initial_stock: 0,
+            tax_rate_ids: vec![],
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("N"));
+    }
+
+    #[test]
+    fn create_product_result_serialize() {
+        let result = CreateProductResult {
+            sku: "NEW-SKU".into(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["sku"], "NEW-SKU");
+    }
+
+    #[test]
+    fn create_product_result_debug() {
+        let result = CreateProductResult { sku: "X".into() };
+        let d = format!("{result:?}");
+        assert!(d.contains("X"));
+    }
+
+    #[test]
+    fn update_product_args_deserialize() {
+        let json = r##"{"user_id":"u1","sku":"LATTE","name":"Latte Updated","price_minor":500,"currency":"USD","category_id":null,"barcode":null,"tax_rate_ids":[]}"##;
+        let args: UpdateProductArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Latte Updated");
+        assert_eq!(args.price_minor, 500);
+    }
+
+    #[test]
+    fn update_product_result_serialize() {
+        let result = UpdateProductResult {
+            sku: "UPD-SKU".into(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["sku"], "UPD-SKU");
+    }
+
+    #[test]
+    fn delete_product_args_deserialize() {
+        let json = r##"{"user_id":"u1","sku":"OLD-SKU"}"##;
+        let args: DeleteProductArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku, "OLD-SKU");
+    }
+
+    #[test]
+    fn delete_product_args_debug() {
+        let args = DeleteProductArgs {
+            user_id: "u".into(),
+            sku: "S".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("S"));
+    }
 }

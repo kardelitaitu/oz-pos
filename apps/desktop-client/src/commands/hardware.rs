@@ -442,4 +442,111 @@ mod tests {
         assert_eq!(args.items.len(), 1);
         assert_eq!(args.payments.len(), 1);
     }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn open_cash_drawer_args_default_device() {
+        let json = r#"{}"#;
+        let args: OpenCashDrawerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.device_id, None);
+    }
+
+    #[test]
+    fn open_cash_drawer_args_with_device() {
+        let json = r#"{"device_id":"drawer-1"}"#;
+        let args: OpenCashDrawerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.device_id.as_deref(), Some("drawer-1"));
+    }
+
+    #[test]
+    fn open_cash_drawer_args_debug() {
+        let args = OpenCashDrawerArgs {
+            device_id: Some("d".into()),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("d"));
+    }
+
+    #[test]
+    fn open_cash_drawer_result_serialize() {
+        let result = OpenCashDrawerResult { opened: true };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["opened"], true);
+    }
+
+    #[test]
+    fn print_receipt_result_serialize() {
+        let result = PrintReceiptResult { printed_lines: 42 };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["printed_lines"], 42);
+    }
+
+    #[test]
+    fn scanner_info_serialize() {
+        let info = ScannerInfo {
+            id: "scanner-1".into(),
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["id"], "scanner-1");
+    }
+
+    #[test]
+    fn scanner_info_debug() {
+        let info = ScannerInfo { id: "s".into() };
+        let d = format!("{info:?}");
+        assert!(d.contains("s"));
+    }
+
+    #[test]
+    fn display_show_args_deserialize() {
+        let json = r##"{"display_id":"d1","line1":"Welcome","line2":"Customer"}"##;
+        let args: DisplayShowArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.line1, "Welcome");
+        assert_eq!(args.line2, "Customer");
+    }
+
+    #[test]
+    fn display_show_args_debug() {
+        let args = DisplayShowArgs {
+            display_id: "d".into(),
+            line1: "L1".into(),
+            line2: "L2".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("L1"));
+    }
+
+    #[test]
+    fn print_receipt_args_deserialize() {
+        let json = r#"{"body":"Hello\nWorld"}"#;
+        let args: PrintReceiptArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.body.lines().count(), 2);
+    }
+
+    #[test]
+    fn print_receipt_args_debug() {
+        let args = PrintReceiptArgs {
+            body: "test".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("test"));
+    }
+
+    #[test]
+    fn line_item_dto_deserialize() {
+        let json = r#"{"name":"Coffee","quantity":2,"unit_price":{"minor_units":350,"currency":"USD"},"total_price":{"minor_units":700,"currency":"USD"}}"#;
+        let item: LineItemDto = serde_json::from_str(json).unwrap();
+        assert_eq!(item.name, "Coffee");
+        assert_eq!(item.quantity, 2);
+        assert!(item.tax_amount.is_none());
+    }
+
+    #[test]
+    fn payment_dto_deserialize() {
+        let json = r#"{"method":"CASH","amount":{"minor_units":500,"currency":"USD"},"change":{"minor_units":150,"currency":"USD"}}"#;
+        let p: PaymentDto = serde_json::from_str(json).unwrap();
+        assert_eq!(p.method, "CASH");
+        assert!(p.change.is_some());
+    }
 }

@@ -437,4 +437,103 @@ mod tests {
         let err = store.delete_terminal("nope").unwrap_err();
         assert!(matches!(err, oz_core::CoreError::NotFound { .. }));
     }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn terminal_dto_debug() {
+        let dto = TerminalDto {
+            id: "t1".into(),
+            name: "Front Counter".into(),
+            device_id: "host-01".into(),
+            is_active: true,
+            last_seen_at: None,
+            metadata: None,
+            created_at: "2025-01-01".into(),
+            updated_at: "2025-01-01".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Front Counter"));
+    }
+
+    #[test]
+    fn terminal_dto_serialize() {
+        let dto = TerminalDto {
+            id: "t2".into(),
+            name: "Drive-Thru".into(),
+            device_id: "host-02".into(),
+            is_active: false,
+            last_seen_at: Some("2025-06-01".into()),
+            metadata: Some(r#"{"os":"linux"}"#.into()),
+            created_at: "2025-01-01".into(),
+            updated_at: "2025-01-01".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["name"], "Drive-Thru");
+        assert_eq!(json["isActive"], false);
+    }
+
+    #[test]
+    fn register_terminal_args_deserialize() {
+        let json = r##"{"name":"POS-1","deviceId":"host-03"}"##;
+        let args: RegisterTerminalArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "POS-1");
+        assert_eq!(args.terminal_secret, None);
+    }
+
+    #[test]
+    fn register_terminal_args_debug() {
+        let args = RegisterTerminalArgs {
+            name: "N".into(),
+            device_id: "D".into(),
+            terminal_secret: None,
+            metadata: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("N"));
+    }
+
+    #[test]
+    fn register_terminal_result_serialize() {
+        let result = RegisterTerminalResult { id: "t99".into() };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], "t99");
+    }
+
+    #[test]
+    fn register_terminal_result_debug() {
+        let result = RegisterTerminalResult { id: "t42".into() };
+        let d = format!("{result:?}");
+        assert!(d.contains("t42"));
+    }
+
+    #[test]
+    fn update_terminal_args_deserialize_minimal() {
+        let json = r##"{"id":"t1"}"##;
+        let args: UpdateTerminalArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "t1");
+        assert_eq!(args.name, None);
+        assert_eq!(args.is_active, None);
+    }
+
+    #[test]
+    fn update_terminal_args_debug() {
+        let args = UpdateTerminalArgs {
+            id: "x".into(),
+            name: None,
+            device_id: None,
+            terminal_secret: None,
+            is_active: None,
+            metadata: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("x"));
+    }
+
+    #[test]
+    fn update_terminal_result_serialize() {
+        let result = UpdateTerminalResult { id: "t-up".into() };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], "t-up");
+    }
 }

@@ -422,6 +422,77 @@ mod tests {
         assert!(!loaded.is_enabled(oz_core::Feature::SimpleRetail));
     }
 
+    // -- DTO struct tests --
+
+    #[test]
+    fn complete_setup_args_deserialize() {
+        let json = r##"{"preset":"simple-retail","features":["cash-payment","receipt-printing"]}"##;
+        let args: CompleteSetupArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.preset, "simple-retail");
+        assert_eq!(args.features.len(), 2);
+    }
+
+    #[test]
+    fn complete_setup_args_debug() {
+        let args = CompleteSetupArgs {
+            preset: "custom".into(),
+            features: vec![],
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("custom"));
+    }
+
+    #[test]
+    fn setup_status_serialize() {
+        let status = SetupStatus {
+            completed: true,
+            preset: Some("restaurant".into()),
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["completed"], true);
+        assert_eq!(json["preset"], "restaurant");
+    }
+
+    #[test]
+    fn setup_status_serialize_not_completed() {
+        let status = SetupStatus {
+            completed: false,
+            preset: None,
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["completed"], false);
+        assert!(json["preset"].is_null());
+    }
+
+    #[test]
+    fn setup_status_debug() {
+        let status = SetupStatus {
+            completed: false,
+            preset: None,
+        };
+        let d = format!("{status:?}");
+        assert!(d.contains("false"));
+    }
+
+    #[test]
+    fn enabled_features_result_serialize() {
+        let result = EnabledFeaturesResult {
+            features: vec!["cash-payment".into(), "barcode-scanning".into()],
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        let arr = json["features"].as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn enabled_features_result_debug() {
+        let result = EnabledFeaturesResult {
+            features: vec!["tax-engine".into()],
+        };
+        let d = format!("{result:?}");
+        assert!(d.contains("tax-engine"));
+    }
+
     #[test]
     fn complete_setup_persists_all_settings() {
         let conn = fresh_conn();
