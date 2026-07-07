@@ -123,6 +123,8 @@ mod tests {
         }
     }
 
+    // ── LoyaltyTier ──────────────────────────────────────────────
+
     #[test]
     fn loyalty_tier_serde_roundtrip() {
         let tier = sample_tier();
@@ -134,6 +136,34 @@ mod tests {
         assert_eq!(back.earn_multiplier, tier.earn_multiplier);
         assert_eq!(back.colour, tier.colour);
     }
+
+    #[test]
+    fn loyalty_tier_high_threshold() {
+        let tier = LoyaltyTier {
+            id: "tier-gold".into(),
+            name: "Gold".into(),
+            min_points: 100000,
+            points_per_unit: 15,
+            earn_multiplier: 2.0,
+            colour: "#ffd700".into(),
+            sort_order: 0,
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+        };
+        let json = serde_json::to_string(&tier).unwrap();
+        let back: LoyaltyTier = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.min_points, 100000);
+        assert!((back.earn_multiplier - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn loyalty_tier_debug() {
+        let tier = sample_tier();
+        let debug = format!("{:?}", tier);
+        assert!(debug.contains("Bronze"));
+        assert!(debug.contains("#cd7f32"));
+    }
+
+    // ── LoyaltyAccount ───────────────────────────────────────────
 
     #[test]
     fn loyalty_account_serde_roundtrip() {
@@ -148,6 +178,40 @@ mod tests {
     }
 
     #[test]
+    fn loyalty_account_without_tier() {
+        let acct = LoyaltyAccount {
+            tier_id: None,
+            ..sample_account()
+        };
+        assert!(acct.tier_id.is_none());
+        let json = serde_json::to_string(&acct).unwrap();
+        let back: LoyaltyAccount = serde_json::from_str(&json).unwrap();
+        assert!(back.tier_id.is_none());
+    }
+
+    #[test]
+    fn loyalty_account_zero_points() {
+        let acct = LoyaltyAccount {
+            points: 0,
+            lifetime_points: 0,
+            tier_id: None,
+            ..sample_account()
+        };
+        assert_eq!(acct.points, 0);
+        assert_eq!(acct.lifetime_points, 0);
+    }
+
+    #[test]
+    fn loyalty_account_debug() {
+        let acct = sample_account();
+        let debug = format!("{:?}", acct);
+        assert!(debug.contains("cust-1"));
+        assert!(debug.contains("150"));
+    }
+
+    // ── LoyaltyTransaction ───────────────────────────────────────
+
+    #[test]
     fn loyalty_transaction_serde_roundtrip() {
         let txn = sample_txn();
         let json = serde_json::to_string(&txn).unwrap();
@@ -156,23 +220,6 @@ mod tests {
         assert_eq!(back.account_id, txn.account_id);
         assert_eq!(back.sale_id, txn.sale_id);
         assert_eq!(back.txn_type, txn.txn_type);
-    }
-
-    #[test]
-    fn loyalty_account_with_details_serde_roundtrip() {
-        let details = LoyaltyAccountWithDetails {
-            account: sample_account(),
-            tier: Some(sample_tier()),
-            recent_transactions: vec![sample_txn()],
-            next_tier: Some(sample_tier()),
-            points_to_next_tier: 500,
-        };
-        let json = serde_json::to_string(&details).unwrap();
-        let back: LoyaltyAccountWithDetails = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.account.id, details.account.id);
-        assert_eq!(back.tier.as_ref().unwrap().name, "Bronze");
-        assert_eq!(back.recent_transactions.len(), 1);
-        assert_eq!(back.points_to_next_tier, 500);
     }
 
     #[test]
@@ -193,14 +240,133 @@ mod tests {
     }
 
     #[test]
-    fn loyalty_account_without_tier() {
-        let acct = LoyaltyAccount {
-            tier_id: None,
-            ..sample_account()
+    fn loyalty_transaction_adjust_type() {
+        let txn = LoyaltyTransaction {
+            id: "txn-3".into(),
+            account_id: "acct-1".into(),
+            sale_id: None,
+            points: 25,
+            txn_type: "adjust".into(),
+            description: "Manual adjustment".into(),
+            created_at: "2025-01-03T00:00:00.000Z".into(),
         };
-        assert!(acct.tier_id.is_none());
-        let json = serde_json::to_string(&acct).unwrap();
-        let back: LoyaltyAccount = serde_json::from_str(&json).unwrap();
-        assert!(back.tier_id.is_none());
+        let json = serde_json::to_string(&txn).unwrap();
+        let back: LoyaltyTransaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.txn_type, "adjust");
+        assert_eq!(back.points, 25);
+    }
+
+    #[test]
+    fn loyalty_transaction_expire_type() {
+        let txn = LoyaltyTransaction {
+            id: "txn-4".into(),
+            account_id: "acct-1".into(),
+            sale_id: None,
+            points: -200,
+            txn_type: "expire".into(),
+            description: "Points expired".into(),
+            created_at: "2025-01-04T00:00:00.000Z".into(),
+        };
+        let json = serde_json::to_string(&txn).unwrap();
+        let back: LoyaltyTransaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.txn_type, "expire");
+        assert_eq!(back.points, -200);
+    }
+
+    #[test]
+    fn loyalty_transaction_no_sale() {
+        let txn = LoyaltyTransaction {
+            sale_id: None,
+            ..sample_txn()
+        };
+        let json = serde_json::to_string(&txn).unwrap();
+        let back: LoyaltyTransaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sale_id, None);
+    }
+
+    #[test]
+    fn loyalty_transaction_debug() {
+        let txn = sample_txn();
+        let debug = format!("{:?}", txn);
+        assert!(debug.contains("earn"));
+        assert!(debug.contains("100"));
+    }
+
+    // ── LoyaltyAccountWithDetails ────────────────────────────────
+
+    #[test]
+    fn loyalty_account_with_details_serde_roundtrip() {
+        let details = LoyaltyAccountWithDetails {
+            account: sample_account(),
+            tier: Some(sample_tier()),
+            recent_transactions: vec![sample_txn()],
+            next_tier: Some(sample_tier()),
+            points_to_next_tier: 500,
+        };
+        let json = serde_json::to_string(&details).unwrap();
+        let back: LoyaltyAccountWithDetails = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.account.id, details.account.id);
+        assert_eq!(back.tier.as_ref().unwrap().name, "Bronze");
+        assert_eq!(back.recent_transactions.len(), 1);
+        assert_eq!(back.points_to_next_tier, 500);
+    }
+
+    #[test]
+    fn loyalty_account_with_details_no_tier() {
+        let details = LoyaltyAccountWithDetails {
+            account: LoyaltyAccount {
+                tier_id: None,
+                ..sample_account()
+            },
+            tier: None,
+            recent_transactions: vec![],
+            next_tier: None,
+            points_to_next_tier: 0,
+        };
+        let json = serde_json::to_string(&details).unwrap();
+        let back: LoyaltyAccountWithDetails = serde_json::from_str(&json).unwrap();
+        assert!(back.tier.is_none());
+        assert!(back.next_tier.is_none());
+        assert!(back.recent_transactions.is_empty());
+        assert_eq!(back.points_to_next_tier, 0);
+    }
+
+    #[test]
+    fn loyalty_account_with_details_multiple_transactions() {
+        let txn1 = sample_txn();
+        let txn2 = LoyaltyTransaction {
+            id: "txn-2".into(),
+            account_id: "acct-1".into(),
+            sale_id: Some("sale-2".into()),
+            points: -30,
+            txn_type: "redeem".into(),
+            description: "Redeemed".into(),
+            created_at: "2025-01-03T00:00:00.000Z".into(),
+        };
+        let details = LoyaltyAccountWithDetails {
+            account: sample_account(),
+            tier: None,
+            recent_transactions: vec![txn1, txn2],
+            next_tier: None,
+            points_to_next_tier: 0,
+        };
+        let json = serde_json::to_string(&details).unwrap();
+        let back: LoyaltyAccountWithDetails = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.recent_transactions.len(), 2);
+        assert_eq!(back.recent_transactions[0].txn_type, "earn");
+        assert_eq!(back.recent_transactions[1].txn_type, "redeem");
+    }
+
+    #[test]
+    fn loyalty_account_with_details_debug() {
+        let details = LoyaltyAccountWithDetails {
+            account: sample_account(),
+            tier: Some(sample_tier()),
+            recent_transactions: vec![],
+            next_tier: None,
+            points_to_next_tier: 500,
+        };
+        let debug = format!("{:?}", details);
+        assert!(debug.contains("500"));
     }
 }
