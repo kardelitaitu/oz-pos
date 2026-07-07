@@ -251,4 +251,37 @@ mod tests {
         let result = store.create_refund(&refund);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn refund_line_arg_deserialize() {
+        let json = r#"{"sale_line_id":"sl-1","sku":"CAKE","qty":1,"unit_price_minor":500,"currency":"USD","line_total_minor":500}"#;
+        let arg: RefundLineArg = serde_json::from_str(json).unwrap();
+        assert_eq!(arg.sale_line_id, "sl-1");
+        assert_eq!(arg.sku, "CAKE");
+        assert_eq!(arg.qty, 1);
+        assert_eq!(arg.unit_price_minor, 500);
+        assert_eq!(arg.line_total_minor, 500);
+    }
+
+    #[test]
+    fn process_refund_args_deserialize() {
+        let json = r#"{"sale_id":"s1","reason":"damaged","note":"box was crushed","user_id":"u1","lines":[{"sale_line_id":"sl-1","sku":"CAKE","qty":1,"unit_price_minor":500,"currency":"USD","line_total_minor":500}]}"#;
+        let args: ProcessRefundArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sale_id, "s1");
+        assert_eq!(args.reason, "damaged");
+        assert_eq!(args.note, Some("box was crushed".into()));
+        assert_eq!(args.lines.len(), 1);
+        assert_eq!(args.lines[0].sku, "CAKE");
+    }
+
+    #[test]
+    fn process_refund_result_serialize() {
+        let result = ProcessRefundResult {
+            refund_id: "ref-1".into(),
+            total_minor: 1500,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("ref-1"));
+        assert!(json.contains("1500"));
+    }
 }

@@ -514,4 +514,39 @@ mod tests {
         assert_eq!(line_total.minor_units, 600);
         assert_eq!(cart.total().unwrap().minor_units, 600);
     }
+
+    #[test]
+    fn start_sale_args_defaults_currency() {
+        let json = r#"{}"#;
+        let args: StartSaleArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.currency, "");
+    }
+
+    #[test]
+    fn add_line_args_deserialize() {
+        let json = r#"{"cart_id":"550e8400-e29b-41d4-a716-446655440000","sku":"COFFEE","qty":3,"unit_price_minor":350}"#;
+        let args: AddLineArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku.as_str(), "COFFEE");
+        assert_eq!(args.qty, 3);
+        assert_eq!(args.unit_price_minor, 350);
+    }
+
+    #[test]
+    fn set_cart_discount_args_deserialize() {
+        let json = r#"{"cart_id":"660e8400-e29b-41d4-a716-446655440001","percent":10,"label":"Senior Discount","user_id":"u1"}"#;
+        let args: SetCartDiscountArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.percent, 10);
+        assert_eq!(args.label, Some("Senior Discount".into()));
+        assert_eq!(args.user_id, "u1");
+    }
+
+    #[test]
+    fn complete_sale_args_deserialize_minimal() {
+        let json = r#"{"cart_id":"770e8400-e29b-41d4-a716-446655440002","payment_method":"cash","user_id":"u2"}"#;
+        let args: CompleteSaleArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.payment_method, "cash");
+        assert!(args.tendered_minor.is_none());
+        assert!(args.customer_id.is_none());
+        assert!(args.serial_numbers.is_none());
+    }
 }
