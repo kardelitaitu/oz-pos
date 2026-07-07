@@ -144,6 +144,37 @@ mod tests {
         assert_eq!(PromotionType::from_str("Percentage"), None);
     }
 
+    #[test]
+    fn promotion_type_debug() {
+        assert!(format!("{:?}", PromotionType::Percentage).contains("Percentage"));
+        assert!(format!("{:?}", PromotionType::FixedAmount).contains("FixedAmount"));
+        assert!(format!("{:?}", PromotionType::BuyXGetY).contains("BuyXGetY"));
+    }
+
+    #[test]
+    fn promotion_type_serde_json_format() {
+        // No #[serde(rename_all)] — uses PascalCase variant names.
+        let json = serde_json::to_value(PromotionType::Percentage).unwrap();
+        assert_eq!(json, "Percentage");
+        let json = serde_json::to_value(PromotionType::FixedAmount).unwrap();
+        assert_eq!(json, "FixedAmount");
+        let json = serde_json::to_value(PromotionType::BuyXGetY).unwrap();
+        assert_eq!(json, "BuyXGetY");
+    }
+
+    #[test]
+    fn promotion_type_serde_roundtrip_all() {
+        for variant in [
+            PromotionType::Percentage,
+            PromotionType::FixedAmount,
+            PromotionType::BuyXGetY,
+        ] {
+            let json = serde_json::to_string(&variant).unwrap();
+            let back: PromotionType = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, variant);
+        }
+    }
+
     // ── Serde ────────────────────────────────────────────────────
 
     #[test]
@@ -405,5 +436,50 @@ mod tests {
         let json = serde_json::to_value(&a).unwrap();
         assert_eq!(json["promotion_id"], "promo-1");
         assert_eq!(json["discount_minor"], 150);
+    }
+
+    // ── Debug output ────────────────────────────────────────────
+
+    #[test]
+    fn promotion_debug_output() {
+        let p = sample_promotion();
+        let debug = format!("{p:?}");
+        assert!(debug.contains("10% Off"));
+        assert!(debug.contains("percentage"));
+    }
+
+    #[test]
+    fn promotion_application_debug_output() {
+        let a = PromotionApplication {
+            id: "app-1".into(),
+            promotion_id: "promo-1".into(),
+            sale_id: "sale-1".into(),
+            discount_minor: 150,
+            description: "10% off".into(),
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+        };
+        let debug = format!("{a:?}");
+        assert!(debug.contains("app-1"));
+        assert!(debug.contains("promo-1"));
+    }
+
+    #[test]
+    fn promotion_neq_when_active_differs() {
+        let a = sample_promotion();
+        let b = Promotion {
+            active: false,
+            ..sample_promotion()
+        };
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn promotion_neq_when_name_differs() {
+        let a = sample_promotion();
+        let b = Promotion {
+            name: "Different".into(),
+            ..sample_promotion()
+        };
+        assert_ne!(a, b);
     }
 }

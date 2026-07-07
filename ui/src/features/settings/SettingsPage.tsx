@@ -328,7 +328,7 @@ export default function SettingsPage() {
               <option value="antialiased">Antialiased (crisp)</option>
               <option value="subpixel">Subpixel (smooth)</option>
             </select>
-          </label>
+          </div>
         </div>
       </Card>
 

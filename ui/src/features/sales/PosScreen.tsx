@@ -1620,7 +1620,6 @@ export default function PosScreen() {
                   value={closingBalance}
                   onChange={(e) => setClosingBalance(e.target.value)}
                   aria-label={l10n.getString('pos-close-shift-balance-aria')}
-                  autoFocus
                 />
               </Localized>
             </div>
@@ -1820,7 +1819,6 @@ export default function PosScreen() {
                   value={openingBalance}
                   onChange={(e) => setOpeningBalance(e.target.value)}
                   aria-label={l10n.getString('pos-open-shift-balance-aria')}
-                  autoFocus
                 />
               </Localized>
             </div>

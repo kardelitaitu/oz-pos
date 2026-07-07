@@ -855,7 +855,7 @@ export default function PaymentModal({
                         </span>
                       </label>
                     ))}
-                    <label className="payment-method-label">
+                    <div className="payment-method-label">
                       <input
                         type="radio"
                         name="payment-method"
@@ -878,7 +878,7 @@ export default function PaymentModal({
                         />
                       </Localized>
                       </Localized>
-                    </label>
+                    </div>
                     <label className="payment-method-label">
                       <input
                         type="radio"
@@ -919,7 +919,7 @@ export default function PaymentModal({
 
                 {method === 'cash' && (
                   <div className="payment-cash-section">
-                    <label className="payment-tendered-label">
+                    <div className="payment-tendered-label">
                       <Localized id="payment-amount-tendered">
                         <span>Amount Tendered</span>
                       </Localized>
@@ -935,7 +935,7 @@ export default function PaymentModal({
                         />
                       </Localized>
                       </Localized>
-                    </label>
+                    </div>
 
                     <div className="payment-quick-cash">
                       {[5000, 10000, 20000, 50000, 100000].map((amount) => {
@@ -1055,7 +1055,7 @@ export default function PaymentModal({
                             <span>{m === 'cash' ? l10n.getString('payment-split-method-cash') : l10n.getString('payment-split-method-card')}</span>
                           </label>
                         ))}
-                        <label className="payment-split-radio-label">
+                        <div className="payment-split-radio-label">
                           <input
                             type="radio"
                             name={`split-method-${s.id}`}
@@ -1075,7 +1075,7 @@ export default function PaymentModal({
                             />
                           </Localized>
                           </Localized>
-                        </label>
+                        </div>
                       </div>
                       <div className="payment-split-amount-group">
                         <span className="payment-split-currency">$</span>
@@ -1198,7 +1198,7 @@ export default function PaymentModal({
                 {redeemPoints && (
                   <div className="payment-loyalty-active">
                     <div className="payment-loyalty-input-row">
-                      <label className="payment-loyalty-input-label">Points</label>
+                      <span className="payment-loyalty-input-label">Points</span>
                       <input
                         type="number"
                         className="payment-loyalty-input"
@@ -1206,7 +1206,7 @@ export default function PaymentModal({
                         onChange={(e) => setPointsToRedeem(Math.max(0, parseInt(e.target.value, 10) || 0))}
                         min={0}
                         max={loyaltyAccount.account.points}
-                        autoFocus
+                        aria-label="Points"
                       />
                       <span className="payment-loyalty-input-hint">
                         / {loyaltyAccount.account.points}
@@ -1235,8 +1235,8 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-              <div className="payment-customer-search-overlay" onClick={() => setShowCustomerSearch(false)}>
-                <div className="payment-customer-search-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="payment-customer-search-overlay" role="button" tabIndex={0} onClick={() => setShowCustomerSearch(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCustomerSearch(false); } }}>
+                <div className="payment-customer-search-modal" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); } }}>
                   <h3 className="payment-customer-search-heading">Select Customer</h3>
                   <input
                     className="payment-customer-search-input"
@@ -1244,7 +1244,6 @@ export default function PaymentModal({
                     placeholder="Search by name, phone, or email..."
                     value={customerSearchQuery}
                     onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                    autoFocus
                   />
                   <div className="payment-customer-search-list">
                     {loadingCustomers ? (
