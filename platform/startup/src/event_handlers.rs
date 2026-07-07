@@ -700,4 +700,100 @@ mod tests {
         assert!(pending.iter().any(|i| i.payload.contains("sale-queue-1")));
         assert!(pending.iter().any(|i| i.payload.contains("sale-queue-2")));
     }
+
+    // ── LoyaltyEarnHandler tests ─────────────────────────────────
+
+    #[test]
+    fn loyalty_earn_skips_when_no_customer() {
+        let db = fresh_db();
+        let handler = LoyaltyEarnHandler::new(db.clone());
+
+        let event = SaleCompleted {
+            sale_id: "sale-no-cust".into(),
+            line_items: vec![],
+            total_minor: 500,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        // Should succeed without error — no customer, so no points earned.
+        handler.handle(&event).unwrap();
+
+        // No loyalty transaction should have been created.
+        let conn = db.lock().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM loyalty_transactions", [], |r| {
+                r.get(0)
+            })
+            .unwrap_or(0);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn loyalty_earn_creates_account_and_earns_points() {
+        let db = fresh_db();
+        let handler = LoyaltyEarnHandler::new(db.clone());
+
+        // Seed a customer and a completed sale.
+        {
+            let conn = db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO customers (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    "cust-loyal",
+                    "Loyal Customer",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z"
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
+                 VALUES (?1, 0, 'USD', 0, 'completed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 0, 0)",
+                rusqlite::params!["sale-loyal-1"],
+            )
+            .unwrap();
+        }
+
+        let event = SaleCompleted {
+            sale_id: "sale-loyal-1".into(),
+            line_items: vec![],
+            total_minor: 1000,
+            currency: "USD".into(),
+            customer_id: Some("cust-loyal".into()),
+        };
+
+        handler.handle(&event).unwrap();
+
+        // Verify a loyalty account was created.
+        let conn = db.lock().unwrap();
+        let account_id: String = conn
+            .query_row(
+                "SELECT id FROM loyalty_accounts WHERE customer_id = 'cust-loyal'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!account_id.is_empty());
+
+        // Verify a transaction was recorded.
+        let txn_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM loyalty_transactions WHERE account_id = ?1",
+                [&account_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(txn_count, 1);
+
+        // Points should be > 0 (10 points per unit × 1000 minor units).
+        let points: i64 = conn
+            .query_row(
+                "SELECT points FROM loyalty_accounts WHERE id = ?1",
+                [&account_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(points > 0, "should have earned points for {points}");
+    }
 }
