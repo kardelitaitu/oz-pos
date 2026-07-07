@@ -213,4 +213,209 @@ mod tests {
             .unwrap();
         assert!(payments.is_empty());
     }
+
+    #[test]
+    fn list_payments_for_nonexistent_sale() {
+        let conn = fresh();
+        let store = store(&conn);
+        let payments = store.list_payments_for_sale("nonexistent").unwrap();
+        assert!(payments.is_empty());
+    }
+
+    #[test]
+    fn create_single_payment() {
+        let conn = fresh();
+        let store = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = "2025-06-01T12:00:00Z";
+        insert_sale(&conn, &sale_id, 1000, now);
+
+        let splits = vec![PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: 1000,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        }];
+
+        let currency: Currency = "USD".parse().unwrap();
+        let payments = store
+            .create_payments(&sale_id, &splits, &currency, now)
+            .unwrap();
+        assert_eq!(payments.len(), 1);
+        assert_eq!(payments[0].method, "cash");
+        assert_eq!(payments[0].amount.minor_units, 1000);
+        assert_eq!(payments[0].amount.currency, currency);
+        assert!(!payments[0].id.is_empty());
+        assert!(!payments[0].created_at.is_empty());
+    }
+
+    #[test]
+    fn create_payment_zero_amount() {
+        let conn = fresh();
+        let store = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = "2025-06-01T12:00:00Z";
+        insert_sale(&conn, &sale_id, 0, now);
+
+        let splits = vec![PaymentSplitArg {
+            method: "voucher".into(),
+            amount_minor: 0,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        }];
+
+        let currency: Currency = "USD".parse().unwrap();
+        let payments = store
+            .create_payments(&sale_id, &splits, &currency, now)
+            .unwrap();
+        assert_eq!(payments.len(), 1);
+        assert_eq!(payments[0].amount.minor_units, 0);
+    }
+
+    #[test]
+    fn create_payment_large_amount() {
+        let conn = fresh();
+        let store = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = "2025-06-01T12:00:00Z";
+        insert_sale(&conn, &sale_id, i64::MAX, now);
+
+        let splits = vec![PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: i64::MAX,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        }];
+
+        let currency: Currency = "USD".parse().unwrap();
+        let payments = store
+            .create_payments(&sale_id, &splits, &currency, now)
+            .unwrap();
+        assert_eq!(payments.len(), 1);
+        assert_eq!(payments[0].amount.minor_units, i64::MAX);
+    }
+
+    #[test]
+    fn create_payment_with_declined_gateway() {
+        let conn = fresh();
+        let store = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = "2025-06-01T12:00:00Z";
+        insert_sale(&conn, &sale_id, 5000, now);
+
+        let splits = vec![PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 5000,
+            gateway_reference: Some("txn_declined".into()),
+            gateway_status: Some("declined".into()),
+            gateway_response: Some(r#"{"error":"insufficient_funds"}"#.into()),
+        }];
+
+        let currency: Currency = "USD".parse().unwrap();
+        let payments = store
+            .create_payments(&sale_id, &splits, &currency, now)
+            .unwrap();
+        assert_eq!(payments[0].gateway_status.as_deref(), Some("declined"));
+
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed[0].gateway_status.as_deref(), Some("declined"));
+    }
+
+    #[test]
+    fn list_payments_filters_by_sale() {
+        let conn = fresh();
+        let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
+        let now = "2025-06-01T12:00:00Z";
+
+        let sale_a = uuid::Uuid::new_v4().to_string();
+        let sale_b = uuid::Uuid::new_v4().to_string();
+        insert_sale(&conn, &sale_a, 500, now);
+        insert_sale(&conn, &sale_b, 300, now);
+
+        store
+            .create_payments(
+                &sale_a,
+                &[PaymentSplitArg {
+                    method: "cash".into(),
+                    amount_minor: 500,
+                    gateway_reference: None,
+                    gateway_status: None,
+                    gateway_response: None,
+                }],
+                &currency,
+                now,
+            )
+            .unwrap();
+        store
+            .create_payments(
+                &sale_b,
+                &[PaymentSplitArg {
+                    method: "card".into(),
+                    amount_minor: 300,
+                    gateway_reference: None,
+                    gateway_status: None,
+                    gateway_response: None,
+                }],
+                &currency,
+                now,
+            )
+            .unwrap();
+
+        let a_payments = store.list_payments_for_sale(&sale_a).unwrap();
+        assert_eq!(a_payments.len(), 1);
+        assert_eq!(a_payments[0].method, "cash");
+
+        let b_payments = store.list_payments_for_sale(&sale_b).unwrap();
+        assert_eq!(b_payments.len(), 1);
+        assert_eq!(b_payments[0].method, "card");
+    }
+
+    #[test]
+    fn create_payments_preserves_currency() {
+        let conn = fresh();
+        let store = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = "2025-06-01T12:00:00Z";
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status,
+                                payment_method, tendered_minor,
+                                discount_percent, discount_label, user_id,
+                                created_at, updated_at,
+                                subtotal_minor, tax_total_minor)
+             VALUES (?1, ?2, 'IDR', 1, 'completed', 'cash', ?2,
+                     0, NULL, 'user-1', ?3, ?3, ?2, 0)",
+            params![sale_id, 50000_i64, now],
+        )
+        .unwrap();
+
+        let currency: Currency = "IDR".parse().unwrap();
+        let payments = store
+            .create_payments(
+                &sale_id,
+                &[PaymentSplitArg {
+                    method: "cash".into(),
+                    amount_minor: 50000,
+                    gateway_reference: None,
+                    gateway_status: None,
+                    gateway_response: None,
+                }],
+                &currency,
+                now,
+            )
+            .unwrap();
+        assert_eq!(payments[0].amount.currency, currency);
+        assert_eq!(payments[0].amount.currency.to_string(), "IDR");
+
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed[0].amount.currency.to_string(), "IDR");
+    }
 }
