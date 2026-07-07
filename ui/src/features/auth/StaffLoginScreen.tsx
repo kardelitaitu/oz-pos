@@ -238,7 +238,7 @@ export default function StaffLoginScreen() {
   // ── Step label ────────────────────────────────────────────────
 
   return (
-    <div className="staff-login-screen" onClick={handleScreenClick}>
+    <div className="staff-login-screen" onClick={handleScreenClick} onKeyDown={handleScreenClick} role="presentation" tabIndex={-1}>
       <div className="staff-login-card">
         {/* Logo */}
         <div className="staff-login-logo">

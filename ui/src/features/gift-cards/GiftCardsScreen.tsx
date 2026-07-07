@@ -139,7 +139,10 @@ export default function GiftCardsScreen() {
             <Card key={gc.card.id} shadow="sm" className="gift-card-card">
               <div
                 className="gift-card-summary"
+                role="button"
+                tabIndex={0}
                 onClick={() => setExpandedId(expandedId === gc.card.id ? null : gc.card.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === gc.card.id ? null : gc.card.id); } }}
               >
                 <div className="gift-card-summary-left">
                   <span className="gift-card-number">{gc.card.card_number}</span>

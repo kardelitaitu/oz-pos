@@ -51,8 +51,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   };
 
   return (
-    <div className="gift-cards-modal-overlay" onClick={onClose}>
-      <div className="gift-cards-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="gift-cards-modal-overlay" role="button" tabIndex={0} onClick={onClose} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}>
+      <div className="gift-cards-modal" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); } }}>
         <Localized id="gift-cards-issue-title">
           <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
         </Localized>
@@ -60,7 +60,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
         <div className="gift-cards-modal-form">
           <div className="gift-cards-modal-field">
             <Localized id="gift-cards-issue-number-label">
-              <label className="gift-cards-modal-label">Card Number</label>
+              <div className="gift-cards-modal-label">Card Number</div>
             </Localized>
             <input
               type="text"
@@ -73,7 +73,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
 
           <div className="gift-cards-modal-field">
             <Localized id="gift-cards-issue-amount-label">
-              <label className="gift-cards-modal-label">Initial Amount (minor units)</label>
+              <div className="gift-cards-modal-label">Initial Amount (minor units)</div>
             </Localized>
             <input
               type="number"
@@ -87,7 +87,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
 
           <div className="gift-cards-modal-field">
             <Localized id="gift-cards-issue-to-label">
-              <label className="gift-cards-modal-label">Issued To (optional)</label>
+              <div className="gift-cards-modal-label">Issued To (optional)</div>
             </Localized>
             <input
               type="text"
@@ -101,7 +101,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
 
           <div className="gift-cards-modal-field">
             <Localized id="gift-cards-issue-pin-label">
-              <label className="gift-cards-modal-label">PIN (optional)</label>
+              <div className="gift-cards-modal-label">PIN (optional)</div>
             </Localized>
             <input
               type="text"

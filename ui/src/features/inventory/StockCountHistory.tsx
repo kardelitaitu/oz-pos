@@ -8,7 +8,6 @@ import {
   type StockCountLineDto,
   type StockAdjustmentDto,
 } from '@/api/inventoryCounts';
-import { Card } from '@/components/Card';
 import './StockCountHistory.css';
 
 export default function StockCountHistory() {

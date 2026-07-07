@@ -52,11 +52,11 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
 
       <Card shadow="sm" className="sc-form-card">
         <div className="sc-form-field" role="radiogroup" aria-label={l10n.getString('sc-type-aria')}>
-          <label className="sc-form-label">
+          <div className="sc-form-label">
             <Localized id="sc-type-label">
               <span>Count Type</span>
             </Localized>
-          </label>
+          </div>
           <div className="sc-type-options">
             {typeOptions.map((opt) => (
               <button
@@ -76,11 +76,11 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
         </div>
 
         <div className="sc-form-field">
-          <label className="sc-form-label" htmlFor="sc-notes">
+          <div className="sc-form-label">
             <Localized id="sc-notes-label">
               <span>Notes (optional)</span>
             </Localized>
-          </label>
+          </div>
           <textarea
             id="sc-notes"
             className="sc-form-textarea"
@@ -88,6 +88,7 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
             onChange={(e) => setNotes(e.target.value)}
             placeholder={l10n.getString('sc-notes-placeholder')}
             rows={3}
+            aria-label={l10n.getString('sc-notes-label')}
           />
         </div>
 

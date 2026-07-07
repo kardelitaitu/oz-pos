@@ -224,15 +224,16 @@ export default function StockCountDetail({ countId, onBack }: Props) {
           {selectedSku && (
             <div className="sc-add-line-form">
               <span className="sc-add-line-selected">{selectedName} ({selectedSku})</span>
-              <label>
+              <div>
                 <Localized id="sc-expected-qty"><span>Expected Qty</span></Localized>
                 <input
                   type="number"
                   value={expectedQty}
                   onChange={(e) => setExpectedQty(e.target.value)}
                   min="0"
+                  aria-label={l10n.getString('sc-expected-qty')}
                 />
-              </label>
+              </div>
               <Button variant="primary" onClick={handleAddLine} loading={saving} disabled={!expectedQty}>
                 <Localized id="sc-add"><span>Add</span></Localized>
               </Button>

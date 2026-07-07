@@ -11,14 +11,14 @@ export default function StockCountsFlow() {
   const [view, setView] = useState<View>('list');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const handleCreate = useCallback(() => setView('new'), []);
+  const _handleCreate = useCallback(() => setView('new'), []);
   const handleCancel = useCallback(() => setView('list'), []);
 
   const handleCreated = useCallback((_count: StockCountDto) => {
     setView('list');
   }, []);
 
-  const handleViewDetail = useCallback((id: string) => {
+  const _handleViewDetail = useCallback((id: string) => {
     setSelectedId(id);
     setView('detail');
   }, []);
