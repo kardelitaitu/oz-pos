@@ -7,7 +7,6 @@ import {
   removeCountLine,
   completeStockCount,
   updateStockCountStatus,
-  listProducts,
   type StockCountDto,
   type StockCountLineDto,
 } from '@/api/inventoryCounts';

@@ -179,7 +179,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Gift Box')).toBeDefined());
 
-    const deleteBtn = screen.getAllByText('Delete')[0].closest('button')!;
+    const deleteBtn = screen.getAllByText('Delete')[0]!.closest('button')!;
     await userEvent.click(deleteBtn);
     await waitFor(() => expect(mockDeleteBundle).toHaveBeenCalledWith('b-1'));
   });
@@ -188,7 +188,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Add Bundle')).toBeDefined());
 
-    const addBtn = screen.getAllByText('Add Bundle')[0].closest('button')!;
+    const addBtn = screen.getAllByText('Add Bundle')[0]!.closest('button')!;
     await userEvent.click(addBtn);
 
     await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
@@ -199,7 +199,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Add Bundle')).toBeDefined());
 
-    const addBtn = screen.getAllByText('Add Bundle')[0].closest('button')!;
+    const addBtn = screen.getAllByText('Add Bundle')[0]!.closest('button')!;
     await userEvent.click(addBtn);
     await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
 
@@ -213,7 +213,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Gift Box')).toBeDefined());
 
-    const editBtn = screen.getAllByText('Edit')[0].closest('button')!;
+    const editBtn = screen.getAllByText('Edit')[0]!.closest('button')!;
     await userEvent.click(editBtn);
 
     await waitFor(() => {
@@ -231,7 +231,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Gift Box')).toBeDefined());
 
-    const editBtn = screen.getAllByText('Edit')[0].closest('button')!;
+    const editBtn = screen.getAllByText('Edit')[0]!.closest('button')!;
     await userEvent.click(editBtn);
 
     await waitFor(() => {
@@ -244,7 +244,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Add Bundle')).toBeDefined());
 
-    const addBtn = screen.getAllByText('Add Bundle')[0].closest('button')!;
+    const addBtn = screen.getAllByText('Add Bundle')[0]!.closest('button')!;
     await userEvent.click(addBtn);
 
     await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
@@ -265,7 +265,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Add Bundle')).toBeDefined());
 
-    const addBtn = screen.getAllByText('Add Bundle')[0].closest('button')!;
+    const addBtn = screen.getAllByText('Add Bundle')[0]!.closest('button')!;
     await userEvent.click(addBtn);
 
     await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
@@ -293,7 +293,7 @@ describe('BundleManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Add Bundle')).toBeDefined());
 
-    const addBtn = screen.getAllByText('Add Bundle')[0].closest('button')!;
+    const addBtn = screen.getAllByText('Add Bundle')[0]!.closest('button')!;
     await userEvent.click(addBtn);
 
     await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());

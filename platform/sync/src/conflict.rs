@@ -69,4 +69,43 @@ mod tests {
         // Remote wins on tie (server-authoritative).
         assert_eq!(resolved.winner.id, remote.id);
     }
+
+    #[test]
+    fn resolved_item_debug() {
+        let local = make_item("2025-06-01T10:00:00.000Z", "update");
+        let remote = make_item("2025-06-01T12:00:00.000Z", "update");
+        let resolved = resolve_lww(&local, &remote);
+        let debug = format!("{resolved:?}");
+        assert!(debug.contains(&local.id));
+        assert!(debug.contains(&remote.id));
+    }
+
+    #[test]
+    fn resolved_item_preserves_both_items() {
+        let local = make_item("2025-06-01T10:00:00.000Z", "update");
+        let remote = make_item("2025-06-01T12:00:00.000Z", "update");
+        let resolved = resolve_lww(&local, &remote);
+        assert!(resolved.local.is_some());
+        assert!(resolved.remote.is_some());
+        assert_eq!(resolved.local.unwrap().id, local.id);
+        assert_eq!(resolved.remote.unwrap().id, remote.id);
+    }
+
+    #[test]
+    fn lww_different_actions() {
+        let local = make_item("2025-06-01T12:00:00.000Z", "create_product");
+        let remote = make_item("2025-06-01T10:00:00.000Z", "delete_product");
+        let resolved = resolve_lww(&local, &remote);
+        assert_eq!(resolved.winner.action, "create_product");
+    }
+
+    #[test]
+    fn lww_empty_payload() {
+        let mut local = make_item("2025-06-01T12:00:00.000Z", "test");
+        let mut remote = make_item("2025-06-01T10:00:00.000Z", "test");
+        local.payload = String::new();
+        remote.payload = String::new();
+        let resolved = resolve_lww(&local, &remote);
+        assert!(resolved.winner.payload.is_empty());
+    }
 }

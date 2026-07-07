@@ -168,7 +168,7 @@ describe('TerminalManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Front Counter')).toBeDefined());
 
-    await userEvent.click(screen.getAllByText('Delete')[0].closest('button')!);
+    await userEvent.click(screen.getAllByText('Delete')[0]!.closest('button')!);
     await waitFor(() =>
       expect(screen.getByText(/Are you sure you want to delete terminal/)).toBeDefined(),
     );
@@ -179,10 +179,10 @@ describe('TerminalManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Front Counter')).toBeDefined());
 
-    await userEvent.click(screen.getAllByText('Delete')[0].closest('button')!);
+    await userEvent.click(screen.getAllByText('Delete')[0]!.closest('button')!);
     await waitFor(() => expect(screen.getByText('Delete Terminal')).toBeDefined());
 
-    const confirmBtn = screen.getAllByText('Delete').slice(-1)[0].closest('button')!;
+    const confirmBtn = screen.getAllByText('Delete').slice(-1)[0]!.closest('button')!;
     await userEvent.click(confirmBtn);
 
     await waitFor(() => expect(mockDeleteTerminal).toHaveBeenCalledWith('user-1', 't-1'));
@@ -192,7 +192,7 @@ describe('TerminalManagementScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Register Terminal')).toBeDefined());
 
-    await userEvent.click(screen.getAllByText('Register Terminal')[0].closest('button')!);
+    await userEvent.click(screen.getAllByText('Register Terminal')[0]!.closest('button')!);
     await waitFor(() => expect(screen.getByText('Register New Terminal')).toBeDefined());
   });
 });

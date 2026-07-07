@@ -51,10 +51,6 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
   };
 }
 
-function _pendingPromise() {
-  return new Promise<KdsOrder[]>(() => {});
-}
-
 describe('KdsScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -25,7 +25,6 @@ import { listShifts, getActiveShift, openShift, getShiftReport } from '@/api/shi
 
 const mockListShifts = listShifts as ReturnType<typeof vi.fn>;
 const mockGetActiveShift = getActiveShift as ReturnType<typeof vi.fn>;
-const _mockOpenShift = openShift as ReturnType<typeof vi.fn>;
 const mockGetShiftReport = getShiftReport as ReturnType<typeof vi.fn>;
 
 const wrap = (children: React.ReactNode) => withFluent(children, shiftsFtl, sharedFtl);
