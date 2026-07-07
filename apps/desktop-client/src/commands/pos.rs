@@ -639,4 +639,76 @@ mod tests {
         assert_eq!(line_total.minor_units, 600);
         assert_eq!(cart.total().unwrap().minor_units, 600);
     }
+
+    // ── DTO struct tests ─────────────────────────────────────────────
+
+    #[test]
+    fn set_cart_discount_args_debug() {
+        let args = SetCartDiscountArgs {
+            cart_id: CartId::new(),
+            percent: 10,
+            label: Some("Senior".into()),
+            user_id: "user-1".into(),
+        };
+        let debug = format!("{args:?}");
+        assert!(debug.contains("Senior"));
+        assert!(debug.contains("10"));
+    }
+
+    #[test]
+    fn start_sale_args_default_currency() {
+        let json = r#"{}"#;
+        let args: StartSaleArgs = serde_json::from_str(json).unwrap();
+        assert!(args.currency.is_empty());
+    }
+
+    #[test]
+    fn start_sale_result_debug() {
+        let cart_id = CartId::new();
+        let result = StartSaleResult { cart_id };
+        let debug = format!("{result:?}");
+        assert!(debug.contains("StartSaleResult"));
+    }
+
+    #[test]
+    fn add_line_args_fields() {
+        let args = AddLineArgs {
+            cart_id: CartId::new(),
+            sku: Sku::new("COFFEE"),
+            qty: 3,
+            unit_price_minor: 350,
+        };
+        assert_eq!(args.qty, 3);
+        assert_eq!(args.unit_price_minor, 350);
+        assert_eq!(args.sku.as_str(), "COFFEE");
+    }
+
+    #[test]
+    fn serial_number_arg_fields() {
+        let arg = SerialNumberArg {
+            sku: "LAPTOP".into(),
+            serial: "SN12345".into(),
+        };
+        assert_eq!(arg.sku, "LAPTOP");
+        assert_eq!(arg.serial, "SN12345");
+    }
+
+    #[test]
+    fn hold_cart_args_default_bill_type() {
+        let json = r#"{"label":"Test","cart_data":"{}","item_count":1,"total_minor":100,"currency":"USD"}"#;
+        let args: HoldCartArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.bill_type, "hold");
+    }
+
+    #[test]
+    fn complete_sale_result_debug() {
+        let result = CompleteSaleResult {
+            sale_id: "sale-1".into(),
+            total: Some(price(1000)),
+            line_count: 2,
+        };
+        let debug = format!("{result:?}");
+        assert!(debug.contains("sale-1"));
+        assert!(debug.contains("1000"));
+    }
 }

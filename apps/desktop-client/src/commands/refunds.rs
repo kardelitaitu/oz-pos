@@ -251,4 +251,62 @@ mod tests {
         let result = store.create_refund(&refund);
         assert!(result.is_err());
     }
+
+    // ── DTO struct tests ─────────────────────────────────────────────
+
+    #[test]
+    fn refund_line_arg_fields() {
+        let arg = RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 2,
+            unit_price_minor: 350,
+            currency: "USD".into(),
+            line_total_minor: 700,
+        };
+        assert_eq!(arg.sale_line_id, "sl-1");
+        assert_eq!(arg.sku, "COFFEE");
+        assert_eq!(arg.qty, 2);
+        assert_eq!(arg.unit_price_minor, 350);
+        assert_eq!(arg.currency, "USD");
+        assert_eq!(arg.line_total_minor, 700);
+    }
+
+    #[test]
+    fn refund_line_arg_debug() {
+        let arg = RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 1,
+            unit_price_minor: 100,
+            currency: "USD".into(),
+            line_total_minor: 100,
+        };
+        let debug = format!("{arg:?}");
+        assert!(debug.contains("COFFEE"));
+    }
+
+    #[test]
+    fn process_refund_args_debug() {
+        let args = ProcessRefundArgs {
+            sale_id: "sale-1".into(),
+            reason: "Customer changed mind".into(),
+            note: Some("Returned item".into()),
+            user_id: "user-1".into(),
+            lines: vec![],
+        };
+        let debug = format!("{args:?}");
+        assert!(debug.contains("sale-1"));
+        assert!(debug.contains("changed mind"));
+    }
+
+    #[test]
+    fn process_refund_result_fields() {
+        let result = ProcessRefundResult {
+            refund_id: "ref-1".into(),
+            total_minor: 700,
+        };
+        assert_eq!(result.refund_id, "ref-1");
+        assert_eq!(result.total_minor, 700);
+    }
 }
