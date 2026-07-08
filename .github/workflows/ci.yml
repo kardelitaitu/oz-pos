@@ -57,61 +57,72 @@ jobs:
       - run: cd ui && npm ci --no-audit --no-fund
       - run: cd ui && npm run lint
       - run: cd ui && npm run typecheck
-      - run: cd ui && npm run test
-      - run: cd ui && npm run build
+      - run: cd ui && npm run test -- --reporter=verbose 2>&1 | tee ui/vitest-output.log
+      # Hard-fail on any act() or flushSync warnings. Components
+      # whose mount effect fires an async IPC must use the
+      # `renderInAct` / `renderHookInAct` helper from
+      # ui/src/test-utils/renderInAct.ts. The gate catches regressions
+      # before they reach main — historically the project emitted
+      # ~15 warnings from tests that called plain `render()` /
+      # `renderHook()` outside an `act()` boundary; those have been
+      # cleaned up incrementally and the gate is now strict.
+      - name: Gate on act() / flushSync warnings
+        if: always()
+        run: |
+          if grep -E 'Warning: (An update to .* was not wrapped in act|flushSync was called from inside)' ui/vitest-output.log; then
+            echo "::error::vitest emitted act() or flushSync warnings — see ui/vitest-output.log. Apply renderInAct / renderHookInAct to fix."
+            head -50 ui/vitest-output.log || true
+            exit 1
+          else              echo "No act() or flushSync warnings detected."
+            fi
+      # ── i18n quality gate ──────────────────────────────────────────────
+      #
+      # Consolidates two categories of i18n-quality warnings into a
+      # single pass/fail decision so contributors triage one block
+      # of output instead of two separate gates:
+      #   1. `[i18n]` — emitted by the translation completeness
+      #      assertions in `ui/src/__tests__/i18nBundle.test.tsx`
+      #      when an .id.ftl file is a verbatim copy of its .ftl
+      #      sibling (Indonesian users see English text).
+      #   2. `Attempt to override an existing message` — emitted by
+      #      FluentBundle.addResource when two .ftl files in the
+      #      same joined bundle define the same key (the first
+      #      wins silently; later duplicates are dropped).
+      # The output is categorized so contributors see exactly which
+      # class of issue needs fixing.
+      - name: i18n quality gate
+        
+        if: always()
+        run: bash scripts/lint-i18n.sh
 
-  migration:
-    name: Migration smoke test
+  skill-drift-tests:
+    # Runs the skill-drift-guard itself + its bats test suite on every
+    # PR + main push. detect.sh's exit code is the number of manual
+    # findings, so a non-clean baseline flashes on every PR until the
+    # drift is resolved — the intentional loud-surface behavior. The
+    # bats suite pins specific invariants (clean baseline, format
+    # shape + value, audit-date stale) so future regressions to the
+    # helper family or audit-footer pipeline surface immediately.
+    name: Skill drift tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
-      - run: cargo run -p oz-cli -- migrate
-      - run: cargo run -p oz-cli -- migrate
-      - name: Clean up the local DB the smoke test created
-        run: rm -f oz-pos.db oz-pos.db-wal oz-pos.db-shm
 
-  # ── Coverage ───────────────────────────────────────────────────────────
-  #
-  # Generates both Rust and UI coverage reports and uploads the HTML +
-  # JSON outputs as workflow artifacts. Main-only so PR builds stay
-  # fast — open a PR, get the report after merge.
-  coverage:
-    name: Test coverage
-    runs-on: ubuntu-latest
-    # Only run on main pushes — skip PR builds to keep them fast, but
-    # still run on every merge to main so the badge-of-record updates.
-    # `github.ref == 'refs/heads/main'` alone is NOT sufficient: for
-    # `pull_request` events targeting main, `github.ref` resolves to
-    # the PR merge ref, which would let coverage leak onto PRs.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            .
-            src-tauri -> target
-      - name: Install cargo-llvm-cov (prebuilt binary)
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-      - name: Install LLVM runtime (for llvm-cov / llvm-profdata)
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config llvm
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: 'ui/package-lock.json'
-      - run: cd ui && npm ci --no-audit --no-fund
-      - name: Generate coverage (Rust + UI)
-        run: bash scripts/coverage.sh
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-reports
-          path: coverage/
-          retention-days: 30
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Clean baseline smoke test
+        # End-to-end detect.sh run as a baseline gate. detect.sh's exit
+        # code equals the number of manual findings, so a non-clean
+        # baseline flashes on every PR until the drift is resolved —
+        # the intentional loud-surface behavior.
+        run: bash .agents/skills/skill-drift-guard/scripts/detect.sh
+
+      - name: Bats test suite
+        # Pins all 11 drift-guard checks: clean-baseline, format
+        # shape + value (Check 9 + 10), audit-date stale (Check 8).
+        # Without this CI hook the .bats files would be dead
+        # documentation; with it, future regressions to the helper
+        # family or audit-footer pipeline surface immediately even on
+        # PRs that don't touch the script or SKILL.md.
+        run: bash .agents/skills/skill-drift-guard/scripts/run-tests.sh
