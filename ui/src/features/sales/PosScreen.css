@@ -149,6 +149,18 @@
   background: color-mix(in srgb, var(--color-danger, #ef4444) 18%, transparent);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pos-shift-error-out {
+    from { opacity: 1; max-height: 60px; }
+    to   { opacity: 0; max-height: 0; }
+  }
+
+  .pos-shift-error--exiting {
+    animation: pos-shift-error-out var(--duration-200) var(--ease-out) both;
+    pointer-events: none;
+  }
+}
+
 /* ── Modal overlay (shared) ──────────────────────────── */
 
 .pos-hold-overlay,

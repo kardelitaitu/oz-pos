@@ -582,6 +582,15 @@ export default function PosScreen() {
   const [openingShift, setOpeningShift] = useState(false);
   const [closeShiftError, setCloseShiftError] = useState<string | null>(null);
   const [closedShiftSummary, setClosedShiftSummary] = useState<ShiftDto | null>(null);
+  // Fade the inline shift-error banner out. The error is set when
+  // the cashier tries to close the shift while the cart is not empty.
+  // Dismiss via × fades with a 200ms height-opacity mirror before
+  // clearing the error string.
+  const shiftErrorExit = useExitAnimation(
+    !!closeShiftError && !showCloseShift,
+    () => setCloseShiftError(null),
+  );
+
   // Fade the close-shift confirmation modal out before the parent
   // state flips. Used by Cancel + Escape. The confirm-success path
   // that swaps to the summary view intentionally SNAPS (no fade on
@@ -1385,13 +1394,16 @@ export default function PosScreen() {
         )}
 
         {/* ── Inline shift error (cart not empty) ──── */}
-        {closeShiftError && !showCloseShift && (
-          <div className="pos-shift-error" role="alert">
+        {shiftErrorExit.shouldRender && (
+          <div
+            className={`pos-shift-error${shiftErrorExit.exiting ? ' pos-shift-error--exiting' : ''}`}
+            role="alert"
+          >
             {closeShiftError}
             <button
               type="button"
               className="pos-shift-error-dismiss"
-              onClick={() => setCloseShiftError(null)}
+              onClick={() => shiftErrorExit.requestClose()}
               aria-label={l10n.getString('pos-dismiss-error-aria')}
             >
               &times;

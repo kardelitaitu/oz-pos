@@ -5,6 +5,7 @@ import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import PaymentModal from '@/features/sales/PaymentModal';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
 import { overrideLinePrice, startSale, getProductTrackSerial, lookupSaleByReceiptBarcode } from '@/api/sales';
@@ -238,9 +239,14 @@ export default function RetailPosScreen() {
     setUndoStack((prev) => prev.slice(1));
   }, [undoStack, addProduct]);
 
+  const undoBarExit = useExitAnimation(
+    undoStack.length > 0,
+    () => setUndoStack([]),
+  );
+
   const handleDismissUndo = useCallback(() => {
-    setUndoStack([]);
-  }, []);
+    undoBarExit.requestClose();
+  }, [undoBarExit]);
 
   // ── Quantity picker ──────────────────────────────────────────────
   const [showQtyPicker, setShowQtyPicker] = useState(false);
@@ -469,6 +475,21 @@ export default function RetailPosScreen() {
   const [closeShiftError, setCloseShiftError] = useState<string | null>(null);
   const [closedShiftSummary, setClosedShiftSummary] = useState<ShiftDto | null>(null);
 
+  // Fade the retail modals out with mirror keyframes before the
+  // parent setter flips the boolean gate. Used by Cancel buttons
+  // and × icons. Confirm-success paths that either reload the
+  // app or swap to a sibling summary (close-shift↔summary) snap
+  // intentionally per the navigate-to-next-state rule.
+  const retailOpenShiftExit = useExitAnimation(showOpenShift, () => setShowOpenShift(false));
+  const retailCloseShiftExit = useExitAnimation(
+    showCloseShift && !closedShiftSummary,
+    () => { setShowCloseShift(false); setCloseShiftError(null); },
+  );
+  const retailShiftSummaryExit = useExitAnimation(
+    !!closedShiftSummary,
+    () => setClosedShiftSummary(null),
+  );
+
   useEffect(() => {
     setActiveShift(null);
     setShiftLoading(true);
@@ -535,6 +556,7 @@ export default function RetailPosScreen() {
 
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountTab, setDiscountTab] = useState<'pct' | 'rp'>('pct');
+  const retailDiscountExit = useExitAnimation(showDiscount, () => setShowDiscount(false));
   const [discountInput, setDiscountInput] = useState('');
   const [discountRpInput, setDiscountRpInput] = useState('');
 
@@ -1210,8 +1232,12 @@ export default function RetailPosScreen() {
               </div>
 
               {/* ── Undo bar ───────────── */}
-              {undoStack.length > 0 && (
-                <div className="retail-undo-bar" role="status" aria-live="polite">
+              {undoBarExit.shouldRender && (
+                <div
+                  className={`retail-undo-bar${undoBarExit.exiting ? ' retail-undo-bar--exiting' : ''}`}
+                  role="status"
+                  aria-live="polite"
+                >
                   <span className="retail-undo-bar-label">{l10n.getString('retail-undo-items-removed', { count: undoStack.length }) || `${undoStack.length} item${undoStack.length > 1 ? 's' : ''} removed`}</span>
                   <button className="retail-undo-bar-btn" onClick={handleUndoRemove}>{l10n.getString('pos-cart-undo')}</button>
                   <button className="retail-undo-bar-dismiss" onClick={handleDismissUndo} aria-label={l10n.getString('pos-cart-undo-dismiss-aria')}>&times;</button>
@@ -1349,9 +1375,16 @@ export default function RetailPosScreen() {
       </div>
 
       {/* ── Open Shift modal ────────────────── */}
-      {showOpenShift && (
-        <div className="retail-shift-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowOpenShift(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowOpenShift(false); } }}>
-          <div className="retail-shift-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
+      {retailOpenShiftExit.shouldRender && (
+        <div
+          className={`retail-shift-overlay${retailOpenShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-label="Close"
+          onClick={() => retailOpenShiftExit.requestClose()}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailOpenShiftExit.requestClose(); } }}
+        >
+          <div className={`retail-shift-modal${retailOpenShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('pos-open-shift-title')}</h3>
             <label htmlFor="retail-opening">{l10n.getString('retail-open-shift-opening-label')}</label>
             <input
@@ -1362,7 +1395,7 @@ export default function RetailPosScreen() {
               onChange={(e) => setOpeningBalance(e.target.value)}
             />
             <div className="retail-shift-modal-actions">
-              <button onClick={() => setShowOpenShift(false)} disabled={openingShift}>{l10n.getString('cancel')}</button>
+              <button onClick={() => retailOpenShiftExit.requestClose()} disabled={openingShift}>{l10n.getString('cancel')}</button>
               <button className="retail-shift-confirm-btn" onClick={handleOpenShift} disabled={openingShift}>
                 {openingShift ? l10n.getString('retail-open-shift-opening') : l10n.getString('pos-shift-open-btn')}
               </button>
@@ -1372,9 +1405,16 @@ export default function RetailPosScreen() {
       )}
 
       {/* ── Close Shift modal ───────────────── */}
-      {showCloseShift && activeShift && !closedShiftSummary && (
-        <div className="retail-shift-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowCloseShift(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCloseShift(false); } }}>
-          <div className="retail-shift-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
+      {retailCloseShiftExit.shouldRender && activeShift && (
+        <div
+          className={`retail-shift-overlay${retailCloseShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-label="Close"
+          onClick={() => retailCloseShiftExit.requestClose()}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailCloseShiftExit.requestClose(); } }}
+        >
+          <div className={`retail-shift-modal${retailCloseShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {closeShiftError && <div className="retail-shift-error">{closeShiftError}</div>}
             <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>
@@ -1396,7 +1436,7 @@ export default function RetailPosScreen() {
               onChange={(e) => setShiftNotes(e.target.value)}
             />
             <div className="retail-shift-modal-actions">
-              <button onClick={() => setShowCloseShift(false)} disabled={closingShift}>{l10n.getString('cancel')}</button>
+              <button onClick={() => retailCloseShiftExit.requestClose()} disabled={closingShift}>{l10n.getString('cancel')}</button>
               <button className="retail-shift-confirm-btn" onClick={handleCloseShift} disabled={closingShift}>
                 {closingShift ? l10n.getString('loading') : l10n.getString('pos-shift-close-btn')}
               </button>
@@ -1406,9 +1446,9 @@ export default function RetailPosScreen() {
       )}
 
       {/* ── Closed Shift Summary ────────────── */}
-      {closedShiftSummary && (
-        <div className="retail-shift-overlay">
-          <div className="retail-shift-modal">
+      {(retailShiftSummaryExit.shouldRender && closedShiftSummary) && (
+        <div className={`retail-shift-overlay${retailShiftSummaryExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}>
+          <div className={`retail-shift-modal${retailShiftSummaryExit.exiting ? ' retail-shift-modal--exiting' : ''}`}>
             <h3>{l10n.getString('pos-shift-closed-title')}</h3>
             <div style={{ fontSize: 13, lineHeight: 1.8 }}>
               <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: storeSettings.currency })}</div>
@@ -1417,7 +1457,10 @@ export default function RetailPosScreen() {
               <div>{l10n.getString('pos-shift-difference')}: {closedShiftSummary.cashDifferenceMinor != null ? formatMoney({ minor_units: closedShiftSummary.cashDifferenceMinor, currency: storeSettings.currency }) : '—'}</div>
             </div>
             <div className="retail-shift-modal-actions">
-              <button className="retail-shift-confirm-btn" onClick={() => setClosedShiftSummary(null)}>{l10n.getString('pos-shift-summary-done')}</button>
+              <button
+                className="retail-shift-confirm-btn"
+                onClick={() => retailShiftSummaryExit.requestClose()}
+              >{l10n.getString('pos-shift-summary-done')}</button>
             </div>
           </div>
         </div>
@@ -1491,9 +1534,16 @@ export default function RetailPosScreen() {
       )}
 
       {/* ── Discount modal ──────────────────── */}
-      {showDiscount && (
-        <div className="retail-discount-overlay" role="button" tabIndex={0} aria-label="Close" onClick={() => setShowDiscount(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowDiscount(false); } }}>
-          <div className="retail-discount-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
+      {retailDiscountExit.shouldRender && (
+        <div
+          className={`retail-discount-overlay${retailDiscountExit.exiting ? ' retail-discount-overlay--exiting' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-label="Close"
+          onClick={() => retailDiscountExit.requestClose()}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailDiscountExit.requestClose(); } }}
+        >
+          <div className={`retail-discount-modal${retailDiscountExit.exiting ? ' retail-discount-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-discount-title')}</h3>
             <div className="retail-discount-tabs">
               <button
@@ -1536,7 +1586,7 @@ export default function RetailPosScreen() {
               </>
             )}
             <div className="retail-discount-actions">
-              <button onClick={() => { setShowDiscount(false); setDiscountInput(''); setDiscountRpInput(''); }}>{l10n.getString('cancel')}</button>
+              <button onClick={() => { retailDiscountExit.requestClose(); setDiscountInput(''); setDiscountRpInput(''); }}>{l10n.getString('cancel')}</button>
               {discountTab === 'pct' ? (
                 <button onClick={handleApplyDiscount}>{l10n.getString('pos-cart-apply')}</button>
               ) : (
