@@ -710,4 +710,26 @@ scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan
 scale-read-error = Error timbangan
 
+# ── Gift Cards ─────────────────────────────────────────────────────
+gift-cards-loading = Memuat...
+gift-cards-status-all = Semua Status
+gift-cards-status-active = Aktif
+gift-cards-status-frozen = Dibekukan
+gift-cards-status-redeemed = Ditukarkan
+gift-cards-status-expired = Kedaluwarsa
+gift-cards-info-initial-balance = Saldo Awal
+gift-cards-info-issued = Diterbitkan
+gift-cards-info-expires = Kedaluwarsa
+gift-cards-freeze = Bekukan
+gift-cards-unfreeze = Buka Bekuan
+gift-cards-top-up = Top Up
+gift-cards-confirm-topup = Konfirmasi Top-Up
+gift-cards-cancel-topup = Batal
+gift-cards-recent-transactions = Transaksi Terbaru
+gift-cards-txn-type = Tipe
+gift-cards-txn-amount = Jumlah
+gift-cards-txn-balance = Saldo
+gift-cards-txn-notes = Catatan
+gift-cards-txn-date = Tanggal
+
 

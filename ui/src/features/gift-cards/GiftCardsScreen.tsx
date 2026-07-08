@@ -115,16 +115,16 @@ export default function GiftCardsScreen() {
           onChange={(e) => setStatusFilter(e.target.value)}
           aria-label={l10n.getString('gift-cards-status-aria')}
         >
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="frozen">Frozen</option>
-          <option value="redeemed">Redeemed</option>
-          <option value="expired">Expired</option>
+          <Localized id="gift-cards-status-all"><option value="">All Statuses</option></Localized>
+          <Localized id="gift-cards-status-active"><option value="active">Active</option></Localized>
+          <Localized id="gift-cards-status-frozen"><option value="frozen">Frozen</option></Localized>
+          <Localized id="gift-cards-status-redeemed"><option value="redeemed">Redeemed</option></Localized>
+          <Localized id="gift-cards-status-expired"><option value="expired">Expired</option></Localized>
         </select>
       </div>
 
       {loading ? (
-        <p className="gift-cards-loading">Loading...</p>
+        <Localized id="gift-cards-loading"><p className="gift-cards-loading">Loading...</p></Localized>
       ) : cards.length === 0 ? (
         <Card shadow="sm">
           <div className="gift-cards-empty">
@@ -167,16 +167,16 @@ export default function GiftCardsScreen() {
                 <div className="gift-card-detail">
                   <div className="gift-card-info-grid">
                     <div className="gift-card-info-item">
-                      <span className="gift-card-info-label">Initial Balance</span>
+                      <Localized id="gift-cards-info-initial-balance"><span className="gift-card-info-label">Initial Balance</span></Localized>
                       <span>{formatMoney(gc.card.initial_balance_minor, gc.card.currency)}</span>
                     </div>
                     <div className="gift-card-info-item">
-                      <span className="gift-card-info-label">Issued</span>
+                      <Localized id="gift-cards-info-issued"><span className="gift-card-info-label">Issued</span></Localized>
                       <span>{new Date(gc.card.issue_date).toLocaleDateString()}</span>
                     </div>
                     {gc.card.expiry_date && (
                       <div className="gift-card-info-item">
-                        <span className="gift-card-info-label">Expires</span>
+                        <Localized id="gift-cards-info-expires"><span className="gift-card-info-label">Expires</span></Localized>
                         <span>{new Date(gc.card.expiry_date).toLocaleDateString()}</span>
                       </div>
                     )}
@@ -188,12 +188,16 @@ export default function GiftCardsScreen() {
                         variant="ghost"
                         onClick={() => handleFreezeToggle(gc.card.card_number, gc.card.status)}
                       >
-                        {gc.card.status === 'frozen' ? 'Unfreeze' : 'Freeze'}
+                        {gc.card.status === 'frozen' ? (
+                          <Localized id="gift-cards-unfreeze"><span>Unfreeze</span></Localized>
+                        ) : (
+                          <Localized id="gift-cards-freeze"><span>Freeze</span></Localized>
+                        )}
                       </Button>
                     ) : null}
                     {gc.card.status === 'active' && (
                       <Button variant="primary" onClick={() => setTopUpCardId(gc.card.id)}>
-                        Top Up
+                        <Localized id="gift-cards-top-up"><span>Top Up</span></Localized>
                       </Button>
                     )}
                   </div>
@@ -208,27 +212,33 @@ export default function GiftCardsScreen() {
                         onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}
                         aria-label="Top-up amount"
                       />
-                      <Button variant="primary" onClick={() => handleTopUp(gc.card.card_number)}>
-                        Confirm Top-Up
-                      </Button>
-                      <Button variant="ghost" onClick={() => { setTopUpCardId(null); setTopUpAmount(''); }}>
-                        Cancel
-                      </Button>
+                      <Localized id="gift-cards-confirm-topup">
+                        <Button variant="primary" onClick={() => handleTopUp(gc.card.card_number)}>
+                          <span>Confirm Top-Up</span>
+                        </Button>
+                      </Localized>
+                      <Localized id="gift-cards-cancel-topup">
+                        <Button variant="ghost" onClick={() => { setTopUpCardId(null); setTopUpAmount(''); }}>
+                          <span>Cancel</span>
+                        </Button>
+                      </Localized>
                       {topUpError && <div className="gift-card-topup-error">{topUpError}</div>}
                     </div>
                   )}
 
                   {gc.transactions.length > 0 && (
                     <div className="gift-card-transactions">
-                      <h4 className="gift-card-txn-title">Recent Transactions</h4>
+                      <Localized id="gift-cards-recent-transactions">
+                        <h4 className="gift-card-txn-title">Recent Transactions</h4>
+                      </Localized>
                       <table className="gift-card-txn-table">
                         <thead>
                           <tr>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Balance</th>
-                            <th>Notes</th>
-                            <th>Date</th>
+                            <Localized id="gift-cards-txn-type"><th>Type</th></Localized>
+                            <Localized id="gift-cards-txn-amount"><th>Amount</th></Localized>
+                            <Localized id="gift-cards-txn-balance"><th>Balance</th></Localized>
+                            <Localized id="gift-cards-txn-notes"><th>Notes</th></Localized>
+                            <Localized id="gift-cards-txn-date"><th>Date</th></Localized>
                           </tr>
                         </thead>
                         <tbody>

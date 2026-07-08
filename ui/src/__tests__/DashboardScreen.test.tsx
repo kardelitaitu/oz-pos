@@ -197,7 +197,7 @@ describe('DashboardScreen', () => {
     });
   });
 
-  it('weekly progress bars have role="progressbar" with aria-valuenow and aria-valuemax', async () => {
+  it('weekly chart bars have role="img" with aria-label describing value', async () => {
     const weekData = [buildRevenueRow({ date: '2026-07-01', total_minor: 100000 })];
     mockGetDailyRevenue
       .mockResolvedValueOnce([])
@@ -206,11 +206,9 @@ describe('DashboardScreen', () => {
     mockGetLowStockAlerts.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      const bar = screen.getByRole('progressbar');
+      const bar = screen.getByRole('img');
       expect(bar).toBeTruthy();
-      expect(bar.getAttribute('aria-valuenow')).toBe('100000');
-      // maxWeekly = Math.max(100000, 1) = 100000
-      expect(bar.getAttribute('aria-valuemax')).toBe('100000');
+      expect(bar.getAttribute('aria-label')).toMatch(/1,000\.00|1\.000/);
     });
   });
 

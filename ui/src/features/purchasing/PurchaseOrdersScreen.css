@@ -113,10 +113,10 @@
 }
 
 .po-status--draft { background: var(--color-bg-surface); color: var(--color-fg-tertiary); border: 1px solid var(--color-border); }
-.po-status--pending { background: #fef3c7; color: #92400e; }
-.po-status--approved { background: #dbeafe; color: #1e40af; }
-.po-status--received { background: #d1fae5; color: #065f46; }
-.po-status--cancelled { background: #fee2e2; color: #991b1b; }
+.po-status--pending { background: var(--color-warning-bg, #fef3c7); color: var(--color-warning, #92400e); }
+.po-status--approved { background: var(--color-accent-dim, #dbeafe); color: var(--color-accent, #1e40af); }
+.po-status--received { background: var(--color-success-bg, #d1fae5); color: var(--color-success, #065f46); }
+.po-status--cancelled { background: var(--color-danger-bg, #fee2e2); color: var(--color-danger, #991b1b); }
 
 .po-cell-actions {
   display: flex;

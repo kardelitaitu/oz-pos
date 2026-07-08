@@ -713,3 +713,25 @@ scale-read-error = Scale error
 
 # ── Retail POS shortcut keys ───────────────────────────────────────────────
 retail-fn-quick-return = Quick Return
+
+# ── Gift Cards ─────────────────────────────────────────────────────
+gift-cards-loading = Loading...
+gift-cards-status-all = All Statuses
+gift-cards-status-active = Active
+gift-cards-status-frozen = Frozen
+gift-cards-status-redeemed = Redeemed
+gift-cards-status-expired = Expired
+gift-cards-info-initial-balance = Initial Balance
+gift-cards-info-issued = Issued
+gift-cards-info-expires = Expires
+gift-cards-freeze = Freeze
+gift-cards-unfreeze = Unfreeze
+gift-cards-top-up = Top Up
+gift-cards-confirm-topup = Confirm Top-Up
+gift-cards-cancel-topup = Cancel
+gift-cards-recent-transactions = Recent Transactions
+gift-cards-txn-type = Type
+gift-cards-txn-amount = Amount
+gift-cards-txn-balance = Balance
+gift-cards-txn-notes = Notes
+gift-cards-txn-date = Date

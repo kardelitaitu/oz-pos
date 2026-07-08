@@ -155,15 +155,20 @@
   transition: border-color var(--duration-150) var(--ease-out);
 }
 
-@keyframes search-pulse {
-  0% { border-color: var(--color-border); }
-  50% { border-color: var(--color-border-hover); }
-  100% { border-color: var(--color-border); }
+@media (prefers-reduced-motion: no-preference) {
+  .restaurant-search:focus-within {
+    animation: search-pulse 0.6s ease-in-out;
+  }
+
+  @keyframes search-pulse {
+    0% { border-color: var(--color-border); }
+    50% { border-color: var(--color-border-hover); }
+    100% { border-color: var(--color-border); }
+  }
 }
 
 .restaurant-search:focus-within {
   outline: none;
-  animation: search-pulse 0.6s ease-in-out;
 }
 
 .restaurant-search-icon {
@@ -331,39 +336,46 @@
     transform var(--duration-200) cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow var(--duration-200) var(--ease-out);
 
-.restaurant-card--enter {
-  animation: restaurant-card-in 350ms var(--ease-out) both;
 }
 }
 
 .restaurant-card--added {
-  animation: restaurant-card-added 450ms var(--ease-out);
   z-index: 2;
 }
 
-@keyframes restaurant-card-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@media (prefers-reduced-motion: no-preference) {
+  .restaurant-card--enter {
+    animation: restaurant-card-in 350ms var(--ease-out) both;
+  }
 
-@keyframes restaurant-card-added {
-  0% {
-    box-shadow: 0 0 0 0 var(--color-success);
-    border-color: var(--color-success);
+  .restaurant-card--added {
+    animation: restaurant-card-added 450ms var(--ease-out);
   }
-  25% {
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-success) 25%, transparent);
-    border-color: var(--color-success);
-    transform: scale(0.97);
+
+  @keyframes restaurant-card-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
   }
-  55% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 8%, transparent);
-    transform: scale(1.02);
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-    border-color: var(--color-border);
-    transform: scale(1);
+
+  @keyframes restaurant-card-added {
+    0% {
+      box-shadow: 0 0 0 0 var(--color-success);
+      border-color: var(--color-success);
+    }
+    25% {
+      box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-success) 25%, transparent);
+      border-color: var(--color-success);
+      transform: scale(0.97);
+    }
+    55% {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 8%, transparent);
+      transform: scale(1.02);
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+      border-color: var(--color-border);
+      transform: scale(1);
+    }
   }
 }
 

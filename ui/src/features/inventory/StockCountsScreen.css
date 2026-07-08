@@ -36,7 +36,7 @@
 
 .sc-filter-btn--active {
   background: var(--accent, #2563eb);
-  color: #fff;
+  color: var(--color-accent-fg, #fff);
   border-color: var(--accent, #2563eb);
 }
 
@@ -77,10 +77,10 @@
   font-weight: 500;
 }
 
-.sc-badge--draft { background: #e5e7eb; color: #374151; }
-.sc-badge--in_progress { background: #dbeafe; color: #1d4ed8; }
-.sc-badge--completed { background: #d1fae5; color: #065f46; }
-.sc-badge--cancelled { background: #fee2e2; color: #991b1b; }
+.sc-badge--draft { background: var(--color-bg-tertiary, #e5e7eb); color: var(--color-fg, #374151); }
+.sc-badge--in_progress { background: var(--color-accent-dim, #dbeafe); color: var(--color-accent, #1d4ed8); }
+.sc-badge--completed { background: var(--color-success-bg, #d1fae5); color: var(--color-success, #065f46); }
+.sc-badge--cancelled { background: var(--color-danger-bg, #fee2e2); color: var(--color-danger, #991b1b); }
 
 .sc-card-meta {
   display: flex;

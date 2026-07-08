@@ -149,7 +149,7 @@ describe('SalesHistoryScreen', () => {
     });
 
     // Click the "Voided" filter chip.
-    const voidedChip = screen.getByRole('button', { name: /voided/i });
+    const voidedChip = screen.getByRole('radio', { name: /voided/i });
     await user.click(voidedChip);
 
     // After filtering, only the Voided sale (sale-003) remains.

@@ -64,12 +64,17 @@
   height: 10px;
   border-radius: 50%;
   background: var(--color-success, #16a34a);
-  animation: shift-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes shift-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+@media (prefers-reduced-motion: no-preference) {
+  .shift-mgmt-active-dot {
+    animation: shift-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes shift-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
 }
 
 .shift-mgmt-active-label {
@@ -319,36 +324,44 @@
   background: rgba(0, 0, 0, 0.5);
   z-index: 120;
   padding: var(--space-4);
-  animation: shift-overlay-in var(--duration-200) var(--ease-out);
 }
 
 .shift-overlay-exit {
-  animation: shift-overlay-out var(--duration-200) var(--ease-in) forwards;
   pointer-events: none;
 }
 
-.shift-modal-exit {
-  animation: shift-modal-out var(--duration-200) var(--ease-in) forwards;
-}
+@media (prefers-reduced-motion: no-preference) {
+  .shift-mgmt-overlay {
+    animation: shift-overlay-in var(--duration-200) var(--ease-out);
+  }
 
-@keyframes shift-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+  .shift-overlay-exit {
+    animation: shift-overlay-out var(--duration-200) var(--ease-in) forwards;
+  }
 
-@keyframes shift-overlay-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
+  .shift-modal-exit {
+    animation: shift-modal-out var(--duration-200) var(--ease-in) forwards;
+  }
 
-@keyframes shift-modal-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+  @keyframes shift-overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 
-@keyframes shift-modal-out {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(4px); }
+  @keyframes shift-overlay-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  @keyframes shift-modal-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes shift-modal-out {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(4px); }
+  }
 }
 
 .shift-mgmt-modal {
@@ -361,7 +374,6 @@
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-xl);
-  animation: shift-modal-in var(--duration-200) var(--ease-out);
 }
 
 .shift-mgmt-modal-header {

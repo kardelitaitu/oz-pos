@@ -82,12 +82,12 @@
 }
 
 .promo-mgmt-btn--danger {
-  color: #ef4444;
-  border-color: #fecaca;
+  color: var(--color-danger, #ef4444);
+  border-color: var(--color-danger-dim, #fecaca);
 }
 
 .promo-mgmt-btn--danger:hover {
-  background: #fef2f2;
+  background: var(--color-danger-bg, #fef2f2);
 }
 
 .promo-mgmt-toggle {
@@ -107,7 +107,7 @@
 .promo-mgmt-toggle-slider {
   position: absolute;
   inset: 0;
-  background: #cbd5e1;
+  background: var(--color-bg-tertiary, #cbd5e1);
   border-radius: 22px;
   transition: background 0.2s;
 }
@@ -119,13 +119,13 @@
   height: 18px;
   left: 2px;
   bottom: 2px;
-  background: #fff;
+  background: var(--color-bg, #fff);
   border-radius: 50%;
   transition: transform 0.2s;
 }
 
 .promo-mgmt-toggle input:checked + .promo-mgmt-toggle-slider {
-  background: #22c55e;
+  background: var(--color-success, #22c55e);
 }
 
 .promo-mgmt-toggle input:checked + .promo-mgmt-toggle-slider::before {
@@ -213,6 +213,6 @@
 .promo-mgmt-field input:focus,
 .promo-mgmt-field select:focus {
   outline: none;
-  border-color: #6366f1;
+  border-color: var(--color-accent, #6366f1);
   box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
 }

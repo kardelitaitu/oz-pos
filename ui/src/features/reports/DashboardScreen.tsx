@@ -131,9 +131,8 @@ export default function DashboardScreen() {
                   style={{
                     width: `${Math.max(5, (row.total_minor / maxWeekly) * 100)}%`,
                   }}
-                  role="progressbar"
-                  aria-valuenow={row.total_minor}
-                  aria-valuemax={maxWeekly}
+                  role="img"
+                  aria-label={`${fmtCurrency(row.total_minor, row.currency)} of ${fmtCurrency(maxWeekly, todayCurrency)}`}
                 />
               </div>
               <span className="dashboard-weekly-bar-value">

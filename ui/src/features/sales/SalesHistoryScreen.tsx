@@ -474,9 +474,10 @@ export default function SalesHistoryScreen() {
                   <Localized id={statusIds[opt] ?? opt} key={opt}>
                     <button
                       type="button"
+                      role="radio"
                       className={`sales-history-chip ${statusFilter === opt ? 'sales-history-chip--active' : ''}`}
                       onClick={() => setStatusFilter(opt)}
-                      aria-pressed={statusFilter === opt}
+                      aria-checked={statusFilter === opt}
                     >
                       <span>{opt}</span>
                     </button>

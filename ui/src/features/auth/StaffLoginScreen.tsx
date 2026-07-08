@@ -253,7 +253,7 @@ export default function StaffLoginScreen() {
 
         {/* Step indicator */}
         <Localized id="staff-login-progress-aria" attrs={{ 'aria-label': true }}>
-          <div className="staff-login-steps" role="progressbar" aria-valuenow={step === 'username' ? 1 : 2} aria-valuemin={1} aria-valuemax={2} aria-label="Login progress">
+          <div className="staff-login-steps" role="status" aria-label={`Login step ${step === 'username' ? 1 : 2} of 2`}>
           <span className={`staff-login-step-dot ${step === 'username' ? 'staff-login-step-dot--active' : 'staff-login-step-dot--done'}`} />
           <span className="staff-login-step-line" />
           <span className={`staff-login-step-dot ${step === 'pin' ? 'staff-login-step-dot--active' : ''}`} />

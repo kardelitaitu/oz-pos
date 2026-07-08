@@ -179,7 +179,7 @@
 }
 
 [data-theme='dark'] .feature-toggle-slider::before {
-  background: #e5e7eb;
+  background: var(--color-bg-tertiary, #e5e7eb);
 }
 
 [data-theme='dark'] .feature-toggle-item {

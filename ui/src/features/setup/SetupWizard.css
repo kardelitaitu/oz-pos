@@ -286,7 +286,7 @@
   width: 18px;
   height: 18px;
   border-radius: var(--radius-full);
-  background: #ffffff;
+  background: var(--color-bg, #ffffff);
   box-shadow: var(--shadow-sm);
   transition: transform var(--duration-150) var(--ease-out);
 }

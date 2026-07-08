@@ -111,7 +111,7 @@
 }
 
 .product-mgmt-action-btn--danger:hover {
-  background: #fef2f2;
+  background: var(--color-danger-bg, #fef2f2);
 }
 
 .product-mgmt-action-btn:disabled {
