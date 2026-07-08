@@ -60,4 +60,4 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 2026-07-07 by docs-auditor
+> last audited 07-07-26 by docs-auditor

@@ -79,4 +79,4 @@ scanner.push(Barcode::new("ABC123"));
 - No `unwrap()` in driver code — map errors to `HalError` at the trait boundary.
 - Wrap blocking I/O in `tokio::task::spawn_blocking`.
 
-> last audited 2026-07-07 by docs-auditor
+> last audited 07-07-26 by docs-auditor

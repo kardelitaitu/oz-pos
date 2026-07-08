@@ -45,4 +45,4 @@ cargo test --package oz-lua
 > 18 passed, 0 failed
 ```
 
-> last audited 2026-06-29 by docs-auditor
+> last audited 29-06-26 by docs-auditor

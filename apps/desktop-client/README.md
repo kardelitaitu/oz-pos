@@ -94,4 +94,4 @@ cargo tauri dev               # Terminal 2: Tauri dev shell
 - Scanner background tasks emit `barcode:scanned` events via `app.emit()`.
 - The `app` handle is `Option<AppHandle>` — always unwrap via `if let Some(ref app)`.
 
-> last audited 2026-07-07 by docs-auditor
+> last audited 07-07-26 by docs-auditor

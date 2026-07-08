@@ -72,4 +72,4 @@ Key methods: `create_product`, `list_products`, `update_product`, `delete_produc
 - `#![deny(unsafe_code)]` and `#![warn(missing_docs)]`.
 - All public items have `///` docs.
 
-> last audited 2026-07-07 by docs-auditor
+> last audited 07-07-26 by docs-auditor

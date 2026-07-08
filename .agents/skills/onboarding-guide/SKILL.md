@@ -11,6 +11,19 @@ OZ-POS is a Rust + Tauri v2 POS framework. The codebase is organized into clear 
 >
 > The OZ-POS philosophy: keep the **merchant's** experience effortless by hiding complexity behind a lean Rust engine. Skills are how we keep the engine clean.
 
+## First-time setup
+
+Before you read the skill router below, enable the project's pre-commit hook so the 4 i18n + format gates fire on every commit. Without this setup, the hooks are silently bypassed at commit time. CI's `scripts/lint-i18n.sh` runs the bundle-parity check too, but only as an informational stderr surface — it never fails-closed in CI. **Pre-commit is currently the only fail-closed path for bundle-parity regressions.**
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit
+```
+
+Once enabled, verify with `git config --get core.hooksPath` (output should be the path you set; empty result means the commands above didn't take). `.githooks/pre-commit` then runs four gates before every commit (~1s): cargo fmt + i18n lint (`scripts/lint-i18n.sh`) + bundle parity: staged files only (`scripts/verify-bundle-parity.py --staged-only …`) + FTL dedupe dry-run (`scripts/dedupe-ftl.py --dry-run`).
+
+For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), run `bash scripts/check.sh`. For the rationale, see [`AGENTS.md`](../../AGENTS.md) Quick Setup.
+
 ---
 
 ## 30-second tour
@@ -141,4 +154,4 @@ If this passes locally, the PR is ready.
 
 ---
 
-> last audited 28-06-26 by docs-auditor
+> last audited 08-07-26 by docs-auditor
