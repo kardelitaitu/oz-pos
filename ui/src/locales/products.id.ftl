@@ -1,0 +1,200 @@
+products-title = Produk
+products-add = Tambah Produk
+products-edit = Ubah Produk
+products-delete = Hapus Produk
+products-name = Nama
+products-sku = SKU
+products-price = Harga
+products-barcode = Barcode
+products-category = Kategori
+products-stock = Stok
+products-no-products = Belum ada produk
+
+restaurant-menu-search-placeholder =
+    .placeholder = Cari Menu
+restaurant-menu-hamburger-aria =
+    .aria-label = Menu
+restaurant-menu-back-aria =
+    .aria-label = Kembali ke ruang kerja
+restaurant-size-decrease-aria =
+    .aria-label = Perkecil ukuran
+restaurant-size-increase-aria =
+    .aria-label = Perbesar ukuran
+restaurant-font-size-decrease-aria =
+    .aria-label = Perkecil ukuran huruf
+restaurant-font-size-increase-aria =
+    .aria-label = Perbesar ukuran huruf
+restaurant-font-size-label = Ukuran Huruf
+restaurant-theme-light = Mode Terang
+restaurant-theme-dark = Mode Gelap
+restaurant-lock-terminal = Kunci Terminal
+restaurant-toggle-fullscreen = Alihkan Layar Penuh
+restaurant-clear-color-aria =
+    .aria-label = Hapus warna
+restaurant-categories-aria =
+    .aria-label = Kategori menu
+
+# Error Boundary
+product-lookup-title = Produk
+product-lookup-dev-fallback = Menggunakan data contoh (IPC tidak tersedia)
+product-lookup-search-placeholder =
+    .placeholder = Cari produk…
+product-lookup-search-aria =
+    .aria-label = Cari produk berdasarkan nama, SKU, atau barcode
+product-lookup-barcode-placeholder =
+    .placeholder = Pindai barcode…
+product-lookup-barcode-aria =
+    .aria-label = Masukkan atau pindai barcode
+product-lookup-barcode-scan = Pindai
+product-lookup-scan-btn-aria =
+    .aria-label = Kirim barcode yang dimasukkan
+product-lookup-no-results = Tidak ada produk ditemukan
+product-lookup-loading = Memuat produk…
+product-lookup-add = Tambah ke Keranjang
+product-lookup-in-stock = Tersedia
+product-lookup-out-of-stock = Stok Habis
+product-lookup-all-categories = Semua Kategori
+product-lookup-categories-aria =
+    .aria-label = Saring berdasarkan kategori
+product-lookup-grid-aria =
+    .aria-label = Hasil pencarian produk
+product-lookup-card-aria =
+    .aria-label = { $name } — { $price }. SKU: { $sku }. { $stock }
+product-lookup-bundle-added = Bundel "{ $name }" ditambahkan — { $count } item
+product-lookup-no-match = Tidak ada produk atau bundel yang cocok dengan barcode ini
+product-lookup-uncategorised = Tanpa Kategori
+product-lookup-error-load = Gagal memuat produk
+
+# POS Cart (remaining)
+product-mgmt-title = Produk
+product-mgmt-add = Tambah Produk
+product-mgmt-loading = Memuat produk…
+product-mgmt-empty = Belum ada produk.
+product-mgmt-empty-cta = Tambah produk pertama
+product-mgmt-col-sku = SKU
+product-mgmt-col-name = Nama
+product-mgmt-col-category = Kategori
+product-mgmt-col-price = Harga
+product-mgmt-col-barcode = Barcode
+product-mgmt-col-stock = Stok
+product-mgmt-stock-in = Tersedia
+product-mgmt-stock-out = Stok Habis
+product-mgmt-edit = Ubah
+product-mgmt-edit-aria = Ubah { $name }
+product-mgmt-delete = Hapus
+product-mgmt-delete-aria = Hapus { $name }
+product-mgmt-deleting =
+    { $count ->
+        [one] Menghapus…
+       *[other] …
+    }
+product-mgmt-modal-add-title = Tambah Produk
+product-mgmt-modal-edit-title = Ubah Produk
+product-mgmt-modal-close = Tutup
+product-mgmt-field-sku = SKU
+product-mgmt-field-sku-required = SKU *
+product-mgmt-field-name = Nama
+product-mgmt-field-name-required = Nama *
+product-mgmt-field-price = Harga (unit minor)
+product-mgmt-field-currency = Mata Uang
+product-mgmt-field-category = Kategori
+product-mgmt-field-barcode = Barcode
+product-mgmt-field-tax-rates = Tarif Pajak
+product-mgmt-field-stock = Stok awal
+product-mgmt-btn-cancel = Batal
+product-mgmt-btn-create = Buat
+product-mgmt-btn-update = Perbarui
+product-mgmt-table-aria =
+    .aria-label = Katalog produk
+product-mgmt-actions-aria =
+    .aria-label = Tindakan
+product-mgmt-variants = Varian
+product-mgmt-variants-aria =
+    .aria-label = Varian untuk { $name }
+product-mgmt-modal-aria =
+    .aria-label = { $mode ->
+        [add] Tambah produk
+       *[edit] Ubah produk
+    }
+product-mgmt-modal-close-aria =
+    .aria-label = Tutup
+product-mgmt-sku-placeholder =
+    .placeholder = mis. LATTE
+product-mgmt-name-placeholder =
+    .placeholder = mis. Caffè Latte
+product-mgmt-price-placeholder =
+    .placeholder = 450
+product-mgmt-barcode-placeholder =
+    .placeholder = 4901234567890
+product-mgmt-stock-placeholder =
+    .placeholder = 0
+product-mgmt-no-category = — Tanpa Kategori —
+
+# ── Product Variants ──
+variant-mgmt-title = Varian — { $product }
+variant-mgmt-loading = Memuat varian…
+variant-mgmt-empty = Belum ada varian.
+variant-mgmt-empty-cta = Tambah varian
+variant-mgmt-add = Tambah Varian
+variant-mgmt-col-name = Nama
+variant-mgmt-col-sku = SKU
+variant-mgmt-col-price = Harga
+variant-mgmt-col-barcode = Barcode
+variant-mgmt-col-status = Status
+variant-mgmt-price-parent = Menggunakan harga induk
+variant-mgmt-status-active = Aktif
+variant-mgmt-status-inactive = Tidak Aktif
+variant-mgmt-edit = Ubah
+variant-mgmt-edit-aria = Ubah { $name }
+variant-mgmt-delete = Hapus
+variant-mgmt-delete-aria = Hapus { $name }
+variant-mgmt-delete-confirm-title = Hapus Varian
+variant-mgmt-delete-confirm-body = Apakah Anda yakin ingin menghapus varian "{ $name }" ({ $sku })? Tindakan ini tidak dapat dibatalkan.
+variant-mgmt-delete-confirm-cancel = Batal
+variant-mgmt-delete-confirm-confirm = Hapus
+variant-mgmt-modal-add-title = Tambah Varian
+variant-mgmt-modal-edit-title = Ubah Varian
+variant-mgmt-modal-close = Tutup
+variant-mgmt-close = Tutup
+variant-mgmt-close-aria =
+    .aria-label = Tutup
+variant-mgmt-field-name-required = Nama *
+variant-mgmt-field-sku-required = SKU *
+variant-mgmt-field-price = Harga (unit minor)
+variant-mgmt-field-currency = Mata Uang
+variant-mgmt-field-barcode = Barcode
+variant-mgmt-field-sort-order = Urutan
+variant-mgmt-field-active = Aktif
+variant-mgmt-btn-cancel = Batal
+variant-mgmt-btn-create = Buat
+variant-mgmt-btn-update = Perbarui
+variant-mgmt-overlay-aria =
+    .aria-label = Varian untuk { $name }
+variant-mgmt-dialog-aria =
+    .aria-label = { $mode ->
+        [add] Tambah varian
+       *[edit] Ubah varian
+    }
+variant-mgmt-table-aria =
+    .aria-label = Varian produk
+variant-mgmt-actions-aria =
+    .aria-label = Tindakan
+variant-mgmt-name-placeholder =
+    .placeholder = mis. Besar
+variant-mgmt-sku-placeholder =
+    .placeholder = mis. TEA-LARGE
+variant-mgmt-price-placeholder =
+    .placeholder = 450
+variant-mgmt-currency-placeholder =
+    .placeholder = USD
+variant-mgmt-barcode-placeholder =
+    .placeholder = 4901234567890
+variant-mgmt-sort-placeholder =
+    .placeholder = 0
+variant-mgmt-delete-confirm-aria =
+    .aria-label = Konfirmasi hapus
+variant-mgmt-error-load = Gagal memuat varian
+variant-mgmt-error-save = Gagal menyimpan varian
+variant-mgmt-error-delete = Gagal menghapus varian
+
+# ── Customer Management (remaining) ──

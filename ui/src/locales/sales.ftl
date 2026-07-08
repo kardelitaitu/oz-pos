@@ -215,8 +215,6 @@ sales-history-void-progress = Voiding…
 sales-history-detail-loading = Loading…
 sales-history-action-view = View
 sales-history-action-void = Void
-sales-history-void-aria =
-    .aria-label = Void order { $id }
 sales-history-void-reason-placeholder =
     .placeholder = e.g. Customer cancellation
 sales-history-void-default-reason = Voided from sales history
@@ -505,7 +503,6 @@ pos-shift-over = Over
 pos-shift-short = Short
 
 # POS shift bar
-pos-shift-loading = Loading shift…
 pos-shift-close-btn = Close
 pos-shift-open-btn = Open
 pos-shift-close-aria =
@@ -698,3 +695,11 @@ retail-low-stock-banner =
 retail-held-cart-delete-aria = Delete held cart
 
 
+
+# ── Scale indicator widget ────────────────────────────────────────────────────
+scale-indicator-aria = Scale weight indicator
+scale-idle = Scale
+scale-read-error = Scale error
+
+# ── Retail POS shortcut keys ───────────────────────────────────────────────
+retail-fn-quick-return = Quick Return

@@ -1,0 +1,34 @@
+currency-title = Nilai Tukar
+currency-add = Tambah Nilai Tukar
+currency-loading = Memuat nilai tukar…
+currency-empty = Belum ada nilai tukar
+currency-col-from = Dari
+currency-col-to = Ke
+currency-col-rate = Nilai
+currency-col-source = Sumber
+currency-col-effective = Tanggal Berlaku
+currency-delete = Hapus
+currency-delete-confirm = Apakah Anda yakin ingin menghapus nilai tukar ini?
+currency-btn-cancel = Batal
+currency-btn-save = Simpan
+currency-btn-add = Tambah
+currency-modal-title = Tambah Nilai Tukar
+currency-field-from = Mata Uang Asal
+currency-field-to = Mata Uang Tujuan
+currency-field-rate = Nilai Tukar
+currency-field-source = Sumber (opsional)
+currency-field-date = Tanggal Berlaku
+currency-source-manual = manual
+currency-table-actions = Tindakan
+currency-delete-label = Hapus { $from }-{ $to }
+currency-modal-add-label = Tambah nilai tukar
+currency-select-placeholder =
+    .placeholder = Pilih mata uang…
+currency-rate-placeholder =
+    .placeholder = 1,25
+currency-source-placeholder =
+    .placeholder = mis. BI
+currency-load-error = Gagal memuat nilai tukar
+currency-table-label = Nilai tukar
+
+# ── KDS (remaining) ──

@@ -1,0 +1,40 @@
+#!/bin/bash
+# .githooks/pre-push — gate pushes on the consolidated i18n quality
+# checks (mirrors `.github/workflows/ci.yml#ui i18n quality gate` and
+# `.github/workflows/release.yml#verify i18n quality gate`).
+#
+# Catches drift that may have slipped past pre-commit (amend-then-
+# push, force-push with --no-verify, branch updates from refs that
+# never ran pre-commit). Runs ONCE per push (not per commit), so the
+# total cost is bounded by number of refs being pushed.
+set -e
+
+# ── FTL dedupe dry-run ────────────────────────────────────────────────────
+# Fast fail-fast check (~50ms) for file-level Fluent key duplicates
+# across all 48 .ftl + .id.ftl files. The lint script below only
+# catches duplicates that `i18nBundle.test.tsx` exercises via
+# `getBundle('en')` / `getBundle('id')`; this catches duplicates in
+# keys that the test does NOT load (e.g., a desktop-only screen's
+# keys). Run BEFORE the lint so a cheap drift errors out before
+# paying for vitest.
+if [ -f scripts/dedupe-ftl.py ]; then
+    if output=$(python3 scripts/dedupe-ftl.py --dry-run 2>&1); then
+        : # clean — silently discard the "no duplicates" line
+    else
+        printf '%s\n' "error: FTL duplicates detected — run 'npm run dedupe:ftl' to fix:" >&2
+        printf '%s\n' "$output" >&2
+        exit 1
+    fi
+fi
+
+# ── i18n lint ──────────────────────────────────────────────────────────────
+# Runs the local i18n quality gate. ~1 second cost because it targets
+# `i18nBundle.test.tsx` only and greps for both `[i18n]` translation-
+# completeness warnings and Fluent `Attempt to override` duplicate
+# warnings in exercised keys.
+if [ -f scripts/lint-i18n.sh ]; then
+    if ! bash scripts/lint-i18n.sh; then
+        echo "error: i18n lint failed on push — fix issues above or run 'bash scripts/check.sh' for context." >&2
+        exit 1
+    fi
+fi

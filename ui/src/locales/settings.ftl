@@ -158,6 +158,7 @@ settings-page-title = Settings
 settings-loading = Loading settings…
 settings-section-store = Store
 settings-section-currency = Currency
+settings-section-display = Display
 settings-section-receipt = Receipt
 settings-field-store-name = Store name
 settings-field-address = Address
@@ -167,6 +168,11 @@ settings-field-decimal-separator = Decimal separator
 settings-field-paper-width = Paper width
 settings-field-language = Language
 settings-field-footer = Receipt footer
+
+# ── Display sub-section fields ──
+settings-field-card-size = Menu Card Size
+settings-field-font-size = Font Size
+settings-field-font-smoothing = Font Smoothing
 settings-toggle-show-currency = Show currency symbol on amounts
 settings-toggle-show-currency-aria =
     .aria-label = Show currency symbol on amounts
@@ -384,8 +390,6 @@ settings-show-table-label = Show table number
 settings-decimal-sep-label = Decimal separator
 settings-paper-width-label = Paper width
 settings-footer-label = Footer text
-settings-footer-placeholder =
-    .placeholder = Thank you for shopping!
 settings-margins-heading = Paper Margins (mm)
 settings-margin-top = Top
 settings-margin-bottom = Bottom
@@ -442,8 +446,8 @@ settings-toast-saved = Settings saved
 settings-toast-failed-save = Failed to save settings
 
 # Settings receipt preview
-settings-receipt-preview-store-fallback = Toko Anda
-settings-receipt-preview-address-fallback = Jl. Contoh No. 123
+settings-receipt-preview-store-fallback = Your Store
+settings-receipt-preview-address-fallback = 123 Main Street
 settings-receipt-preview-cashier = Cashier:
 settings-receipt-preview-col-item = Item
 settings-receipt-preview-col-qty = Qty
@@ -489,7 +493,6 @@ settings-tender-preset-add = Add preset
 
 # Sound & language
 settings-sound-label = Sound Effects
-settings-sound-aria = Toggle sound effects
 settings-language-label = Language
 
 # Quick links
