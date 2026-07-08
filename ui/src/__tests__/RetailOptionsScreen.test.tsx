@@ -7,12 +7,13 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { withFluent } from '@/locales/test-utils';
+import { renderInAct } from '@/test-utils/renderInAct';
 import salesFtl from '@/locales/sales.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 import settingsFtl from '@/locales/settings.ftl?raw';
 import RetailOptionsScreen from '@/features/retail/RetailOptionsScreen';
 
@@ -150,7 +151,7 @@ vi.mock('@/features/settings/DataManagementScreen', () => ({
 // ── Test wrapper ──────────────────────────────────────────────────
 
 function Wrapper({ children }: { children: ReactNode }) {
-  return withFluent(<ToastProvider>{children}</ToastProvider>, salesFtl, sharedFtl, settingsFtl);
+  return withFluent(<ToastProvider>{children}</ToastProvider>, salesFtl, settingsFtl);
 }
 
 function wrap(onClose?: () => void) {
@@ -177,13 +178,13 @@ describe('RetailOptionsScreen', () => {
     const { getStoreSettings } = await import('@/api/settings');
     vi.mocked(getStoreSettings).mockImplementationOnce(() => new Promise(() => {}));
 
-    render(wrap());
+    await renderInAct(wrap());
 
     expect(screen.getByText('Loading\u2026')).toBeInTheDocument();
   });
 
   it('renders the General tab by default', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -197,7 +198,7 @@ describe('RetailOptionsScreen', () => {
   // ── Tab navigation ─────────────────────────────────────────────
 
   it('switches to Receipt tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Receipt')).toBeInTheDocument();
@@ -211,7 +212,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('switches to Printer tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Printer')).toBeInTheDocument();
@@ -224,7 +225,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('switches to Scanner tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Scanner')).toBeInTheDocument();
@@ -236,7 +237,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('switches to Credit tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Credit')).toBeInTheDocument();
@@ -251,7 +252,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('switches to System tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
@@ -267,7 +268,7 @@ describe('RetailOptionsScreen', () => {
   // ── Payments tab ────────────────────────────────────────────────
 
   it('switches to Payments tab and shows gateway status badges', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -287,7 +288,7 @@ describe('RetailOptionsScreen', () => {
     const { getGatewayStatus } = await import('@/api/gateway');
     vi.mocked(getGatewayStatus).mockResolvedValueOnce([]);
 
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -304,7 +305,7 @@ describe('RetailOptionsScreen', () => {
     const { getGatewayStatus } = await import('@/api/gateway');
     vi.mocked(getGatewayStatus).mockRejectedValueOnce(new Error('Network error'));
 
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -319,7 +320,7 @@ describe('RetailOptionsScreen', () => {
 
   it('shows Stripe API key input in Payments tab', async () => {
     mockSettingsDb['stripe.api_key'] = 'sk_test_stored_key';
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -338,7 +339,7 @@ describe('RetailOptionsScreen', () => {
 
   it('shows Square API key input in Payments tab', async () => {
     mockSettingsDb['square.api_key'] = 'sq0atp_test';
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -356,7 +357,7 @@ describe('RetailOptionsScreen', () => {
 
   it('shows Midtrans key input in Payments tab', async () => {
     mockSettingsDb['midtrans.server_key'] = 'Mid-server-test';
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -375,7 +376,7 @@ describe('RetailOptionsScreen', () => {
   // ── Tender presets ──────────────────────────────────────────────
 
   it('renders default tender presets in Payments tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -393,7 +394,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('adds a new tender preset when Add preset is clicked', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -410,7 +411,7 @@ describe('RetailOptionsScreen', () => {
 
   it('disables Add preset button when 8 presets exist', async () => {
     localStorage.setItem('retail-tender-presets', JSON.stringify([1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]));
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -423,7 +424,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('removes a tender preset when remove button is clicked', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -444,7 +445,7 @@ describe('RetailOptionsScreen', () => {
 
   it('disables remove buttons when only 2 presets remain', async () => {
     localStorage.setItem('retail-tender-presets', JSON.stringify([5000, 10000]));
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -462,7 +463,7 @@ describe('RetailOptionsScreen', () => {
 
   it('loads tender presets from localStorage on mount', async () => {
     localStorage.setItem('retail-tender-presets', JSON.stringify([25000, 75000]));
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -475,7 +476,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('saves tender presets to localStorage when Save is clicked', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -494,7 +495,7 @@ describe('RetailOptionsScreen', () => {
   // ── Sound toggle ────────────────────────────────────────────────
 
   it('shows sound toggle checkbox checked by default in System tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
@@ -502,14 +503,14 @@ describe('RetailOptionsScreen', () => {
 
     await userEvent.click(screen.getByText('System'));
 
-    const soundCheckbox = screen.getByRole('checkbox', { name: /Toggle sound effects/i }) as HTMLInputElement;
+    const soundCheckbox = screen.getByRole('checkbox', { name: 'Sound Effects' }) as HTMLInputElement;
     expect(soundCheckbox).toBeInTheDocument();
     expect(soundCheckbox.checked).toBe(true);
   });
 
   it('loads sound preference from localStorage (disabled)', async () => {
     localStorage.setItem('retail-sound-enabled', 'false');
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
@@ -517,12 +518,12 @@ describe('RetailOptionsScreen', () => {
 
     await userEvent.click(screen.getByText('System'));
 
-    const soundCheckbox = screen.getByRole('checkbox', { name: /Toggle sound effects/i }) as HTMLInputElement;
+    const soundCheckbox = screen.getByRole('checkbox', { name: 'Sound Effects' }) as HTMLInputElement;
     expect(soundCheckbox.checked).toBe(false);
   });
 
   it('saves sound preference to localStorage when Save is clicked', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -537,7 +538,7 @@ describe('RetailOptionsScreen', () => {
 
   it('saves disabled sound preference to localStorage', async () => {
     localStorage.setItem('retail-sound-enabled', 'false');
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
@@ -555,7 +556,7 @@ describe('RetailOptionsScreen', () => {
   // ── Language selector ───────────────────────────────────────────
 
   it('renders language selector in System tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
@@ -570,7 +571,7 @@ describe('RetailOptionsScreen', () => {
   // ── Quick links info ────────────────────────────────────────────
 
   it('shows quick links informational text in System tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
@@ -585,7 +586,7 @@ describe('RetailOptionsScreen', () => {
   // ── Gateway keys localStorage ───────────────────────────────────
 
   it('saves gateway keys to settings DB when Save is clicked', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -619,7 +620,7 @@ describe('RetailOptionsScreen', () => {
 
   it('removes gateway keys from settings DB when cleared and saved', async () => {
     mockSettingsDb['stripe.api_key'] = 'old_key';
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
@@ -646,7 +647,7 @@ describe('RetailOptionsScreen', () => {
   it('saves all settings when Save is clicked', async () => {
     const { setStoreSettings, setReceiptSettings, setCreditSettings, setHardwareSettings } = await import('@/api/settings');
 
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -663,7 +664,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('shows success toast after saving', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -681,7 +682,7 @@ describe('RetailOptionsScreen', () => {
     const { setStoreSettings } = await import('@/api/settings');
     vi.mocked(setStoreSettings).mockImplementationOnce(() => new Promise(() => {}));
 
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -696,7 +697,7 @@ describe('RetailOptionsScreen', () => {
   // ── Scanner tab ────────────────────────────────────────────────
 
   it('shows detected scanners in Scanner tab', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Scanner')).toBeInTheDocument();
@@ -713,7 +714,7 @@ describe('RetailOptionsScreen', () => {
   // ── Receipt Preview ────────────────────────────────────────────
 
   it('shows receipt preview popup when clicking the preview', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Receipt')).toBeInTheDocument();
@@ -735,7 +736,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('closes receipt preview popup when clicking close', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Receipt')).toBeInTheDocument();
@@ -765,7 +766,7 @@ describe('RetailOptionsScreen', () => {
 
   it('calls onClose when Back is clicked', async () => {
     const onClose = vi.fn();
-    render(wrap(onClose));
+    await renderInAct(wrap(onClose));
 
     await waitFor(() => {
       expect(screen.getByText(/Back/)).toBeInTheDocument();
@@ -778,7 +779,7 @@ describe('RetailOptionsScreen', () => {
 
   it('calls onClose when Escape is pressed', async () => {
     const onClose = vi.fn();
-    render(wrap(onClose));
+    await renderInAct(wrap(onClose));
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -791,7 +792,7 @@ describe('RetailOptionsScreen', () => {
 
   it('calls onClose when Close button is clicked', async () => {
     const onClose = vi.fn();
-    render(wrap(onClose));
+    await renderInAct(wrap(onClose));
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
@@ -805,7 +806,7 @@ describe('RetailOptionsScreen', () => {
   // ── Credit toggle ──────────────────────────────────────────────
 
   it('shows credit limit info when credit is enabled', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Credit')).toBeInTheDocument();
@@ -825,7 +826,7 @@ describe('RetailOptionsScreen', () => {
   // ── New tab navigation (Appearance / Features / Data / Sync) ────
 
   it('switches to Appearance tab and renders AppearanceSettings', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Appearance')).toBeInTheDocument();
@@ -839,7 +840,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('switches to Features tab and renders FeatureToggleScreen', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Features')).toBeInTheDocument();
@@ -853,7 +854,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('switches to Data tab and renders DataManagementScreen', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Data')).toBeInTheDocument();
@@ -867,7 +868,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('switches to Sync tab and renders the Cloud Sync form', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
@@ -886,7 +887,7 @@ describe('RetailOptionsScreen', () => {
   // ── Sync tab behaviour ──────────────────────────────────────────
 
   it('disables the Sync enable toggle until a server URL is set', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
@@ -907,7 +908,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('Sync now simulates a successful round-trip and flips status to Online', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
@@ -935,7 +936,7 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('persists the sync auth token via the secure set_setting IPC', async () => {
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
@@ -962,7 +963,7 @@ describe('RetailOptionsScreen', () => {
 
   it('invokes the real sync_run Tauri command when Sync now is clicked', async () => {
     const { invoke } = await import('@tauri-apps/api/core');
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
@@ -978,7 +979,7 @@ describe('RetailOptionsScreen', () => {
 
   it('surfaces an error toast when sync_run reports a failure', async () => {
     const { invoke } = await import('@tauri-apps/api/core');
-    render(wrap());
+    await renderInAct(wrap());
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
@@ -1018,7 +1019,7 @@ describe('RetailOptionsScreen', () => {
     const { invoke } = await import('@tauri-apps/api/core');
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    render(wrap());
+    await renderInAct(wrap());
     await waitFor(() => expect(screen.getByText('Sync')).toBeInTheDocument());
     await userEvent.click(screen.getByText('Sync'));
     await userEvent.type(screen.getByLabelText('Server URL'), 'https://sync.example.com');
@@ -1040,7 +1041,7 @@ describe('RetailOptionsScreen', () => {
     const { invoke } = await import('@tauri-apps/api/core');
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    render(wrap());
+    await renderInAct(wrap());
     await waitFor(() => expect(screen.getByText('Sync')).toBeInTheDocument());
     await userEvent.click(screen.getByText('Sync'));
     await userEvent.type(screen.getByLabelText('Server URL'), 'https://sync.example.com');
@@ -1065,7 +1066,7 @@ describe('RetailOptionsScreen', () => {
     const { invoke } = await import('@tauri-apps/api/core');
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    render(wrap());
+    await renderInAct(wrap());
     await waitFor(() => expect(screen.getByText('Sync')).toBeInTheDocument());
     await userEvent.click(screen.getByText('Sync'));
     await userEvent.type(screen.getByLabelText('Server URL'), 'https://sync.example.com');
@@ -1091,13 +1092,119 @@ describe('RetailOptionsScreen', () => {
   });
 
   it('disables the Pull from server button when no server URL is set', async () => {
-    render(wrap());
+    await renderInAct(wrap());
     await waitFor(() => expect(screen.getByText('Sync')).toBeInTheDocument());
     await userEvent.click(screen.getByText('Sync'));
 
     const pullBtn = screen.getByTestId('sync-pull-btn') as HTMLButtonElement;
     expect(pullBtn).toBeInTheDocument();
     expect(pullBtn).toBeDisabled();
+  });
+
+  // ── htmlFor/id wiring (a11y + getByLabelText) ──────────────────
+
+  it('wires htmlFor/id on every General-tab input so screen readers can announce them', async () => {
+    await renderInAct(wrap());
+    await waitFor(() => expect(screen.getByText('General Settings')).toBeInTheDocument());
+
+    // All five General inputs are addressable via getByLabelText.
+    expect(screen.getByLabelText('Store name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Address')).toBeInTheDocument();
+    expect(screen.getByLabelText('Branch')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tax ID')).toBeInTheDocument();
+    expect(screen.getByLabelText('Default currency')).toBeInTheDocument();
+  });
+
+  it('wires htmlFor/id on the Receipt tab checkboxes and selects', async () => {
+    await renderInAct(wrap());
+    await waitFor(() => expect(screen.getByText('Receipt')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Receipt'));
+
+    // Checkboxes (row layout) are addressable by their label text.
+    expect(screen.getByLabelText('Show currency symbol')).toBeInTheDocument();
+    expect(screen.getByLabelText('Show tax line')).toBeInTheDocument();
+    expect(screen.getByLabelText('Show table number')).toBeInTheDocument();
+    // Selects
+    expect(screen.getByLabelText('Decimal separator')).toBeInTheDocument();
+    expect(screen.getByLabelText('Paper width')).toBeInTheDocument();
+    // Textarea
+    expect(screen.getByLabelText('Receipt footer')).toBeInTheDocument();
+  });
+
+  it('wires htmlFor/id on the Credit tab inputs', async () => {
+    await renderInAct(wrap());
+    await waitFor(() => expect(screen.getByText('Credit')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Credit'));
+
+    expect(screen.getByLabelText('Enable credit sales')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reminder interval (hours)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Max credit limit (Rp)')).toBeInTheDocument();
+  });
+
+  it('wires htmlFor/id on the System tab display fields', async () => {
+    await renderInAct(wrap());
+    await waitFor(() => expect(screen.getByText('System')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('System'));
+
+    // The disabled display fields are still addressable.
+    expect(screen.getByLabelText('App version')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cashier')).toBeInTheDocument();
+    expect(screen.getByLabelText('Terminal')).toBeInTheDocument();
+    expect(screen.getByLabelText('Auto-lock after (minutes)')).toBeInTheDocument();
+  });
+
+  it('wires htmlFor/id on the dynamic tender-preset labels in Payments tab', async () => {
+    await renderInAct(wrap());
+    await waitFor(() => expect(screen.getByText('Payments')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Payments'));
+
+    // The default 5 presets each have a "Preset N" label wired to a
+    // matching input id. We verify the wiring by checking the DOM
+    // directly (id exists + label[for=...] references it) because the
+    // test wrapper's `l10n.getString` may return the raw FTL string
+    // ("Preset { $n }") rather than the interpolated value, depending
+    // on whether the test Fluent provider supports vars interpolation.
+    const id1 = document.getElementById('payments-tender-preset-1') as HTMLInputElement | null;
+    const id2 = document.getElementById('payments-tender-preset-2') as HTMLInputElement | null;
+    const id5 = document.getElementById('payments-tender-preset-5') as HTMLInputElement | null;
+    expect(id1).toBeInTheDocument();
+    expect(id2).toBeInTheDocument();
+    expect(id5).toBeInTheDocument();
+    // And each input is referenced by a matching label htmlFor.
+    expect(id1?.labels?.length ?? 0).toBeGreaterThan(0);
+    expect(id2?.labels?.length ?? 0).toBeGreaterThan(0);
+    expect(id5?.labels?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it('wires htmlFor/id on the Printer and Scanner tabs', async () => {
+    await renderInAct(wrap());
+    await waitFor(() => expect(screen.getByText('Printer')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Printer'));
+
+    expect(screen.getByLabelText('Connection')).toBeInTheDocument();
+    expect(screen.getByLabelText('Device path')).toBeInTheDocument();
+    expect(screen.getByLabelText('Paper size')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Scanner'));
+    expect(screen.getByLabelText('Scanner device')).toBeInTheDocument();
+    expect(screen.getByLabelText('Input mode')).toBeInTheDocument();
+  });
+
+  it('wires htmlFor/id on the Payments tab gateway keys after opening the details', async () => {
+    await renderInAct(wrap());
+    await waitFor(() => expect(screen.getByText('Payments')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Payments'));
+
+    // Stripe / Square / Midtrans inputs only render after the user
+    // opens the corresponding <details> summary.
+    await userEvent.click(screen.getByText('💳 Stripe'));
+    expect(screen.getByLabelText('Stripe API Key')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('🟦 Square'));
+    expect(screen.getByLabelText('Square API Key')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('📱 QRIS (Midtrans)'));
+    expect(screen.getByLabelText('Midtrans Server Key')).toBeInTheDocument();
   });
 
 });

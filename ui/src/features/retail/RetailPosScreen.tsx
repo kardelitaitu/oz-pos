@@ -119,8 +119,8 @@ export default function RetailPosScreen() {
     }
   }, [lines]);
 
-  const handleSerialChange = useCallback((sku: string, serial: string) => {
-    setSerialNumbers((prev) => ({ ...prev, [sku]: serial }));
+  const handleSerialChange = useCallback((lineId: string, serial: string) => {
+    setSerialNumbers((prev) => ({ ...prev, [lineId]: serial }));
   }, []);
 
   // ── Quick Return ───────────────────────────────────────────────────
@@ -539,7 +539,7 @@ export default function RetailPosScreen() {
   const [discountRpInput, setDiscountRpInput] = useState('');
 
   const handleApplyDiscount = useCallback(() => {
-    const pct = parseFloat(discountInput);
+    const pct = Math.min(100, parseFloat(discountInput));
     if (Number.isNaN(pct) || pct <= 0) return;
     setDiscount(pct, '');
     setShowDiscount(false);
@@ -550,7 +550,7 @@ export default function RetailPosScreen() {
   const handleApplyDiscountRp = useCallback(() => {
     const rp = parseFloat(discountRpInput);
     if (Number.isNaN(rp) || rp <= 0 || !subtotal) return;
-    const rpMinor = Math.round(rp * 100);
+    const rpMinor = Math.min(subtotal.minor_units, Math.round(rp * 100));
     const pct = Math.round((rpMinor / subtotal.minor_units) * 100 * 100) / 100;
     setDiscount(pct, '');
     setShowDiscount(false);
@@ -605,27 +605,41 @@ export default function RetailPosScreen() {
     }
   }, [overrideTarget, cartId, addToast, updateLinePrice]);
 
+  const allCustomersRef = useRef<CustomerDto[]>([]);
+
   useEffect(() => {
-    if (!showCustomerSearch) return;
+    if (!showCustomerSearch) { setCustomerSearchResults([]); return; }
     setLoadingCustomers(true);
     listCustomers()
       .then((customers) => {
+        allCustomersRef.current = customers;
         const q = customerSearchQuery.trim().toLowerCase();
-        if (!q) {
-          setCustomerSearchResults(customers);
-        } else {
-          setCustomerSearchResults(
-            customers.filter(
-              (c) =>
-                c.name.toLowerCase().includes(q) ||
-                (c.phone && c.phone.includes(q)) ||
-                (c.email && c.email.toLowerCase().includes(q)),
-            ),
-          );
-        }
+        setCustomerSearchResults(
+          !q ? customers : customers.filter(
+            (c) =>
+              c.name.toLowerCase().includes(q) ||
+              (c.phone && c.phone.includes(q)) ||
+              (c.email && c.email.toLowerCase().includes(q)),
+          ),
+        );
       })
       .catch(() => setCustomerSearchResults([]))
       .finally(() => setLoadingCustomers(false));
+  }, [showCustomerSearch]);
+
+  useEffect(() => {
+    if (!showCustomerSearch) return;
+    const customers = allCustomersRef.current;
+    if (customers.length === 0) return;
+    const q = customerSearchQuery.trim().toLowerCase();
+    setCustomerSearchResults(
+      !q ? customers : customers.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          (c.phone && c.phone.includes(q)) ||
+          (c.email && c.email.toLowerCase().includes(q)),
+      ),
+    );
   }, [showCustomerSearch, customerSearchQuery]);
 
   // ── Payment modal ────────────────────────────────────────────
@@ -647,7 +661,7 @@ export default function RetailPosScreen() {
     if (lines.length === 0) return;
     try {
       const cartData = JSON.stringify({
-        lines: lines.map((l) => ({ sku: l.sku, name: l.name, qty: l.qty, unit_price: l.unit_price })),
+        lines: lines.map((l) => ({ sku: l.sku, name: l.name, category: l.category, qty: l.qty, unit_price: l.unit_price })),
         discountPercent,
         discountLabel,
       });
@@ -720,8 +734,6 @@ export default function RetailPosScreen() {
       })
       .catch(() => addToast({ message: 'Failed to load held carts', type: 'error' }));
   }, []);
-
-  // ── Clock ────────────────────────────────────────────────────
 
   // ── Options full-screen page ─────────────────────────────────
 
@@ -945,7 +957,7 @@ export default function RetailPosScreen() {
             <span className="retail-shift-badge">{l10n.getString('loading')}</span>
           ) : activeShift ? (
             <span className="retail-shift-badge">
-              {l10n.getString('retail-shift-label')} &middot; {formatMoney({ minor_units: activeShift.totalSalesMinor, currency: 'IDR' })}
+              {l10n.getString('retail-shift-label')} &middot; {formatMoney({ minor_units: activeShift.totalSalesMinor, currency: storeSettings.currency })}
             </span>
           ) : (
             <span className="retail-shift-badge" style={{ opacity: 0.6 }}>{l10n.getString('retail-no-shift')}</span>
@@ -1138,8 +1150,8 @@ export default function RetailPosScreen() {
                             <input
                               type="text"
                               className="retail-cart-serial-input"
-                              value={serialNumbers[line.sku] ?? ''}
-                              onChange={(e) => handleSerialChange(line.sku, e.target.value)}
+                              value={serialNumbers[line.id] ?? ''}
+                              onChange={(e) => handleSerialChange(line.id, e.target.value)}
                               placeholder="Serial #"
                               aria-label={`Serial number for ${line.name ?? line.sku}`}
                               style={{
@@ -1399,10 +1411,10 @@ export default function RetailPosScreen() {
           <div className="retail-shift-modal">
             <h3>{l10n.getString('pos-shift-closed-title')}</h3>
             <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-              <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: 'IDR' })}</div>
-              <div>{l10n.getString('retail-shift-closed-cash-sales')} {formatMoney({ minor_units: closedShiftSummary.totalCashMinor, currency: 'IDR' })}</div>
-              <div>{l10n.getString('pos-shift-expected-cash')}: {closedShiftSummary.expectedCashMinor != null ? formatMoney({ minor_units: closedShiftSummary.expectedCashMinor, currency: 'IDR' }) : '—'}</div>
-              <div>{l10n.getString('pos-shift-difference')}: {closedShiftSummary.cashDifferenceMinor != null ? formatMoney({ minor_units: closedShiftSummary.cashDifferenceMinor, currency: 'IDR' }) : '—'}</div>
+              <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: storeSettings.currency })}</div>
+              <div>{l10n.getString('retail-shift-closed-cash-sales')} {formatMoney({ minor_units: closedShiftSummary.totalCashMinor, currency: storeSettings.currency })}</div>
+              <div>{l10n.getString('pos-shift-expected-cash')}: {closedShiftSummary.expectedCashMinor != null ? formatMoney({ minor_units: closedShiftSummary.expectedCashMinor, currency: storeSettings.currency }) : '—'}</div>
+              <div>{l10n.getString('pos-shift-difference')}: {closedShiftSummary.cashDifferenceMinor != null ? formatMoney({ minor_units: closedShiftSummary.cashDifferenceMinor, currency: storeSettings.currency }) : '—'}</div>
             </div>
             <div className="retail-shift-modal-actions">
               <button className="retail-shift-confirm-btn" onClick={() => setClosedShiftSummary(null)}>{l10n.getString('pos-shift-summary-done')}</button>
@@ -1781,6 +1793,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
   onSetWeighTarget: (p: ProductDto) => void;
 }) {
   const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
+  const priceRecent = useMemo(() => isPriceRecent(product), [product.price_updated_at]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
 
@@ -1815,7 +1828,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
       {product.stock_qty != null && product.stock_qty > 0 && (
         <span className={`retail-product-stock-badge retail-stock-${product.stock_qty <= 5 ? 'low' : product.stock_qty <= 10 ? 'medium' : 'high'}`}>{product.stock_qty}</span>
       )}
-      {isPriceRecent(product) && <span className="retail-price-volatility-hint" title="Price changed recently" />}
+      {priceRecent && <span className="retail-price-volatility-hint" title="Price changed recently" />}
       <span className="retail-product-name">{product.name}</span>
       <span className="retail-product-price">{formatMoney(product.price)}</span>
       {scaleEnabled && (

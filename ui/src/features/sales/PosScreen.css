@@ -609,3 +609,34 @@
   }
 }
 
+
+/* Settings sub-screen (tablet) tab bar */
+.pos-settings-tab {
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out),
+    border-bottom-color var(--duration-150) var(--ease-out),
+    font-weight var(--duration-150) var(--ease-out);
+}
+.pos-settings-tab:hover {
+  background: color-mix(in srgb, var(--color-fg, #111) 8%, transparent);
+}
+.pos-settings-tab:focus-visible {
+  outline: 2px solid var(--color-border-focus, #60a5fa);
+  outline-offset: 2px;
+}
+.pos-settings-tab--active {
+  border-bottom-color: var(--color-accent, #1a3a5c);
+  font-weight: var(--font-weight-semibold);
+}
+.pos-settings-tab--active:hover {
+  background: color-mix(in srgb, var(--color-accent, #1a3a5c) 8%, transparent);
+}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
-import { useLocalization, Localized } from '@fluent/react';
+import { useLocalization } from '@fluent/react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   getReceiptSettings,
@@ -49,7 +49,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'data', label: 'Data' },
   { id: 'sync', label: 'Sync' },
 ];
-
 
 // ── Paper dimensions (mm) ──────────────────────────────────────
 
@@ -437,24 +436,24 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
             <div className="retail-options-section">
               <h3 className="retail-options-heading">{l10n.getString('settings-general-heading')}</h3>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-field-store-name')}</label>
-                <input value={store.name} onChange={(e) => setStore({ ...store, name: e.target.value })} />
+                <label htmlFor="general-store-name">{l10n.getString('settings-field-store-name')}</label>
+                <input id="general-store-name" value={store.name} onChange={(e) => setStore({ ...store, name: e.target.value })} />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-field-address')}</label>
-                <input value={store.address} onChange={(e) => setStore({ ...store, address: e.target.value })} />
+                <label htmlFor="general-address">{l10n.getString('settings-field-address')}</label>
+                <input id="general-address" value={store.address} onChange={(e) => setStore({ ...store, address: e.target.value })} />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-branch-label')}</label>
-                <input value={store.branch} onChange={(e) => setStore({ ...store, branch: e.target.value })} placeholder={l10n.getString('settings-branch-placeholder')} />
+                <label htmlFor="general-branch">{l10n.getString('settings-branch-label')}</label>
+                <input id="general-branch" value={store.branch} onChange={(e) => setStore({ ...store, branch: e.target.value })} placeholder={l10n.getString('settings-branch-placeholder')} />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-tax-id-label')}</label>
-                <input value={store.taxId} onChange={(e) => setStore({ ...store, taxId: e.target.value })} />
+                <label htmlFor="general-tax-id">{l10n.getString('settings-tax-id-label')}</label>
+                <input id="general-tax-id" value={store.taxId} onChange={(e) => setStore({ ...store, taxId: e.target.value })} />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-field-default-currency')}</label>
-                <select value={store.currency} onChange={(e) => setStore({ ...store, currency: e.target.value })}>
+                <label htmlFor="general-default-currency">{l10n.getString('settings-field-default-currency')}</label>
+                <select id="general-default-currency" value={store.currency} onChange={(e) => setStore({ ...store, currency: e.target.value })}>
                   <option value="IDR">IDR (Rp)</option>
                   <option value="USD">USD ($)</option>
                   <option value="MYR">MYR (RM)</option>
@@ -472,32 +471,36 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               <div className="retail-options-section">
                 <h3 className="retail-options-heading">{l10n.getString('settings-receipt-heading')}</h3>
                 <div className="retail-options-field retail-options-field--row">
-                  <label>{l10n.getString('settings-show-currency-label')}</label>
+                  <label htmlFor="receipt-show-currency">{l10n.getString('settings-show-currency-label')}</label>
                   <input
+                    id="receipt-show-currency"
                     type="checkbox"
                     checked={receipt.showCurrency}
                     onChange={(e) => setReceipt({ ...receipt, showCurrency: e.target.checked })}
                   />
                 </div>
                 <div className="retail-options-field retail-options-field--row">
-                  <label>{l10n.getString('settings-show-tax-label')}</label>
+                  <label htmlFor="receipt-show-tax">{l10n.getString('settings-show-tax-label')}</label>
                   <input
+                    id="receipt-show-tax"
                     type="checkbox"
                     checked={receipt.showTax}
                     onChange={(e) => setReceipt({ ...receipt, showTax: e.target.checked })}
                   />
                 </div>
                 <div className="retail-options-field retail-options-field--row">
-                  <label>{l10n.getString('settings-show-table-label')}</label>
+                  <label htmlFor="receipt-show-table">{l10n.getString('settings-show-table-label')}</label>
                   <input
+                    id="receipt-show-table"
                     type="checkbox"
                     checked={receipt.showTableNumber}
                     onChange={(e) => setReceipt({ ...receipt, showTableNumber: e.target.checked })}
                   />
                 </div>
                 <div className="retail-options-field">
-                  <label>{l10n.getString('settings-decimal-sep-label')}</label>
+                  <label htmlFor="receipt-decimal-sep">{l10n.getString('settings-decimal-sep-label')}</label>
                   <select
+                    id="receipt-decimal-sep"
                     value={receipt.decimalSeparator}
                     onChange={(e) => setReceipt({ ...receipt, decimalSeparator: e.target.value })}
                   >
@@ -507,8 +510,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   </select>
                 </div>
                 <div className="retail-options-field">
-                  <label>{l10n.getString('settings-paper-width-label')}</label>
+                  <label htmlFor="receipt-paper-width">{l10n.getString('settings-paper-width-label')}</label>
                 <select
+                  id="receipt-paper-width"
                   value={receipt.paperWidth}
                   onChange={(e) => setReceipt({ ...receipt, paperWidth: e.target.value })}
                 >
@@ -521,8 +525,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </select>
                 </div>
                 <div className="retail-options-field">
-                <label>{l10n.getString('settings-field-footer')}</label>
+                <label htmlFor="receipt-footer">{l10n.getString('settings-field-footer')}</label>
                 <textarea
+                  id="receipt-footer"
                   rows={2}
                   value={receipt.footer}
                   onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })}
@@ -532,32 +537,36 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               <h4 style={{ margin: '16px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>{l10n.getString('settings-margins-heading')}</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
                 <div className="retail-options-field">
-                  <label>{l10n.getString('settings-margin-top')}</label>
+                  <label htmlFor="receipt-margin-top">{l10n.getString('settings-margin-top')}</label>
                   <input
+                    id="receipt-margin-top"
                     type="number" min={0} max={50}
                     value={receipt.marginTop}
                     onChange={(e) => setReceipt({ ...receipt, marginTop: Math.max(0, Number(e.target.value)) })}
                   />
                 </div>
                 <div className="retail-options-field">
-                  <label>{l10n.getString('settings-margin-bottom')}</label>
+                  <label htmlFor="receipt-margin-bottom">{l10n.getString('settings-margin-bottom')}</label>
                   <input
+                    id="receipt-margin-bottom"
                     type="number" min={0} max={50}
                     value={receipt.marginBottom}
                     onChange={(e) => setReceipt({ ...receipt, marginBottom: Math.max(0, Number(e.target.value)) })}
                   />
                 </div>
                 <div className="retail-options-field">
-                  <label>{l10n.getString('settings-margin-left')}</label>
+                  <label htmlFor="receipt-margin-left">{l10n.getString('settings-margin-left')}</label>
                   <input
+                    id="receipt-margin-left"
                     type="number" min={0} max={50}
                     value={receipt.marginLeft}
                     onChange={(e) => setReceipt({ ...receipt, marginLeft: Math.max(0, Number(e.target.value)) })}
                   />
                 </div>
                 <div className="retail-options-field">
-                  <label>{l10n.getString('settings-margin-right')}</label>
+                  <label htmlFor="receipt-margin-right">{l10n.getString('settings-margin-right')}</label>
                   <input
+                    id="receipt-margin-right"
                     type="number" min={0} max={50}
                     value={receipt.marginRight}
                     onChange={(e) => setReceipt({ ...receipt, marginRight: Math.max(0, Number(e.target.value)) })}
@@ -576,8 +585,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
             <div className="retail-options-section">
               <h3 className="retail-options-heading">{l10n.getString('settings-printer-heading')}</h3>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-connection-label')}</label>
+                <label htmlFor="printer-connection">{l10n.getString('settings-connection-label')}</label>
                 <select
+                  id="printer-connection"
                   value={hardware.printerConnection}
                   onChange={(e) => setHardware({ ...hardware, printerConnection: e.target.value })}
                 >
@@ -588,16 +598,18 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </select>
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-device-path-label')}</label>
+                <label htmlFor="printer-device-path">{l10n.getString('settings-device-path-label')}</label>
                 <input
+                  id="printer-device-path"
                   placeholder={l10n.getString('settings-device-path-placeholder')}
                   value={hardware.printerDevicePath}
                   onChange={(e) => setHardware({ ...hardware, printerDevicePath: e.target.value })}
                 />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-printer-paper-size-label')}</label>
+                <label htmlFor="printer-paper-size">{l10n.getString('settings-printer-paper-size-label')}</label>
                 <select
+                  id="printer-paper-size"
                   value={hardware.printerPaperSize}
                   onChange={(e) => setHardware({ ...hardware, printerPaperSize: e.target.value })}
                 >
@@ -624,8 +636,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </div>
               ) : (
                 <div className="retail-options-field">
-                  <label>{l10n.getString('settings-scanner-device-label')}</label>
+                  <label htmlFor="scanner-device">{l10n.getString('settings-scanner-device-label')}</label>
                   <select
+                    id="scanner-device"
                     value={hardware.scannerDeviceId}
                     onChange={(e) => setHardware({ ...hardware, scannerDeviceId: e.target.value })}
                   >
@@ -636,12 +649,13 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </div>
               )}
               <div className="retail-options-field retail-options-field--row">
-                <label>{l10n.getString('settings-auto-add-label')}</label>
-                <input type="checkbox" checked disabled />
+                <label htmlFor="scanner-auto-add">{l10n.getString('settings-auto-add-label')}</label>
+                <input id="scanner-auto-add" type="checkbox" checked disabled />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-input-mode-label')}</label>
+                <label htmlFor="scanner-input-mode">{l10n.getString('settings-input-mode-label')}</label>
                 <select
+                  id="scanner-input-mode"
                   value={hardware.scannerInputMode}
                   onChange={(e) => setHardware({ ...hardware, scannerInputMode: e.target.value })}
                 >
@@ -657,8 +671,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
             <div className="retail-options-section">
               <h3 className="retail-options-heading">{l10n.getString('settings-credit-heading')}</h3>
               <div className="retail-options-field retail-options-field--row">
-                <label>{l10n.getString('settings-enable-credit-label')}</label>
+                <label htmlFor="credit-enabled">{l10n.getString('settings-enable-credit-label')}</label>
                 <input
+                  id="credit-enabled"
                   type="checkbox"
                   checked={credit.enabled}
                   onChange={(e) => setCredit({ ...credit, enabled: e.target.checked })}
@@ -667,8 +682,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               {credit.enabled && (
                 <>
                   <div className="retail-options-field">
-                    <label>{l10n.getString('settings-reminder-interval-label')}</label>
+                    <label htmlFor="credit-reminder-interval">{l10n.getString('settings-reminder-interval-label')}</label>
                     <input
+                      id="credit-reminder-interval"
                       type="number" min={1} max={720}
                       value={credit.reminderIntervalHours}
                       onChange={(e) => setCredit({ ...credit, reminderIntervalHours: Math.max(1, Number(e.target.value)) })}
@@ -678,8 +694,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                     </span>
                   </div>
                   <div className="retail-options-field">
-                    <label>{l10n.getString('settings-max-credit-label')}</label>
+                    <label htmlFor="credit-max-credit">{l10n.getString('settings-max-credit-label')}</label>
                     <input
+                      id="credit-max-credit"
                       type="number" min={0}
                       value={credit.maxLimitMinor / 100}
                       onChange={(e) => setCredit({ ...credit, maxLimitMinor: Math.max(0, Math.round(Number(e.target.value) * 100)) })}
@@ -734,12 +751,13 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
               {/* ── Stripe ──────────────────────── */}
               <details style={{ marginBottom: 12 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }} aria-label="Stripe">
                   💳 Stripe
                 </summary>
                 <div className="retail-options-field" style={{ marginTop: 8 }}>
-                  <label>{l10n.getString('settings-stripe-api-key') || 'Stripe API Key'}</label>
+                  <label htmlFor="payments-stripe-key">{l10n.getString('settings-stripe-api-key') || 'Stripe API Key'}</label>
                   <input
+                    id="payments-stripe-key"
                     type="password"
                     placeholder={l10n.getString('settings-stripe-key-placeholder') || 'sk_live_...'}
                     value={stripeKey}
@@ -753,12 +771,13 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
               {/* ── Square ─────────────────────── */}
               <details style={{ marginBottom: 12 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }} aria-label="Square">
                   🟦 Square
                 </summary>
                 <div className="retail-options-field" style={{ marginTop: 8 }}>
-                  <label>{l10n.getString('settings-square-api-key') || 'Square API Key'}</label>
+                  <label htmlFor="payments-square-key">{l10n.getString('settings-square-api-key') || 'Square API Key'}</label>
                   <input
+                    id="payments-square-key"
                     type="password"
                     placeholder={l10n.getString('settings-square-key-placeholder') || 'sq0atp-...'}
                     value={squareKey}
@@ -772,12 +791,13 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
               {/* ── QRIS (Midtrans) ────────────── */}
               <details style={{ marginBottom: 12 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }} aria-label="QRIS Midtrans">
                   📱 QRIS (Midtrans)
                 </summary>
                 <div className="retail-options-field" style={{ marginTop: 8 }}>
-                  <label>{l10n.getString('settings-midtrans-key') || 'Midtrans Server Key'}</label>
+                  <label htmlFor="payments-midtrans-key">{l10n.getString('settings-midtrans-key') || 'Midtrans Server Key'}</label>
                   <input
+                    id="payments-midtrans-key"
                     type="password"
                     placeholder={l10n.getString('settings-midtrans-key-placeholder') || 'Mid-server-...'}
                     value={midtransKey}
@@ -798,11 +818,12 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               </p>
               {tenderPresets.map((val, idx) => (
                 <div key={idx} className="retail-options-field" style={{ marginBottom: 4 }}>
-                  <Localized id="settings-tender-preset-label" vars={{ n: idx + 1 }}>
-                    <label>{`Preset ${idx + 1}`}</label>
-                  </Localized>
+                  <label htmlFor={`payments-tender-preset-${idx + 1}`}>
+                    {l10n.getString('settings-tender-preset-label', { n: idx + 1 }) ?? `Preset ${idx + 1}`}
+                  </label>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input
+                      id={`payments-tender-preset-${idx + 1}`}
                       type="number"
                       min={0}
                       step={100}
@@ -812,10 +833,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                         const v = Math.max(0, Math.round(Number(e.target.value) / 100) * 100);
                         setTenderPresets((prev) => prev.map((p, i) => (i === idx ? v : p)));
                       }}
-                      aria-label={`Preset ${idx + 1} amount`}
                     />
                     <span style={{ fontSize: 12, color: '#888' }}>
-                      Rp {(val).toLocaleString('id-ID')}
+                      {store.currency} {(val).toLocaleString('id-ID')}
                     </span>
                     <button
                       type="button"
@@ -852,20 +872,21 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
             <div className="retail-options-section">
               <h3 className="retail-options-heading">{l10n.getString('settings-system-heading')}</h3>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-app-version-label')}</label>
-                <input value="0.0.3" disabled style={{ background: '#e8e8e8', color: '#888' }} />
+                <label htmlFor="system-app-version">{l10n.getString('settings-app-version-label')}</label>
+                <input id="system-app-version" value="0.0.3" disabled style={{ background: '#e8e8e8', color: '#888' }} />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-cashier-label')}</label>
-                <input value={`${session?.display_name} (${session?.role_name})`} disabled style={{ background: '#e8e8e8', color: '#888' }} />
+                <label htmlFor="system-cashier">{l10n.getString('settings-cashier-label')}</label>
+                <input id="system-cashier" value={`${session?.display_name} (${session?.role_name})`} disabled style={{ background: '#e8e8e8', color: '#888' }} />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-terminal-label')}</label>
-                  <input value="local" disabled style={{ background: '#e8e8e8', color: '#888' }} />
+                <label htmlFor="system-terminal">{l10n.getString('settings-terminal-label')}</label>
+                  <input id="system-terminal" value="local" disabled style={{ background: '#e8e8e8', color: '#888' }} />
               </div>
               <div className="retail-options-field retail-options-field--row">
-                <label>{l10n.getString('settings-theme-label')}</label>
+                <label htmlFor="system-theme">{l10n.getString('settings-theme-label')}</label>
                 <select
+                  id="system-theme"
                   value={theme}
                   onChange={(e) => onThemeChange?.(e.target.value as 'light' | 'dark')}
                   style={{ padding: '4px 8px', fontSize: 12 }}
@@ -875,12 +896,12 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </select>
               </div>
               <div className="retail-options-field retail-options-field--row">
-                <label>{l10n.getString('settings-sound-label') || 'Sound Effects'}</label>
+                <label htmlFor="system-sound">{l10n.getString('settings-sound-label') || 'Sound Effects'}</label>
                 <input
+                  id="system-sound"
                   type="checkbox"
                   checked={soundEnabled}
                   onChange={(e) => setSoundEnabledLocal(e.target.checked)}
-                  aria-label={l10n.getString('settings-sound-aria') || 'Toggle sound effects'}
                 />
               </div>
               <div className="retail-options-field">
@@ -888,8 +909,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 <LanguageSelector />
               </div>
               <div className="retail-options-field">
-                <label>{l10n.getString('settings-auto-lock-label')}</label>
+                <label htmlFor="system-auto-lock">{l10n.getString('settings-auto-lock-label')}</label>
                 <input
+                  id="system-auto-lock"
                   type="number" min={1} max={120}
                   style={{ width: 80 }}
                   value={autoLockMinutes}
@@ -926,9 +948,10 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                     {l10n.getString('settings-display-count', { count: displays.length }) || `${displays.length} display(s) connected`}
                   </p>
                   <div className="retail-options-field">
-                    <label>{l10n.getString('settings-display-test-label') || 'Test Message'}</label>
+                    <label htmlFor="system-display-test">{l10n.getString('settings-display-test-label') || 'Test Message'}</label>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <input
+                        id="system-display-test"
                         type="text"
                         style={{ flex: 1 }}
                         placeholder={l10n.getString('settings-display-test-placeholder') || 'Welcome to our store!'}
@@ -993,13 +1016,13 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               <h3 className="retail-options-heading">{l10n.getString('settings-sync-heading') || 'Cloud Sync'}</h3>
 
               <div className="retail-options-field retail-options-field--row">
-                <label>{l10n.getString('settings-sync-enabled-label') || 'Enable cloud sync'}</label>
+                <label htmlFor="sync-enabled">{l10n.getString('settings-sync-enabled-label') || 'Enable cloud sync'}</label>
                 <input
+                  id="sync-enabled"
                   type="checkbox"
                   checked={sync.enabled}
                   onChange={(e) => sync.setEnabled(e.target.checked)}
                   disabled={!sync.serverURL.trim()}
-                  aria-label={l10n.getString('settings-sync-enabled-label') || 'Enable cloud sync'}
                 />
               </div>
 
@@ -1130,8 +1153,14 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         </div>
       </div>
       {showPreview && (
-        <div className="retail-preview-overlay" role="button" tabIndex={0} onClick={() => setShowPreview(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(false); } }}>
-          <div className="retail-preview-modal" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); } }}>
+        <div
+          className="retail-preview-overlay"
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowPreview(false); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(false); } }}
+        >
+          <div className="retail-preview-modal" role="dialog" aria-modal="true" aria-label={l10n.getString('settings-receipt-heading')}>
             <button className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
             <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={[]} scale={SCALE} />
           </div>

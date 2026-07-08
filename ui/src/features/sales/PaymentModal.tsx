@@ -304,7 +304,10 @@ export default function PaymentModal({
       const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
         ? Object.entries(serialNumbers)
             .filter(([_, s]) => s.trim().length > 0)
-            .map(([sku, serial]) => ({ sku, serial }))
+            .map(([lineId, serial]) => {
+              const line = lineItems.find((l) => String(l.id) === lineId);
+              return { sku: String(line?.sku ?? lineId), serial };
+            })
         : undefined;
       const saleResult = await completeSale({
         cartId,
@@ -564,7 +567,10 @@ export default function PaymentModal({
       const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
         ? Object.entries(serialNumbers)
             .filter(([_, s]) => s.trim().length > 0)
-            .map(([sku, serial]) => ({ sku, serial }))
+            .map(([lineId, serial]) => {
+              const line = lineItems.find((l) => String(l.id) === lineId);
+              return { sku: String(line?.sku ?? lineId), serial };
+            })
         : undefined;
       const saleResult = await completeSale({
         cartId,
