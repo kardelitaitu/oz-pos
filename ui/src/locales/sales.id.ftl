@@ -568,6 +568,16 @@ payment-split-remaining = Sisa
 payment-split-toggle = Bagi pembayaran antar metode
 payment-cancel = Batal
 payment-open-bill = Tagihan Terbuka
+payment-credit-sale = Penjualan Kredit
+payment-customer-name = Nama Pelanggan
+payment-customer-name-label = Nama Pelanggan
+payment-customer-change = Ganti
+payment-customer-select = Pilih Pelanggan
+payment-loyalty-use-points = Gunakan Poin
+payment-loyalty-points-label = Poin
+payment-customer-search-heading = Pilih Pelanggan
+payment-customer-search-loading = Memuat…
+payment-customer-search-empty = Tidak ada pelanggan
 payment-complete = Selesaikan
 
 # ── Shift (remaining) ──

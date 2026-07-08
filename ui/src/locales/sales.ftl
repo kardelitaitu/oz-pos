@@ -110,6 +110,16 @@ payment-split-remaining = Remaining
 payment-split-toggle = Split payment across methods
 payment-cancel = Cancel
 payment-open-bill = Open Bill
+payment-credit-sale = Credit Sale
+payment-customer-name = Customer Name
+payment-customer-name-label = Customer Name
+payment-customer-change = Change
+payment-customer-select = Select Customer
+payment-loyalty-use-points = Use Points
+payment-loyalty-points-label = Points
+payment-customer-search-heading = Select Customer
+payment-customer-search-loading = Loading…
+payment-customer-search-empty = No customers found
 payment-complete = Complete
 
 # Sales History

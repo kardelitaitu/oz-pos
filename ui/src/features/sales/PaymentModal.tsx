@@ -88,6 +88,7 @@ export default function PaymentModal({
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState<CustomerDto[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const allCustomersRef = useRef<CustomerDto[]>([]);
   const [leaving, setLeaving] = useState(false);
   const leaveCb = useRef<(() => void) | null>(null);
 
@@ -186,22 +187,29 @@ export default function PaymentModal({
     setLoadingCustomers(true);
     listCustomers()
       .then((customers) => {
-        const q = customerSearchQuery.trim().toLowerCase();
-        if (!q) {
-          setCustomerSearchResults(customers);
-        } else {
-          setCustomerSearchResults(
-            customers.filter(
-              (c) =>
-                c.name.toLowerCase().includes(q) ||
-                (c.phone && c.phone.includes(q)) ||
-                (c.email && c.email.toLowerCase().includes(q)),
-            ),
-          );
-        }
+        allCustomersRef.current = customers;
+        setCustomerSearchResults(customers);
       })
       .catch(() => setCustomerSearchResults([]))
       .finally(() => setLoadingCustomers(false));
+  }, [showCustomerSearch]);
+
+  useEffect(() => {
+    if (!showCustomerSearch) return;
+    const customers = allCustomersRef.current;
+    const q = customerSearchQuery.trim().toLowerCase();
+    if (!q) {
+      setCustomerSearchResults(customers);
+    } else {
+      setCustomerSearchResults(
+        customers.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.phone && c.phone.includes(q)) ||
+            (c.email && c.email.toLowerCase().includes(q)),
+        ),
+      );
+    }
   }, [showCustomerSearch, customerSearchQuery]);
 
   const totalMinor = useMemo(() => BigInt(total.minor_units), [total.minor_units]);
@@ -897,7 +905,7 @@ export default function PaymentModal({
                         onChange={() => setMethod('open_bill')}
                       />
                       <span className="payment-method-name">
-                        Open Bill
+                        <Localized id="payment-open-bill"><span>Open Bill</span></Localized>
                       </span>
                     </label>
                   </div>
@@ -906,13 +914,9 @@ export default function PaymentModal({
                 {(method === 'open_bill' || method === 'credit') && (
                   <div className="payment-open-bill-section">
                     <label className="payment-customer-label">
-                      {method === 'credit' ? (
-                        <span>Customer Name (for credit)</span>
-                      ) : (
-                        <Localized id="payment-customer-name">
-                          <span>Customer Name</span>
-                        </Localized>
-                      )}
+                      <Localized id="payment-customer-name">
+                        <span>Customer Name</span>
+                      </Localized>
                       <Localized id="payment-customer-name-aria" attrs={{ 'aria-label': true }}>
                       <input
                         type="text"
@@ -955,7 +959,7 @@ export default function PaymentModal({
                             className="payment-quick-btn"
                             onClick={() => setTendered(quickVal.toFixed(2))}
                           >
-                            Rp {quickVal.toLocaleString('id-ID')}
+                            {total.currency} {quickVal.toLocaleString('id-ID')}
                           </button>
                           </Localized>
                         );
@@ -1085,7 +1089,7 @@ export default function PaymentModal({
                         </div>
                       </div>
                       <div className="payment-split-amount-group">
-                        <span className="payment-split-currency">$</span>
+                        <span className="payment-split-currency">{total.currency}</span>
                         <Localized id="payment-split-amount-aria" attrs={{ 'aria-label': true }}>
                         <Localized id="payment-split-amount-placeholder" attrs={{ placeholder: true }}>
                           <input
@@ -1149,13 +1153,15 @@ export default function PaymentModal({
                     <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
                   </svg>
                   <span className="payment-customer-name">{selectedCustomer.name}</span>
-                  <button
-                    type="button"
-                    className="payment-customer-change"
-                    onClick={() => setShowCustomerSearch(true)}
-                  >
-                    Change
-                  </button>
+                  <Localized id="payment-customer-change">
+                    <button
+                      type="button"
+                      className="payment-customer-change"
+                      onClick={() => setShowCustomerSearch(true)}
+                    >
+                      <span>Change</span>
+                    </button>
+                  </Localized>
                   <button
                     type="button"
                     className="payment-customer-remove"
@@ -1165,16 +1171,18 @@ export default function PaymentModal({
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  className="payment-customer-select-btn"
-                  onClick={() => setShowCustomerSearch(true)}
-                >
-                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-                    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
-                  </svg>
-                  Select Customer
-                </button>
+                <Localized id="payment-customer-select">
+                  <button
+                    type="button"
+                    className="payment-customer-select-btn"
+                    onClick={() => setShowCustomerSearch(true)}
+                  >
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+                      <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
+                    </svg>
+                    <span>Select Customer</span>
+                  </button>
+                </Localized>
               )}
             </div>
 
@@ -1191,21 +1199,23 @@ export default function PaymentModal({
                   </span>
                 </div>
                 {loyaltyAccount.account.points > 0 && !redeemPoints && (
-                  <button
-                    type="button"
-                    className="payment-loyalty-redeem-btn"
-                    onClick={() => {
-                      setRedeemPoints(true);
-                      setPointsToRedeem(loyaltyAccount.account.points);
-                    }}
-                  >
-                    Use Points
-                  </button>
+                  <Localized id="payment-loyalty-use-points">
+                    <button
+                      type="button"
+                      className="payment-loyalty-redeem-btn"
+                      onClick={() => {
+                        setRedeemPoints(true);
+                        setPointsToRedeem(loyaltyAccount.account.points);
+                      }}
+                    >
+                      <span>Use Points</span>
+                    </button>
+                  </Localized>
                 )}
                 {redeemPoints && (
                   <div className="payment-loyalty-active">
                     <div className="payment-loyalty-input-row">
-                      <span className="payment-loyalty-input-label">Points</span>
+                      <Localized id="payment-loyalty-points-label"><span className="payment-loyalty-input-label">Points</span></Localized>
                       <input
                         type="number"
                         className="payment-loyalty-input"
@@ -1225,17 +1235,19 @@ export default function PaymentModal({
                         currency: total.currency,
                       } as Money)}
                     </span>
-                    <button
-                      type="button"
-                      className="payment-loyalty-cancel-btn"
-                      onClick={() => {
-                        setRedeemPoints(false);
-                        setPointsToRedeem(0);
-                        setLoyaltyDiscount(0n);
-                      }}
-                    >
-                      Cancel
-                    </button>
+                    <Localized id="payment-cancel">
+                      <button
+                        type="button"
+                        className="payment-loyalty-cancel-btn"
+                        onClick={() => {
+                          setRedeemPoints(false);
+                          setPointsToRedeem(0);
+                          setLoyaltyDiscount(0n);
+                        }}
+                      >
+                        <span>Cancel</span>
+                      </button>
+                    </Localized>
                   </div>
                 )}
               </div>
@@ -1244,7 +1256,9 @@ export default function PaymentModal({
             {showCustomerSearch && (
               <div className="payment-customer-search-overlay" role="button" tabIndex={0} onClick={() => setShowCustomerSearch(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCustomerSearch(false); } }}>
                 <div className="payment-customer-search-modal" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); } }}>
-                  <h3 className="payment-customer-search-heading">Select Customer</h3>
+                  <Localized id="payment-customer-search-heading">
+                    <h3 className="payment-customer-search-heading">Select Customer</h3>
+                  </Localized>
                   <input
                     className="payment-customer-search-input"
                     type="text"
@@ -1254,9 +1268,13 @@ export default function PaymentModal({
                   />
                   <div className="payment-customer-search-list">
                     {loadingCustomers ? (
-                      <div className="payment-customer-search-loading">Loading...</div>
+                      <Localized id="payment-customer-search-loading">
+                        <div className="payment-customer-search-loading">Loading...</div>
+                      </Localized>
                     ) : customerSearchResults.length === 0 ? (
-                      <div className="payment-customer-search-empty">No customers found</div>
+                      <Localized id="payment-customer-search-empty">
+                        <div className="payment-customer-search-empty">No customers found</div>
+                      </Localized>
                     ) : (
                       customerSearchResults.map((c) => (
                         <button
@@ -1278,12 +1296,14 @@ export default function PaymentModal({
                       ))
                     )}
                   </div>
-                  <button
-                    className="payment-customer-search-close"
-                    onClick={() => setShowCustomerSearch(false)}
-                  >
-                    Cancel
-                  </button>
+                  <Localized id="payment-cancel">
+                    <button
+                      className="payment-customer-search-close"
+                      onClick={() => setShowCustomerSearch(false)}
+                    >
+                      <span>Cancel</span>
+                    </button>
+                  </Localized>
                 </div>
               </div>
             )}
@@ -1305,7 +1325,7 @@ export default function PaymentModal({
                     <span>Open Bill</span>
                   </Localized>
                 ) : method === 'credit' ? (
-                  <span>Credit Sale</span>
+                  <Localized id="payment-credit-sale"><span>Credit Sale</span></Localized>
                 ) : (
                   <Localized id="payment-complete">
                     <span>Complete Sale</span>
