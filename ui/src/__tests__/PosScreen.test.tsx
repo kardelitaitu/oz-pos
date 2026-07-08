@@ -845,4 +845,5 @@ describe('PosScreen – bundle scanning toast', () => {
     });
     expect(screen.getByText(/Cart is empty/)).toBeInTheDocument();
   });
+
 });

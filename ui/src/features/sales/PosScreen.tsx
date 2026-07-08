@@ -25,6 +25,7 @@ import { animDuration } from '@/utils/animation';
 import { triggerInteraction } from '@/utils/interaction';
 import { useSwipe } from '@/hooks/useSwipe';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { useAnimatedUndoStack } from '@/hooks/useAnimatedUndoStack';
 import {
   holdCart,
   listOpenBills,
@@ -800,103 +801,41 @@ export default function PosScreen() {
 
   // ── Multi-step undo stack ───────────────────────────────────
   // Each removed line is pushed onto the stack. Pressing Undo pops
-  // the most recent one and re-inserts it. The stack holds up to 5
-  // entries so the cashier can recover from a batch of mistakes.
-  const MAX_UNDO = 5;
-  const [undoStack, setUndoStack] = useState<CartLine[]>([]);
+  // the most recent one and re-inserts it. The state machine and
+  // race-safe exit fade are owned by `useAnimatedUndoStack` so the
+  // contract can be tested directly via renderHook — bypassing the
+  // CartLineItem 200ms exit timer that prevents concurrent pushes
+  // from landing during the fade on the component layer. MAX size
+  // 5 so the cashier can recover from a batch of mistakes.
+  const animatedUndoStack = useAnimatedUndoStack<CartLine>({
+    maxSize: 5,
+    getId: (line) => String(line.id),
+  });
 
-  // ── Undo-bar exit animation ──────────────────────────────────
-  // When the pill is dismissed OR the last stack item is popped,
-  // PosScreen applies the .pos-cart-undo-bar--exiting class so the
-  // mirror keyframe pos-cart-undo-out fades it down smoothly before
-  // unmount. animDuration(200) returns 0 under prefers-reduced-motion,
-  // so the pill snaps away as expected for users who suppress motion.
-  // The CSS duration (var(--duration-200)) and this timer stay aligned.
-  const [undoExiting, setUndoExiting] = useState(false);
-
-  // Live-mirror of undoStack so the exit-timer callback can read
-  // the post-snapshot value if the cashier removes another cart
-  // line during the 200 ms exit window (the useCallback's
-  // closure would otherwise only see the dismiss-time stack).
-  const undoStackRef = useRef<CartLine[]>(undoStack);
-  useEffect(() => {
-    undoStackRef.current = undoStack;
-  }, [undoStack]);
-
-  // Holds the dismiss-time snapshot and the pending exit timer
-  // so we can clear a stale timer if the cashier dismisses twice,
-  // abort the cleanup when concurrent pushes change the live stack,
-  // and cancel the timer if PosScreen unmounts mid-animation.
-  const undoExitSnapshotRef = useRef<CartLine[] | null>(null);
-  const undoExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Cancel any pending exit timer if PosScreen unmounts mid-anim
-  // so we never setState against an unmounted component.
-  useEffect(() => {
-    return () => {
-      if (undoExitTimerRef.current !== null) {
-        clearTimeout(undoExitTimerRef.current);
-        undoExitTimerRef.current = null;
-      }
-    };
-  }, []);
-
+  // Push a removed cart line onto the undo stack so the cashier
+  // can recover up to the last 5 removes via the floating pill.
   const handleRemoveLine = useCallback((line: CartLine) => {
     removeLine(line.id);
-    setUndoStack((prev) => [line, ...prev].slice(0, MAX_UNDO));
-  }, [removeLine]);
+    animatedUndoStack.push(line);
+  }, [removeLine, animatedUndoStack]);
 
-  const clearUndoStackAnimated = useCallback(() => {
-    if (undoStack.length === 0) {
-      setUndoExiting(false);
-      return;
-    }
-    // Capture the dismiss-time snapshot so concurrent pushes
-    // during the fade aren't silently wiped by the timer.
-    undoExitSnapshotRef.current = undoStack;
-    setUndoExiting(true);
-    if (undoExitTimerRef.current !== null) {
-      clearTimeout(undoExitTimerRef.current);
-    }
-    undoExitTimerRef.current = setTimeout(() => {
-      const liveStack = undoStackRef.current;
-      const snapshot = undoExitSnapshotRef.current;
-      // Compare by id-set rather than ref equality because the
-      // cashier can slice/push the live stack during the fade.
-      // If the live stack still matches the snapshot exactly,
-      // no concurrent activity happened and it is safe to clear;
-      // otherwise keep the live state alone and just retire the
-      // visual exit so the new stack keeps its entry animation.
-      const liveIds = new Set(liveStack.map((l) => l.id));
-      const sameAsSnapshot =
-        snapshot !== null &&
-        liveIds.size === snapshot.length &&
-        snapshot.every((l) => liveIds.has(l.id));
-      if (sameAsSnapshot) {
-        setUndoStack([]);
-      }
-      setUndoExiting(false);
-      undoExitSnapshotRef.current = null;
-      undoExitTimerRef.current = null;
-    }, animDuration(200));
-  }, [undoStack, animDuration]);
-
+  // Pop the top of the undo stack and re-insert the line into the
+  // cart. When the pop empties the stack, the hook schedules the
+  // fade so the pill unmounts via the exit keyframe instead of
+  // snapping away.
   const handleUndoRemove = useCallback(() => {
-    if (undoStack.length === 0) return;
+    const popped = animatedUndoStack.pop();
+    if (popped === undefined) return;
     triggerInteraction('undo-cart');
-    setLines((prev) => [undoStack[0]!, ...prev]);
-    if (undoStack.length === 1) {
-      // Popping the last item — fade the pill out via the exit
-      // animation instead of snapping it away synchronously.
-      clearUndoStackAnimated();
-    } else {
-      setUndoStack((prev) => prev.slice(1));
-    }
-  }, [undoStack, setLines, clearUndoStackAnimated]);
+    setLines((prev) => [popped, ...prev]);
+  }, [animatedUndoStack, setLines]);
 
+  // Dismiss the pill via the race-safe exit fade. Concurrent
+  // pushes during the 200 ms window abort the clear (see the
+  // useAnimatedUndoStack contract + the applyExitAnimation skill).
   const handleDismissUndo = useCallback(() => {
-    clearUndoStackAnimated();
-  }, [clearUndoStackAnimated]);
+    animatedUndoStack.dismiss();
+  }, [animatedUndoStack]);
 
   const handleDecreaseQty = useCallback((line: CartLine) => {
     updateQty(line.id, line.qty - 1);
@@ -1494,9 +1433,9 @@ export default function PosScreen() {
           )}
 
           {/* ── Undo floating pill (bottom-right of cart lines) ── */}
-          {undoStack.length > 0 && (
+          {animatedUndoStack.shouldRender && (
             <div
-              className={`pos-cart-undo-bar${undoExiting ? ' pos-cart-undo-bar--exiting' : ''}`}
+              className={`pos-cart-undo-bar${animatedUndoStack.isExiting ? ' pos-cart-undo-bar--exiting' : ''}`}
               role="status"
               aria-live="polite"
             >
