@@ -66,8 +66,14 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     step "ui lint" "cd ui; npm run lint" npm run lint
     step "ui typecheck" "cd ui; npm run typecheck" npm run typecheck
     step "ui test" "cd ui; npm run test" npm run test
-    step "ui build" "cd ui; npm run build" npm run build
+    # i18n lint: runs AFTER ui test (which proves vitest works) but
+    # BEFORE ui build (which is ~30s). Fail-fast on a ~1s lint check
+    # so contributors don't pay the full build cost for a translation
+    # gap. Detects translation gaps and Fluent key duplicates in
+    # `ui/src/locales/*.id.ftl` before they reach CI.
     cd ..
+    step "i18n lint" "bash scripts/lint-i18n.sh" bash scripts/lint-i18n.sh
+    step "ui build" "cd ui; npm run build" npm run build
 else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
 fi
