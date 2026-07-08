@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './UpdateBanner.css';
 import type * as UpdaterModule from '@tauri-apps/plugin-updater';
 
@@ -83,13 +84,23 @@ export default function UpdateBanner() {
     }
   }, [updateInstance]);
 
-  if (!update.available || dismissed) {
+  // Mirror the entry keyframe with a 200ms exit fade so the × dismiss
+  // doesn't snap. Install path bypasses the hook entirely: Tauri
+  // either restarts (banner would unmount via the parent route
+  // unmount) or fails (banner stays visible, no dismiss needed).
+  // Per project exit-animation-pattern skill (commit 2d8bab9 sibling).
+  const exit = useExitAnimation(
+    update.available && !dismissed,
+    () => setDismissed(true),
+  );
+
+  if (!exit.shouldRender) {
     return null;
   }
 
   return (
     <div
-      className="update-banner"
+      className={`update-banner${exit.exiting ? ' update-banner--exiting' : ''}`}
       role="alert"
       aria-live="polite"
     >
@@ -128,7 +139,8 @@ export default function UpdateBanner() {
         <button
           type="button"
           className="update-banner-btn update-banner-btn--dismiss"
-          onClick={() => setDismissed(true)}
+          onClick={() => exit.requestClose()}
+          disabled={exit.exiting}
           aria-label={l10n.getString('update-banner-dismiss-aria')}
         >
           <svg

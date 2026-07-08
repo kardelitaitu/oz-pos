@@ -5,6 +5,7 @@ import { processRefund, type SaleDetail } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney, type Money } from '@/types/domain';
 import { Button } from '@/components/Button';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './RefundModal.css';
 
 interface RefundModalProps {
@@ -88,17 +89,45 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
     }
   }, [session, hasSelection, reason, note, selectedLines, sale, l10n]);
 
+ 
+
+  // Mirror the entry animations with a 200ms layered exit fade so the
+  // × / Cancel / Done buttons don't snap. Mirrors PosScreen's cousin-
+  // modals pattern (commit 1408992): the overlay and modal container
+  // each get their own `--exiting` class so two mirrored keyframes
+  // play in parallel. Declared BEFORE handleDone so the callback can
+  // reference it.
+  const exit = useExitAnimation(open, onClose);
+
   const handleDone = useCallback(() => {
+    // Notify the parent FIRST (so any post-refund side effects —
+    // toast, refresh ledger, etc — happen immediately, not after
+    // the 200 ms fade). Then trigger the fade-out via the hook; the
+    // hook will call `onClose()` (the prop) after the fade, which
+    // flips the parent's `open` to false and unmounts.
     onRefunded();
-    onClose();
-  }, [onRefunded, onClose]);
+    exit.requestClose();
+  }, [onRefunded, exit.requestClose]);
 
-  if (!open) return null;
+  if (!exit.shouldRender) return null;
 
+  // Use direct aria-label rather than wrapping in <Localized attrs>.
+  // Observed in jsdom tests (in this codebase) to render the dialog
+  // body empty when <Localized attrs={{ 'aria-label': true }}> wraps
+  // a complex overlay with deep nested children. Regardless, the
+  // direct-aria-label pattern matches 124+ established usages in this
+  // codebase for dialog overlays (PaymentModal, ShiftManagementScreen,
+  // every *ManagementScreen modal) so it's the safer choice here.
   return (
-    <Localized id="refund-dialog-aria" attrs={{ 'aria-label': true }}>
-      <div className="refund-overlay" role="dialog" aria-modal="true" aria-label="Process refund">
-        <div className="refund-modal">
+    <div
+      className={`refund-overlay${exit.exiting ? ' refund-overlay--exiting' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={l10n.getString('refund-dialog-aria')}
+    >
+      <div
+        className={`refund-modal${exit.exiting ? ' refund-modal--exiting' : ''}`}
+      >
         {result ? (
           <div className="refund-done">
             <Localized id="refund-done-title">
@@ -125,7 +154,13 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                 <h2 className="refund-title">Process Refund</h2>
               </Localized>
               <Localized id="refund-close-aria" attrs={{ 'aria-label': true }}>
-                <button type="button" className="refund-close" onClick={onClose} aria-label="Cancel refund">
+                <button
+                  type="button"
+                  className="refund-close"
+                  onClick={() => exit.requestClose()}
+                  disabled={exit.exiting}
+                  aria-label="Cancel refund"
+                >
                 &times;
               </button>
               </Localized>
@@ -243,7 +278,11 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
 
             <div className="refund-actions">
               <Localized id="refund-cancel">
-                <Button variant="ghost" onClick={onClose} disabled={processing}>
+                <Button
+                  variant="ghost"
+                  onClick={() => exit.requestClose()}
+                  disabled={processing || exit.exiting}
+                >
                   Cancel
                 </Button>
               </Localized>
@@ -260,8 +299,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
             </div>
           </>
         )}
-        </div>
       </div>
-    </Localized>
+    </div>
   );
 }

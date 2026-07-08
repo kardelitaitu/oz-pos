@@ -34,6 +34,27 @@
       transform: translateY(0);
     }
   }
+
+  /* ── Exit: mirror of slide-in (top → up + fade out) ─── */
+  /* Source order: entry rule → entry keyframe → exit keyframe
+                   → exit rule. animation-fill-mode: both holds the
+                   TO-frame across React unmount so there's no
+                   visual flash. pointer-events: none blocks stale
+                   clicks during the fade. */
+  @keyframes update-banner-slide-out {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-100%);
+    }
+  }
+  .update-banner--exiting {
+    animation: update-banner-slide-out var(--duration-200) var(--ease-out) both;
+    pointer-events: none;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -78,6 +78,46 @@
 .qris-qr-wrapper.qris-pulse {}
 
 @media (prefers-reduced-motion: no-preference) {
+  /* Entry + mirror exit (added in this PR for cohesion with cousin
+     modals). Before this PR the surface had no entry animation, so
+     adding the entry AND its exit mirror satisfies the skill's
+     rule #1 ("Mirror the existing entry keyframe exactly") without
+     introducing a brand-new motion token. */
+  .qris-overlay {
+    animation: qris-overlay-in var(--duration-200) var(--ease-out);
+  }
+  .qris-container {
+    animation: qris-container-in var(--duration-200) var(--ease-out);
+  }
+
+  @keyframes qris-overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes qris-container-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* Exit (the actual purpose of this PR). Layered: overlay +
+     container fade in parallel. */
+  @keyframes qris-overlay-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+  @keyframes qris-container-out {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.96); }
+  }
+  .qris-overlay--exiting {
+    animation: qris-overlay-out var(--duration-200) var(--ease-out) both;
+    pointer-events: none;
+  }
+  .qris-container--exiting {
+    animation: qris-container-out var(--duration-200) var(--ease-out) both;
+    pointer-events: none;
+  }
+
   .qris-qr-wrapper.qris-pulse {
     animation: qris-pulse 2s ease-in-out infinite;
   }

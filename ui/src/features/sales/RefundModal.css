@@ -241,6 +241,26 @@
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  /* ── Exit: mirror of overlay + modal layer (PosScreen cousin
+     pattern, commit 1408992). Layered exit so overlay fade-out
+     and modal slide-down play in parallel. */
+  @keyframes refund-overlay-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+  @keyframes refund-modal-slide-down {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(12px) scale(0.98); }
+  }
+  .refund-overlay--exiting {
+    animation: refund-overlay-out var(--duration-200, 200ms) var(--ease-out, ease-out) both;
+    pointer-events: none;
+  }
+  .refund-modal--exiting {
+    animation: refund-modal-slide-down var(--duration-200, 200ms) var(--ease-out, ease-out) both;
+    pointer-events: none;
+  }
 }
 
 /* ── Qty button: hover + focus-visible ───────────────────── */
