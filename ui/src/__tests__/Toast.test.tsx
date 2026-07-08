@@ -276,10 +276,8 @@ describe('ToastProvider + useToast', () => {
       // Mid-fade: enqueue `add-success` whose id was NOT in the
       // dismiss-time snapshot. The id-set compare in the timer
       // body detects the divergence and the new toast survives.
-      act(() => {
-        vi.advanceTimersByTime(100);
-        fireEvent.click(screen.getByTestId('add-success'));
-      });
+      act(() => { vi.advanceTimersByTime(100); });
+      fireEvent.click(screen.getByTestId('add-success'));
 
       act(() => { vi.advanceTimersByTime(100); });
 
@@ -296,17 +294,19 @@ describe('ToastProvider + useToast', () => {
       fireEvent.click(screen.getByTestId('add-error'));
       fireEvent.click(screen.getByTestId('clear-all'));
 
-      // Mid-fade: enqueue a third toast, then clearToasts again.
-      // The second clearAll re-snapshots [info, error, warning]
-      // and resets the timer so the warning toast is also cleared.
-      act(() => {
-        vi.advanceTimersByTime(50);
-        fireEvent.click(screen.getByTestId('add-warning'));
-        fireEvent.click(screen.getByTestId('clear-all'));
-      });
+      // Mid-fade (T+50): enqueue a third toast, then clearToasts
+      // again. The two fireEvent.click calls are intentionally NOT
+      // wrapped in an outer act(...) so each commits independently —
+      // RTL internally wraps each fireEvent in its own act, so the
+      // React commit + itemsRef refresh happen between the two
+      // clicks. The second clearAll's snapshot then includes the
+      // fresh `add-warning` and the timer removes all three.
+      act(() => { vi.advanceTimersByTime(50); });
+      fireEvent.click(screen.getByTestId('add-warning'));
+      fireEvent.click(screen.getByTestId('clear-all'));
 
       // Advance past the SECOND timer's deadline (200 ms from second clearAll).
-      act(() => { vi.advanceTimersByTime(200); });
+      act(() => { vi.advanceTimersByTime(300); });
 
       // All three (info, error, warning) were in the second snapshot, all gone.
       expect(document.querySelectorAll('.toast').length).toBe(0);
