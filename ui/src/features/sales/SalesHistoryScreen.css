@@ -47,6 +47,10 @@
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
+.sales-history-export-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
 
 /* ── Filter bar ──────────────────────────────────────────── */
 .sales-history-filters {
@@ -175,6 +179,10 @@
   background: var(--color-accent-dim);
   border-color: var(--color-accent);
 }
+.sales-history-clear-filters-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
 
 .sales-history-table-wrap {
   overflow-x: auto;
@@ -277,6 +285,10 @@
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
+.sales-history-action-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
 
 .sales-history-overlay {
   position: fixed;
@@ -286,6 +298,7 @@
   align-items: center;
   justify-content: center;
   z-index: 100;
+  animation: sales-history-overlay-in var(--duration-200) var(--ease-out);
 }
 
 .sales-history-modal {
@@ -296,6 +309,18 @@
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
+  animation: sales-history-modal-slide-up var(--duration-200) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes sales-history-overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes sales-history-modal-slide-up {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
 }
 
 .sales-history-modal-header {
@@ -320,6 +345,17 @@
   color: var(--color-fg-secondary);
   padding: var(--space-1);
   line-height: 1;
+  border-radius: var(--radius-md);
+  transition: background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out);
+}
+.sales-history-modal-close:hover {
+  background: color-mix(in srgb, var(--color-fg, #111) 10%, transparent);
+  color: var(--color-fg);
+}
+.sales-history-modal-close:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
 }
 
 .sales-history-modal-body {
@@ -566,8 +602,11 @@
   box-sizing: border-box;
 }
 
-.sales-history-void-input:focus {
-  border-color: var(--color-accent);
+.sales-history-void-input:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 0;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-border-focus) 20%, transparent);
 }
 
 .sales-history-void-error {

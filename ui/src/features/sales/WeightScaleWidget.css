@@ -45,13 +45,14 @@
 .weight-scale-btn {
   padding: 4px 12px;
   background: var(--accent-primary, #1a3a5c);
-  color: #fff;
+  color: var(--color-accent-fg, #fff);
   border: none;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color var(--duration-150) var(--ease-out);
 }
 
 .weight-scale-btn:disabled {
@@ -61,4 +62,9 @@
 
 .weight-scale-btn:hover:not(:disabled) {
   background: var(--accent-hover, #14304d);
+}
+
+.weight-scale-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
 }
