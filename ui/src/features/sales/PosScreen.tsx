@@ -24,6 +24,7 @@ import { formatMoney, type CartId, type CartLine, type LineId, type Product, typ
 import { animDuration } from '@/utils/animation';
 import { triggerInteraction } from '@/utils/interaction';
 import { useSwipe } from '@/hooks/useSwipe';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import {
   holdCart,
   listOpenBills,
@@ -567,6 +568,12 @@ export default function PosScreen() {
   }, [cartId, addToast]);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showOpenShift, setShowOpenShift] = useState(false);
+  // Fade the open-shift modal out before the parent setter flips
+  // showOpenShift to false. Used by Cancel + Escape + Open-success.
+  const openShiftExit = useExitAnimation(
+    showOpenShift,
+    () => setShowOpenShift(false),
+  );
   const [closingBalance, setClosingBalance] = useState('');
   const [openingBalance, setOpeningBalance] = useState('');
   const [shiftNotes, setShiftNotes] = useState('');
@@ -574,6 +581,29 @@ export default function PosScreen() {
   const [openingShift, setOpeningShift] = useState(false);
   const [closeShiftError, setCloseShiftError] = useState<string | null>(null);
   const [closedShiftSummary, setClosedShiftSummary] = useState<ShiftDto | null>(null);
+  // Fade the close-shift confirmation modal out before the parent
+  // state flips. Used by Cancel + Escape. The confirm-success path
+  // that swaps to the summary view intentionally SNAPS (no fade on
+  // the confirmation) because the new summary has its own entry
+  // animation — adding an exit fade on the old one would visually
+  // double up with the new entry.
+  const closeShiftExit = useExitAnimation(
+    showCloseShift && !closedShiftSummary,
+    () => {
+      setShowCloseShift(false);
+      setCloseShiftError(null);
+    },
+  );
+  // Fade the close-shift success summary out before clearing all
+  // three related states. Used by the Done button.
+  const shiftSummaryExit = useExitAnimation(
+    !!closedShiftSummary,
+    () => {
+      setClosedShiftSummary(null);
+      setShowCloseShift(false);
+      setCloseShiftError(null);
+    },
+  );
 
   const handleAddProduct = useCallback(
     (product: Product, qty?: number) => {
@@ -676,6 +706,12 @@ export default function PosScreen() {
   const [activeOpenBillId, setActiveOpenBillId] = useState<string | null>(null);
   const [openBills, setOpenBills] = useState<HeldCartRow[]>([]);
   const [showOpenBills, setShowOpenBills] = useState(false);
+  // Fade the Open Bills list modal out before the parent setter
+  // flips showOpenBills to false. Used by the close button + Resume.
+  const openBillsExit = useExitAnimation(
+    showOpenBills,
+    () => setShowOpenBills(false),
+  );
   const loadOpenBills = useCallback(() => {
     listOpenBills().then(setOpenBills).catch(() => {
       addToast({ message: 'Failed to load open bills', type: 'error' });
@@ -1041,22 +1077,25 @@ export default function PosScreen() {
     try {
       const shift = await openShift(userId, safeBalance);
       setActiveShift(shift);
-      setShowOpenShift(false);
+      openShiftExit.requestClose();
     } catch {
       // Handled silently — shift open failure is rare.
     } finally {
       setOpeningShift(false);
     }
-  }, [openingBalance, userId]);
+  }, [openingBalance, userId, openShiftExit]);
 
-  const handleDismissShiftSummary = useCallback(() => {
-    setClosedShiftSummary(null);
-    setShowCloseShift(false);
-    setCloseShiftError(null);
-  }, []);
+
 
   // ── Open Bill inline state ────────────────────────────────────
   const [showOpenBillInput, setShowOpenBillInput] = useState(false);
+  // Fade the Open Bill Input modal out (mirror of pos-modal-slide-up
+  // via .pos-hold-modal--exiting) before the parent setter flips
+  // showOpenBillInput to false. Used by cancel + Save-success.
+  const openBillInputExit = useExitAnimation(
+    showOpenBillInput,
+    () => setShowOpenBillInput(false),
+  );
   const [openBillName, setOpenBillName] = useState('');
   const [openingBill, setOpeningBill] = useState(false);
 
@@ -1093,16 +1132,16 @@ export default function PosScreen() {
         bill_type: 'open_bill',
         customer_name: openBillName.trim(),
       });
-      resetCart();
-      setShowOpenBillInput(false);
-      setOpenBillName('');
-      loadOpenBills();
+    resetCart();
+    openBillInputExit.requestClose();
+    setOpenBillName('');
+    loadOpenBills();
     } catch {
       addToast({ message: 'Failed to save open bill', type: 'error' });
     } finally {
       setOpeningBill(false);
     }
-  }, [lines, subtotal, openBillName, discountPercent, discountLabel, resetCart, loadOpenBills, addToast]);
+  }, [lines, subtotal, openBillName, discountPercent, discountLabel, resetCart, loadOpenBills, addToast, openBillInputExit]);
 
   const handleResumeOpenBill = useCallback(async (id: string) => {
     try {
@@ -1125,12 +1164,12 @@ export default function PosScreen() {
       if (typeof data.tableNumber === 'string') {
         setTableNumber(data.tableNumber);
       }
-      setActiveOpenBillId(id);
-      setShowOpenBills(false);
+    setActiveOpenBillId(id);
+    openBillsExit.requestClose();
     } catch {
       addToast({ message: 'Failed to resume open bill', type: 'error' });
     }
-  }, [setLines, setDiscount, setTableNumber, addToast]);
+  }, [setLines, setDiscount, setTableNumber, addToast, openBillsExit]);
 
   // ── Sub-screen: Table Management ─────────────────────────────
   if (showTables) {
@@ -1802,9 +1841,13 @@ export default function PosScreen() {
       )}
 
       {/* ── Open Bill Input modal ────────────────────── */}
-      {showOpenBillInput && (
-        <div className="pos-hold-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('pos-open-bill-overlay-aria')}>
-          <div className="pos-hold-modal">
+      {openBillInputExit.shouldRender && (          <div
+            className={`pos-hold-overlay${openBillInputExit.exiting ? ' pos-hold-overlay--exiting' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={l10n.getString('pos-open-bill-overlay-aria')}
+          >
+            <div className={`pos-hold-modal${openBillInputExit.exiting ? ' pos-hold-modal--exiting' : ''}`}>
             <h3 className="pos-hold-title">{l10n.getString('pos-open-bill-title')}</h3>
             <p className="pos-hold-desc">
               {l10n.getString('pos-open-bill-desc')}
@@ -1822,7 +1865,7 @@ export default function PosScreen() {
                 type="button"
                 className="pos-hold-cancel-btn"
                 onClick={() => {
-                  setShowOpenBillInput(false);
+                  openBillInputExit.requestClose();
                   setOpenBillName('');
                 }}
                 disabled={openingBill}
@@ -1843,15 +1886,14 @@ export default function PosScreen() {
       )}
 
       {/* ── Open Bills panel ────────────────────────── */}
-      {showOpenBills && (
-        <div className="pos-hold-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('pos-open-bills-overlay-aria')}>
-          <div className="pos-held-list-modal">
+      {openBillsExit.shouldRender && (          <div className={`pos-hold-overlay${openBillsExit.exiting ? ' pos-hold-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('pos-open-bills-overlay-aria')}>
+          <div className={`pos-held-list-modal${openBillsExit.exiting ? ' pos-held-list-modal--exiting' : ''}`}>
             <div className="pos-held-list-header">
               <h3>{l10n.getString('pos-open-bills-title')}</h3>
               <button
                 type="button"
                 className="pos-held-list-close"
-                onClick={() => setShowOpenBills(false)}
+                onClick={() => openBillsExit.requestClose()}
                 aria-label={l10n.getString('pos-open-bills-close-aria')}
               >
                 &times;
@@ -1888,22 +1930,21 @@ export default function PosScreen() {
       )}
 
       {/* ── Close Shift Confirmation Modal ───────── */}
-      {showCloseShift && activeShift && !closedShiftSummary && (
-        <div
-          className="pos-close-shift-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={l10n.getString('pos-close-shift-overlay-aria')}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              setShowCloseShift(false);
-              setCloseShiftError(null);
-            }
-            if (e.key === 'Enter') handleConfirmCloseShift();
-          }}
-        >
-          <div className="pos-close-shift-modal">
-            <Localized id="pos-close-shift-title">
+      {closeShiftExit.shouldRender && activeShift ? (          <div
+            className={`pos-close-shift-overlay${closeShiftExit.exiting ? ' pos-close-shift-overlay--exiting' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={l10n.getString('pos-close-shift-overlay-aria')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                closeShiftExit.requestClose();
+                setCloseShiftError(null);
+              }
+              if (e.key === 'Enter') handleConfirmCloseShift();
+            }}
+          >
+            <div className={`pos-close-shift-modal${closeShiftExit.exiting ? ' pos-close-shift-modal--exiting' : ''}`}>
+              <Localized id="pos-close-shift-title">
               <h3 className="pos-close-shift-title">Close Shift</h3>
             </Localized>
 
@@ -1999,17 +2040,16 @@ export default function PosScreen() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* ── Close Shift Success Summary ────────────── */}
-      {closedShiftSummary && (
-        <div
-          className="pos-close-shift-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={l10n.getString('pos-close-shift-summary-aria')}
-        >
-          <div className="pos-close-shift-modal pos-close-shift-summary">
+      {shiftSummaryExit.shouldRender && closedShiftSummary ? (          <div
+            className={`pos-close-shift-overlay${shiftSummaryExit.exiting ? ' pos-close-shift-overlay--exiting' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={l10n.getString('pos-close-shift-summary-aria')}
+          >
+            <div className={`pos-close-shift-modal pos-close-shift-summary${shiftSummaryExit.exiting ? ' pos-close-shift-modal--exiting' : ''}`}>
             <Localized id="pos-shift-closed-title">
               <h3 className="pos-close-shift-title">
                 Shift Closed
@@ -2095,35 +2135,32 @@ export default function PosScreen() {
                 </Localized>
                 <p>{closedShiftSummary.notes}</p>
               </div>
-            )}
-
-            <Localized id="pos-shift-summary-done">
+            )}            <Localized id="pos-shift-summary-done">
               <button
                 type="button"
                 className="pos-close-shift-dismiss-btn"
-                onClick={handleDismissShiftSummary}
+                onClick={() => shiftSummaryExit.requestClose()}
               >
                 Done
               </button>
             </Localized>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* ── Open Shift Modal ───────────────────────── */}
-      {showOpenShift && (
-        <div
-          className="pos-close-shift-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={l10n.getString('pos-open-shift-overlay-aria')}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setShowOpenShift(false);
-            if (e.key === 'Enter') handleConfirmOpenShift();
-          }}
-        >
-          <div className="pos-close-shift-modal">
-            <Localized id="pos-open-shift-title">
+      {openShiftExit.shouldRender && (          <div
+            className={`pos-close-shift-overlay${openShiftExit.exiting ? ' pos-close-shift-overlay--exiting' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={l10n.getString('pos-open-shift-overlay-aria')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') openShiftExit.requestClose();
+              if (e.key === 'Enter') handleConfirmOpenShift();
+            }}
+          >
+            <div className={`pos-close-shift-modal${openShiftExit.exiting ? ' pos-close-shift-modal--exiting' : ''}`}>
+              <Localized id="pos-open-shift-title">
               <h3 className="pos-close-shift-title">Open Shift</h3>
             </Localized>
 
@@ -2151,8 +2188,8 @@ export default function PosScreen() {
               <Localized id="cancel">
                 <button
                   type="button"
-                  className="pos-close-shift-cancel-btn"
-                  onClick={() => setShowOpenShift(false)}
+                className="pos-close-shift-cancel-btn"
+                onClick={() => openShiftExit.requestClose()}
                   disabled={openingShift}
                 >
                   Cancel

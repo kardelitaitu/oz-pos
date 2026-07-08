@@ -196,6 +196,42 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ── Exit mirror keyframes (the JS animDuration(200) timer stays
+ * aligned with these). pos-modal-slide-down is the exact reverse
+ * of pos-modal-slide-up so the modal pops out at the same scale
+ * factor it popped in at — no perceptible jolt on reopen.
+ * pos-overlay-out is the exact reverse of pos-overlay-in.
+ * Both run for the same 200 ms as the entry so the overlay + panel
+ * + parent timer all stay in lockstep. ── */
+@keyframes pos-overlay-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes pos-modal-slide-down {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(12px) scale(0.98); }
+}
+
+/* --exiting rules are source-ordered after the entry rules above
+ * so they win when both classes are present on the same element
+ * (same specificity, later rule wins). pointer-events: none on
+ * the overlay blocks click-through to a stale element behind it
+ * during the fade. animation-fill-mode: both (per the skill)
+ * holds the TO-frame so the React unmount doesn't flash back to
+ * the rule's own opacity (1) the instant the keyframe completes. */
+.pos-hold-overlay--exiting,
+.pos-close-shift-overlay--exiting {
+  animation: pos-overlay-out var(--duration-200) var(--ease-out) both;
+  pointer-events: none;
+}
+
+.pos-hold-modal--exiting,
+.pos-held-list-modal--exiting,
+.pos-close-shift-modal--exiting {
+  animation: pos-modal-slide-down var(--duration-200) var(--ease-out) both;
+}
+
 .pos-hold-title {
   margin: 0;
   font-size: var(--text-lg);
@@ -613,7 +649,12 @@
   .pos-held-list-modal,
   .pos-close-shift-modal,
   .pos-hold-overlay,
-  .pos-close-shift-overlay {
+  .pos-close-shift-overlay,
+  .pos-hold-modal--exiting,
+  .pos-held-list-modal--exiting,
+  .pos-close-shift-modal--exiting,
+  .pos-hold-overlay--exiting,
+  .pos-close-shift-overlay--exiting {
     animation: none;
   }
 }
