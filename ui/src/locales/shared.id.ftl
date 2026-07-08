@@ -214,5 +214,9 @@ workspace-home-loading = Memuat ruang kerja…
 workspace-home-subtitle = Pilih ruang kerja untuk memulai
 workspace-home-logout = Keluar
 workspace-card-no-access-badge = Tidak tersedia
+workspace-home-error-title = Galat Koneksi
+workspace-home-error-desc = Tidak dapat memuat ruang kerja. Periksa koneksi Anda dan coba lagi.
+workspace-home-retry = Coba Lagi
+workspace-home-retry-btn = Muat Ulang
 
 

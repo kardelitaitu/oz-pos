@@ -269,6 +269,8 @@ pub mod builtin_roles {
     pub const MANAGER: &str = "role-manager";
     /// Cashier — can process sales and manage the daily register.
     pub const CASHIER: &str = "role-cashier";
+    /// Kitchen — can view and update KDS orders.
+    pub const KITCHEN: &str = "role-kitchen";
 }
 
 // ── Role presets ─────────────────────────────────────────────────────
@@ -403,6 +405,17 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::INVENTORY_VIEW,
             permissions::SHIFTS_OPEN,
             permissions::SHIFTS_CLOSE,
+            permissions::WORKSPACES_SWITCH,
+        ],
+    },
+    RolePreset {
+        id: builtin_roles::KITCHEN,
+        name: "Kitchen",
+        description: "Can view and update KDS orders and manage the order queue.",
+        permissions: &[
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+            permissions::SALES_VIEW,
             permissions::WORKSPACES_SWITCH,
         ],
     },
@@ -598,6 +611,12 @@ pub mod permissions {
     // ── Workspaces ────────────────────────────────────────────────
     /// Switch between workspaces / stores.
     pub const WORKSPACES_SWITCH: &str = "workspaces:switch";
+
+    // ── KDS ─────────────────────────────────────────────────────
+    /// View the KDS order queue.
+    pub const KDS_VIEW: &str = "kds:view";
+    /// Update KDS order status (advance tickets).
+    pub const KDS_UPDATE: &str = "kds:update";
 
     // ── Promotions ──────────────────────────────────────────────
     /// Create a new promotion rule.

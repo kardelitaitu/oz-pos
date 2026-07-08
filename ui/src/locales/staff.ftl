@@ -55,10 +55,8 @@ staff-error-save-failed = Failed to save staff member
 staff-table-aria = Staff members
 staff-field-username-aria =
     .aria-label = Username
-staff-field-name-aria =
-    .aria-label = Display Name
-staff-field-pin-aria =
-    .aria-label = PIN
+staff-field-name-aria = Display Name
+staff-field-pin-aria = PIN
 staff-error-generic = { $message }
 
 # ── Workspace Access ──────────────────────────────────────────────────────

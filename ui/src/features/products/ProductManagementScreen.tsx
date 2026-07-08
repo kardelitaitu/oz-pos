@@ -190,8 +190,7 @@ export default function ProductManagementScreen() {
         </Card>
       ) : (
         <div className="product-mgmt-table-wrap">
-          <Localized id="product-mgmt-table-aria" attrs={{ 'aria-label': true }}>
-          <table className="product-mgmt-table" aria-label="Product catalog">
+          <table className="product-mgmt-table" aria-label={l10n.getString('product-mgmt-table-aria')}>
             <thead>
               <tr>
                 <Localized id="product-mgmt-col-sku"><th>SKU</th></Localized>
@@ -276,13 +275,11 @@ export default function ProductManagementScreen() {
               ))}
             </tbody>
           </table>
-          </Localized>
         </div>
       )}
 
       {showModal && (
-        <Localized id="product-mgmt-modal-aria" attrs={{ 'aria-label': true }} vars={{ mode: editingSku ? 'edit' : 'add' }}>
-        <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingSku ? 'Edit product' : 'Add product'}>
+        <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
           <div className="product-mgmt-modal">
             <div className="product-mgmt-modal-header">
               <Localized id={editingSku ? 'product-mgmt-modal-edit-title' : 'product-mgmt-modal-add-title'}>
@@ -461,7 +458,6 @@ export default function ProductManagementScreen() {
             </div>
           </div>
         </div>
-        </Localized>
       )}
 
       {variantProductSku && (

@@ -176,9 +176,9 @@ describe('KioskScreen', () => {
     });
 
     const productCard1 = screen.getAllByText('Indomie Goreng');
-    await userEvent.click(productCard1[0]);
+    await userEvent.click(productCard1[0]!);
     const productCard2 = screen.getAllByText('Indomie Goreng');
-    await userEvent.click(productCard2[0]);
+    await userEvent.click(productCard2[0]!);
 
     await waitFor(() => {
       expect(screen.getByText('Checkout')).toBeInTheDocument();

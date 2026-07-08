@@ -248,6 +248,50 @@
   color: var(--kds-subtle);
 }
 
+/* ── Workspace wrapper (used by AppShell when KDS is a standalone workspace) ── */
+
+.kds-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.kds-workspace-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--kds-header-bg, #16213e);
+  border-bottom: 1px solid var(--kds-header-border, #0f3460);
+}
+
+.kds-workspace-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--kds-text, #e0e0e0);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.kds-workspace-back:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.kds-workspace-back:active {
+  transform: translateY(0);
+}
+
+.kds-workspace .kds {
+  flex: 1;
+}
+
 /* ── Responsive: stack columns on small screens ───────────────────── */
 
 @media (max-width: 800px) {

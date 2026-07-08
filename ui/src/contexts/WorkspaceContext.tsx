@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const FALLBACK_WORKSPACES: WorkspaceDto[] = [
   { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Cashier terminal for restaurant ordering with menu categories and table management', icon: 'restaurant' },
   { key: 'store-pos', name: 'Store POS', description: 'Cashier terminal for retail with product lookup, customer management, and loyalty', icon: 'store' },
+  { key: 'kds', name: 'Kitchen Display', description: 'Order queue display for the kitchen — tap tickets to advance their status', icon: 'kds' },
   { key: 'inventory', name: 'Inventory Management', description: 'Manage products, stock levels, bundles, categories, and inventory reports', icon: 'inventory' },
   { key: 'admin', name: 'Admin', description: 'System settings, staff management, reports, audit logs, and configuration', icon: 'admin' },
 ];
@@ -17,6 +18,8 @@ export interface WorkspaceContextValue {
   availableWorkspaces: WorkspaceDto[];
   workspaceScreens: string[];
   loading: boolean;
+  error: string | null;
+  retry: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -27,6 +30,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [availableWorkspaces, setAvailableWorkspaces] = useState<WorkspaceDto[]>([]);
   const [workspaceScreens, setWorkspaceScreensState] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const roleId = session?.role_id ?? '';
   const userId = session?.user_id ?? '';
@@ -45,19 +49,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
     setLoading(true);
+    setError(null);
     // Pass user_id so the backend can check for per-user workspace overrides.
     listWorkspaces(roleId, userId || undefined)
       .then((workspaces) => {
         if (workspaces.length > 0) {
           setAvailableWorkspaces(workspaces);
+          setError(null);
         } else {
           // Empty response from backend — use fallback samples for dev.
           setAvailableWorkspaces(FALLBACK_WORKSPACES);
+          setError(null);
         }
       })
       .catch((err) => {
         console.warn('WorkspaceContext: failed to list workspaces, using fallback', err);
         setAvailableWorkspaces(FALLBACK_WORKSPACES);
+        setError('Failed to load workspaces from server. Using demo workspaces.');
       })
       .finally(() => setLoading(false));
   }, [roleId, userId]);
@@ -83,6 +91,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setActiveWorkspace(key);
   }, []);
 
+  const retry = useCallback(() => {
+    if (!roleId) return;
+    setLoading(true);
+    setError(null);
+    listWorkspaces(roleId, userId || undefined)
+      .then((workspaces) => {
+        if (workspaces.length > 0) {
+          setAvailableWorkspaces(workspaces);
+        } else {
+          setAvailableWorkspaces(FALLBACK_WORKSPACES);
+        }
+        setError(null);
+      })
+      .catch((err) => {
+        console.warn('WorkspaceContext: retry failed', err);
+        setAvailableWorkspaces(FALLBACK_WORKSPACES);
+        setError('Failed to load workspaces from server. Using demo workspaces.');
+      })
+      .finally(() => setLoading(false));
+  }, [roleId, userId]);
+
   return (
     <WorkspaceContext.Provider
       value={{
@@ -91,6 +120,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         availableWorkspaces,
         workspaceScreens,
         loading,
+        error,
+        retry,
       }}
     >
       {children}

@@ -328,11 +328,18 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let roles = store(&conn).list_roles().unwrap();
-        assert_eq!(roles.len(), 3);
-        // Ordered by name: cashier, manager, owner.
+        assert_eq!(roles.len(), 4);
+        // Ordered by name: cashier, kitchen, manager, owner.
         assert_eq!(roles[0].name, "Cashier");
-        assert_eq!(roles[1].name, "Manager");
-        assert_eq!(roles[2].name, "Owner");
+        assert_eq!(roles[0].id, "role-cashier");
+        assert_eq!(roles[1].name, "Kitchen");
+        assert_eq!(roles[1].id, "role-kitchen");
+        assert!(roles[1].permissions.contains("kds:view"));
+        assert!(roles[1].permissions.contains("kds:update"));
+        assert_eq!(roles[2].name, "Manager");
+        assert_eq!(roles[2].id, "role-manager");
+        assert_eq!(roles[3].name, "Owner");
+        assert_eq!(roles[3].id, "role-owner");
     }
 
     #[test]

@@ -23,7 +23,6 @@ import ScaleIndicator from './ScaleIndicator';
 import RetailOptionsScreen from './RetailOptionsScreen';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
-import KdsScreen from '@/features/kds/KdsScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import './RetailPosScreen.css';
 
@@ -59,7 +58,11 @@ function toProduct(p: ProductDto): {
   };
 }
 
-export default function RetailPosScreen() {
+interface RetailPosScreenProps {
+  onNavigate?: (route: string) => void;
+}
+
+export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
@@ -762,7 +765,6 @@ export default function RetailPosScreen() {
   const [showOptions, setShowOptions] = useState(false);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
-  const [showKds, setShowKds] = useState(false);
   const [showTables, setShowTables] = useState(false);
 
   // ── Credit reminders ──────────────────────────────────────────
@@ -819,7 +821,7 @@ export default function RetailPosScreen() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (showOptions || showPayment || showOpenShift || showCloseShift || showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm || showSalesHistory || showStockInquiry || showKds || showTables) return;
+      if (showOptions || showPayment || showOpenShift || showCloseShift || showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm || showSalesHistory || showStockInquiry || showTables) return;
       switch (e.key) {
         case 'F1': handlePay(); break;
         case 'F2': if (lines.length > 0) handleRequestClear(); break;
@@ -832,12 +834,12 @@ export default function RetailPosScreen() {
         case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
         case 'F10': if (session?.role_name !== 'cashier') setShowOptions(true); break;
         case 'F11': case '?': setShowShortcuts((v) => !v); break;
-        case 'F12': setShowKds(true); break;
+        case 'F12': onNavigate?.('kds'); break;
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showSalesHistory, showStockInquiry, showKds, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast]);
+  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate]);
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -884,28 +886,6 @@ export default function RetailPosScreen() {
         </header>
         <div style={{ flex: 1, overflow: 'auto' }}>
           <SalesHistoryScreen />
-        </div>
-      </div>
-    );
-  }
-
-  // ── KDS screen ─────────────────────────────────────────────
-  if (showKds) {
-    return (
-      <div className="retail-pos" data-theme={theme}>
-        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-          <div className="retail-header-store">
-            <span className="retail-header-name">{l10n.getString('kds-title') || 'Kitchen Display'}</span>
-          </div>
-          <button
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={() => setShowKds(false)}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <KdsScreen />
         </div>
       </div>
     );
@@ -1364,7 +1344,7 @@ export default function RetailPosScreen() {
             <span className="retail-fn-key">F11</span> {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
           </button>
         )}
-        <button className="retail-fn-btn" onClick={() => setShowKds(true)}>
+        <button className="retail-fn-btn" onClick={() => onNavigate?.('kds')}>
           <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
         </button>
         {isEnabled(FEATURES.TABLE_MANAGEMENT) && (

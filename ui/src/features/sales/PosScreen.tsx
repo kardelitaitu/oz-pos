@@ -16,7 +16,6 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
-import KdsScreen from '@/features/kds/KdsScreen';
 import { AppearanceSettings } from '@/features/settings/AppearanceSettings';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import DataManagementScreen from '@/features/settings/DataManagementScreen';
@@ -402,7 +401,11 @@ function SettingsSubScreen({ onBack }: { onBack: () => void }) {
  * 1366×768 → 4K displays. Keyboard navigation (↑/↓/+/-/Del/Enter) is
  * bound on the cart panel itself.
  */
-export default function PosScreen() {
+interface PosScreenProps {
+  onNavigate?: (route: string) => void;
+}
+
+export default function PosScreen({ onNavigate }: PosScreenProps) {
   const {
     lines,
     subtotal,
@@ -465,7 +468,6 @@ export default function PosScreen() {
   const [showTables, setShowTables] = useState(false);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
-  const [showKds, setShowKds] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
@@ -1182,27 +1184,6 @@ export default function PosScreen() {
     );
   }
 
-  // ── Sub-screen: KDS (F12) ────────────────────────────────────
-  if (showKds) {
-    return (
-      <div className="pos-screen">
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <KdsScreen />
-        </div>
-        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border, #ddd)' }}>
-          <button
-            type="button"
-            className="pos-cart-pay-btn"
-            onClick={() => setShowKds(false)}
-            style={{ width: '100%' }}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // ── Sub-screen: Settings (4-tab-routing) ──────────────────────
   // Same pattern as the desktop `RetailOptionsScreen`: four tabs
   // (Appearance / Features / Data / Sync) that route to the
@@ -1340,7 +1321,7 @@ export default function PosScreen() {
             <button
               type="button"
               className="pos-cart-lock-btn"
-              onClick={() => setShowKds(true)}
+              onClick={() => onNavigate?.('kds')}
               aria-label={l10n.getString('kds-title') || 'KDS'}
               title={l10n.getString('kds-title') || 'KDS'}
               style={{ marginRight: 4 }}

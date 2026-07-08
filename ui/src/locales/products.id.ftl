@@ -54,10 +54,8 @@ product-lookup-add = Tambah ke Keranjang
 product-lookup-in-stock = Tersedia
 product-lookup-out-of-stock = Stok Habis
 product-lookup-all-categories = Semua Kategori
-product-lookup-categories-aria =
-    .aria-label = Saring berdasarkan kategori
-product-lookup-grid-aria =
-    .aria-label = Hasil pencarian produk
+product-lookup-categories-aria = Saring berdasarkan kategori
+product-lookup-grid-aria = Hasil pencarian produk
 product-lookup-card-aria =
     .aria-label = { $name } — { $price }. SKU: { $sku }. { $stock }
 product-lookup-bundle-added = Bundel "{ $name }" ditambahkan — { $count } item
@@ -104,8 +102,7 @@ product-mgmt-field-stock = Stok awal
 product-mgmt-btn-cancel = Batal
 product-mgmt-btn-create = Buat
 product-mgmt-btn-update = Perbarui
-product-mgmt-table-aria =
-    .aria-label = Katalog produk
+product-mgmt-table-aria = Katalog produk
 product-mgmt-actions-aria =
     .aria-label = Tindakan
 product-mgmt-variants = Varian
@@ -168,15 +165,12 @@ variant-mgmt-field-active = Aktif
 variant-mgmt-btn-cancel = Batal
 variant-mgmt-btn-create = Buat
 variant-mgmt-btn-update = Perbarui
-variant-mgmt-overlay-aria =
-    .aria-label = Varian untuk { $name }
-variant-mgmt-dialog-aria =
-    .aria-label = { $mode ->
-        [add] Tambah varian
-       *[edit] Ubah varian
-    }
-variant-mgmt-table-aria =
-    .aria-label = Varian produk
+variant-mgmt-overlay-aria = Varian untuk { $name }
+variant-mgmt-dialog-aria = { $mode ->
+    [add] Tambah varian
+   *[edit] Ubah varian
+}
+variant-mgmt-table-aria = Varian produk
 variant-mgmt-actions-aria =
     .aria-label = Tindakan
 variant-mgmt-name-placeholder =

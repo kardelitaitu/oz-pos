@@ -209,8 +209,7 @@ export default function LoyaltyManagementScreen() {
             </Card>
           ) : (
             <div className="loyalty-table-wrap">
-              <Localized id="loyalty-table-aria" attrs={{ 'aria-label': true }}>
-              <table className="loyalty-table" aria-label="Loyalty accounts">
+              <table className="loyalty-table" aria-label={l10n.getString('loyalty-table-aria')}>
                 <thead>
                   <tr>
                     <Localized id="loyalty-customer"><th>Customer</th></Localized>
@@ -261,8 +260,7 @@ export default function LoyaltyManagementScreen() {
                                 {a.recent_transactions.length === 0 ? (
                                   <p className="loyalty-detail-empty"><Localized id="loyalty-no-transactions">No transactions yet</Localized></p>
                                 ) : (
-                                  <Localized id="loyalty-txn-table-aria" attrs={{ 'aria-label': true }}>
-                                  <table className="loyalty-txn-table" aria-label="Recent transactions">
+                                  <table className="loyalty-txn-table" aria-label={l10n.getString('loyalty-txn-table-aria')}>
                                     <thead>
                                       <tr>
                                         <Localized id="loyalty-txn-type"><th>Type</th></Localized>
@@ -289,7 +287,6 @@ export default function LoyaltyManagementScreen() {
                                         </tr>
                                       ))}                                      </tbody>
                                     </table>
-                                    </Localized>
                                 )}
                               </div>
                             </td>
@@ -299,7 +296,6 @@ export default function LoyaltyManagementScreen() {
                     );
                   })}                  </tbody>
                 </table>
-                </Localized>
               </div>
           )}
         </div>

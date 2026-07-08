@@ -15,10 +15,19 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
-import { render, act, fireEvent, screen } from '@testing-library/react';
+import { render, fireEvent, screen } from '@testing-library/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import RefundModal from '@/features/sales/RefundModal';
+
+import {
+  ExitAnimHost,
+  createExitAnimHostRef,
+  advanceFadeSync,
+  expectExiting,
+  expectNotExiting,
+} from './test-utils/exitAnimHost';
+import type { ExitAnimHostRef } from './test-utils/exitAnimHost';
 
 // ── Mock @/api/sales.processRefund so the async submit is deterministic ──
 
@@ -119,22 +128,15 @@ const fakeSale = {
   ],
 };
 
-// ── Mutable host-state ref ───────────────────────────────────────
+// ── Mutable host-state ref (extends shared ExitAnimHostRef) ───────
 
-interface HostRef {
-  open: boolean;
+interface HostRef extends ExitAnimHostRef {
   refunded: boolean;
-  setOpen: (v: boolean) => void;
   setRefunded: (v: boolean) => void;
 }
 
 function makeHostRef(): HostRef {
-  return {
-    open: true,
-    refunded: false,
-    setOpen: () => {},
-    setRefunded: () => {},
-  };
+  return { ...createExitAnimHostRef(), refunded: false, setRefunded: () => {} };
 }
 
 function HostModal({
@@ -144,23 +146,24 @@ function HostModal({
   initialOpen?: boolean;
   hostRef: HostRef;
 }) {
-  const [open, setOpen] = useState(initialOpen);
   const [refunded, setRefunded] = useState(false);
-  hostRef.open = open;
   hostRef.refunded = refunded;
-  hostRef.setOpen = setOpen;
   hostRef.setRefunded = setRefunded;
   return (
-    <>
-      <span data-testid="open-state">{String(open)}</span>
-      <span data-testid="refunded-state">{String(refunded)}</span>
-      <RefundModal
-        open={open}
-        sale={fakeSale as never}
-        onClose={() => setOpen(false)}
-        onRefunded={() => setRefunded(true)}
-      />
-    </>
+    <ExitAnimHost hostRef={hostRef} initialOpen={initialOpen}>
+      {(open, setOpen) => (
+        <>
+          <span data-testid="open-state">{String(open)}</span>
+          <span data-testid="refunded-state">{String(refunded)}</span>
+          <RefundModal
+            open={open}
+            sale={fakeSale as never}
+            onClose={() => setOpen(false)}
+            onRefunded={() => setRefunded(true)}
+          />
+        </>
+      )}
+    </ExitAnimHost>
   );
 }
 
@@ -185,8 +188,8 @@ describe('RefundModal exit-animation polish', () => {
     const modal = document.querySelector('.refund-modal');
     expect(overlay).toBeTruthy();
     expect(modal).toBeTruthy();
-    expect(overlay?.classList.contains('refund-overlay--exiting')).toBe(false);
-    expect(modal?.classList.contains('refund-modal--exiting')).toBe(false);
+    expectNotExiting(overlay, 'refund-overlay');
+    expectNotExiting(modal, 'refund-modal');
   });
 
   it('× button applies BOTH overlay and modal --exiting classes (layered exit), then fades', () => {
@@ -197,16 +200,16 @@ describe('RefundModal exit-animation polish', () => {
 
     const overlay = document.querySelector('.refund-overlay');
     const modal = document.querySelector('.refund-modal');
-    expect(overlay?.classList.contains('refund-overlay--exiting')).toBe(true);
-    expect(modal?.classList.contains('refund-modal--exiting')).toBe(true);
+    expectExiting(overlay, 'refund-overlay');
+    expectExiting(modal, 'refund-modal');
 
     // Mid-fade: still in DOM.
-    act(() => { vi.advanceTimersByTime(199); });
+    advanceFadeSync(199);
     expect(document.querySelector('.refund-overlay')).toBeTruthy();
     expect(document.querySelector('.refund-modal')).toBeTruthy();
 
     // After 200 ms: unmounted and parent open=false.
-    act(() => { vi.advanceTimersByTime(1); });
+    advanceFadeSync(1);
     expect(document.querySelector('.refund-overlay')).toBeNull();
     expect(hostRef.open).toBe(false);
   });
@@ -221,7 +224,7 @@ describe('RefundModal exit-animation polish', () => {
     // match the footer button by visible text, not aria-label.
     fireEvent.click(screen.getByText('Cancel'));
 
-    act(() => { vi.advanceTimersByTime(200); });
+    advanceFadeSync(200);
     expect(document.querySelector('.refund-overlay')).toBeNull();
     expect(hostRef.open).toBe(false);
   });
@@ -240,9 +243,7 @@ describe('RefundModal exit-animation polish', () => {
 
     // Flush microtasks so the processRefund Promise resolves and the
     // done-state mounts.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await vi.advanceTimersByTimeAsync(0);
 
     // Now the done-state is visible. Click Done.
     fireEvent.click(screen.getByRole('button', { name: /Done/i }));
@@ -251,21 +252,11 @@ describe('RefundModal exit-animation polish', () => {
     expect(hostRef.refunded).toBe(true);
 
     // --exiting class applied to both layers.
-    expect(
-      document.querySelector('.refund-overlay')?.classList.contains(
-        'refund-overlay--exiting',
-      ),
-    ).toBe(true);
-    expect(
-      document.querySelector('.refund-modal')?.classList.contains(
-        'refund-modal--exiting',
-      ),
-    ).toBe(true);
+    expectExiting(document.querySelector('.refund-overlay'), 'refund-overlay');
+    expectExiting(document.querySelector('.refund-modal'), 'refund-modal');
 
     // After the fade, parent unmounted.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(200);
-    });
+    await vi.advanceTimersByTimeAsync(200);
     expect(document.querySelector('.refund-overlay')).toBeNull();
     expect(hostRef.open).toBe(false);
   });

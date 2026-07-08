@@ -138,8 +138,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
   }, [confirmDeleteSku, load]);
 
   return (
-    <Localized id="variant-mgmt-overlay-aria" attrs={{ 'aria-label': true }} vars={{ name: productName }}>
-    <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={`Variants for ${productName}`}>
+    <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-overlay-aria', { name: productName })}>
       <div className="product-mgmt-modal" style={{ width: '640px' }}>
         <div className="product-mgmt-modal-header">
           <Localized id="variant-mgmt-title" vars={{ product: productName }}>
@@ -186,8 +185,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
             </div>
           ) : (
             <div className="product-mgmt-table-wrap">
-              <Localized id="variant-mgmt-table-aria" attrs={{ 'aria-label': true }}>
-              <table className="product-mgmt-table" aria-label="Product variants">
+              <table className="product-mgmt-table" aria-label={l10n.getString('variant-mgmt-table-aria')}>
                 <thead>
                   <tr>
                     <Localized id="variant-mgmt-col-name"><th>Name</th></Localized>
@@ -257,14 +255,11 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                   ))}
                 </tbody>
               </table>
-              </Localized>
             </div>
           )}
         </div>
 
-        {showModal && (
-          <Localized id="variant-mgmt-dialog-aria" attrs={{ 'aria-label': true }} vars={{ mode: editingSku ? 'edit' : 'add' }}>
-          <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingSku ? 'Edit variant' : 'Add variant'} style={{ zIndex: 200 }}>
+        {showModal && (            <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-dialog-aria', { mode: editingSku ? 'edit' : 'add' })} style={{ zIndex: 200 }}>
             <div className="product-mgmt-modal">
               <div className="product-mgmt-modal-header">
                 <Localized id={editingSku ? 'variant-mgmt-modal-edit-title' : 'variant-mgmt-modal-add-title'}>
@@ -404,13 +399,10 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                 </Button>
               </div>
             </div>
-          </div>
-        </Localized>
-        )}
+          </div>        )}
 
         {confirmDeleteSku && (
-          <Localized id="variant-mgmt-delete-confirm-aria" attrs={{ 'aria-label': true }}>
-          <div className="product-mgmt-overlay" role="alertdialog" aria-modal="true" aria-label="Delete confirmation" style={{ zIndex: 200 }}>
+          <div className="product-mgmt-overlay" role="alertdialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-delete-confirm-aria')} style={{ zIndex: 200 }}>
             <div className="product-mgmt-modal" style={{ width: '380px' }}>
               <div className="product-mgmt-modal-header">
                 <Localized id="variant-mgmt-delete-confirm-title">
@@ -443,11 +435,9 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               </div>
             </div>
           </div>
-          </Localized>
         )}
       </div>
     </div>
-    </Localized>
   );
 }
 

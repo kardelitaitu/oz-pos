@@ -143,8 +143,7 @@ export default function StaffLoginScreen() {
 
   const renderPinDots = (length: number) => {
     return (
-      <Localized id="staff-login-pin-aria" attrs={{ 'aria-label': true }} vars={{ length, max: MAX_PIN_LENGTH }}>
-        <div className="staff-login-pin-dots" aria-label={`PIN entry: ${length} of ${MAX_PIN_LENGTH} digits`}>
+      <div className="staff-login-pin-dots" aria-label={l10n.getString('staff-login-pin-aria', { length, max: MAX_PIN_LENGTH })}>
           {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
             <span
               key={i}
@@ -153,7 +152,6 @@ export default function StaffLoginScreen() {
             />
           ))}
         </div>
-      </Localized>
     );
   };
 
@@ -167,8 +165,7 @@ export default function StaffLoginScreen() {
     ];
 
     return (
-      <Localized id="staff-login-keypad-aria" attrs={{ 'aria-label': true }}>
-        <div className="staff-login-pad" role="group" aria-label="Numeric keypad">
+      <div className="staff-login-pad" role="group" aria-label={l10n.getString('staff-login-keypad-aria')}>
           {keys.map((row) => (
             <div className="staff-login-pad-row" key={row[0]}>
               {row.map((digit) => (
@@ -222,7 +219,6 @@ export default function StaffLoginScreen() {
             </Localized>
           </div>
         </div>
-      </Localized>
     );
   };
 
@@ -252,13 +248,11 @@ export default function StaffLoginScreen() {
         </Localized>
 
         {/* Step indicator */}
-        <Localized id="staff-login-progress-aria" attrs={{ 'aria-label': true }}>
-          <div className="staff-login-steps" role="status" aria-label={`Login step ${step === 'username' ? 1 : 2} of 2`}>
+        <div className="staff-login-steps" role="status" aria-label={l10n.getString('staff-login-progress-aria')}>
           <span className={`staff-login-step-dot ${step === 'username' ? 'staff-login-step-dot--active' : 'staff-login-step-dot--done'}`} />
           <span className="staff-login-step-line" />
           <span className={`staff-login-step-dot ${step === 'pin' ? 'staff-login-step-dot--active' : ''}`} />
-          </div>
-        </Localized>
+        </div>
 
         {step === 'username' ? (
           <Localized id="staff-login-step-username">
@@ -304,15 +298,13 @@ export default function StaffLoginScreen() {
 
         {/* PIN step */}
         {step === 'pin' && (
-          <Localized id="staff-login-pin-section-aria" attrs={{ 'aria-label': true }}>
-            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
             <div
               className="staff-login-pin-section"
               ref={pinSectionRef}
               tabIndex={-1}
               onKeyDown={handleKeyDown}
               role="application"
-              aria-label="PIN entry — type digits on your keyboard or use the on-screen keypad"
+              aria-label={l10n.getString('staff-login-pin-section-aria')}
             >
             {renderPinDots(pin.length)}
             {renderPinPad()}
@@ -327,7 +319,6 @@ export default function StaffLoginScreen() {
               {l10n.getString(loading ? 'staff-login-submitting' : 'staff-login-submit')}
             </button>
             </div>
-          </Localized>
         )}
 
         {/* Error */}

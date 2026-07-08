@@ -13,6 +13,8 @@ import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
 import type { WizardState } from '@/features/setup/SetupWizard';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
+import PosScreen from '@/features/sales/PosScreen';
+import KdsScreen from '@/features/kds/KdsScreen';
 
 /**
  * Application shell — handles setup wizard flow, auth gates,
@@ -59,6 +61,7 @@ export default function AppShell() {
       const workspaceRoute: Record<string, string> = {
         'restaurant-pos': 'sales',
         'store-pos': 'products',
+        kds: 'kds',
         inventory: 'inventory',
         admin: 'settings',
       };
@@ -138,26 +141,68 @@ export default function AppShell() {
   const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole);
 
   // Workspace fullscreen — restaurant POS hides the sidebar.
+  // KDS is a separate workspace screen, navigated to via the chef button in PosScreen.
   if (activeWorkspace === 'restaurant-pos') {
+    if (currentRoute === 'kds') {
+      return (
+        <div className="workspace-fullscreen">
+          <div className="kds-workspace">
+            <div className="kds-workspace-header">
+              <button
+                className="kds-workspace-back"
+                onClick={() => handleNavigate('sales')}
+              >
+                <Localized id="back">
+                  <span>&larr; Back</span>
+                </Localized>
+              </button>
+            </div>
+            <KdsScreen />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="workspace-fullscreen">
-        {pageDenied ? (
-          <PermissionDenied
-            action={pageRegistration!.label}
-            requiredRole={pageRegistration!.requiredRole!}
-          />
-        ) : PageComponent ? (
-          <PageComponent />
-        ) : null}
+        <PosScreen onNavigate={handleNavigate} />
       </div>
     );
   }
 
   // Workspace fullscreen — retail POS with its own layout.
+  // KDS is a separate workspace screen, navigated to via F12 or function bar.
   if (activeWorkspace === 'store-pos') {
+    if (currentRoute === 'kds') {
+      return (
+        <div className="workspace-fullscreen">
+          <div className="kds-workspace">
+            <div className="kds-workspace-header">
+              <button
+                className="kds-workspace-back"
+                onClick={() => handleNavigate('products')}
+              >
+                <Localized id="back">
+                  <span>&larr; Back</span>
+                </Localized>
+              </button>
+            </div>
+            <KdsScreen />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="workspace-fullscreen">
-        <RetailPosScreen />
+        <RetailPosScreen onNavigate={handleNavigate} />
+      </div>
+    );
+  }
+
+  // Fullscreen workspace — KDS.
+  if (activeWorkspace === 'kds') {
+    return (
+      <div className="workspace-fullscreen">
+        <KdsScreen />
       </div>
     );
   }

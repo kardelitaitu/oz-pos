@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useAuth } from '@/contexts/AuthContext';
 import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
 import './KdsScreen.css';
 
@@ -14,14 +15,16 @@ const STATUS_LABELS: Record<KdsStatus, string> = {
 
 export default function KdsScreen() {
   const { l10n } = useLocalization();
+  const { session } = useAuth();
+  const userId = session?.user_id ?? '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const fetchOrders = useCallback(() => {
-    getKdsQueue()
+    getKdsQueue(userId)
       .then(setOrders)
       .catch((e) => setError(e.message ?? String(e)));
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     fetchOrders();
@@ -34,7 +37,7 @@ export default function KdsScreen() {
     if (currentIdx < 0 || currentIdx >= STATUS_ORDER.length - 1) return;
     const nextStatus = STATUS_ORDER[currentIdx + 1]!;
     try {
-      await updateKdsStatus(order.id, nextStatus);
+      await updateKdsStatus(userId, order.id, nextStatus);
       fetchOrders();
     } catch (e) {
       setError(String(e));

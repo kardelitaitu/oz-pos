@@ -181,6 +181,10 @@ workspace-card-no-access-aria = { $name } — not available for your role
 workspace-card-no-access-title = Your role ({ $role }) cannot access this workspace
 workspace-card-no-access-badge = Not available
 workspace-home-logout = Logout
+workspace-home-error-title = Connection Error
+workspace-home-error-desc = Could not load your workspaces. Check your connection and try again.
+workspace-home-retry = Try Again
+workspace-home-retry-btn = Retry
 
 # Shell
 shell-loading = Loading…

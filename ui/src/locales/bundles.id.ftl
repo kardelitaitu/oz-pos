@@ -14,8 +14,7 @@ bundles-add-item = + Tambah Item
 bundles-cancel = Batal
 bundles-create = Buat
 bundles-save = Perbarui
-bundles-table-aria =
-    .aria-label = Daftar bundel produk
+bundles-table-aria = Daftar bundel produk
 bundles-actions-aria =
     .aria-label = Tindakan
 bundles-toggle-aria =
@@ -29,11 +28,10 @@ bundles-edit-aria =
     .aria-label = Ubah { $name }
 bundles-delete-aria =
     .aria-label = Hapus { $name }
-bundles-modal-aria =
-    .aria-label = { $mode ->
-        [add] Tambah bundel
-       *[edit] Ubah bundel
-    }
+bundles-modal-aria = { $mode ->
+    [add] Tambah bundel
+   *[edit] Ubah bundel
+}
 bundles-close-aria =
     .aria-label = Tutup
 bundles-sku-placeholder =

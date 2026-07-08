@@ -608,7 +608,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       </div>
 
       {/* ── Category pills ─────────────────────────── */}
-      <Localized id="restaurant-categories-aria" attrs={{ 'aria-label': true }}><div className="restaurant-categories" role="tablist" aria-label={l10n.getString('restaurant-categories-aria')}>
+      <div className="restaurant-categories" role="tablist" aria-label={l10n.getString('restaurant-categories-aria')}>
           {categoryOptions.map((cat) => {
             const meta = catMetaMap.get(cat);
             const isActive = activeCategory === cat;
@@ -636,10 +636,8 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 {cat}
               </button>
             );
-          })}
-        </div>
-      </Localized>
-
+          })}        </div>
+
       {/* ── Product grid ───────────────────────────── */}
       {loading ? (
         <div className="restaurant-empty">

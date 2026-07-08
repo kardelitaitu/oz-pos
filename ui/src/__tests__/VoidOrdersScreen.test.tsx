@@ -113,7 +113,7 @@ describe('VoidOrdersScreen', () => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getAllByText('Voided')[0]);
+    await userEvent.click(screen.getAllByText('Voided')[0]!);
 
     expect(screen.queryByText(/ORD-001/)).not.toBeInTheDocument();
     expect(screen.queryByText(/ORD-002/)).not.toBeInTheDocument();
@@ -129,7 +129,7 @@ describe('VoidOrdersScreen', () => {
     });
 
     const viewBtns = screen.getAllByRole('button', { name: /^View|^view/i });
-    await userEvent.click(viewBtns[0]);
+    await userEvent.click(viewBtns[0]!);
 
     await waitFor(() => {
       expect(screen.getByText(/Indomie Goreng/)).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('VoidOrdersScreen', () => {
     });
 
     const viewBtns = screen.getAllByRole('button', { name: /^view/i });
-    await userEvent.click(viewBtns[0]);
+    await userEvent.click(viewBtns[0]!);
 
     await waitFor(() => {
       expect(screen.getByText(/Void Order/)).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe('VoidOrdersScreen', () => {
     });
 
     const viewBtns = screen.getAllByRole('button', { name: /^view/i });
-    await userEvent.click(viewBtns[0]);
+    await userEvent.click(viewBtns[0]!);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue(/Select a reason/i)).toBeInTheDocument();
@@ -178,7 +178,7 @@ describe('VoidOrdersScreen', () => {
     });
 
     const viewBtns = screen.getAllByRole('button', { name: /^view/i });
-    await userEvent.click(viewBtns[0]);
+    await userEvent.click(viewBtns[0]!);
 
     await waitFor(() => {
       const confirmBtn = screen.getByRole('button', { name: /confirm void/i });
@@ -198,7 +198,7 @@ describe('VoidOrdersScreen', () => {
     });
 
     const viewBtns = screen.getAllByRole('button', { name: /^view/i });
-    await user.click(viewBtns[0]);
+    await user.click(viewBtns[0]!);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
@@ -232,7 +232,7 @@ describe('VoidOrdersScreen', () => {
     });
 
     const viewBtns = screen.getAllByRole('button', { name: /^view/i });
-    await user.click(viewBtns[0]);
+    await user.click(viewBtns[0]!);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();

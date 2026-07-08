@@ -487,8 +487,7 @@ export default function CategoryManagementScreen() {
                 <Localized id="categories-colour">
                   <span className="cat-mgmt-label">Colour</span>
                 </Localized>
-                <Localized id="category-colour-picker-aria" attrs={{ 'aria-label': true }}>
-                  <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label="Pick a colour">
+                <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('category-colour-picker-aria')}>
                     {COLOURS.map((colour) => (
                       <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
                         <button
@@ -507,7 +506,6 @@ export default function CategoryManagementScreen() {
                       </Localized>
                     ))}
                   </div>
-                </Localized>
               </div>
 
               {/* Preview */}

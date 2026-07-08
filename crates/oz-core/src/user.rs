@@ -188,6 +188,8 @@ pub mod builtin_roles {
     pub const MANAGER: &str = "role-manager";
     /// Cashier — can process sales and manage the daily register.
     pub const CASHIER: &str = "role-cashier";
+    /// Kitchen — can view and update KDS orders.
+    pub const KITCHEN: &str = "role-kitchen";
 }
 
 /// Well-known seed user ids.

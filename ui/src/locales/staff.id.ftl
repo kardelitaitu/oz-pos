@@ -77,14 +77,10 @@ staff-error-display-name-required = Nama tampilan wajib diisi
 staff-error-role-required = Silakan pilih peran
 staff-error-pin-length = PIN minimal 4 karakter
 staff-error-save-failed = Gagal menyimpan anggota staf
-staff-table-aria =
-    .aria-label = Anggota staf
-staff-field-username-aria =
-    .aria-label = Nama Pengguna
-staff-field-name-aria =
-    .aria-label = Nama Tampilan
-staff-field-pin-aria =
-    .aria-label = PIN
+staff-table-aria = Anggota staf
+staff-field-username-aria = Nama Pengguna
+staff-field-name-aria = Nama Tampilan
+staff-field-pin-aria = PIN
 staff-error-generic = { $message }
 
 # ── Staff Login (remaining) ──

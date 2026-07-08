@@ -16,8 +16,7 @@ bundles-add-item = + Add Item
 bundles-cancel = Cancel
 bundles-create = Create
 bundles-save = Update
-bundles-table-aria =
-    .aria-label = Product bundles
+bundles-table-aria = Product bundles
 bundles-actions-aria =
     .aria-label = Actions
 bundles-toggle-aria =
@@ -31,11 +30,10 @@ bundles-edit-aria =
     .aria-label = Edit { $name }
 bundles-delete-aria =
     .aria-label = Delete { $name }
-bundles-modal-aria =
-    .aria-label = { $mode ->
-        [add] Add bundle
-       *[edit] Edit bundle
-    }
+bundles-modal-aria = { $mode ->
+    [add] Add bundle
+   *[edit] Edit bundle
+}
 bundles-close-aria =
     .aria-label = Close
 bundles-sku-placeholder =

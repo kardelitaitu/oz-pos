@@ -45,10 +45,8 @@ product-lookup-add = Add to cart
 product-lookup-in-stock = In stock
 product-lookup-out-of-stock = Out of stock
 product-lookup-all-categories = All Categories
-product-lookup-categories-aria =
-    .aria-label = Filter by category
-product-lookup-grid-aria =
-    .aria-label = Product search results
+product-lookup-categories-aria = Filter by category
+product-lookup-grid-aria = Product search results
 product-lookup-card-aria =
     .aria-label = { $name } — { $price }. SKU: { $sku }. { $stock }
 product-lookup-bundle-added = Bundle "{ $name }" added — { $count } items
@@ -95,8 +93,7 @@ product-mgmt-field-stock = Initial stock
 product-mgmt-btn-cancel = Cancel
 product-mgmt-btn-create = Create
 product-mgmt-btn-update = Update
-product-mgmt-table-aria =
-    .aria-label = Product catalog
+product-mgmt-table-aria = Product catalog
 product-mgmt-actions-aria =
     .aria-label = Actions
 product-mgmt-variants = Variants
@@ -159,15 +156,12 @@ variant-mgmt-field-active = Active
 variant-mgmt-btn-cancel = Cancel
 variant-mgmt-btn-create = Create
 variant-mgmt-btn-update = Update
-variant-mgmt-overlay-aria =
-    .aria-label = Variants for { $name }
-variant-mgmt-dialog-aria =
-    .aria-label = { $mode ->
-        [add] Add variant
-       *[edit] Edit variant
-    }
-variant-mgmt-table-aria =
-    .aria-label = Product variants
+variant-mgmt-overlay-aria = Variants for { $name }
+variant-mgmt-dialog-aria = { $mode ->
+    [add] Add variant
+   *[edit] Edit variant
+}
+variant-mgmt-table-aria = Product variants
 variant-mgmt-actions-aria =
     .aria-label = Actions
 variant-mgmt-name-placeholder =

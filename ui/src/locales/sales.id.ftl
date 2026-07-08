@@ -131,8 +131,7 @@ pos-cart-line-swipe-remove-aria = Hapus { $sku }
 pos-cart-panel-aria = Keranjang
 
 # POS Cart Actions
-pos-cart-table-aria =
-    .aria-label = Nomor meja
+pos-cart-table-aria = Nomor meja
 pos-cart-options-collapse-aria =
     .aria-label = Tutup opsi
 pos-cart-options-expand-aria =

@@ -380,7 +380,7 @@ export default function PaymentModal({
       }
 
       try {
-        await createKdsOrderFromSale(saleResult.saleId);
+        await createKdsOrderFromSale(userId, saleResult.saleId);
       } catch {
         // KDS may not be configured — non-blocking.
       }
@@ -643,7 +643,7 @@ export default function PaymentModal({
       }
 
       try {
-        await createKdsOrderFromSale(saleResult.saleId);
+        await createKdsOrderFromSale(userId, saleResult.saleId);
       } catch {
         // KDS may not be configured — non-blocking.
       }

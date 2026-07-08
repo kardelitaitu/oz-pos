@@ -13,12 +13,12 @@ const { mockGetKdsQueue, mockUpdateKdsStatus } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/kds', () => ({
-  getKdsQueue: () => mockGetKdsQueue(),
-  updateKdsStatus: (id: string, status: string) => mockUpdateKdsStatus(id, status),
+  getKdsQueue: (_userId: string) => mockGetKdsQueue(),
+  updateKdsStatus: (_userId: string, id: string, status: string) => mockUpdateKdsStatus(id, status),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ role: { id: 'admin', name: 'Admin' } }),
+  useAuth: () => ({ session: { user_id: 'user-1', display_name: 'Alice', role_name: 'cashier' } }),
 }));
 
 const bundle = new FluentBundle('en-US');

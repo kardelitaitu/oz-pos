@@ -313,8 +313,7 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
 
   // ── Step indicator dots ──────────────────────────────────────────
   const stepIndicator = (
-    <Localized id="setup-progress-aria" attrs={{ 'aria-label': true }}>
-      <nav className="setup-progress" aria-label="Setup progress">
+    <nav className="setup-progress" aria-label={l10n.getString('setup-progress-aria')}>
         {STEPS.map((label, i) => {
           const stepLabel = l10n.getString(`setup-step-${STEP_IDS[i]}`) || label;
           return (
@@ -346,7 +345,6 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
           );
         })}
       </nav>
-    </Localized>
   );
 
   // ── Completion screen ───────────────────────────────────────────
@@ -489,6 +487,7 @@ function StepPreset({
   selected: Preset | null;
   onSelect: (p: Preset) => void;
 }) {
+  const { l10n } = useLocalization();
   return (
     <>
       <Localized id="setup-preset-question">
@@ -500,8 +499,7 @@ function StepPreset({
         </p>
       </Localized>
 
-      <Localized id="setup-preset-group-aria" attrs={{ 'aria-label': true }}>
-        <div className="setup-presets" role="radiogroup" aria-label="Store preset">
+      <div className="setup-presets" role="radiogroup" aria-label={l10n.getString('setup-preset-group-aria')}>
           {PRESETS.map((p) => (
             <button
               key={p.value}
@@ -525,9 +523,7 @@ function StepPreset({
                 <span className="setup-preset-desc">{p.description}</span>
               </Localized>
             </button>
-          ))}
-        </div>
-      </Localized>
+          ))}          </div>
     </>
   );
 }
@@ -561,8 +557,7 @@ function StepFeatures({
         </p>
       </Localized>
 
-      <Localized id="setup-features-group-aria" attrs={{ 'aria-label': true }} vars={{ title: localizedTitle }}>
-        <div className="setup-features" role="group" aria-label={title}>
+      <div className="setup-features" role="group" aria-label={l10n.getString('setup-features-group-aria', { title: localizedTitle })}>
           {features.map((f) => {
             const isOn = !!enabled[f.key];
             const label = l10n.getString(`setup-feature-${f.key}-label`) || l10n.getString(`setup-feature-${f.key}`) || f.label;
@@ -595,9 +590,7 @@ function StepFeatures({
                 </span>
               </label>
             );
-          })}
-        </div>
-      </Localized>
+          })}          </div>
     </>
   );
 }

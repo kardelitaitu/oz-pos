@@ -263,8 +263,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
       </div>
 
       {/* ── Category filters ───────────────────────── */}
-      <Localized id="product-lookup-categories-aria" attrs={{ 'aria-label': true }}>
-        <div className="product-categories" role="radiogroup" aria-label="Filter by category">
+      <div className="product-categories" role="radiogroup" aria-label={l10n.getString('product-lookup-categories-aria')}>
           {categoryOptions.map((cat) => (
             <button
               key={cat}
@@ -288,7 +287,6 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             </button>
           ))}
         </div>
-      </Localized>
 
       {/* ── Loading state ────────────────────────────── */}
       {loading ? (
@@ -309,8 +307,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           </span>
         </div>
       ) : (
-        <Localized id="product-lookup-grid-aria" attrs={{ 'aria-label': true }}>
-          <div className="product-grid" role="list" aria-label="Products">
+        <div className="product-grid" role="list" aria-label={l10n.getString('product-lookup-grid-aria')}>
             {filtered.map((product) => (
               <ProductCard
                 key={product.sku}
@@ -320,7 +317,6 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
               />
             ))}
           </div>
-        </Localized>
       )
       }
 

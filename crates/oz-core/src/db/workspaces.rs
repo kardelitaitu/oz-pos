@@ -213,15 +213,24 @@ mod tests {
     fn list_all_workspaces_returns_seeded() {
         let (store, _) = fresh();
         let ws = store.list_all_workspaces().unwrap();
-        assert!(ws.len() >= 4); // restaurant-pos, store-pos, inventory, admin
+        assert_eq!(ws.len(), 5); // restaurant-pos, store-pos, kds, inventory, admin
         assert!(ws.iter().any(|w| w.key == "restaurant-pos"));
+        assert!(ws.iter().any(|w| w.key == "kds"));
+        assert!(ws.iter().any(|w| w.key == "store-pos"));
+        assert!(ws.iter().any(|w| w.key == "inventory"));
+        assert!(ws.iter().any(|w| w.key == "admin"));
+        // Verify the kds workspace has the expected display name.
+        let kds = ws.iter().find(|w| w.key == "kds").unwrap();
+        assert_eq!(kds.name, "Kitchen Display");
+        assert_eq!(kds.icon, "kds");
     }
 
     #[test]
     fn list_workspaces_owner_returns_all() {
         let (store, _) = fresh();
         let ws = store.list_workspaces("role-owner", None).unwrap();
-        assert!(ws.len() >= 4);
+        assert_eq!(ws.len(), 5);
+        assert!(ws.iter().any(|w| w.key == "kds"));
     }
 
     #[test]

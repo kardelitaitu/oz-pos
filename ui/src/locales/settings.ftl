@@ -14,13 +14,11 @@ setup-step-review = Review
 setup-step-aria =
     .aria-label = Step { $number }: { $label }
 
-setup-progress-aria =
-    .aria-label = Setup progress
+setup-progress-aria = Setup progress
 
 setup-preset-question = What kind of store are you running?
 setup-preset-desc = Choose a preset to get started quickly, or customise every feature later.
-setup-preset-group-aria =
-    .aria-label = Store preset
+setup-preset-group-aria = Store preset
 
 setup-preset-simple-retail = Simple Retail
 setup-preset-simple-retail-desc = Barcode scan, cart, cash/card/QR, staff PIN, receipt printer
@@ -33,8 +31,7 @@ setup-preset-custom-desc = Start from scratch — enable exactly what you need
 
 setup-features-title = { $title }
 setup-features-desc = Toggle the features you need. You can change these later.
-setup-features-group-aria =
-    .aria-label = { $title }
+setup-features-group-aria = { $title }
 setup-features-toggle-aria =
     .aria-label = Toggle { $label }
 
@@ -237,8 +234,7 @@ settings-paper-width-narrow = 58 mm (narrow)
 # Category Management
 category-delete-aria =
     .aria-label = Delete category { $name }
-category-delete-dialog-aria =
-    .aria-label = Delete category
+category-delete-dialog-aria = Delete category
 category-colour-picker-aria =
     .aria-label = Pick a colour
 category-colour-swatch-aria =

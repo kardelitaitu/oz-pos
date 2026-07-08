@@ -18,27 +18,24 @@ import { useState } from 'react';
 import { render, act, fireEvent, screen } from '@testing-library/react';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 
-// ── Mutable host-state ref (synchronously accessible from tests) ──
-//
-// `hostRef.open` mirrors HostModal's internal `open` state after each
-// render. `hostRef.setOpen` is a fresh React state setter each render
-// — calls to it trigger the same React-controlled re-render path as
-// any component-internal state update.
+import {
+  ExitAnimHost,
+  createExitAnimHostRef,
+  advanceFadeSync,
+  expectExiting,
+  expectNotExiting,
+} from './test-utils/exitAnimHost';
+import type { ExitAnimHostRef } from './test-utils/exitAnimHost';
 
-interface HostRef {
-  open: boolean;
+// ── Mutable host-state ref (extends shared ExitAnimHostRef) ───────
+
+interface HostRef extends ExitAnimHostRef {
   paid: boolean;
-  setOpen: (v: boolean) => void;
   setPaid: (v: boolean) => void;
 }
 
 function makeHostRef(): HostRef {
-  return {
-    open: true,
-    paid: false,
-    setOpen: () => {},
-    setPaid: () => {},
-  };
+  return { ...createExitAnimHostRef(), paid: false, setPaid: () => {} };
 }
 
 function HostModal({
@@ -50,30 +47,31 @@ function HostModal({
   hostRef: HostRef;
   onPaymentConfirmed?: () => void;
 }) {
-  const [open, setOpen] = useState(initialOpen);
   const [paid, setPaid] = useState(false);
-  // Mirror state into the ref on every render so tests can read it
-  // synchronously after fireEvent advances ticks.
-  hostRef.open = open;
+  // Mirror extra state into the ref on every render so tests can read
+  // it synchronously after fireEvent advances ticks.
   hostRef.paid = paid;
-  hostRef.setOpen = setOpen;
   hostRef.setPaid = setPaid;
   return (
-    <>
-      <span data-testid="open-state">{String(open)}</span>
-      <span data-testid="paid-state">{String(paid)}</span>
-      <QrisQrDisplay
-        amount={25000}
-        currency="IDR"
-        reference="REF-1234"
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        onPaymentConfirmed={() => {
-          setPaid(true);
-          onPaymentConfirmed?.();
-        }}
-      />
-    </>
+    <ExitAnimHost hostRef={hostRef} initialOpen={initialOpen}>
+      {(open, setOpen) => (
+        <>
+          <span data-testid="open-state">{String(open)}</span>
+          <span data-testid="paid-state">{String(paid)}</span>
+          <QrisQrDisplay
+            amount={25000}
+            currency="IDR"
+            reference="REF-1234"
+            isOpen={open}
+            onClose={() => setOpen(false)}
+            onPaymentConfirmed={() => {
+              setPaid(true);
+              onPaymentConfirmed?.();
+            }}
+          />
+        </>
+      )}
+    </ExitAnimHost>
   );
 }
 
@@ -98,8 +96,8 @@ describe('QrisQrDisplay exit-animation polish', () => {
     const container = document.querySelector('.qris-container');
     expect(overlay).toBeTruthy();
     expect(container).toBeTruthy();
-    expect(overlay?.classList.contains('qris-overlay--exiting')).toBe(false);
-    expect(container?.classList.contains('qris-container--exiting')).toBe(false);
+    expectNotExiting(overlay, 'qris-overlay');
+    expectNotExiting(container, 'qris-container');
   });
 
   it('× button applies BOTH --exiting classes (layered exit) then fades', () => {
@@ -108,21 +106,13 @@ describe('QrisQrDisplay exit-animation polish', () => {
 
     fireEvent.click(document.querySelector('.qris-close') as HTMLElement);
 
-    expect(
-      document.querySelector('.qris-overlay')?.classList.contains(
-        'qris-overlay--exiting',
-      ),
-    ).toBe(true);
-    expect(
-      document.querySelector('.qris-container')?.classList.contains(
-        'qris-container--exiting',
-      ),
-    ).toBe(true);
+    expectExiting(document.querySelector('.qris-overlay'), 'qris-overlay');
+    expectExiting(document.querySelector('.qris-container'), 'qris-container');
 
-    act(() => { vi.advanceTimersByTime(199); });
+    advanceFadeSync(199);
     expect(document.querySelector('.qris-overlay')).toBeTruthy();
 
-    act(() => { vi.advanceTimersByTime(1); });
+    advanceFadeSync(1);
     expect(document.querySelector('.qris-overlay')).toBeNull();
     expect(hostRef.open).toBe(false);
     expect(screen.getByTestId('open-state').textContent).toBe('false');
@@ -143,7 +133,7 @@ describe('QrisQrDisplay exit-animation polish', () => {
     fireEvent.click(document.querySelector('.qris-close') as HTMLElement);
     fireEvent.click(document.querySelector<HTMLButtonElement>('.qris-close')!);
 
-    act(() => { vi.advanceTimersByTime(200); });
+    advanceFadeSync(200);
     expect(document.querySelector('.qris-overlay')).toBeNull();
   });
 

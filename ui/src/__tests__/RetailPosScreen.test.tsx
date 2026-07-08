@@ -15,7 +15,6 @@ import { withFluent } from '@/locales/test-utils';
 import salesFtl from '@/locales/sales.ftl?raw';
 
 import productsFtl from '@/locales/products.ftl?raw';
-import kdsFtl from '@/locales/kds.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import type { LineId } from '@/types/domain';
@@ -189,15 +188,11 @@ vi.mock('@/api/sales', () => ({
 }));
 
 vi.mock('@/api/kds', () => ({
-  createKdsOrderFromSale: vi.fn(() => Promise.resolve()),
+  createKdsOrderFromSale: vi.fn((_userId: string, _saleId: string) => Promise.resolve()),
 }));
 
 vi.mock('@/features/tables/TableManagementScreen', () => ({
   default: () => <div data-testid="table-management-screen">Table Management Floor Plan</div>,
-}));
-
-vi.mock('@/features/kds/KdsScreen', () => ({
-  default: () => <div data-testid="kds-screen">Kitchen Display System</div>,
 }));
 
 vi.mock('@/features/sales/SalesHistoryScreen', () => ({
@@ -248,14 +243,7 @@ const catFtl = `
 `;
 
 function wrap(children: React.ReactNode) {
-  // kdsFtl + tablesFtl are required so the test bundle includes
-  // `kds-title` and `tables-title`, which `RetailPosScreen` renders
-  // as button labels and aria-labels. Without them every render of
-  // this screen logs `@fluent/react] Error: The id "kds-title" did
-  // not match any messages in the localization bundles.` (×472) and
-  // the same for `tables-title` (×373). Production includes these via
-  // the joined `enFTL` bundle in `src/i18n/index.ts`.
-  return withFluent(<ToastProvider>{children}</ToastProvider>, salesFtl, productsFtl, kdsFtl, tablesFtl, catFtl);
+  return withFluent(<ToastProvider>{children}</ToastProvider>, salesFtl, productsFtl, tablesFtl, catFtl);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────
@@ -1122,75 +1110,41 @@ describe('RetailPosScreen', () => {
 
   // ── KDS (F12) shortcut ────────────────────────────────────────
 
-  it('opens KdsScreen when F12 is pressed', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+  it('F12 navigates to KDS workspace via onNavigate', async () => {
+    const onNavigate = vi.fn();
+    await renderInAct(wrap(<RetailPosScreen onNavigate={onNavigate} />));
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
     });
 
     await userEvent.keyboard('{F12}');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
-    });
-    expect(screen.getByText('Kitchen Display System')).toBeInTheDocument();
+    expect(onNavigate).toHaveBeenCalledWith('kds');
   });
 
-  it('opens KdsScreen when the F12 button in the function bar is clicked', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+  it('F12 button in function bar calls onNavigate with kds', async () => {
+    const onNavigate = vi.fn();
+    await renderInAct(wrap(<RetailPosScreen onNavigate={onNavigate} />));
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
     });
 
     await userEvent.click(screen.getByRole('button', { name: /F12/i }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
-    });
+    expect(onNavigate).toHaveBeenCalledWith('kds');
   });
 
-  it('dismisses KdsScreen when the back button is clicked', async () => {
+  it('does not crash when F12 is pressed and onNavigate is undefined', async () => {
     await renderInAct(wrap(<RetailPosScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
     });
 
+    // Should not throw
     await userEvent.keyboard('{F12}');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
-    });
-
-    await userEvent.click(screen.getByRole('button', { name: /back/i }));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('kds-screen')).not.toBeInTheDocument();
-    });
-    expect(screen.getByText('F1')).toBeInTheDocument();
-  });
-
-  it('suppresses F-keys while KdsScreen is shown', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
-
-    await waitFor(() => {
-      expect(screen.getByText('F1')).toBeInTheDocument();
-    });
-
-    // Open KDS via F12
-    await userEvent.keyboard('{F12}');
-    await waitFor(() => {
-      expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
-    });
-
-    // Pressing F9 while KDS is shown should NOT open the shift modal
-    await userEvent.keyboard('{F9}');
-    expect(screen.queryByRole('heading', { name: /open shift/i })).not.toBeInTheDocument();
-
-    // KDS should still be visible
-    expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+    // KDS screen should NOT appear inline
+    expect(screen.queryByTestId('kds-screen')).not.toBeInTheDocument();
   });
 
   // ── F6 Sales History shortcut ─────────────────────────────────

@@ -17,17 +17,17 @@ export interface KdsOrder {
   notes: string;
 }
 
-export const listKdsOrders = (status?: KdsStatus): Promise<KdsOrder[]> =>
-  invoke<KdsOrder[]>('list_kds_orders', { status: status ?? null });
+export const listKdsOrders = (userId: string, status?: KdsStatus): Promise<KdsOrder[]> =>
+  invoke<KdsOrder[]>('list_kds_orders', { userId, status: status ?? null });
 
-export const getKdsQueue = (): Promise<KdsOrder[]> =>
-  invoke<KdsOrder[]>('get_kds_queue');
+export const getKdsQueue = (userId: string): Promise<KdsOrder[]> =>
+  invoke<KdsOrder[]>('get_kds_queue', { userId });
 
-export const updateKdsStatus = (id: string, status: KdsStatus): Promise<KdsOrder> =>
-  invoke<KdsOrder>('update_kds_status', { id, status });
+export const updateKdsStatus = (userId: string, id: string, status: KdsStatus): Promise<KdsOrder> =>
+  invoke<KdsOrder>('update_kds_status', { userId, id, status });
 
-export const createKdsOrderFromSale = (saleId: string): Promise<KdsOrder> =>
-  invoke<KdsOrder>('create_kds_order_from_sale', { saleId });
+export const createKdsOrderFromSale = (userId: string, saleId: string): Promise<KdsOrder> =>
+  invoke<KdsOrder>('create_kds_order_from_sale', { userId, saleId });
 
-export const getKdsOrder = (id: string): Promise<KdsOrder | null> =>
-  invoke<KdsOrder | null>('get_kds_order', { id });
+export const getKdsOrder = (userId: string, id: string): Promise<KdsOrder | null> =>
+  invoke<KdsOrder | null>('get_kds_order', { userId, id });

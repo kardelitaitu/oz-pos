@@ -205,8 +205,7 @@ export default function BundleManagementScreen() {
         </Card>
       ) : (
         <div className="bundle-mgmt-table-wrap">
-          <Localized id="bundles-table-aria" attrs={{ 'aria-label': true }}>
-          <table className="bundle-mgmt-table" aria-label="Product bundles">
+          <table className="bundle-mgmt-table" aria-label={l10n.getString('bundles-table-aria')}>
             <thead>
               <tr>
                 <Localized id="bundles-name"><th>Name</th></Localized>
@@ -275,13 +274,11 @@ export default function BundleManagementScreen() {
               ))}
             </tbody>
           </table>
-          </Localized>
         </div>
       )}
 
       {showModal && (
-        <Localized id="bundles-modal-aria" attrs={{ 'aria-label': true }} vars={{ mode: editingId ? 'edit' : 'add' }}>
-        <div className="bundle-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit bundle' : 'Add bundle'}>
+        <div className="bundle-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('bundles-modal-aria', { mode: editingId ? 'edit' : 'add' })}>
           <div className="bundle-mgmt-modal">
             <div className="bundle-mgmt-modal-header">
               <Localized id={editingId ? 'bundles-edit' : 'bundles-add'}>
@@ -435,7 +432,6 @@ export default function BundleManagementScreen() {
             </div>
           </div>
         </div>
-        </Localized>
       )}
     </div>
   );
