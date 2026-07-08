@@ -34,46 +34,54 @@
 /* ── Line exit animation (fade + slide-right) ───────── */
 
 .pos-cart-line-wrap--exiting {
-  animation: pos-cart-line-out var(--duration-200, 200ms) var(--ease-in, ease-in) forwards;
   pointer-events: none;
 }
 
-@keyframes pos-cart-line-out {
-  from {
-    opacity: 1;
-    transform: translateX(0);
+@media (prefers-reduced-motion: no-preference) {
+  .pos-cart-line-wrap--exiting {
+    animation: pos-cart-line-out var(--duration-200, 200ms) var(--ease-in, ease-in) forwards;
   }
-  to {
-    opacity: 0;
-    transform: translateX(80px);
+
+  .pos-cart-line-wrap--qty-flash {
+    animation: pos-cart-line-flash 350ms var(--ease-out, ease-out);
+  }
+
+  .pos-cart-line-wrap--qty-flash .pos-cart-qty-value {
+    animation: pos-cart-qty-bounce 350ms var(--ease-out, ease-out);
+  }
+
+  .pos-cart-line {
+    animation: pos-cart-line-in var(--duration-200) var(--ease-out);
+  }
+
+  @keyframes pos-cart-line-out {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(80px);
+    }
+  }
+
+  @keyframes pos-cart-line-flash {
+    0% {
+      background-color: var(--color-accent-subtle, rgba(99, 102, 241, 0.12));
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  @keyframes pos-cart-qty-bounce {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.35); }
+    70% { transform: scale(0.9); }
+    100% { transform: scale(1); }
   }
 }
 
-/* ── Qty-change flash (brief background highlight) ──── */
-
-.pos-cart-line-wrap--qty-flash {
-  animation: pos-cart-line-flash 350ms var(--ease-out, ease-out);
-}
-
-.pos-cart-line-wrap--qty-flash .pos-cart-qty-value {
-  animation: pos-cart-qty-bounce 350ms var(--ease-out, ease-out);
-}
-
-@keyframes pos-cart-line-flash {
-  0% {
-    background-color: var(--color-accent-subtle, rgba(99, 102, 241, 0.12));
-  }
-  100% {
-    background-color: transparent;
-  }
-}
-
-@keyframes pos-cart-qty-bounce {
-  0% { transform: scale(1); }
-  35% { transform: scale(1.35); }
-  70% { transform: scale(0.9); }
-  100% { transform: scale(1); }
-}
 
 /* ── Carved card line item ──────────────────────────── */
 /* Each line is a card with surface background, soft border, rounded
@@ -91,7 +99,6 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--cart-line-radius, var(--radius-xl));
   box-shadow: var(--cart-line-shadow, var(--shadow-xs));
-  animation: pos-cart-line-in var(--duration-200) var(--ease-out);
   transition:
     box-shadow var(--duration-150) var(--ease-out),
     transform var(--duration-150) var(--ease-out),
@@ -382,5 +389,17 @@
   .pos-cart-line-thumb {
     width: 40px;
     height: 40px;
+  }
+}
+
+/* ── New-line slide-in ──────────────────────────────────────
+ * Reuses the pos-cart-line-in keyframe already defined in
+ * CartPanel.css so the empty-state stack and the per-line card
+ * animate identically when a new cart line is added. Tablet-
+ * aware: just enough fade + 6 px lift to register visually
+ * without competing with the menu during high-frequency adds. */
+@media (prefers-reduced-motion: no-preference) {
+  .pos-cart-line {
+    animation: pos-cart-line-in var(--duration-200) var(--ease-out);
   }
 }

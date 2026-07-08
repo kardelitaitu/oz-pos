@@ -181,12 +181,19 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  animation: pos-modal-in var(--duration-200) var(--ease-out);
+  animation: pos-overlay-in var(--duration-200) var(--ease-out),
+    pos-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
-@keyframes pos-modal-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ── Modal panel slide-up (the overlay backdrop uses the
+ * pre-existing pos-overlay-in opacity-only keyframe above; this
+ * single ka retains the lift + subtle scale for the three
+ * modal panels — hold-order, held-list, close-shift + summary)
+ * so they share a coordinated entry: opacity + translateY(12 px)
+ * + subtle scale(0.98). */
+@keyframes pos-modal-slide-up {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .pos-hold-title {
@@ -274,7 +281,8 @@
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  animation: pos-modal-in var(--duration-200) var(--ease-out);
+  animation: pos-overlay-in var(--duration-200) var(--ease-out),
+    pos-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
 .pos-held-list-header {
@@ -398,7 +406,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  animation: pos-modal-in var(--duration-200) var(--ease-out);
+  animation: pos-overlay-in var(--duration-200) var(--ease-out),
+    pos-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
 .pos-close-shift-title {
@@ -628,6 +637,9 @@
 }
 .pos-settings-tab:hover {
   background: color-mix(in srgb, var(--color-fg, #111) 8%, transparent);
+}
+.pos-settings-tab:active {
+  transform: translateY(0) scale(0.98);
 }
 .pos-settings-tab:focus-visible {
   outline: 2px solid var(--color-border-focus, #60a5fa);

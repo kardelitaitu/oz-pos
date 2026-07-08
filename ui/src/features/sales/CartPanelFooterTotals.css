@@ -31,12 +31,17 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
   font-variant-numeric: tabular-nums;
-  animation: pos-subtotal-flash 600ms var(--ease-out);
 }
 
-@keyframes pos-subtotal-flash {
-  0% { color: var(--color-warning, #f59e0b); }
-  100% { color: var(--color-fg); }
+@media (prefers-reduced-motion: no-preference) {
+  .pos-cart-subtotal-amount {
+    animation: pos-subtotal-flash 600ms var(--ease-out);
+  }
+
+  @keyframes pos-subtotal-flash {
+    0% { color: var(--color-warning, #f59e0b); }
+    100% { color: var(--color-fg); }
+  }
 }
 
 /* ── Discount area ─────────────────────────────────── */
@@ -117,12 +122,17 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  animation: pos-discount-form-in 250ms var(--ease-out) both;
 }
 
-@keyframes pos-discount-form-in {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: no-preference) {
+  .pos-cart-discount-form {
+    animation: pos-discount-form-in 250ms var(--ease-out) both;
+  }
+
+  @keyframes pos-discount-form-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
 .pos-cart-discount-input-row {
@@ -311,6 +321,7 @@
 
 .pos-cart-service-toggle:hover {
   border-color: var(--color-border-hover);
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-surface));
 }
 
 .pos-cart-service-toggle:focus-visible {

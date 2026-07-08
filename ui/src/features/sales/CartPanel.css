@@ -226,7 +226,6 @@
   padding: var(--space-12) var(--space-6);
   color: var(--color-fg-tertiary);
   text-align: center;
-  animation: pos-cart-line-in var(--duration-300) var(--ease-out);
 }
 
 .pos-cart-empty-msg svg {
@@ -255,14 +254,45 @@
  * card (in CartPanelLineItem.css) consume the same animation
  * definition. Avoids cross-file coupling where removing the
  * keyframe from LineItem would silently break the empty state. */
-@keyframes pos-cart-line-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
+@media (prefers-reduced-motion: no-preference) {
+  .pos-cart-empty-msg {
+    animation: pos-cart-line-in var(--duration-300) var(--ease-out);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  @keyframes pos-cart-line-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Gentle breathing for the empty-state SVG. Tablet-aware:
+   * slower cycle (4 s) and a tighter scale range than retail's
+   * cousin so the icon stays visually quiet as a passive cue
+   * rather than competing with the menu. */
+  .pos-cart-empty-msg svg {
+    animation: pos-cart-empty-breathe 4s ease-in-out infinite;
+  }
+
+  @keyframes pos-cart-empty-breathe {
+    0%, 100% { opacity: 0.4; transform: scale(0.96); }
+    50%      { opacity: 0.8; transform: scale(1.04); }
+  }
+
+  /* Undo pill entry: slides up + fades in when a removed line is
+   * recoverable. Reuses the existing duration-200 easing so it
+   * composes with the cart-line animations already in flight. */
+  .pos-cart-undo-bar {
+    animation: pos-cart-undo-in var(--duration-200) var(--ease-out);
+  }
+
+  @keyframes pos-cart-undo-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 }
 
@@ -334,6 +364,7 @@
   border-color: var(--color-accent);
   color: var(--color-accent);
   background: var(--color-accent-dim);
+  transform: translateY(-1px);
 }
 
 .pos-cart-held-count {
