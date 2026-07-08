@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:i18n": "bash ../scripts/lint-i18n.sh",
+    "dedupe:ftl": "python3 ../scripts/dedupe-ftl.py",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

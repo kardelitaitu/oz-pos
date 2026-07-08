@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 
 // getCountLines is dynamically imported — vi.fn() inside factory avoids hoisting issues.
 vi.mock('@/api/inventoryCounts', () => ({
@@ -33,7 +33,7 @@ const mockComplete = completeStockCount as ReturnType<typeof vi.fn>;
 const mockUpdateStatus = updateStockCountStatus as ReturnType<typeof vi.fn>;
 const mockGetLines = getCountLines as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl, sharedFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl);
 
 const sampleCount = {
   id: 'sc-1', count_number: 'SC-001', status: 'draft' as const,

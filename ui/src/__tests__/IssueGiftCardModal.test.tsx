@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import giftCardsFtl from '@/locales/gift-cards.ftl?raw';
 
+
 // Mock the API module before importing the component.
 vi.mock('@/api/giftCards', () => ({
   issueGiftCard: vi.fn(),

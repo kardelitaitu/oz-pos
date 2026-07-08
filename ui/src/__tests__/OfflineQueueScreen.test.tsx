@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import offlineFtl from '@/locales/offline.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ function makeQueueItem(overrides: Record<string, unknown> = {}) {
 }
 
 const wrap = (children: React.ReactNode) =>
-  withFluent(children, offlineFtl, sharedFtl);
+  withFluent(children, offlineFtl);
 
 function renderScreen() {
   return render(wrap(<OfflineQueueScreen />));

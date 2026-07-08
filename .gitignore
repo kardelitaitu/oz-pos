@@ -41,6 +41,9 @@ Thumbs.db
 *.profraw
 *.gcda
 *.gcno
+# CI gate teed output from the act() / flushSync warning check
+# in .github/workflows/ci.yml. Regenerated on every CI run.
+ui/vitest-output.log
 
 # Tauri — generated platform code (Android/iOS)
 # Tauri requires real PNG/ICO icons; the scaffold ships without them.

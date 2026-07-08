@@ -10,9 +10,19 @@ export default defineConfig({
   plugins: [react()],
 
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    // Use the explicit regex form for the `@/` alias (instead of the
+    // shorthand `'@': path`). The shorthand is honored by Vite's
+    // dev/build resolver but NOT by Vitest 1.6.x's pool-worker
+    // resolver — imports like `@/components/Badge` fall through to
+    // Node's ESM resolver and fail with `Cannot find package`.
+    // Trailing slashes on both `./src/` and `replacement` keep the
+    // path join clean (`…/foo`, never `…/srccomponents/foo`).
+    alias: [
+      {
+        find: /^@\//,
+        replacement: `${fileURLToPath(new URL('./src/', import.meta.url))}/`,
+      },
+    ],
   },
 
   // Vite options tailored for Tauri development.

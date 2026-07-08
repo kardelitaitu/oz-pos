@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import salesFtl from '@/locales/sales.ftl?raw';
 import shiftsFtl from '@/locales/shifts.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 import EodReportScreen from '@/features/sales/EodReportScreen';
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ function makeShift(overrides: Record<string, unknown> = {}) {
 }
 
 const wrap = (children: React.ReactNode) =>
-  withFluent(children, salesFtl, shiftsFtl, sharedFtl);
+  withFluent(children, salesFtl, shiftsFtl);
 
 function renderScreen() {
   return render(wrap(<EodReportScreen />));

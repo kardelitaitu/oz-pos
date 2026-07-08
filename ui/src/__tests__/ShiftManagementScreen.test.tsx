@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import shiftsFtl from '@/locales/shifts.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 
 vi.mock('@/api/shifts', () => ({
   listShifts: vi.fn(),
@@ -27,7 +27,7 @@ const mockListShifts = listShifts as ReturnType<typeof vi.fn>;
 const mockGetActiveShift = getActiveShift as ReturnType<typeof vi.fn>;
 const mockGetShiftReport = getShiftReport as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, shiftsFtl, sharedFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, shiftsFtl);
 
 const activeShift = {
   id: 'shift-1', userId: 'user-1', terminalId: null,

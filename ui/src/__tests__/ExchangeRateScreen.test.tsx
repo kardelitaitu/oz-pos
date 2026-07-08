@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import currencyFtl from '@/locales/currency.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ function makeCurrency(code: string, name: string) {
 }
 
 const wrap = (children: React.ReactNode) =>
-  withFluent(children, currencyFtl, sharedFtl);
+  withFluent(children, currencyFtl);
 
 function renderScreen() {
   return render(wrap(<ExchangeRateScreen />));

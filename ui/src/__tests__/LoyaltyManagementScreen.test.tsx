@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import loyaltyFtl from '@/locales/loyalty.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 
 vi.mock('@/api/loyalty', () => ({
   listLoyaltyAccounts: vi.fn(),
@@ -24,7 +24,7 @@ const mockListTiers = listLoyaltyTiers as ReturnType<typeof vi.fn>;
 const mockUpdateTier = updateLoyaltyTier as ReturnType<typeof vi.fn>;
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, loyaltyFtl, sharedFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, loyaltyFtl);
 
 const sampleTiers = [
   { id: 'tier-bronze', name: 'Bronze', min_points: 0, points_per_unit: 10, earn_multiplier: 1.0, colour: '#cd7f32', sort_order: 1, created_at: '2025-01-01T00:00:00.000Z' },

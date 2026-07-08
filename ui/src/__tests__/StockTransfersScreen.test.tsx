@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import stockTransfersFtl from '@/locales/stock-transfers.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 
 vi.mock('@/api/stockTransfers', () => ({
   listStockTransfers: vi.fn(),
@@ -40,7 +40,7 @@ const mockCancelTransfer = cancelStockTransfer as ReturnType<typeof vi.fn>;
 const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
 const mockListTerminals = listTerminals as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockTransfersFtl, sharedFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, stockTransfersFtl);
 
 const sampleTransfers = [
   {
