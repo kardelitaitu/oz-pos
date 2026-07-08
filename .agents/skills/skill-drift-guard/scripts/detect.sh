@@ -77,12 +77,42 @@ PYTHON_BIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
 # `cut | "$PYTHON_BIN" -c '...'` produces empty output → $res_file empty
 # → no FINDINGS written. Demote such stubs to empty so the awk fail-closed
 # path correctly surfaces every shape-pass date as INVALID instead of
-# silently passing through. The `[ -x ]` pre-flight skips the slow
-# `python3 -c 'pass'` cold-start when PYTHON_BIN points at a non-executable
-# stub; real Python hosts on Linux/macOS still pay the ~100-500ms cost
-# each run (TODO: a positive-list against canonical install paths like
-# `/usr/bin/python3`, `/opt/homebrew/bin/python3` could amortize the cost).
-[ -n "$PYTHON_BIN" ] && [ -x "$PYTHON_BIN" ] && ! "$PYTHON_BIN" -c 'pass' 2>/dev/null && PYTHON_BIN=""
+# silently passing through.
+
+# Amortize the ~100-500ms `python3 -c 'pass'` cold-start on canonical
+# real-Python install paths (Linux distro defaults, Homebrew, pyenv,
+# python.org macOS framework). The `[ -x ]` pre-flight still cheap-skips
+# non-executable stubs (e.g. Windows Store launchers); this positive-list
+# extends that to executable-but-known-real installs. Paths not in the
+# list fall through to the smoke-test, which catches unknown / venv /
+# programmatic installs at the cost of one cold-start per run.
+#
+# Each pattern is split into `python3` AND `python3.[0-9]*` (NOT a
+# single `python3*` glob) so unrelated helpers — `python3m`,
+# `python3-config`, `python3-something` — are NOT trusted. Add patterns
+# to the case below as new canonical paths surface; keep the list
+# short and conservative.
+case "$PYTHON_BIN" in
+  /usr/bin/python3|/usr/bin/python3.[0-9]*|\
+  /usr/local/bin/python3|/usr/local/bin/python3.[0-9]*|\
+  /opt/homebrew/bin/python3|/opt/homebrew/bin/python3.[0-9]*|\
+  /opt/python*/bin/python3|/opt/python*/bin/python3.[0-9]*|\
+  /usr/local/opt/python*/bin/python3|/usr/local/opt/python*/bin/python3.[0-9]*|\
+  /home/*/.pyenv/shims/python3|/home/*/.pyenv/shims/python3.[0-9]*|\
+  /Users/*/.pyenv/shims/python3|/Users/*/.pyenv/shims/python3.[0-9]*|\
+  /Library/Frameworks/Python.framework/Versions/*/bin/python3|\
+  /Library/Frameworks/Python.framework/Versions/*/bin/python3.[0-9]*)
+    # Canonical real-Python path; trust without smoke-test. The pyenv
+    # entries enumerate /home/* and /Users/* explicitly because bash
+    # case-patterns do not tilde-expand (literal `~/` would never match
+    # real `command -v python3` resolutions on pyenv hosts).
+    ;;
+  *)
+    [ -n "$PYTHON_BIN" ] && [ -x "$PYTHON_BIN" ] \
+      && ! "$PYTHON_BIN" -c 'pass' 2>/dev/null \
+      && PYTHON_BIN=""
+    ;;
+esac
 
 # Audit-footer validation helpers (used by Check 9 and Check 10).
 # Two-pass validation: $AUDIT_RE catches SHAPE failures (missing fields,
