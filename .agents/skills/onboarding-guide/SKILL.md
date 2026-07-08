@@ -49,7 +49,8 @@ What do you want to do?
 |---|---|
 | Add or change Rust code in any `oz-*` crate, work with the `Money` struct, write SQL transactions, define error types, or add a `#[cfg(test)]` block | **`rust-backend`** |
 | Add a new Tauri command on the backend, register it, and call it from the front-end via `pos.ts` | **`tauri-ipc`** |
-| Add or change a React component, screen, hook, or any user-visible string; review accessibility, i18n, or strict TypeScript | **`ui-components`** |
+| Add or change React component, screen, hook, or any user-visible string; review accessibility, i18n, or strict TypeScript | **`ui-components`** |
+| Add a symmetric CSS entry/exit animation (mirror keyframe + class toggle + useRef cleanup + ID-set-compare race guard) on a pill, badge, banner, modal, or any dismissable UI element | **`exit-animation-pattern`** |
 | Add a new device category or vendor driver (barcode, printer, NFC, payment terminal, cash drawer); write the **mandatory mock** | **`hal-drivers`** |
 | Scaffold the workspace, add a new crate, configure CI, write commit messages, set up the GitHub Actions matrix | **`project-scaffold`** |
 | Detect or patch drift between a skill and the code (broken paths, renamed crates, stale `last audited` dates, outdated dependency versions) | **`skill-drift-guard`** |
@@ -128,7 +129,7 @@ If any of those describe the task, the right move is to ask the user which codeb
 |---|---|
 | "What does this Rust trait do?" | Read the `///` docs on the trait itself. The skills are guides, not the source of truth — the code is. |
 | "How should this work in OZ-POS?" | Read the matching skill. If the skill doesn't cover it, ask Buffy (the AI agent) to extend the skill. |
-| "How should this work in general?" | The relevant upstream docs (`embedded-hal`, `rusqlite`, `tauri`, React, Fluent). The skills assume familiarity with these. |
+| "How should this work in general?" | The relevant upstream docs (`embedded-hal`, `rusqlite`, Tauri, React, Fluent). The skills assume familiarity with these. |
 | "Is this a security concern?" | Read `AGENTS.md` first. If still unclear, spawn a security review — OZ-POS handles money and (eventually) card data. |
 
 ---
