@@ -36,7 +36,6 @@
   cursor: col-resize;
   background: transparent;
   position: relative;
-  transition: background-color var(--duration-150) var(--ease-out);
   /* Avoid text-selection while dragging. */
   user-select: none;
   touch-action: none;
@@ -59,7 +58,6 @@
   border-radius: var(--radius-full);
   background: var(--color-border);
   transform: translate(-50%, -50%);
-  transition: background-color var(--duration-150) var(--ease-out);
 }
 
 .pos-resize-handle:hover::after {
@@ -342,7 +340,6 @@
   font-size: var(--text-sm);
   text-align: center;
   outline: none;
-  transition: border-color var(--duration-150) var(--ease-out);
 }
 
 .pos-cart-table-input:focus {
@@ -410,6 +407,18 @@
  * .pos-cart-panel reflow) live here; selector-specific responsive
  * rules live in their owning files so each chunk is independently
  * themable. */
+@media (prefers-reduced-motion: no-preference) {
+  .pos-resize-handle {
+    transition: background-color var(--duration-150) var(--ease-out);
+  }
+  .pos-resize-handle::after {
+    transition: background-color var(--duration-150) var(--ease-out);
+  }
+  .pos-cart-table-input {
+    transition: border-color var(--duration-150) var(--ease-out);
+  }
+}
+
 @media (max-width: 1023px) {
   .pos-resize-handle {
     display: none;

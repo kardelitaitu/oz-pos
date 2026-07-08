@@ -62,9 +62,6 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  transition:
-    border-color var(--duration-150) var(--ease-out),
-    box-shadow var(--duration-150) var(--ease-out);
 }
 
 .settings-select:focus,
@@ -109,9 +106,6 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition:
-    border-color var(--duration-150) var(--ease-out),
-    background var(--duration-150) var(--ease-out);
 }
 
 .settings-size-btn:hover:not(:disabled) {
@@ -143,5 +137,15 @@
   .settings-page .tab-list button {
     font-size: 14px;
     padding: 8px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .settings-select,
+  .settings-input {
+    transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
+  }
+  .settings-size-btn {
+    transition: border-color var(--duration-150) var(--ease-out), background var(--duration-150) var(--ease-out);
   }
 }

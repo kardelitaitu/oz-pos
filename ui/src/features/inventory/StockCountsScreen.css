@@ -31,7 +31,6 @@
   background: var(--bg-card, #fff);
   cursor: pointer;
   font-size: 0.875rem;
-  transition: all 0.15s;
 }
 
 .sc-filter-btn--active {
@@ -118,4 +117,10 @@
   cursor: pointer;
   font-size: 0.875rem;
   padding: 4px 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-filter-btn {
+    transition: all 0.15s;
+  }
 }

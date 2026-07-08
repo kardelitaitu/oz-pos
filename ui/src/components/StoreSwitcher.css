@@ -14,7 +14,6 @@
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: background-color var(--duration-150) var(--ease-out);
   white-space: nowrap;
 }
 
@@ -34,7 +33,6 @@
 }
 
 .store-switcher-chevron {
-  transition: transform var(--duration-150) var(--ease-out);
   color: var(--color-fg-tertiary);
 }
 
@@ -70,7 +68,6 @@
   font-size: var(--text-sm);
   text-align: left;
   cursor: pointer;
-  transition: background-color var(--duration-150) var(--ease-out);
 }
 
 .store-switcher-option:hover {
@@ -103,4 +100,16 @@
 
 .store-switcher-option--active .store-switcher-option-meta {
   color: var(--color-accent-active);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .store-switcher-trigger {
+    transition: background-color var(--duration-150) var(--ease-out);
+  }
+  .store-switcher-chevron {
+    transition: transform var(--duration-150) var(--ease-out);
+  }
+  .store-switcher-option {
+    transition: background-color var(--duration-150) var(--ease-out);
+  }
 }

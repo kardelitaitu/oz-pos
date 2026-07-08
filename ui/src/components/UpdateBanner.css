@@ -36,6 +36,12 @@
   }
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .update-banner-btn {
+    transition: background-color var(--duration-150) var(--ease-out), opacity var(--duration-150) var(--ease-out);
+  }
+}
+
 .update-banner-content {
   display: flex;
   align-items: center;
@@ -80,9 +86,6 @@
   font-weight: var(--font-weight-medium);
   line-height: var(--leading-tight);
   cursor: pointer;
-  transition:
-    background-color var(--duration-150) var(--ease-out),
-    opacity var(--duration-150) var(--ease-out);
   border: none;
 }
 

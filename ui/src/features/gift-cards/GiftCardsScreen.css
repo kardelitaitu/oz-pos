@@ -76,7 +76,6 @@
   align-items: center;
   padding: var(--space-3) var(--space-4);
   cursor: pointer;
-  transition: background var(--duration-150) var(--ease-out);
 }
 
 .gift-card-summary:hover {
@@ -147,7 +146,6 @@
 .gift-card-expand {
   font-size: 10px;
   color: var(--color-fg-tertiary);
-  transition: transform var(--duration-150) var(--ease-out);
 }
 
 .gift-card-expand.expanded {
@@ -369,4 +367,13 @@
   justify-content: flex-end;
   gap: var(--space-2);
   margin-top: var(--space-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gift-card-summary {
+    transition: background var(--duration-150) var(--ease-out);
+  }
+  .gift-card-expand {
+    transition: transform var(--duration-150) var(--ease-out);
+  }
 }

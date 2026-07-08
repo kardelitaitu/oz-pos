@@ -87,7 +87,6 @@
   height: 100%;
   border-radius: var(--radius-sm);
   background: var(--color-border);
-  transition: width var(--duration-300) var(--ease-out);
 }
 
 .reporting-widget-hour-bar--active {
@@ -139,4 +138,10 @@
   text-align: center;
   padding: var(--space-8) 0;
   font-size: var(--text-sm);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reporting-widget-hour-bar {
+    transition: width var(--duration-300) var(--ease-out);
+  }
 }

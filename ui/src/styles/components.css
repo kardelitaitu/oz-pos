@@ -464,6 +464,31 @@
   }
 }
 
+/* ── Toast exit ────────────────────────────────────── */
+/* Per the exit-animation-pattern skill: mirror keyframe +          */
+/* `.toast--exiting` rule. Source order: entry rule → entry         */
+/* keyframe → exit keyframe → exit rule. `animation-fill-mode:      */
+/* both` holds the TO-frame across React's unmount so the fade      */
+/* doesn't flash back to opacity 1 before the element drops.        */
+/* `pointer-events: none` blocks stale clicks during the fade.      */
+/* Note: the existing toast entry rules aren't wrapped in a         */
+/* prefers-no-preference block (pre-existing inconsistency with     */
+/* sibling surfaces). Mirroring it here keeps it consistent.        */
+@keyframes toast-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+.toast--exiting {
+  animation: toast-slide-out var(--duration-200) var(--ease-out) both;
+  pointer-events: none;
+}
+
 /* ── Skeleton ────────────────────────────────────────── */
 .skeleton {
   background: var(--color-bg-surface);
