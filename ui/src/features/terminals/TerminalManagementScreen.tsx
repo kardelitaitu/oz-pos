@@ -444,8 +444,7 @@ export default function TerminalManagementScreen() {
 
       {/* ── Add/Edit Modal ──────────────────────────────────────── */}
       {showModal && (
-        <Localized id={isEditing ? 'terminal-edit-title' : 'terminal-register-title'} attrs={{ "aria-label": true }}>
-          <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label={isEditing ? 'Edit Terminal' : 'Register New Terminal'}>
+        <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(isEditing ? 'terminal-edit-title' : 'terminal-register-title')}>
             <div className="terminal-mgmt-modal">
               <div className="terminal-mgmt-modal-header">
                 <Localized id={isEditing ? 'terminal-edit-title' : 'terminal-register-title'}>
@@ -689,13 +688,11 @@ export default function TerminalManagementScreen() {
               </div>
             </div>
           </div>
-        </Localized>
       )}
 
       {/* ── Delete Confirmation Modal ────────────────────────────── */}
       {deleteTarget && (
-        <Localized id="terminal-delete-aria" attrs={{ "aria-label": true }}>
-          <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete terminal">
+        <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('terminal-delete-aria')}>
             <div className="terminal-mgmt-modal">
               <div className="terminal-mgmt-modal-header">
               <Localized id="terminal-delete-title">
@@ -737,7 +734,6 @@ export default function TerminalManagementScreen() {
             </div>
           </div>
         </div>
-        </Localized>
       )}
     </div>
   );

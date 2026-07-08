@@ -221,8 +221,7 @@ export default function CustomerManagementScreen() {
         </Card>
       ) : (
         <div className="customer-mgmt-table-wrap">
-          <Localized id="customer-mgmt-table-aria" attrs={{ 'aria-label': true }}>
-          <table className="customer-mgmt-table" aria-label="Customers">
+          <table className="customer-mgmt-table" aria-label={l10n.getString('customer-mgmt-table-aria')}>
             <thead>
               <tr>
                 <Localized id="customer-mgmt-col-name"><th>Name</th></Localized>
@@ -280,14 +279,12 @@ export default function CustomerManagementScreen() {
                 </tr>
               ))}                  </tbody>
                 </table>
-                </Localized>
               </div>
       )}
 
       {/* ── Add/Edit Modal ──────────────────────────────────────── */}
       {showModal && (
-        <Localized id={editingId ? 'customer-mgmt-modal-edit-aria' : 'customer-mgmt-modal-add-aria'} attrs={{ 'aria-label': true }}>
-          <div className="customer-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit customer' : 'Add customer'}>
+        <div className="customer-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(editingId ? 'customer-mgmt-modal-edit-aria' : 'customer-mgmt-modal-add-aria')}>
             <div className="customer-mgmt-modal">
               <div className="customer-mgmt-modal-header">
                 <Localized id={editingId ? 'customer-mgmt-modal-edit-title' : 'customer-mgmt-modal-add-title'}>
@@ -412,7 +409,6 @@ export default function CustomerManagementScreen() {
               </div>
             </div>
           </div>
-        </Localized>
       )}
     </div>
   );

@@ -207,8 +207,7 @@ export default function TaxConfigurationScreen() {
             </Card>
           ) : (
             <div className="tax-config-table-wrap">
-              <Localized id="tax-config-table-aria" attrs={{ "aria-label": true }}>
-              <table className="tax-config-table" aria-label="Tax rates">
+              <table className="tax-config-table" aria-label={l10n.getString('tax-config-table-aria')}>
                 <thead>
                   <tr>
                     <Localized id="tax-config-col-name"><th>Name</th></Localized>
@@ -271,7 +270,6 @@ export default function TaxConfigurationScreen() {
                   ))}
                 </tbody>
               </table>
-              </Localized>
             </div>
           )}
 
@@ -293,8 +291,7 @@ export default function TaxConfigurationScreen() {
               </Localized>
             ) : (
               <div className="tax-config-table-wrap">
-                <Localized id="tax-config-cat-table-aria" attrs={{ "aria-label": true }}>
-              <table className="tax-config-table" aria-label="Category tax rates">
+              <table className="tax-config-table" aria-label={l10n.getString('tax-config-cat-table-aria')}>
                   <thead>
                     <tr>
                       <Localized id="tax-config-col-category"><th>Category</th></Localized>
@@ -353,7 +350,6 @@ export default function TaxConfigurationScreen() {
                       );
                     })}                </tbody>
               </table>
-              </Localized>
               </div>
             )}
           </div>
@@ -362,7 +358,6 @@ export default function TaxConfigurationScreen() {
 
       {/* ── Tax Rate Form Modal ──────────────────────────────────── */}
       {showModal && (
-        <Localized id="tax-config-modal-aria" attrs={{ "aria-label": true }} vars={{ editing: editingId !== null ? 'true' : 'false' }}>
         <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('tax-config-modal-aria', { editing: editingId !== null ? 'true' : 'false' })}>
           <div className="tax-config-modal">
             <div className="tax-config-modal-header">
@@ -382,8 +377,7 @@ export default function TaxConfigurationScreen() {
             </div>
 
             <div className="tax-config-modal-body">
-              <Localized id="tax-config-field-name-aria" attrs={{ "aria-label": true }}>
-              <label className="tax-config-field" htmlFor="tax-field-name" aria-label="Tax Name">
+              <label className="tax-config-field" htmlFor="tax-field-name" aria-label={l10n.getString('tax-config-field-name-aria')}>
                 <Localized id="tax-config-field-name">
                   <span className="tax-config-label">Tax Name</span>
                 </Localized>
@@ -397,7 +391,6 @@ export default function TaxConfigurationScreen() {
                   ref={taxNameInputRef}
                 />
               </label>
-              </Localized>
 
               <label className="tax-config-field" htmlFor="tax-field-rate">
                 {l10n.getString('tax-config-field-rate')}
@@ -420,7 +413,6 @@ export default function TaxConfigurationScreen() {
                 <Localized id="tax-config-tax-type">
                   <span className="tax-config-label">Tax Type</span>
                 </Localized>
-                <Localized id="tax-config-tax-type-aria" attrs={{ "aria-label": true }}>
                 <div className="tax-config-toggle-group" role="radiogroup" aria-label={l10n.getString('tax-config-tax-type-aria')}>
                   <button
                     type="button"
@@ -451,7 +443,6 @@ export default function TaxConfigurationScreen() {
                     </Localized>
                   </button>
                 </div>
-                </Localized>
               </div>
 
               <label className="tax-config-checkbox">
@@ -481,12 +472,10 @@ export default function TaxConfigurationScreen() {
             </div>
           </div>
         </div>
-        </Localized>
       )}
 
       {/* ── Category Tax Rates Modal ─────────────────────────────── */}
       {showCatModal && (
-        <Localized id="tax-config-cat-modal-aria" attrs={{ "aria-label": true }} vars={{ name: editingCatName }}>
         <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('tax-config-cat-modal-aria', { name: editingCatName })}>
           <div className="tax-config-modal">
             <div className="tax-config-modal-header">
@@ -566,7 +555,6 @@ export default function TaxConfigurationScreen() {
             </div>
           </div>
         </div>
-        </Localized>
       )}
     </div>
   );

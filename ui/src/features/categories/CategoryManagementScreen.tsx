@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listCategories,
   createCategory,
@@ -161,6 +161,7 @@ function colourToId(name: string): string {
 // ── Component ────────────────────────────────────────────────────────
 
 export default function CategoryManagementScreen() {
+  const { l10n } = useLocalization();
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -368,8 +369,7 @@ export default function CategoryManagementScreen() {
 
       {/* ── Delete confirmation modal ──────────────────────── */}
       {deleteTarget && (
-        <Localized id="category-delete-dialog-aria" attrs={{ 'aria-label': true }}>
-          <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete category">
+        <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('category-delete-dialog-aria')}>
             <div className="cat-mgmt-modal">
               <div className="cat-mgmt-modal-header">
                 <Localized id="categories-delete-confirm" vars={{ name: deleteTarget.name }}>
@@ -405,7 +405,6 @@ export default function CategoryManagementScreen() {
               </div>
             </div>
           </div>
-        </Localized>
       )}
 
       {/* ── Create modal ──────────────────────────────── */}
