@@ -1,9 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 
 vi.mock('@/api/inventoryCounts', () => ({
   listStockCounts: vi.fn(),
@@ -14,7 +15,7 @@ import { listStockCounts } from '@/api/inventoryCounts';
 
 const mockListCounts = listStockCounts as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl, sharedFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl);
 
 const sampleCounts = [
   {
@@ -51,20 +52,20 @@ describe('StockCountsScreen', () => {
   // ── Basic rendering ──────────────────────────────────────────
   it('renders the title and New Count button', async () => {
     mockListCounts.mockResolvedValue([]);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
     expect(screen.getByText('Stock Counts')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /new count/i })).toBeInTheDocument();
   });
 
   it('shows loading state initially', async () => {
     mockListCounts.mockReturnValue(new Promise(() => {}));
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no counts exist', async () => {
     mockListCounts.mockResolvedValue([]);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
     await waitFor(() => {
       expect(screen.getByText(/no stock counts/i)).toBeInTheDocument();
     });
@@ -73,7 +74,7 @@ describe('StockCountsScreen', () => {
   // ── List display ─────────────────────────────────────────────
   it('loads and displays count cards', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -85,7 +86,7 @@ describe('StockCountsScreen', () => {
 
   it('renders status badges with Fluent-resolved text', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -110,7 +111,7 @@ describe('StockCountsScreen', () => {
 
   it('renders count type labels via Fluent', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -127,7 +128,7 @@ describe('StockCountsScreen', () => {
 
   it('shows notes when present on a count', async () => {
     mockListCounts.mockResolvedValue([sampleCounts[0]!, sampleCounts[2]!]);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -138,7 +139,7 @@ describe('StockCountsScreen', () => {
 
   it('does not show notes paragraph when notes is empty', async () => {
     mockListCounts.mockResolvedValue([sampleCounts[1]!]);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-002')).toBeInTheDocument();
@@ -149,7 +150,7 @@ describe('StockCountsScreen', () => {
 
   it('shows View button on each count card', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -162,7 +163,7 @@ describe('StockCountsScreen', () => {
   // ── Status filters ───────────────────────────────────────────
   it('renders status filter buttons', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     // Filter buttons use aria-pressed.
     const filterBtns = screen.getAllByRole('button', { pressed: false });
@@ -174,7 +175,7 @@ describe('StockCountsScreen', () => {
   it('filters counts by status when a filter is clicked', async () => {
     const user = userEvent.setup();
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -192,7 +193,7 @@ describe('StockCountsScreen', () => {
   it('shows empty message when filter matches nothing', async () => {
     const user = userEvent.setup();
     mockListCounts.mockResolvedValue([sampleCounts[0]!]);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -208,7 +209,7 @@ describe('StockCountsScreen', () => {
   it('highlights active filter button with --active class', async () => {
     const user = userEvent.setup();
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -223,7 +224,7 @@ describe('StockCountsScreen', () => {
   it('returns to All filter when All is clicked', async () => {
     const user = userEvent.setup();
     mockListCounts.mockResolvedValue(sampleCounts);
-    render(wrap(<StockCountsScreen />));
+    await renderInAct(wrap(<StockCountsScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();

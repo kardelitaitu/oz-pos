@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 
 // Mock the purchasing API — use vi.fn() inline to avoid hoisting issues.
@@ -27,7 +28,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('renders the form with title and fields', async () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     expect(screen.getByText('New Purchase Order')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('PO-001')).toBeInTheDocument();
@@ -38,7 +39,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('loads suppliers into the dropdown', async () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     // Suppliers are loaded async.
     expect(mockListSuppliers).toHaveBeenCalledTimes(1);
@@ -51,7 +52,7 @@ describe('PurchaseOrderForm', () => {
   it('shows empty supplier dropdown without error when listSuppliers fails', async () => {
     mockListSuppliers.mockRejectedValueOnce(new Error('Network down'));
 
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     // Should not crash; dropdown stays with just "-- Select --".
     await vi.waitFor(() => {
@@ -61,34 +62,34 @@ describe('PurchaseOrderForm', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows Edit title when editingId is set', () => {
-    render(<PurchaseOrderForm editingId="po-existing" onClose={vi.fn()} onSaved={vi.fn()} />);
+  it('shows Edit title when editingId is set', async () => {
+    await renderInAct(<PurchaseOrderForm editingId="po-existing" onClose={vi.fn()} onSaved={vi.fn()} />);
     expect(screen.getByText('Edit Purchase Order')).toBeInTheDocument();
   });
 
   it('calls onClose when cancel is clicked', async () => {
     const onClose = vi.fn();
-    render(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('calls onClose when X button is clicked', async () => {
     const onClose = vi.fn();
-    render(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
     await userEvent.click(screen.getByRole('button', { name: /close/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('button is disabled when PO number or supplier is missing', () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+  it('button is disabled when PO number or supplier is missing', async () => {
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     const btn = screen.getByRole('button', { name: /create po/i });
     expect(btn).toBeDisabled();
   });
 
   it('button enables when both PO number and supplier are filled', async () => {
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-001');
     const select = screen.getByRole('combobox');
     await userEvent.selectOptions(select, 'sup-1');
@@ -97,7 +98,7 @@ describe('PurchaseOrderForm', () => {
 
   it('validates SKU is required on each line', async () => {
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-001');
     // Select first supplier.
@@ -110,7 +111,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('adds a new line row when + Add Line is clicked', async () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     // Start with 1 SKU input.
     const initialSkuInputs = screen.getAllByPlaceholderText('SKU');
     expect(initialSkuInputs).toHaveLength(1);
@@ -122,7 +123,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('removes a line row when remove button is clicked', async () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     await userEvent.click(screen.getByRole('button', { name: '+ Add Line' }));
     expect(screen.getAllByPlaceholderText('SKU')).toHaveLength(2);
 
@@ -132,13 +133,13 @@ describe('PurchaseOrderForm', () => {
     expect(screen.getAllByPlaceholderText('SKU')).toHaveLength(1);
   });
 
-  it('does not show remove button when only one line remains', () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+  it('does not show remove button when only one line remains', async () => {
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     expect(screen.queryByRole('button', { name: /remove line/i })).not.toBeInTheDocument();
   });
 
   it('updates line fields — SKU, product name, qty, unit cost', async () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     const skuInput = screen.getByPlaceholderText('SKU');
     const nameInput = screen.getByPlaceholderText('Product name');
@@ -160,7 +161,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('shows computed line total and subtotal', async () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     const qtyInput = screen.getByDisplayValue('1');
     const costInput = screen.getByPlaceholderText('in cents');
@@ -177,7 +178,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('allows entering expected date and notes', async () => {
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     const dateInput = screen.getByLabelText('Expected Date');
     await userEvent.type(dateInput, '2026-08-01');
@@ -193,7 +194,7 @@ describe('PurchaseOrderForm', () => {
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     const onSaved = vi.fn();
 
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={onSaved} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={onSaved} />);
 
     await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-001');
     const select = screen.getByRole('combobox');
@@ -223,7 +224,7 @@ describe('PurchaseOrderForm', () => {
     mockCreatePO.mockRejectedValueOnce(new Error('Network failure'));
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
 
-    render(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-FAIL');
     const select = screen.getByRole('combobox');

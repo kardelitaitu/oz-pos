@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// `render` is kept in the import below — the 'throws when used outside
+// BrandProvider' test relies on a synchronous throw during render, so
+// `renderInAct`'s async boundary cannot be used there.
 import { render, screen, waitFor, act } from '@testing-library/react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import { BrandProvider, useBrand } from '@/contexts/BrandContext';
 
 const mockGetBrandSettings = vi.fn();
@@ -23,8 +27,8 @@ function TestConsumer() {
   );
 }
 
-function renderProvider() {
-  return render(
+async function renderProvider() {
+  await renderInAct(
     <BrandProvider>
       <TestConsumer />
     </BrandProvider>,
@@ -41,16 +45,16 @@ describe('BrandContext', () => {
     });
   });
 
-  it('renders defaults before API resolves', () => {
+  it('renders defaults before API resolves', async () => {
     mockGetBrandSettings.mockImplementation(() => new Promise(() => {}));
-    renderProvider();
+    await renderProvider();
     expect(screen.getByTestId('colour').textContent).toBe('#10b981'); // default
     expect(screen.getByTestId('store').textContent).toBe(''); // default
     expect(screen.getByTestId('logo').textContent).toBe('no-logo'); // default null
   });
 
   it('updates with fetched settings after API resolves', async () => {
-    renderProvider();
+    await renderProvider();
     await waitFor(() => {
       expect(screen.getByTestId('colour').textContent).toBe('#4f46e5');
     });
@@ -60,7 +64,7 @@ describe('BrandContext', () => {
 
   it('keeps current settings on API error', async () => {
     mockGetBrandSettings.mockRejectedValue(new Error('Offline'));
-    renderProvider();
+    await renderProvider();
 
     // Wait for the error to be swallowed
     await waitFor(() => {
@@ -73,7 +77,7 @@ describe('BrandContext', () => {
   });
 
   it('refreshBrandSettings re-fetches from the API', async () => {
-    renderProvider();
+    await renderProvider();
     await waitFor(() => {
       expect(screen.getByTestId('store').textContent).toBe('Test Store');
     });

@@ -1,9 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import purchasingFtl from '@/locales/purchasing.ftl?raw';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 
 vi.mock('@/api/purchasing', () => ({
   listSuppliers: vi.fn(),
@@ -24,7 +25,7 @@ supplier-code-required = Code is required
 supplier-save-failed = Save failed
 `;
 
-const wrap = (children: React.ReactNode) => withFluent(children, purchasingFtl, sharedFtl, supplierFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, purchasingFtl, supplierFtl);
 
 const sampleSuppliers = [
   {
@@ -49,14 +50,14 @@ describe('SuppliersScreen', () => {
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and Add Supplier button', async () => {
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
     expect(screen.getByText('Suppliers')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add supplier/i })).toBeInTheDocument();
   });
 
   it('loads and displays suppliers in the table', async () => {
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SUP001')).toBeInTheDocument();
@@ -70,13 +71,13 @@ describe('SuppliersScreen', () => {
 
   it('shows loading state initially', async () => {
     mockListSuppliers.mockReturnValue(new Promise(() => {}));
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
     expect(screen.getByText(/loading suppliers/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no suppliers exist', async () => {
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
     await waitFor(() => {
       expect(screen.getByText(/no suppliers yet/i)).toBeInTheDocument();
     });
@@ -86,7 +87,7 @@ describe('SuppliersScreen', () => {
   it('filters suppliers by search query', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('Acme Corp')).toBeInTheDocument();
@@ -104,7 +105,7 @@ describe('SuppliersScreen', () => {
   it('shows no-match message when search filters everything out', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('Acme Corp')).toBeInTheDocument();
@@ -119,7 +120,7 @@ describe('SuppliersScreen', () => {
 
   it('renders status badges with correct class', async () => {
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await waitFor(() => {
       const badges = screen.getAllByText('active');
@@ -134,7 +135,7 @@ describe('SuppliersScreen', () => {
   it('opens create modal when Add Supplier is clicked', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
 
@@ -151,7 +152,7 @@ describe('SuppliersScreen', () => {
   it('opens edit modal when Edit button is clicked on a row', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('SUP001')).toBeInTheDocument();
@@ -169,7 +170,7 @@ describe('SuppliersScreen', () => {
   it('enables save button when both code and name are filled', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
 
@@ -189,7 +190,7 @@ describe('SuppliersScreen', () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     mockCreateSupplier.mockResolvedValue({ id: 'sup-3', code: 'SUP-NEW', name: 'New Co', status: 'active' });
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
 
@@ -211,7 +212,7 @@ describe('SuppliersScreen', () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     mockCreateSupplier.mockRejectedValue(new Error('Duplicate code'));
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
 
@@ -229,7 +230,7 @@ describe('SuppliersScreen', () => {
   it('closes modal when Cancel is clicked', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -243,7 +244,7 @@ describe('SuppliersScreen', () => {
   it('closes modal when X button is clicked', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -257,7 +258,7 @@ describe('SuppliersScreen', () => {
   it('renders all optional fields in the form', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
 
@@ -273,7 +274,7 @@ describe('SuppliersScreen', () => {
   it('disables save button when code or name is empty', async () => {
     const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
-    render(wrap(<SuppliersScreen />));
+    await renderInAct(wrap(<SuppliersScreen />));
 
     await user.click(screen.getByRole('button', { name: /add supplier/i }));
 

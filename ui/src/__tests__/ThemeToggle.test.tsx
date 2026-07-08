@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
-import sharedFtl from '@/locales/shared.ftl?raw';
+
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { BrandProvider } from '@/contexts/BrandContext';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
@@ -14,7 +14,6 @@ function wrap(children: React.ReactNode) {
     <BrandProvider>
       <ThemeProvider>{children}</ThemeProvider>
     </BrandProvider>,
-    sharedFtl,
   );
 }
 
@@ -76,11 +75,13 @@ describe('ThemeToggle', () => {
   it('has an aria-label that reflects current theme', () => {
     render(wrap(<ThemeToggle />));
     const button = screen.getByTestId('theme-toggle');
-    // Initially light → aria-label says "Switch to dark mode".
-    // Fluent wraps interpolated variables in Unicode formatting markers.
+    // Asserts on the user-visible substring (and SR-announced string),
+    // not on Fluent's internal bidi-isolating marks U+2068/U+2069.
+    // Production's `getBundle()` passes `useIsolating: false`, so the
+    // aria-label is the literal plain string — no markers.
     expect(button).toHaveAttribute(
       'aria-label',
-      expect.stringMatching(/Switch to .+dark.+ mode/),
+      expect.stringContaining('Switch to dark mode'),
     );
   });
 
@@ -89,14 +90,14 @@ describe('ThemeToggle', () => {
     const button = screen.getByTestId('theme-toggle');
     expect(button).toHaveAttribute(
       'aria-label',
-      expect.stringMatching(/Switch to .+dark.+ mode/),
+      expect.stringContaining('Switch to dark mode'),
     );
 
     await userEvent.click(button);
 
     expect(button).toHaveAttribute(
       'aria-label',
-      expect.stringMatching(/Switch to .+light.+ mode/),
+      expect.stringContaining('Switch to light mode'),
     );
   });
 

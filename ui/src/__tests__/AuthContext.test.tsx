@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// `render` is kept in the import below — the 'throws when used outside
+// AuthProvider' test relies on a synchronous throw during render, so
+// `renderInAct`'s async boundary cannot be used there.
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
 // ── mock staff login API ──────────────────────────────────────────────
@@ -33,8 +37,8 @@ function TestConsumer() {
   );
 }
 
-function renderProvider() {
-  return render(
+async function renderProvider() {
+  await renderInAct(
     <AuthProvider>
       <TestConsumer />
     </AuthProvider>,
@@ -46,15 +50,15 @@ describe('AuthContext', () => {
     vi.clearAllMocks();
   });
 
-  it('starts with no session, no loading, no error', () => {
-    renderProvider();
+  it('starts with no session, no loading, no error', async () => {
+    await renderProvider();
     expect(screen.getByTestId('session').textContent).toBe('no-session');
     expect(screen.getByTestId('loading').textContent).toBe('false');
     expect(screen.getByTestId('error').textContent).toBe('no-error');
   });
 
-  it('isManager and isOwner are false with no session', () => {
-    renderProvider();
+  it('isManager and isOwner are false with no session', async () => {
+    await renderProvider();
     expect(screen.getByTestId('isManager').textContent).toBe('false');
     expect(screen.getByTestId('isOwner').textContent).toBe('false');
   });
@@ -66,7 +70,7 @@ describe('AuthContext', () => {
       }), 100)),
     );
 
-    renderProvider();
+    await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
 
     // Loading should be true immediately after click
@@ -80,7 +84,7 @@ describe('AuthContext', () => {
 
   it('sets error on login failure', async () => {
     mockStaffLogin.mockRejectedValue(new Error('Invalid PIN'));
-    renderProvider();
+    await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
 
     await waitFor(() => {
@@ -92,7 +96,7 @@ describe('AuthContext', () => {
 
   it('clears error on clearError call', async () => {
     mockStaffLogin.mockRejectedValue(new Error('Invalid PIN'));
-    renderProvider();
+    await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
 
     await waitFor(() => {
@@ -107,7 +111,7 @@ describe('AuthContext', () => {
     mockStaffLogin.mockResolvedValue({
       session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
     });
-    renderProvider();
+    await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
 
     await waitFor(() => {
@@ -123,7 +127,7 @@ describe('AuthContext', () => {
     mockStaffLogin.mockResolvedValue({
       session: { display_name: 'Bob', role_name: 'manager', user_id: 'u2', role_id: 'r2' },
     });
-    renderProvider();
+    await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
 
     await waitFor(() => {
@@ -136,7 +140,7 @@ describe('AuthContext', () => {
     mockStaffLogin.mockResolvedValue({
       session: { display_name: 'Eve', role_name: 'owner', user_id: 'u3', role_id: 'r3' },
     });
-    renderProvider();
+    await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
 
     await waitFor(() => {
