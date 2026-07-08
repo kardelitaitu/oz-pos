@@ -19,14 +19,16 @@
   pointer-events: none;
 }
 
-@keyframes payment-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes payment-overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 
-@keyframes payment-overlay-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  @keyframes payment-overlay-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
 }
 
 .payment-modal {
@@ -46,14 +48,16 @@
   animation: payment-modal-out var(--duration-200, 200ms) var(--ease-in, ease-in);
 }
 
-@keyframes payment-modal-in {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes payment-modal-in {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
 
-@keyframes payment-modal-out {
-  from { opacity: 1; transform: scale(1) translateY(0); }
-  to { opacity: 0; transform: scale(0.95) translateY(8px); }
+  @keyframes payment-modal-out {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to { opacity: 0; transform: scale(0.95) translateY(8px); }
+  }
 }
 
 .payment-header {
@@ -637,7 +641,6 @@
   fill: none;
   stroke-dasharray: 166;
   stroke-dashoffset: 166;
-  animation: payment-checkmark-draw 500ms var(--ease-out) 100ms forwards;
 }
 
 .payment-done-checkmark-path {
@@ -648,28 +651,37 @@
   stroke-linejoin: round;
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: payment-checkmark-draw 350ms var(--ease-out) 400ms forwards;
 }
 
-.payment-done-title {
-  animation: payment-done-fade-in 400ms var(--ease-out) 250ms both;
-}
+@media (prefers-reduced-motion: no-preference) {
+  .payment-done-checkmark-circle {
+    animation: payment-checkmark-draw 500ms var(--ease-out) 100ms forwards;
+  }
 
-.payment-change {
-  animation: payment-done-fade-in 400ms var(--ease-out) 350ms both;
-}
+  .payment-done-checkmark-path {
+    animation: payment-checkmark-draw 350ms var(--ease-out) 400ms forwards;
+  }
 
-.payment-done-note {
-  animation: payment-done-fade-in 400ms var(--ease-out) 450ms both;
-}
+  .payment-done-title {
+    animation: payment-done-fade-in 400ms var(--ease-out) 250ms both;
+  }
 
-@keyframes payment-checkmark-draw {
-  to { stroke-dashoffset: 0; }
-}
+  .payment-change {
+    animation: payment-done-fade-in 400ms var(--ease-out) 350ms both;
+  }
 
-@keyframes payment-done-fade-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  .payment-done-note {
+    animation: payment-done-fade-in 400ms var(--ease-out) 450ms both;
+  }
+
+  @keyframes payment-checkmark-draw {
+    to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes payment-done-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
 /* ── Customer selection ────────────────────────────── */
@@ -684,16 +696,16 @@
   gap: 6px;
   width: 100%;
   padding: 8px 12px;
-  background: #f0f4f8;
-  border: 1px dashed #aaa;
+  background: var(--color-bg-surface, #f0f4f8);
+  border: 1px dashed var(--color-border-3, #aaa);
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  color: #555;
+  color: var(--color-text-3, #555);
   transition: background 0.15s;
 }
 .payment-customer-select-btn:hover {
-  background: #e2e8f0;
+  background: var(--color-bg-elevated, #e2e8f0);
 }
 
 .payment-customer-badge {
@@ -701,10 +713,10 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: #e8f5e9;
+  background: var(--color-success-2, #e8f5e9);
   border-radius: 6px;
   font-size: 13px;
-  color: #2e7d32;
+  color: var(--color-success-7, #2e7d32);
 }
 .payment-customer-name {
   font-weight: 600;
@@ -713,7 +725,7 @@
 .payment-customer-change {
   background: none;
   border: none;
-  color: #1565c0;
+  color: var(--color-link, #1565c0);
   cursor: pointer;
   font-size: 12px;
   text-decoration: underline;
@@ -721,7 +733,7 @@
 .payment-customer-remove {
   background: none;
   border: none;
-  color: #999;
+  color: var(--color-text-4, #999);
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
@@ -739,7 +751,7 @@
   background: rgba(0, 0, 0, 0.4);
 }
 .payment-customer-search-modal {
-  background: #fff;
+  background: var(--color-bg-elevated, #fff);
   border-radius: 12px;
   width: 380px;
   max-height: 70vh;
@@ -755,7 +767,7 @@
 .payment-customer-search-input {
   margin: 12px 20px;
   padding: 8px 12px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border, #ccc);
   border-radius: 6px;
   font-size: 14px;
 }
@@ -768,7 +780,7 @@
 .payment-customer-search-empty {
   padding: 16px;
   text-align: center;
-  color: #888;
+  color: var(--color-text-4, #888);
   font-size: 13px;
 }
 .payment-customer-search-item {
@@ -785,21 +797,21 @@
   transition: background 0.15s;
 }
 .payment-customer-search-item:hover {
-  background: #f0f4f8;
+  background: var(--color-bg-surface, #f0f4f8);
 }
 .payment-customer-search-item-name {
   font-weight: 600;
   font-size: 14px;
-  color: #222;
+  color: var(--color-text-1, #222);
 }
 .payment-customer-search-item-detail {
   font-size: 12px;
-  color: #888;
+  color: var(--color-text-4, #888);
 }
 .payment-customer-search-close {
   margin: 0 20px 16px;
   padding: 8px;
-  background: #f0f4f8;
+  background: var(--color-bg-surface, #f0f4f8);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -807,7 +819,7 @@
   text-align: center;
 }
 .payment-customer-search-close:hover {
-  background: #e2e8f0;
+  background: var(--color-bg-elevated, #e2e8f0);
 }
 
 .payment-loyalty-section {
@@ -816,8 +828,8 @@
   gap: 6px;
   padding: 8px 12px;
   margin: 4px 0;
-  background: #fef9e7;
-  border: 1px solid #f9e79f;
+  background: var(--color-warning-1, #fef9e7);
+  border: 1px solid var(--color-warning-3, #f9e79f);
   border-radius: 6px;
 }
 
@@ -831,12 +843,12 @@
 .payment-loyalty-label {
   font-size: 13px;
   font-weight: 600;
-  color: #7d6608;
+  color: var(--color-warning-8, #7d6608);
 }
 
 .payment-loyalty-value {
   font-size: 13px;
-  color: #7d6608;
+  color: var(--color-warning-8, #7d6608);
 }
 
 .payment-loyalty-redeem-btn {
@@ -844,8 +856,8 @@
   align-items: center;
   justify-content: center;
   padding: 4px 12px;
-  background: #f39c12;
-  color: #fff;
+  background: var(--color-warning-5, #f39c12);
+  color: var(--color-bg-primary, #fff);
   border: none;
   border-radius: 4px;
   font-size: 12px;
@@ -855,7 +867,7 @@
 }
 
 .payment-loyalty-redeem-btn:hover {
-  background: #e67e22;
+  background: var(--color-warning-6, #e67e22);
 }
 
 .payment-loyalty-active {
@@ -868,7 +880,7 @@
 .payment-loyalty-discount-label {
   font-size: 13px;
   font-weight: 600;
-  color: #27ae60;
+  color: var(--color-success-6, #27ae60);
 }
 
 .payment-loyalty-cancel-btn {
@@ -877,8 +889,8 @@
   justify-content: center;
   padding: 4px 10px;
   background: transparent;
-  color: #e74c3c;
-  border: 1px solid #e74c3c;
+  color: var(--color-danger-6, #e74c3c);
+  border: 1px solid var(--color-danger-6, #e74c3c);
   border-radius: 4px;
   font-size: 11px;
   cursor: pointer;
@@ -886,7 +898,7 @@
 }
 
 .payment-loyalty-cancel-btn:hover {
-  background: #fdf2f2;
+  background: var(--color-danger-1, #fdf2f2);
 }
 
 .payment-loyalty-input-row {
@@ -898,7 +910,7 @@
 .payment-loyalty-input-label {
   font-size: 12px;
   font-weight: 600;
-  color: #7d6608;
+  color: var(--color-warning-8, #7d6608);
   white-space: nowrap;
 }
 
@@ -907,19 +919,19 @@
   padding: 3px 6px;
   font-size: 13px;
   font-weight: 600;
-  border: 1px solid #f9e79f;
+  border: 1px solid var(--color-warning-3, #f9e79f);
   border-radius: 4px;
   text-align: center;
-  background: #fff;
-  color: #333;
+  background: var(--color-bg-primary, #fff);
+  color: var(--color-text-1, #333);
   outline: none;
 }
 
 .payment-loyalty-input:focus {
-  border-color: #f39c12;
+  border-color: var(--color-warning-5, #f39c12);
 }
 
 .payment-loyalty-input-hint {
   font-size: 11px;
-  color: #999;
+  color: var(--color-text-4, #999);
 }

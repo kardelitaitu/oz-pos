@@ -494,10 +494,6 @@ export default function PaymentModal({
     return true;
   }, [splitMode, splitComplete, method, otherLabel, sufficient, customerName]);
 
-  const subtotalMinor = useMemo(() => {
-    return lineItems.reduce((acc, l) => acc + l.unit_price.minor_units * l.qty, 0);
-  }, [lineItems]);
-
   const complete = useCallback(async () => {
     setProcessing(true);
     console.log('[Sale] Starting sale...');
@@ -673,7 +669,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, subtotalMinor, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount]);
+  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount]);
 
   useEffect(() => {
     if (!done) return;
@@ -1254,8 +1250,8 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-              <div className="payment-customer-search-overlay" role="button" tabIndex={0} onClick={() => setShowCustomerSearch(false)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCustomerSearch(false); } }}>
-                <div className="payment-customer-search-modal" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); } }}>
+              <div className="payment-customer-search-overlay" role="presentation" onClick={() => setShowCustomerSearch(false)}>
+                <div className="payment-customer-search-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
                   <Localized id="payment-customer-search-heading">
                     <h3 className="payment-customer-search-heading">Select Customer</h3>
                   </Localized>
