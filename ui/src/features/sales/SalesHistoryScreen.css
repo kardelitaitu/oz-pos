@@ -2,10 +2,6 @@
   padding: var(--space-4);
 }
 
-.sales-history {
-  padding: var(--space-4);
-}
-
 .sales-history-header {
   display: flex;
   align-items: center;

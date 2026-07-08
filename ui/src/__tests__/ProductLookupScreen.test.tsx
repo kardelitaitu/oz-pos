@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { withFluent, withFluentLocale } from '@/locales/test-utils';
 import productsFtl from '@/locales/products.ftl?raw';
 import productsId from '@/locales/products.id.ftl?raw';
+import sharedId from '@/locales/shared.id.ftl?raw';
 
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { ScannerError } from '@/api/hardware';

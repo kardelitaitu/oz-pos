@@ -193,13 +193,15 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #eab308;
+  background: var(--color-warning, #eab308);
   animation: product-card-price-pulse 2s ease-in-out infinite;
   z-index: 1;
 }
-@keyframes product-card-price-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes product-card-price-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
 }
 
 .product-card {
@@ -219,24 +221,26 @@
   z-index: 2;
 }
 
-@keyframes product-card-added {
-  0% {
-    box-shadow: 0 0 0 0 var(--color-success);
-    border-color: var(--color-success);
-  }
-  25% {
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-success) 25%, transparent);
-    border-color: var(--color-success);
-    transform: scale(0.97);
-  }
-  55% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 8%, transparent);
-    transform: scale(1.02);
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-    border-color: var(--color-border);
-    transform: scale(1);
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes product-card-added {
+    0% {
+      box-shadow: 0 0 0 0 var(--color-success);
+      border-color: var(--color-success);
+    }
+    25% {
+      box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-success) 25%, transparent);
+      border-color: var(--color-success);
+      transform: scale(0.97);
+    }
+    55% {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 8%, transparent);
+      transform: scale(1.02);
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+      border-color: var(--color-border);
+      transform: scale(1);
+    }
   }
 }
 

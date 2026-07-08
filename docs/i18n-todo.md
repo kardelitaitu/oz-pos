@@ -34,10 +34,23 @@ Indonesian flag, which is worse than the fallback happening transparently.
 
 A translation PR lands once ALL of the following are true:
 
+0. **Scaffolded properly.** Run `python3 scripts/translate-stub.py --bundle=<name> --write`
+   to generate scaffolding. The script injects a `# HINT:` comment at the
+   top with the per-domain translator guidance, prepends `[TODO]` to every
+   value, and verifies the scaffold is NOT byte-identical to the source
+   before writing to disk. Required because shipping the byte-identical
+   `.id.ftl` would render English content under the Indonesian locale
+   tag — worse than the runtime `[i18n]` fallback warning. The scaffold's
+   dry-run (`--dry-run`, the default) is the recommended first step so
+   the translator can preview what will be written.
+
 1. **Same key set as the `.ftl` sibling.** No missing or extra keys.
    Verified by exit 0 from `scripts/verify-bundle-parity.py --staged-only`.
 2. **Variable references preserved verbatim.** `{ $count }`, `{ $name }`,
    `{ $date }` etc. must match the source bundle character-for-character.
+   The scaffold script protects these automatically; `scripts/translate-stub.py`
+   has its own `validate_scaffold()` pass that catches placeholder drift
+   before write.
 3. **Multi-line values use the Fluent continuation form correctly.**
    A source value like
 
@@ -50,7 +63,9 @@ A translation PR lands once ALL of the following are true:
 
 4. **No `[i18n]` lint warnings.** `bash scripts/lint-i18n.sh` exits 0
    without print the byte-identical sentinel — that no longer triggers
-   because the bytes now differ.
+   because the bytes now differ. Also run `bash scripts/lint-i18n.sh`
+   pre-push — it warns (yellow `[i18n]` prefix) if you ship a bundle
+   whose bytes still match the English source.
 
 5. **Indonesian-appropriate content.** Formal Indonesian uses Latin
    script; tooling does not require any specific UTF-8 encoding.
@@ -67,8 +82,23 @@ acceptance criteria above are the de-facto submission contract; ping
 the brand review team in the PR description so they can sign off on
 copy-sensitive bundles (especially `gift-cards.id.ftl`).
 
+The recommended workflow:
+
+1. `python3 scripts/translate-stub.py --bundle=<name> --dry-run` to
+   preview what the scaffold will look like.
+2. `python3 scripts/translate-stub.py --bundle=<name> --write` once the
+   preview looks right.
+3. Open the resulting `ui/src/locales/<bundle>.id.ftl` and replace each
+   `[TODO]` sentinel with the actual Indonesian translation.
+4. Run `python3 scripts/verify-bundle-parity.py --staged-only` and
+   `bash scripts/lint-i18n.sh` to confirm gates pass.
+
 If a translator sees `@fluent/react` warnings at runtime after landing,
-that's typically the bundle-parity gate rejecting an unmatched key;re-run `python3 scripts/verify-bundle-parity.py --staged-only` and fix the reported missing keys before re-merging. Also run `bash scripts/lint-i18n.sh` pre-push — it warns (yellow `[i18n]` prefix) if you ship a bundle whose bytes still match the English source.
+that's typically the bundle-parity gate rejecting an unmatched key; re-run
+`python3 scripts/verify-bundle-parity.py --staged-only` and fix the
+reported missing keys before re-merging. Also run `bash scripts/lint-i18n.sh`
+pre-push — it warns (yellow `[i18n]` prefix) if you ship a bundle whose
+bytes still match the English source.
 
 ## Total gap
 

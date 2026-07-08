@@ -251,7 +251,7 @@ export default function SalesHistoryScreen() {
       const dir = sortAsc ? 1 : -1;
       switch (sortKey) {
         case 'id':            return a.id.localeCompare(b.id) * dir;
-        case 'createdAt':     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() * dir;
+        case 'createdAt':     return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
         case 'total':         return (a.total.minor_units - b.total.minor_units) * dir;
         case 'lineCount':     return (a.lineCount - b.lineCount) * dir;
         case 'status':        return a.status.localeCompare(b.status) * dir;
