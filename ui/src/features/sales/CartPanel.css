@@ -294,6 +294,25 @@
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  /* Mirror of pos-cart-undo-in so dismissed pills (and the
+   * naturally-drained stack) fade down smoothly instead of
+   * snapping. Triggered via .pos-cart-undo-bar--exiting which
+   * PosScreen applies on dismiss / last-item undo, then drops
+   * the pill after the 200 ms keyframe completes. fill-mode
+   * `both` keeps the TO-frame locked when React unmounts so
+   * there is no opacity:1 flash between animation end and
+   * element removal. pointer-events:none prevents further
+   * click handling during the exit window. */
+  @keyframes pos-cart-undo-out {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(8px); }
+  }
+
+  .pos-cart-undo-bar--exiting {
+    animation: pos-cart-undo-out var(--duration-200) var(--ease-out) both;
+    pointer-events: none;
+  }
 }
 
 /* ── Table-number row (conditionally shown via receipt setting) ─ */
