@@ -1,0 +1,30 @@
+[package]
+name = "oz-cloud-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Headless OZ-POS cloud sync server — no Tauri, no WebView, no GUI."
+
+[[bin]]
+name = "oz-cloud-server"
+path = "src/main.rs"
+
+[dependencies]
+oz-api = { workspace = true }
+oz-core = { workspace = true }
+oz-logging = { workspace = true }
+platform-sync = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+rusqlite = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tower-http = { workspace = true }
+
+[dev-dependencies]
+tower = "0.5"
+http-body-util = "0.1"
