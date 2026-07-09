@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import AppLayout, { type AppRoute } from './AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
@@ -44,11 +45,12 @@ export default function AppShell() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session, logout } = useAuth();
-  const { activeWorkspace, setActiveWorkspace } = useWorkspace();
+  const { activeWorkspace } = useWorkspace();
+  const { goToWorkspacePicker } = useWorkspaceNav();
 
   useIdleTimer(() => {
     if (activeWorkspace) {
-      setActiveWorkspace(null);
+      goToWorkspacePicker();
       addToast({
         type: 'info',
         message: 'Returned to workspace picker due to inactivity',
@@ -125,8 +127,8 @@ export default function AppShell() {
   // ── Escape key navigates back to workspace picker ────────────
 
   const handleBackToPicker = useCallback(() => {
-    setActiveWorkspace(null);
-  }, [setActiveWorkspace]);
+    goToWorkspacePicker();
+  }, [goToWorkspacePicker]);
 
   useWorkspaceEscape(activeWorkspace, handleBackToPicker);
 

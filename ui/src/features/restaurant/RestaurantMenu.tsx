@@ -3,7 +3,7 @@ import { Localized } from '@/components/Localized';
 import { type Product } from '@/types/domain';
 import { useLocalization } from '@fluent/react';
 import { useProducts } from '@/features/products/useProducts';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useAuth } from '@/contexts/AuthContext';import { useTheme } from '@/frontend/shell/ThemeProvider';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { getUserPreferences, setUserPreferences } from '@/api/settings';
@@ -214,7 +214,7 @@ function PinIcon() {
 export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const { l10n } = useLocalization();
   const { products, categories, categoryMeta, loading } = useProducts();
-  const { setActiveWorkspace } = useWorkspace();
+  const { goToWorkspacePicker } = useWorkspaceNav();
   const { session, logout } = useAuth();
   const userId = session?.user_id ?? 'default';
   const { theme, toggleTheme } = useTheme();
@@ -568,7 +568,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         <button
           type="button"
           className="restaurant-back-btn"
-          onClick={() => setActiveWorkspace(null)}
+          onClick={goToWorkspacePicker}
           aria-label={l10n.getString('restaurant-menu-back-aria')}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" style={{ pointerEvents: 'none' }}>

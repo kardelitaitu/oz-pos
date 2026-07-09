@@ -225,7 +225,7 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
 
 /// Create a fresh in-memory database with all migrations already applied.
 ///
-/// Concatenates all 47 migration SQLs into a single batch the first time
+/// Concatenates all 49 migration SQLs into a single batch the first time
 /// and caches the generated SQL in a `OnceLock<String>`. Subsequent calls
 /// just run `execute_batch` on the cached string — no per-test migration
 /// overhead.

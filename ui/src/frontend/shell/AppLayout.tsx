@@ -7,7 +7,7 @@ import StoreSwitcher from '@/components/StoreSwitcher';
 import { GatewayStatusBadge } from '@/components/GatewayStatusBadge';
 import { useGatewayStatus } from '@/hooks/useGatewayStatus';
 import { useBrand } from '@/contexts/BrandContext';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 
 import { getNavItems } from '@/platform/ui/menu-registry';
 import './AppLayout.css';
@@ -49,7 +49,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
   const { settings: brandSettings } = useBrand();
   const navItems = getNavItems(enabledFeatures, userRole);
   const stripeStatus = useGatewayStatus();
-  const { setActiveWorkspace } = useWorkspace();
+  const { goToWorkspacePicker } = useWorkspaceNav();
 
   // ── Sidebar collapse state (persisted to localStorage) ─────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -127,7 +127,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
           <button
             type="button"
             className="app-sidebar-workspace-btn"
-            onClick={() => setActiveWorkspace(null)}
+            onClick={goToWorkspacePicker}
             aria-label="Switch workspace"
           >
             <Localized id="nav-switch-workspace">

@@ -9,7 +9,7 @@ import { useExitAnimation } from '@/hooks/useExitAnimation';
 import PaymentModal from '@/features/sales/PaymentModal';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
 import { overrideLinePrice, startSale, getProductTrackSerial, lookupSaleByReceiptBarcode } from '@/api/sales';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import RefundModal from '@/features/sales/RefundModal';
 import { listProducts, listCategories, lookupProductBySku, lookupByBarcode, type ProductDto, type CategoryDto } from '@/api/products';
@@ -65,7 +65,7 @@ interface RetailPosScreenProps {
 
 export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { l10n } = useLocalization();
-  const { setActiveWorkspace } = useWorkspace();
+  const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
   const userId = session!.user_id;
@@ -969,7 +969,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           <button
             type="button"
             className="retail-header-nav-btn"
-            onClick={() => setActiveWorkspace(null)}
+            onClick={goToWorkspacePicker}
             title={l10n.getString('retail-header-workspaces-title') || 'Back to workspaces'}
             aria-label={l10n.getString('retail-header-workspaces-aria') || 'Back to workspaces'}
           >
