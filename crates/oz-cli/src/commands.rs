@@ -801,8 +801,8 @@ pub(crate) fn run_product_update(
 
     // Treat empty strings passed via --category-id or --barcode as None
     // so the caller can clear a previously-set value.
-    let cat = category_id.and_then(|s| if s.is_empty() { None } else { Some(s) });
-    let bar = barcode.and_then(|s| if s.is_empty() { None } else { Some(s) });
+    let cat = category_id.filter(|s| !s.is_empty());
+    let bar = barcode.filter(|s| !s.is_empty());
 
     let product = store
         .update_product(sku, name, money, cat, bar, None)

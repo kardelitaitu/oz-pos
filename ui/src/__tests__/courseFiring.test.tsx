@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { act } from 'react-dom/test-utils';
+import { act } from 'react';
 import { usePosState } from '@/features/sales/usePosState';
 import { COURSES, courseLabel, courseEmoji } from '@/types/domain';
 import type { CourseId } from '@/types/domain';
