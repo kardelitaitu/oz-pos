@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOptionalBrand } from '@/contexts/BrandContext';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
 import './StaffLoginScreen.css';
@@ -36,6 +37,8 @@ type Step = 'username' | 'pin';
 export default function StaffLoginScreen() {
   const { l10n } = useLocalization();
   const { login, loading, error, clearError } = useAuth();
+  const brandSettings = useOptionalBrand();
+  const [logoError, setLogoError] = useState(false);
   const [step, setStep] = useState<Step>('username');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState<string[]>([]);
@@ -238,11 +241,24 @@ export default function StaffLoginScreen() {
       <div className="staff-login-card">
         {/* Logo */}
         <div className="staff-login-logo">
-          <UserIcon />
+          {!logoError && (brandSettings?.logo_path || '/branding/logo-mark.svg') ? (
+            <img
+              src={brandSettings?.logo_path || '/branding/logo-mark.svg'}
+              alt={brandSettings?.store_name || 'OZ-POS'}
+              className="staff-login-logo-img"
+              onError={() => setLogoError(true)}
+            />
+          ) : (
+            <UserIcon />
+          )}
         </div>
-        <Localized id="staff-login-title">
-          <h1 className="staff-login-title">OZ-POS</h1>
-        </Localized>
+        {brandSettings?.store_name?.trim() ? (
+          <h1 className="staff-login-title">{brandSettings.store_name}</h1>
+        ) : (
+          <Localized id="staff-login-title">
+            <h1 className="staff-login-title">OZ-POS</h1>
+          </Localized>
+        )}
         <Localized id="staff-login-subtitle">
           <p className="staff-login-subtitle">Staff Login</p>
         </Localized>

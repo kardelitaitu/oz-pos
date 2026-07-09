@@ -69,6 +69,13 @@
   height: 28px;
 }
 
+.staff-login-logo-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+
 .staff-login-title {
   margin: 0;
   font-size: var(--text-2xl);
