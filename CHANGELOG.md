@@ -7,7 +7,42 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- *(none yet)*
+- **StatusBar component**: Full-width VS Code-style status bar at the bottom of the app — connection status dot, version label, gateway status pill, license type, Switch Workspace button, Theme Toggle. Tooltips on all action buttons.
+- **KDS integration**: SLA alerts with green/yellow/red aging thresholds, course firing engine (appetizer/main/dessert/drinks), mDNS LAN peer discovery, TCP/WebSocket event forwarding, offline buffer with reconnection.
+- **Menu Engineering analytics**: Scatter plot quadrant matrix (Star/Plowhorse/Puzzle/Dog), volume & contribution margin aggregation, actionable recommendations UI.
+- **Feature Toggle screen**: Search with keyword filtering, bulk enable/disable per group, live sidebar/workspace preview.
+- **FeatureGuard trait**: Runtime safety validation when disabling features (active KDS tickets, open shifts) — prevents unsafe toggles with actionable error messages toasts.
+- **Recipe/BOM stock deduction**: `product_recipes` SQLite schema, `RecipeRepository`, upgraded `InventoryStockHandler` to deduct raw ingredients on sale completion.
+- **Modifier groups & coursing**: `modifier_groups`, `modifiers`, `product_modifier_groups` schema, `ItemModifierModal` with selection limits, course firing state engine.
+- **Cloud server binary**: Headless `oz-cloud-server` crate with JWT auth, multi-tenant store isolation, PostgreSQL database pool, and `/api/sync/push` + `/api/sync/pull` endpoints.
+- **Docker infrastructure**: `Dockerfile.server` multi-stage build (final image <50MB), `docker-compose.yml` with `pos-cloud-server` + optional PostgreSQL service.
+- **.ozpkg plugin scaffold**: Archive reader, isolated database namespace (`plugin_<id>_*`), Lua Event Bus bridge for custom hardware drivers and accounting hooks.
+- **Manifest JSON schema**: `docs/specs/module-manifest.schema.json` with mandatory properties (id, name, version, author, dependencies, permissions, database_namespace), validated during `kernel.register()`.
+- **Workspace picker redesign**: Role/permission-aware cards, greeting by time of day (Good morning/afternoon/evening/night), Ctrl+Shift+Escape global shortcut, idle auto-return.
+- **Retail POS terminal**: Store POS workspace with dedicated settings and terminal profile locking (`kds_kiosk`, `counter_pos`, `customer_display`).
+- **Indonesian i18n**: Full translations across settings, inventory, products, stock transfers, tax, terminals, tables, and more.
+- **Keyboard shortcuts**: Ctrl+Shift+Escape → workspace picker, F11 → fullscreen toggle.
+- **Animations & polish**: Page transition animations, undo-pill pattern with CSS animation-driven dismissal, indeterminate spinner, exit-animation skill.
+- **Automated matrix testing**: Rust preset integration tests (`feature_matrix_tests.rs`), frontend registry parity CI gate (`verify-feature-registry.py`).
+
+### Changed
+- **AppLayout restructured**: Body + StatusBar flex-column layout; sidebar footer (version, copyright, workspace btn, theme toggle) moved to StatusBar.
+- **Sidebar refactored**: Removed old footer, gateway badge, collapsed footer styles; added collapsible accordion with localStorage persistence.
+- **ToastProvider unified**: All toast messages standardised across success/error/info/warning variants.
+- **Palette tokens migrated**: Accent palette generation extracted to `deriveAccentPalette` + `applyAccentPalette`.
+- **Hooks extracted**: `useWorkspaceNav`, `useFullscreen`, `useAnimatedUndoStack`, `useTerminalProfile`.
+- **Performance**: Throttled mousemove handler with `requestAnimationFrame` to prevent layout thrashing.
+
+### Fixed
+- **Docker build**: Added workspace stubs for `apps/desktop-client` and `apps/tablet-client` (excluded via `.dockerignore` but required by workspace) — resolves "failed to load manifest for workspace member" errors.
+- **skill-drift-guard bats tests**: Corrected `PROJECT_ROOT` depth from `../../..` to `../../../..` (test files are 4 levels deep from project root).
+- **Test Fluent warnings**: Added missing `staff-login-*` keys, `categories-*` keys (in `products.ftl`), and provided `LocaleContext.Provider` to prevent empty-string ID errors from `LanguageSelector`.
+- **ThemeToggle tooltip**: Added native HTML `title` attribute with localized "Toggle theme" string.
+- **StatusBar workspace button tooltip**: Added `title` attribute with localized "Switch Workspace" label.
+- **Dead CSS cleanup**: Removed orphaned `.app-sidebar-footer`, `.app-sidebar-gateway` selectors, unused `useWorkspaceNav` import.
+- **CONTRIBUTING.md date**: Fixed invalid `30-02-26` → `09-07-26` (caught by skill-drift-guard).
+- **Various Clippy warnings**: Fixed across `oz-lua`, `oz-plugin`, and other crates.
+- **Feature key parity**: All `feature:` strings in `registerPage` and `registerNavItem` now verified against `FEATURES` set.
 
 ## [0.0.3] — 2026-06-30
 
