@@ -40,7 +40,7 @@
 
 .po-filter-btn--active {
   background: var(--color-accent);
-  color: var(--color-fg-on-accent);
+  color: var(--color-accent-fg);
   border-color: var(--color-accent);
 }
 
@@ -113,10 +113,10 @@
 }
 
 .po-status--draft { background: var(--color-bg-surface); color: var(--color-fg-tertiary); border: 1px solid var(--color-border); }
-.po-status--pending { background: var(--color-warning-bg, #fef3c7); color: var(--color-warning, #92400e); }
-.po-status--approved { background: var(--color-accent-dim, #dbeafe); color: var(--color-accent, #1e40af); }
-.po-status--received { background: var(--color-success-bg, #d1fae5); color: var(--color-success, #065f46); }
-.po-status--cancelled { background: var(--color-danger-bg, #fee2e2); color: var(--color-danger, #991b1b); }
+.po-status--pending { background: var(--color-warning-bg); color: var(--color-fg); }
+.po-status--approved { background: var(--color-info-bg); color: var(--color-fg); }
+.po-status--received { background: var(--color-success-bg); color: var(--color-fg); }
+.po-status--cancelled { background: var(--color-danger-bg); color: var(--color-fg); }
 
 .po-cell-actions {
   display: flex;
@@ -140,7 +140,7 @@
 
 .po-action-btn--primary {
   background: var(--color-accent);
-  color: var(--color-fg-on-accent);
+  color: var(--color-accent-fg);
   border-color: var(--color-accent);
 }
 
