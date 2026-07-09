@@ -25,6 +25,7 @@ staff-login-submitting = Memasuki sistem…
 # Restaurant Menu
 staff-login-verifying = Memverifikasi…
 staff-login-back = ← Kembali
+staff-login-copyright = © 2026 OZ-POS. Seluruh hak cipta dilindungi.
 
 # ── Product Bundles ──
 staff-title = Staf
