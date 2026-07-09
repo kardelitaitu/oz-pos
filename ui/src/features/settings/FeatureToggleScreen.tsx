@@ -305,7 +305,7 @@ export default function FeatureToggleScreen() {
           <div className="feature-toggle-group-header">
             <Localized id={GROUP_L10N_IDS[group] ?? ''}>
               <h2 className="feature-toggle-group-title">
-                <span className="feature-toggle-group-icon">{getGroupIcon(group)}</span>
+                <span className="feature-toggle-group-icon" aria-hidden="true">{getGroupIcon(group)}</span>
                 {group}
                 <span className="feature-toggle-group-count">
                 {groupFeatures.filter((f) => f.enabled).length}/{groupFeatures.length}

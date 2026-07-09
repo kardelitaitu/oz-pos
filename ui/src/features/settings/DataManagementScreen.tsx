@@ -335,7 +335,7 @@ export default function DataManagementScreen() {
             className={`data-mgmt-tab ${activeTab === tab ? 'data-mgmt-tab--active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab === 'export' && '📤'} {tab === 'import' && '📥'} {tab === 'backup' && '💾'}
+            <span aria-hidden="true">{tab === 'export' && '📤'}{tab === 'import' && '📥'}{tab === 'backup' && '💾'}</span>
             {' '}
             <Localized id={`data-mgmt-tab-${tab}`}>
               <span>{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
