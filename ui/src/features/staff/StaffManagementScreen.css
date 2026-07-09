@@ -83,13 +83,23 @@
   width: 32px;
   height: 32px;
   border-radius: var(--radius-full);
-  background: var(--color-accent-subtle);
-  color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.staff-mgmt-role-badge-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.staff-mgmt-role-icon {
   flex-shrink: 0;
 }
 

@@ -1,5 +1,7 @@
 import { useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { RoleIcon } from '@/components/RoleIcon';
+import { normalizeRole } from '@/utils/role';
 import './RoleBadge.css';
 
 /**
@@ -15,16 +17,7 @@ export default function RoleBadge() {
 
   if (!session) return null;
 
-  // Map role_name to a display variant.
-  const roleVariant = (): 'owner' | 'manager' | 'cashier' => {
-    switch (session.role_name) {
-      case 'owner': return 'owner';
-      case 'manager': return 'manager';
-      default: return 'cashier';
-    }
-  };
-
-  const variant = roleVariant();
+  const variant = normalizeRole(session.role_name);
 
   return (
     <div className="role-badge" aria-label={l10n.getString('role-badge-logged-in-aria', { displayName: session.display_name, roleName: session.role_name })}>
@@ -34,6 +27,7 @@ export default function RoleBadge() {
       <div className="role-badge-info">
         <span className="role-badge-name">{session.display_name}</span>
         <span className={`role-badge-role role-badge-role--${variant}`}>
+          <RoleIcon role={session.role_name} size={12} className="role-badge-role-icon" />
           {session.role_name}
         </span>
       </div>
