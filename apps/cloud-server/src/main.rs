@@ -17,17 +17,17 @@
 //! | `OZ_API_PORT` | `3099` | HTTP server listen port |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
+mod sync_api;
+
 use std::sync::Arc;
 
-use axum::{
-    Router,
-    extract::State,
-    routing::{get, post},
-};
-use rusqlite::{Connection, params};
+use axum::Router;
+use rusqlite::Connection;
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
+
+use crate::sync_api::{SyncState, sync_router};
 
 /// Shared application state for the cloud server.
 ///
@@ -82,7 +82,7 @@ async fn main() {
 }
 
 /// Build the combined router: REST API + sync endpoints.
-fn build_router(state: CloudServerState) -> Router {
+pub fn build_router(state: CloudServerState) -> Router {
     let cors = CorsLayer::new()
         .allow_methods(Any)
         .allow_headers(Any)
@@ -94,117 +94,13 @@ fn build_router(state: CloudServerState) -> Router {
     };
     let api_router = oz_api::router(api_state);
 
-    // Build the sync router (push/pull endpoints).
-    let sync_router = Router::new()
-        .route("/api/sync/push", post(sync_push_handler))
-        .route("/api/sync/pull", post(sync_pull_handler))
-        .route("/api/sync/status", get(sync_status_handler))
-        .with_state(state);
+    // Build the sync router (push/pull endpoints) from sync_api module.
+    let sync_router = sync_router(SyncState::from(state));
 
     Router::new()
         .merge(api_router)
         .merge(sync_router)
         .layer(cors)
-}
-
-// ── Sync handlers ─────────────────────────────────────────────────────────
-
-/// `POST /api/sync/push` — receive and process offline queue items.
-///
-/// Items are inserted with their existing IDs (not re-generated).
-/// Duplicate IDs are rejected with a Conflict outcome.
-async fn sync_push_handler(
-    State(state): State<CloudServerState>,
-    axum::Json(items): axum::Json<Vec<oz_core::offline::OfflineQueueItem>>,
-) -> Result<axum::Json<platform_sync::transport::PushResponse>, (axum::http::StatusCode, String)> {
-    use oz_core::offline::OfflineQueueStatus;
-
-    let conn = state.db.lock().await;
-
-    let mut results = Vec::with_capacity(items.len());
-    for item in &items {
-        match conn.execute(
-            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![
-                item.id, item.action, item.payload,
-                OfflineQueueStatus::Pending.as_stored_str(),
-                item.retry_count, item.last_error, item.created_at, item.synced_at,
-            ],
-        ) {
-            Ok(_) => results.push(platform_sync::transport::PushOutcome::Accepted),
-            Err(e) => {
-                if e.to_string().contains("UNIQUE") {
-                    results.push(platform_sync::transport::PushOutcome::Rejected {
-                        reason: format!("duplicate id: {}", item.id),
-                    });
-                } else {
-                    results.push(platform_sync::transport::PushOutcome::Rejected {
-                        reason: format!("database error: {e}"),
-                    });
-                }
-            }
-        }
-    }
-
-    let resp = platform_sync::transport::PushResponse { results };
-    Ok(axum::Json(resp))
-}
-
-/// Query parameters for the pull endpoint.
-#[derive(Debug, serde::Deserialize)]
-struct SyncPullQuery {
-    /// ISO-8601 timestamp of the last successful sync.
-    since: Option<String>,
-}
-
-/// `POST /api/sync/pull` — return items changed since the given timestamp.
-///
-/// Uses `list_all_offline()` and filters by `created_at >= since` on the Rust side.
-async fn sync_pull_handler(
-    State(state): State<CloudServerState>,
-    axum::Json(query): axum::Json<SyncPullQuery>,
-) -> Result<axum::Json<platform_sync::transport::PullResponse>, (axum::http::StatusCode, String)> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-
-    let all_items = store.list_all_offline().unwrap_or_default();
-    let items: Vec<_> = if let Some(ref since) = query.since {
-        all_items
-            .into_iter()
-            .filter(|i| i.created_at >= *since)
-            .collect()
-    } else {
-        all_items
-    };
-
-    let resp = platform_sync::transport::PullResponse { items };
-    Ok(axum::Json(resp))
-}
-
-/// Response from the status endpoint.
-#[derive(Debug, serde::Serialize)]
-struct SyncStatusResponse {
-    status: String,
-    version: String,
-    pending_count: i64,
-}
-
-/// `GET /api/sync/status` — return server status and pending queue count.
-async fn sync_status_handler(
-    State(state): State<CloudServerState>,
-) -> axum::Json<SyncStatusResponse> {
-    let pending_count = {
-        let conn = state.db.lock().await;
-        let store = oz_core::db::Store::new(&conn);
-        store.pending_offline_count().unwrap_or(0)
-    };
-
-    axum::Json(SyncStatusResponse {
-        status: "ok".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
-        pending_count,
-    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -255,35 +151,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sync_status_returns_json() {
-        let app = test_app();
-        let req = Request::builder()
-            .uri("/api/sync/status")
-            .body(Body::empty())
-            .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
-        let body = resp.into_body().collect().await.unwrap().to_bytes();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["status"], "ok");
-        assert!(json["version"].is_string());
-        assert_eq!(json["pending_count"], 0);
-    }
-
-    #[tokio::test]
-    async fn sync_push_empty_array() {
-        let app = test_app();
-        let body = r#"[]"#;
-        let req = Request::builder()
-            .method("POST")
-            .uri("/api/sync/push")
-            .header("Content-Type", "application/json")
-            .body(Body::from(body.to_owned()))
-            .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
     async fn sync_push_and_pull_roundtrip() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
@@ -317,65 +184,6 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["id"], "test-id");
         assert_eq!(items[0]["action"], "complete_sale");
-    }
-
-    #[tokio::test]
-    async fn sync_push_receives_items() {
-        let state = CloudServerState {
-            db: Arc::new(Mutex::new(fresh_db())),
-        };
-        let app = build_router(state.clone());
-
-        // Push an item
-        let body = r#"[{"id":"push-1","action":"create_product","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}]"#;
-        let req = Request::builder()
-            .method("POST")
-            .uri("/api/sync/push")
-            .header("Content-Type", "application/json")
-            .body(Body::from(body.to_owned()))
-            .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-
-        // Verify it was stored
-        let conn = state.db.lock().await;
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM offline_queue WHERE id = 'push-1'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(count, 1);
-    }
-
-    #[tokio::test]
-    async fn sync_status_reflects_pending_count() {
-        let state = CloudServerState {
-            db: Arc::new(Mutex::new(fresh_db())),
-        };
-        let app = build_router(state.clone());
-
-        // Seed two pending items
-        {
-            let conn = state.db.lock().await;
-            conn.execute(
-                "INSERT INTO offline_queue (id, action, payload, status, created_at)
-                 VALUES ('a', 'action', '{}', 'pending', datetime('now')),
-                        ('b', 'action', '{}', 'pending', datetime('now'))",
-                [],
-            )
-            .unwrap();
-        }
-
-        let req = Request::builder()
-            .uri("/api/sync/status")
-            .body(Body::empty())
-            .unwrap();
-        let resp = app.oneshot(req).await.unwrap();
-        let body = resp.into_body().collect().await.unwrap().to_bytes();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["pending_count"], 2);
     }
 
     #[tokio::test]
