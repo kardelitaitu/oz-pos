@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useFullscreen } from '@/hooks/useFullscreen';
@@ -103,7 +104,15 @@ export default function AppShell() {
   }, []);
 
   // ── F11 toggles fullscreen across all workpaces ───────────────
-  useFullscreen();
+  const { addToast } = useToast();
+  useFullscreen((isFullscreen) => {
+    addToast({
+      type: 'info',
+      message: isFullscreen
+        ? 'Fullscreen mode enabled'
+        : 'Fullscreen mode disabled',
+    });
+  });
 
   // ── Escape key navigates back to workspace picker ────────────
 

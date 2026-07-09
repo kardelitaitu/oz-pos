@@ -9,6 +9,7 @@ import { screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import AppShell from '@/frontend/shell/AppShell';
 import { withFluent } from '@/locales/test-utils';
 
@@ -128,7 +129,7 @@ import { registerPage, clearPages } from '@/platform/ui/page-registry';
 // ── Test wrapper ─────────────────────────────────────────────
 
 function wrap(children: React.ReactNode) {
-  return withFluent(children);
+  return withFluent(<ToastProvider>{children}</ToastProvider>);
 }
 
 // ── Helpers ───────────────────────────────────────────────────

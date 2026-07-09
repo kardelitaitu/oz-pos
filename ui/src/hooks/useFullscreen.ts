@@ -8,22 +8,39 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
  * The handler prevents default browser F11 behavior and calls
  * `getCurrentWindow().setFullscreen()` to toggle.
  *
+ * @param onToggle Optional callback fired after the fullscreen state changes.
+ *   Receives `true` when entering fullscreen, `false` when exiting.
+ *
  * @example
  * ```tsx
  * function MyComponent() {
  *   useFullscreen(); // just sets up the F11 listener
  *   // ...
  * }
+ *
+ * function MyOtherComponent() {
+ *   const { addToast } = useToast();
+ *   useFullscreen((isFullscreen) => {
+ *     addToast({ type: 'info', message: isFullscreen ? 'Fullscreen mode enabled' : 'Fullscreen mode disabled' });
+ *   });
+ * }
  * ```
  */
-export function useFullscreen() {
+export function useFullscreen(onToggle?: (isFullscreen: boolean) => void) {
   const toggleRef = useRef<(() => void) | null>(null);
+  // Keep the latest callback in a ref so the effect closure always calls the newest version.
+  const onToggleRef = useRef(onToggle);
+  onToggleRef.current = onToggle;
 
   useEffect(() => {
     const toggle = () => {
       try {
         const win = getCurrentWindow();
-        win.isFullscreen().then((fs) => win.setFullscreen(!fs));
+        win.isFullscreen().then((fs) => {
+          const newState = !fs;
+          win.setFullscreen(newState);
+          onToggleRef.current?.(newState);
+        });
       } catch {
         // Not running in Tauri — ignore
       }
