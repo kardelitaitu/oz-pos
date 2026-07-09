@@ -15,7 +15,7 @@
 # AUDIT_RE/PYTHON_BIN plumbing breaking.
 
 setup() {
-  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../../.." && pwd)"
   cd "$PROJECT_ROOT"
   rm -f "$PROJECT_ROOT/skill-drift-report.md"
 }

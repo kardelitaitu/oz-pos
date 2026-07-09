@@ -16,7 +16,7 @@
 # value check fires for a shape-failure case), this test catches it.
 
 setup() {
-  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../../.." && pwd)"
   cd "$PROJECT_ROOT"
   cp "$PROJECT_ROOT/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/CONTRIBUTING.md.bak"
   printf '\n> last audited 28-06-26 by project-scaffold (extra)\n' \

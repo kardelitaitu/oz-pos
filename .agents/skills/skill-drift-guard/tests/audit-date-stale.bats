@@ -22,7 +22,7 @@
 # footers — this test catches it before contributors do.
 
 setup() {
-  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../../.." && pwd)"
   cd "$PROJECT_ROOT"
   cp "$PROJECT_ROOT/.agents/skills/hal-drivers/SKILL.md" \
      "$BATS_TEST_TMPDIR/hal-drivers-SKILL.md.bak"

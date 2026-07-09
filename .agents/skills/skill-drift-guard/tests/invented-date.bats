@@ -16,7 +16,7 @@
 # contributors do.
 
 setup() {
-  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../../.." && pwd)"
   cd "$PROJECT_ROOT"
   cp "$PROJECT_ROOT/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/CONTRIBUTING.md.bak"
   printf '\n> last audited 30-02-26 by docs-auditor\n' \
