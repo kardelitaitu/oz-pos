@@ -316,7 +316,7 @@ impl Kernel {
         }
 
         // Update statuses to Stopped for any module that was Started or Loaded.
-        for (_id, status) in self.statuses.iter_mut() {
+        for status in self.statuses.values_mut() {
             if *status == ModuleStatus::Started || *status == ModuleStatus::Loaded {
                 *status = ModuleStatus::Stopped;
             }
