@@ -1341,7 +1341,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         </button>
         {isEnabled(FEATURES.QUICK_RETURN) && (
           <button className="retail-fn-btn" onClick={() => setShowQuickReturn(true)}>
-            <span className="retail-fn-key">F11</span> {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
+            {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
           </button>
         )}
         <button className="retail-fn-btn" onClick={() => onNavigate?.('kds')}>
