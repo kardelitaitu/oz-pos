@@ -665,6 +665,75 @@ describe('WorkspaceHome', () => {
     });
   });
 
+  // ── Fullscreen button ───────────────────────────────────────
+
+  describe('fullscreen button', () => {
+    it('renders a fullscreen toggle button with F11 tooltip', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
+      expect(btn).toBeInTheDocument();
+      expect(btn.getAttribute('title')).toBe('F11');
+    });
+
+    it('renders fullscreen button in loading state with F11 tooltip', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: [],
+        loading: true,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
+      expect(btn).toBeInTheDocument();
+      expect(btn.getAttribute('title')).toBe('F11');
+    });
+
+    it('renders fullscreen button in error state with F11 tooltip', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: [],
+        loading: false,
+        error: 'Failed',
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Connection Error')).toBeInTheDocument();
+      });
+
+      const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
+      expect(btn).toBeInTheDocument();
+      expect(btn.getAttribute('title')).toBe('F11');
+    });
+  });
+
   // ── Active workspace indicator ───────────────────────────────
 
   describe('active workspace indicator', () => {
