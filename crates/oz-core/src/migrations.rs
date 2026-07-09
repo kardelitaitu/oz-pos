@@ -227,6 +227,10 @@ pub const ALL: &[Migration] = &[
         id: "052_order_modifiers.sql",
         sql: include_str!("../migrations/052_order_modifiers.sql"),
     },
+    Migration {
+        id: "053_kds_status_check.sql",
+        sql: include_str!("../migrations/053_kds_status_check.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -412,6 +416,8 @@ mod tests {
             "stock_transfers",
             "stock_transfer_lines",
             "terminal_profiles",
+            "kds_orders",
+            "kds_daily_counters",
             "active_carts",
             "tables",
             "workspaces",

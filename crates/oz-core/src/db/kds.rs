@@ -705,4 +705,97 @@ mod tests {
         assert_eq!(o1.display_number, Some(1));
         assert_eq!(o2.display_number, Some(2));
     }
+
+    // ── CHECK constraint tests ──────────────────────────────────────
+
+    #[test]
+    fn kds_status_check_rejects_invalid_status_on_insert() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let test_sale = Sale {
+            id: sale_id.clone(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now,
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            lines: vec![],
+        };
+        s.create_sale(&test_sale).unwrap();
+
+        // Attempt a raw INSERT with an invalid status — should fail the CHECK constraint.
+        let id = uuid::Uuid::new_v4().to_string();
+        let result = s.conn.execute(
+            "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
+             VALUES (?1, ?2, 'bogus', 'Test', 1, '')",
+            params![id, sale_id],
+        );
+
+        assert!(
+            result.is_err(),
+            "expected CHECK constraint error for invalid status"
+        );
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("CHECK")
+                || msg.contains("constraint")
+                || msg.contains("abort"),
+            "expected constraint violation message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn kds_status_check_accepts_valid_statuses() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Insert orders with each valid status. Each needs its own sale_id
+        // because kds_orders.sale_id has a UNIQUE constraint.
+        for status in &["pending", "preparing", "ready", "served", "cancelled"] {
+            let sale_id = uuid::Uuid::new_v4().to_string();
+            let test_sale = Sale {
+                id: sale_id.clone(),
+                status: crate::SaleStatus::Completed,
+                total: price(0),
+                currency: usd(),
+                line_count: 0,
+                payment_method: None,
+                tendered_minor: None,
+                discount_percent: 0,
+                discount_label: None,
+                user_id: None,
+                created_at: now.clone(),
+                updated_at: now.clone(),
+                subtotal: price(0),
+                tax_total: price(0),
+                customer_id: None,
+                lines: vec![],
+            };
+            s.create_sale(&test_sale).unwrap();
+
+            let order_id = uuid::Uuid::new_v4().to_string();
+            s.conn.execute(
+                "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
+                 VALUES (?1, ?2, ?3, 'Test', 1, '')",
+                params![order_id, sale_id, status],
+            )
+            .unwrap();
+            let fetched = s.get_kds_order(&order_id).unwrap().unwrap();
+            assert_eq!(fetched.status, *status);
+        }
+    }
 }

@@ -12,10 +12,10 @@
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
-| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 6 |
+| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 7 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **26** |
+| | **Total** | **46** | **27** |
 
 ---
 
@@ -148,7 +148,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 3.3 KDS Ticket State Machine & SLA Alerts
 
-- [ ] **3.3.1 [KDS Ticket Schema & Transitions]**: Ensure `kds_tickets` table enforces valid states: `status TEXT NOT NULL CHECK(status IN ('new', 'preparing', 'ready', 'served', 'recalled'))`. Add timestamp columns (`created_at`, `prepared_at`, `ready_at`, `served_at`).
+- [x] **3.3.1 [KDS Ticket Schema & Transitions]**: Add CHECK constraint on `kds_orders.status` via table recreation (SQLite limitation). Existing timestamp columns (`received_at`, `started_at`, `ready_at`, `served_at`) verified present. Add `kds_orders` and `kds_daily_counters` to expected_tables.
 - [ ] **3.3.2 [SLA Aging Timer Hook]**: Create `ui/src/features/kds/hooks/useTicketSla.ts` accepting `created_at: string`. Computes elapsed seconds every second (`setInterval`) and returns threshold level (`'green' | 'yellow' | 'red'`). Green: `< 600s` (10m), Yellow: `600s..900s`, Red: `> 900s` (15m).
 - [ ] **3.3.3 [KDS Screen Visual & Audio Alerts]**: Upgrade `ui/src/features/kds/KdsScreen.tsx` to apply dynamic header classes (`kds-ticket--green`, `kds-ticket--yellow`, `kds-ticket--red`) based on `useTicketSla`. Add optional audio chime/pulse when a ticket enters the `red` threshold.
 
