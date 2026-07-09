@@ -67,9 +67,10 @@ impl PluginDb {
     /// Returns the number of rows modified/affected.
     pub fn exec(&self, sql: &str) -> Result<usize, PluginError> {
         validate_sql(sql, &self.prefix)?;
-        let conn = self.conn.lock().map_err(|e| {
-            PluginError::Internal(format!("database lock poisoned: {e}"))
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| PluginError::Internal(format!("database lock poisoned: {e}")))?;
         let count = conn
             .execute(sql, [])
             .map_err(|e| PluginError::Internal(format!("database error: {e}")))?;
@@ -82,20 +83,17 @@ impl PluginDb {
     /// Returns `"[]"` if the query produces no rows.
     pub fn query(&self, sql: &str) -> Result<String, PluginError> {
         validate_sql(sql, &self.prefix)?;
-        let conn = self.conn.lock().map_err(|e| {
-            PluginError::Internal(format!("database lock poisoned: {e}"))
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| PluginError::Internal(format!("database lock poisoned: {e}")))?;
 
         let mut stmt = conn
             .prepare(sql)
             .map_err(|e| PluginError::Internal(format!("query prepare error: {e}")))?;
 
         let column_count = stmt.column_count();
-        let column_names: Vec<String> = stmt
-            .column_names()
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let column_names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
 
         let mut rows: Vec<serde_json::Value> = Vec::new();
 
@@ -113,8 +111,8 @@ impl PluginDb {
             .map_err(|e| PluginError::Internal(format!("query error: {e}")))?;
 
         for row_result in row_iter {
-            let row_val = row_result
-                .map_err(|e| PluginError::Internal(format!("row read error: {e}")))?;
+            let row_val =
+                row_result.map_err(|e| PluginError::Internal(format!("row read error: {e}")))?;
             rows.push(row_val);
         }
 
@@ -128,9 +126,10 @@ impl PluginDb {
     /// and similar DDL statements.
     pub fn execute(&self, sql: &str) -> Result<(), PluginError> {
         validate_sql(sql, &self.prefix)?;
-        let conn = self.conn.lock().map_err(|e| {
-            PluginError::Internal(format!("database lock poisoned: {e}"))
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| PluginError::Internal(format!("database lock poisoned: {e}")))?;
         conn.execute_batch(sql)
             .map_err(|e| PluginError::Internal(format!("database error: {e}")))
     }
@@ -227,10 +226,9 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 1: FROM <table1>, <table2>, ...
     // Matches all comma-separated tables after FROM until WHERE/JOIN/ORDER/GROUP/etc.
-    let from_re = Regex::new(
-        r"(?i)\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)",
-    )
-    .unwrap();
+    let from_re =
+        Regex::new(r"(?i)\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)")
+            .unwrap();
     for cap in from_re.captures_iter(sql) {
         let table_list = cap[1].to_string();
         for part in table_list.split(',') {
@@ -265,7 +263,9 @@ fn extract_table_references(sql: &str) -> Vec<String> {
     }
 
     // Pattern 5: TABLE <table> (CREATE TABLE, DROP TABLE)
-    let table_re = Regex::new(r"(?i)\bTABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    let table_re =
+        Regex::new(r"(?i)\bTABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)")
+            .unwrap();
     for cap in table_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -273,8 +273,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 6: INSERT INTO <table> — also caught by INTO above, but handle
     // the case where INSERT INTO has a schema prefix like `INSERT INTO plugin_x.t`
-    let insert_into_re =
-        Regex::new(r"(?i)\bINSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    let insert_into_re = Regex::new(r"(?i)\bINSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
     for cap in insert_into_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         if !tables.contains(&tbl) {
@@ -283,8 +282,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
     }
 
     // Pattern 7: DELETE FROM <table>
-    let delete_from_re =
-        Regex::new(r"(?i)\bDELETE\s+FROM\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    let delete_from_re = Regex::new(r"(?i)\bDELETE\s+FROM\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
     for cap in delete_from_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -312,14 +310,12 @@ fn extract_cte_names(sql: &str) -> Vec<String> {
     let mut names = Vec::new();
     // Match: WITH <name> AS ( ... ) or WITH RECURSIVE <name> AS ( ... )
     let cte_re =
-        Regex::new(r#"(?i)\bWITH\s+(?:RECURSIVE\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#)
-            .unwrap();
+        Regex::new(r#"(?i)\bWITH\s+(?:RECURSIVE\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#).unwrap();
     for cap in cte_re.captures_iter(sql) {
         names.push(cap[1].to_uppercase());
     }
     // Also match comma-separated CTEs: , <name> AS (
-    let cte_comma_re =
-        Regex::new(r#"(?i),\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#).unwrap();
+    let cte_comma_re = Regex::new(r#"(?i),\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#).unwrap();
     for cap in cte_comma_re.captures_iter(sql) {
         names.push(cap[1].to_uppercase());
     }
@@ -331,15 +327,11 @@ fn sqlite_value_to_json(val: rusqlite::types::Value) -> serde_json::Value {
     match val {
         rusqlite::types::Value::Null => serde_json::Value::Null,
         rusqlite::types::Value::Integer(i) => serde_json::Value::Number(i.into()),
-        rusqlite::types::Value::Real(f) => {
-            serde_json::Number::from_f64(f)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null)
-        }
+        rusqlite::types::Value::Real(f) => serde_json::Number::from_f64(f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
         rusqlite::types::Value::Text(s) => serde_json::Value::String(s),
-        rusqlite::types::Value::Blob(b) => serde_json::Value::String(
-            base64_encode(&b),
-        ),
+        rusqlite::types::Value::Blob(b) => serde_json::Value::String(base64_encode(&b)),
     }
 }
 
@@ -378,11 +370,7 @@ mod tests {
 
     #[test]
     fn validate_allowed_select() {
-        validate_sql(
-            "SELECT * FROM plugin_test_items",
-            "plugin_test_",
-        )
-        .unwrap();
+        validate_sql("SELECT * FROM plugin_test_items", "plugin_test_").unwrap();
     }
 
     #[test]
@@ -405,11 +393,7 @@ mod tests {
 
     #[test]
     fn validate_allowed_delete() {
-        validate_sql(
-            "DELETE FROM plugin_test_items WHERE id = 1",
-            "plugin_test_",
-        )
-        .unwrap();
+        validate_sql("DELETE FROM plugin_test_items WHERE id = 1", "plugin_test_").unwrap();
     }
 
     #[test]
@@ -423,11 +407,7 @@ mod tests {
 
     #[test]
     fn validate_allowed_drop_table() {
-        validate_sql(
-            "DROP TABLE plugin_test_items",
-            "plugin_test_",
-        )
-        .unwrap();
+        validate_sql("DROP TABLE plugin_test_items", "plugin_test_").unwrap();
     }
 
     #[test]
@@ -459,11 +439,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_core_table_in_from() {
-        let err = validate_sql(
-            "SELECT * FROM sales",
-            "plugin_test_",
-        )
-        .unwrap_err();
+        let err = validate_sql("SELECT * FROM sales", "plugin_test_").unwrap_err();
         assert!(err.to_string().contains("prefix"));
     }
 
@@ -479,11 +455,8 @@ mod tests {
 
     #[test]
     fn validate_rejects_core_table_in_insert() {
-        let err = validate_sql(
-            "INSERT INTO products (sku) VALUES ('test')",
-            "plugin_test_",
-        )
-        .unwrap_err();
+        let err =
+            validate_sql("INSERT INTO products (sku) VALUES ('test')", "plugin_test_").unwrap_err();
         assert!(err.to_string().contains("prefix"));
     }
 
@@ -499,11 +472,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_core_table_in_delete() {
-        let err = validate_sql(
-            "DELETE FROM sales WHERE id = 1",
-            "plugin_test_",
-        )
-        .unwrap_err();
+        let err = validate_sql("DELETE FROM sales WHERE id = 1", "plugin_test_").unwrap_err();
         assert!(err.to_string().contains("prefix"));
     }
 
@@ -515,11 +484,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_attach() {
-        let err = validate_sql(
-            "ATTACH DATABASE 'other.db' AS other",
-            "plugin_test_",
-        )
-        .unwrap_err();
+        let err = validate_sql("ATTACH DATABASE 'other.db' AS other", "plugin_test_").unwrap_err();
         assert!(err.to_string().contains("ATTACH"));
     }
 
@@ -616,7 +581,9 @@ mod tests {
     #[test]
     fn plugin_db_rejects_non_prefixed() {
         let db = make_db("test");
-        let err = db.execute("CREATE TABLE core_table (id INTEGER)").unwrap_err();
+        let err = db
+            .execute("CREATE TABLE core_table (id INTEGER)")
+            .unwrap_err();
         assert!(err.to_string().contains("prefix"));
     }
 
@@ -627,7 +594,9 @@ mod tests {
             .unwrap();
         db.exec("INSERT INTO plugin_test_items VALUES (1, 'a'), (2, 'b')")
             .unwrap();
-        let result = db.query("SELECT * FROM plugin_test_items ORDER BY id").unwrap();
+        let result = db
+            .query("SELECT * FROM plugin_test_items ORDER BY id")
+            .unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0]["id"], 1);
@@ -657,16 +626,15 @@ mod tests {
     #[test]
     fn plugin_db_multiple_instances_share_connection() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE plugin_shared_data (id INTEGER)",
-        )
-        .unwrap();
+        conn.execute_batch("CREATE TABLE plugin_shared_data (id INTEGER)")
+            .unwrap();
 
         let db1 = PluginDb::new(conn, "shared");
         // db1 uses the connection; db2 is a clone sharing the same Arc
         let db2 = db1.clone();
 
-        db1.exec("INSERT INTO plugin_shared_data VALUES (42)").unwrap();
+        db1.exec("INSERT INTO plugin_shared_data VALUES (42)")
+            .unwrap();
         let result = db2.query("SELECT * FROM plugin_shared_data").unwrap();
         assert!(result.contains("42"));
     }
@@ -707,21 +675,14 @@ mod tests {
 
     #[test]
     fn validate_rejects_mixed_prefix_and_non_prefix() {
-        let err = validate_sql(
-            "SELECT * FROM plugin_test_items, sales",
-            "plugin_test_",
-        )
-        .unwrap_err();
+        let err =
+            validate_sql("SELECT * FROM plugin_test_items, sales", "plugin_test_").unwrap_err();
         assert!(err.to_string().contains("prefix"));
     }
 
     #[test]
     fn validate_allows_drop_table_if_exists() {
-        validate_sql(
-            "DROP TABLE IF EXISTS plugin_test_items",
-            "plugin_test_",
-        )
-        .unwrap();
+        validate_sql("DROP TABLE IF EXISTS plugin_test_items", "plugin_test_").unwrap();
     }
 
     // ── extract_table_references unit tests ─────────────────────────——
@@ -758,22 +719,19 @@ mod tests {
 
     #[test]
     fn extract_tables_from_create_table() {
-        let tables =
-            extract_table_references("CREATE TABLE plugin_test_items (id INTEGER)");
+        let tables = extract_table_references("CREATE TABLE plugin_test_items (id INTEGER)");
         assert_eq!(tables, vec!["plugin_test_items"]);
     }
 
     #[test]
     fn extract_tables_from_delete() {
-        let tables =
-            extract_table_references("DELETE FROM plugin_test_items WHERE id = 1");
+        let tables = extract_table_references("DELETE FROM plugin_test_items WHERE id = 1");
         assert_eq!(tables, vec!["plugin_test_items"]);
     }
 
     #[test]
     fn extract_tables_from_update() {
-        let tables =
-            extract_table_references("UPDATE plugin_test_items SET name = 'x'");
+        let tables = extract_table_references("UPDATE plugin_test_items SET name = 'x'");
         assert_eq!(tables, vec!["plugin_test_items"]);
     }
 
@@ -781,7 +739,10 @@ mod tests {
 
     #[test]
     fn sqlite_null_to_json() {
-        assert_eq!(sqlite_value_to_json(rusqlite::types::Value::Null), serde_json::Value::Null);
+        assert_eq!(
+            sqlite_value_to_json(rusqlite::types::Value::Null),
+            serde_json::Value::Null
+        );
     }
 
     #[test]

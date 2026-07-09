@@ -40,9 +40,7 @@ impl OzpkEntry {
     pub fn filename(&self) -> &str {
         match self {
             OzpkEntry::Manifest(_) => "manifest.json",
-            OzpkEntry::Script(name)
-            | OzpkEntry::Migration(name)
-            | OzpkEntry::Other(name) => name,
+            OzpkEntry::Script(name) | OzpkEntry::Migration(name) | OzpkEntry::Other(name) => name,
         }
     }
 
@@ -261,7 +259,10 @@ impl OzpkArchive {
     ///
     /// Creates `dest/scripts/` and `dest/migrations/` and writes the respective
     /// files there, flattening any directory structure.
-    pub fn extract_scripts_and_migrations(&self, dest: impl AsRef<Path>) -> Result<(), PluginError> {
+    pub fn extract_scripts_and_migrations(
+        &self,
+        dest: impl AsRef<Path>,
+    ) -> Result<(), PluginError> {
         let dest = dest.as_ref();
 
         let scripts_dir = dest.join("scripts");
@@ -408,10 +409,7 @@ mod tests {
     #[test]
     fn read_entry_exact_vs_fallback() {
         let manifest = br#"{"id": "test", "name": "Test", "version": "1.0.0"}"#;
-        let bytes = build_ozpkg(&[
-            ("manifest.json", manifest),
-            ("scripts/foo.lua", b"-- foo"),
-        ]);
+        let bytes = build_ozpkg(&[("manifest.json", manifest), ("scripts/foo.lua", b"-- foo")]);
 
         let archive = OzpkArchive::from_bytes(&bytes, "test.ozpkg").unwrap();
 
@@ -454,10 +452,7 @@ mod tests {
             std::fs::read(dest.path().join("extracted.lua")).unwrap(),
             lua
         );
-        assert_eq!(
-            std::fs::read(dest.path().join("init.sql")).unwrap(),
-            sql
-        );
+        assert_eq!(std::fs::read(dest.path().join("init.sql")).unwrap(), sql);
     }
 
     #[test]
@@ -494,9 +489,7 @@ mod tests {
 
         let archive = OzpkArchive::from_bytes(&bytes, "x.ozpkg").unwrap();
         let dest = tempfile::tempdir().unwrap();
-        archive
-            .extract_scripts_and_migrations(dest.path())
-            .unwrap();
+        archive.extract_scripts_and_migrations(dest.path()).unwrap();
 
         // Scripts and migrations extracted
         assert!(dest.path().join("scripts/script.lua").exists());
@@ -521,10 +514,7 @@ mod tests {
         let bytes = build_ozpkg(&[("manifest.json", manifest)]);
         let archive =
             OzpkArchive::from_bytes(&bytes, PathBuf::from("/custom/path/plugin.ozpkg")).unwrap();
-        assert_eq!(
-            archive.path(),
-            PathBuf::from("/custom/path/plugin.ozpkg")
-        );
+        assert_eq!(archive.path(), PathBuf::from("/custom/path/plugin.ozpkg"));
     }
 
     #[test]
@@ -631,8 +621,7 @@ mod tests {
 
     #[test]
     fn open_nonexistent_file_fails() {
-        let result =
-            OzpkArchive::open(Path::new("/does/not/exist/plugin.ozpkg"));
+        let result = OzpkArchive::open(Path::new("/does/not/exist/plugin.ozpkg"));
         assert!(result.is_err());
     }
 
@@ -663,9 +652,7 @@ mod tests {
         let archive = OzpkArchive::from_bytes(&bytes, "m.ozpkg").unwrap();
         let dest = tempfile::tempdir().unwrap();
         let sub = dest.path().join("extracted");
-        archive
-            .extract_scripts_and_migrations(&sub)
-            .unwrap();
+        archive.extract_scripts_and_migrations(&sub).unwrap();
 
         assert!(sub.join("scripts/test.lua").exists());
         assert!(sub.join("migrations/create.sql").exists());
@@ -682,19 +669,13 @@ mod tests {
         assert!(!archive.has_migrations());
 
         // Only scripts
-        let bytes = build_ozpkg(&[
-            ("manifest.json", manifest),
-            ("s.lua", b"-- s"),
-        ]);
+        let bytes = build_ozpkg(&[("manifest.json", manifest), ("s.lua", b"-- s")]);
         let archive = OzpkArchive::from_bytes(&bytes, "e.ozpkg").unwrap();
         assert!(archive.has_scripts());
         assert!(!archive.has_migrations());
 
         // Only migrations
-        let bytes = build_ozpkg(&[
-            ("manifest.json", manifest),
-            ("m.sql", b"-- m"),
-        ]);
+        let bytes = build_ozpkg(&[("manifest.json", manifest), ("m.sql", b"-- m")]);
         let archive = OzpkArchive::from_bytes(&bytes, "e.ozpkg").unwrap();
         assert!(!archive.has_scripts());
         assert!(archive.has_migrations());

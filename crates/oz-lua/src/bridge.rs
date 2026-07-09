@@ -178,9 +178,7 @@ mod tests {
         let lua = rlua::Lua::new();
         let mut bridge = LuaEventBridge::new();
 
-        let callback = lua
-            .create_function(|_, ()| Ok(()))
-            .unwrap();
+        let callback = lua.create_function(|_, ()| Ok(())).unwrap();
         bridge
             .register(&lua, "test.event".into(), callback)
             .unwrap();
@@ -335,14 +333,15 @@ mod tests {
             })
             .unwrap();
 
-        bridge
-            .register(&lua, "test.event".into(), cb_fail)
-            .unwrap();
+        bridge.register(&lua, "test.event".into(), cb_fail).unwrap();
         bridge.register(&lua, "test.event".into(), cb_ok).unwrap();
 
         // When at least one succeeds, the overall result is Ok
         let result = bridge.fire(&lua, "test.event", rlua::Value::Nil);
-        assert!(result.is_ok(), "should succeed when at least one callback works");
+        assert!(
+            result.is_ok(),
+            "should succeed when at least one callback works"
+        );
         assert_eq!(counter.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 
@@ -457,9 +456,7 @@ mod tests {
             .unwrap();
 
         bridge.register(&lua, "test.event".into(), cb).unwrap();
-        bridge
-            .fire(&lua, "test.event", rlua::Value::Nil)
-            .unwrap();
+        bridge.fire(&lua, "test.event", rlua::Value::Nil).unwrap();
         assert!(called.load(std::sync::atomic::Ordering::SeqCst));
     }
 }

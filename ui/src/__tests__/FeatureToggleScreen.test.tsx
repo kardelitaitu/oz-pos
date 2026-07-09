@@ -1,13 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import type { ReactNode } from 'react';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import salesFtl from '@/locales/sales.ftl?raw';
-import { ToastProvider } from '@/frontend/shared/Toast';
+import { withToastProviders } from '@/__tests__/test-utils/providers';
 
 // ── Mock Tauri IPC ─────────────────────────────────────────────────
 
@@ -40,15 +38,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 function FluentWrapper({ children }: { children: ReactNode }) {
-  const bundle = new FluentBundle('en-US');
-  bundle.addResource(new FluentResource(settingsFtl));
-  bundle.addResource(new FluentResource(salesFtl));
-  const l10n = new ReactLocalization([bundle]);
-  return (
-    <LocalizationProvider l10n={l10n}>
-      <ToastProvider>{children}</ToastProvider>
-    </LocalizationProvider>
-  );
+  return withToastProviders(children, settingsFtl, salesFtl);
 }
 
 describe('FeatureToggleScreen', () => {

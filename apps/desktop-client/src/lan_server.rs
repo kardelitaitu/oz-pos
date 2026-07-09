@@ -135,13 +135,7 @@ impl LanEventForwarder {
 
                     let rx = self.tx.subscribe();
                     let buffer = self.offline_buffer.clone();
-                    tokio::spawn(handle_peer(
-                        stream,
-                        addr,
-                        rx,
-                        buffer,
-                        initial_events,
-                    ));
+                    tokio::spawn(handle_peer(stream, addr, rx, buffer, initial_events));
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "LAN accept failed");
@@ -211,9 +205,8 @@ async fn handle_peer(
     }
 
     // Phase 2: Normal broadcast loop with heartbeat.
-    let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(
-        HEARTBEAT_INTERVAL_SECS,
-    ));
+    let mut heartbeat =
+        tokio::time::interval(std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
     loop {
         tokio::select! {
@@ -372,7 +365,10 @@ mod tests {
         handler.handle(&event).unwrap();
 
         let received = rx.try_recv().unwrap();
-        assert!(received.contains("\"sale-1\""), "JSON should contain sale_id");
+        assert!(
+            received.contains("\"sale-1\""),
+            "JSON should contain sale_id"
+        );
     }
 
     #[test]
@@ -464,14 +460,7 @@ mod tests {
 
         let server_handle = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
-            handle_peer(
-                stream,
-                "test-peer".into(),
-                rx,
-                buffer,
-                initial_events,
-            )
-            .await;
+            handle_peer(stream, "test-peer".into(), rx, buffer, initial_events).await;
         });
 
         let client = TcpStream::connect(addr).await.unwrap();
@@ -594,8 +583,7 @@ mod tests {
 
     #[tokio::test]
     async fn offline_buffer_stores_events_on_disconnect() {
-        let buffer: Arc<Mutex<HashMap<String, Vec<String>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let buffer: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::new(Mutex::new(HashMap::new()));
         let (tx, rx) = broadcast::channel(16);
 
         // Set up a peer that disconnects immediately (stream is closed).
@@ -636,13 +624,15 @@ mod tests {
 
     #[tokio::test]
     async fn offline_buffer_flush_on_reconnect() {
-        let buffer: Arc<Mutex<HashMap<String, Vec<String>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let buffer: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::new(Mutex::new(HashMap::new()));
 
         // Pre-populate the buffer with events for "reconnect-peer".
         {
             let mut buf = buffer.lock().await;
-            buf.insert("reconnect-peer".into(), vec!["replayed1".into(), "replayed2".into()]);
+            buf.insert(
+                "reconnect-peer".into(),
+                vec!["replayed1".into(), "replayed2".into()],
+            );
         }
 
         // Simulate a new connection: drain buffer and pass as initial_events.
@@ -658,8 +648,7 @@ mod tests {
 
     #[tokio::test]
     async fn offline_buffer_does_not_grow_unbounded() {
-        let buffer: Arc<Mutex<HashMap<String, Vec<String>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let buffer: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::new(Mutex::new(HashMap::new()));
 
         // Simulate many disconnects from the same peer — buffer should
         // grow, but the key should exist.

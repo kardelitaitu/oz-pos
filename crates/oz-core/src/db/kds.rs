@@ -750,9 +750,7 @@ mod tests {
         let err = result.unwrap_err();
         let msg = err.to_string();
         assert!(
-            msg.contains("CHECK")
-                || msg.contains("constraint")
-                || msg.contains("abort"),
+            msg.contains("CHECK") || msg.contains("constraint") || msg.contains("abort"),
             "expected constraint violation message, got: {msg}"
         );
     }
@@ -788,12 +786,13 @@ mod tests {
             s.create_sale(&test_sale).unwrap();
 
             let order_id = uuid::Uuid::new_v4().to_string();
-            s.conn.execute(
-                "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
+            s.conn
+                .execute(
+                    "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
                  VALUES (?1, ?2, ?3, 'Test', 1, '')",
-                params![order_id, sale_id, status],
-            )
-            .unwrap();
+                    params![order_id, sale_id, status],
+                )
+                .unwrap();
             let fetched = s.get_kds_order(&order_id).unwrap().unwrap();
             assert_eq!(fetched.status, *status);
         }

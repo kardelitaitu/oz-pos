@@ -69,12 +69,11 @@ impl ModuleManifest {
     /// Returns [`KernelError::ManifestParseError`] if the file cannot be
     /// read, parsed, or validated.
     pub fn load_from_file(path: &Path) -> Result<Self, KernelError> {
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            KernelError::ManifestParseError {
+        let content =
+            std::fs::read_to_string(path).map_err(|e| KernelError::ManifestParseError {
                 module: path.to_string_lossy().into(),
                 message: format!("failed to read manifest file: {e}"),
-            }
-        })?;
+            })?;
         let manifest = Self::from_json(&content)?;
         manifest.validate()?;
         Ok(manifest)
@@ -108,7 +107,10 @@ impl ModuleManifest {
         {
             return Err(KernelError::ManifestParseError {
                 module: self.id.clone(),
-                message: format!("manifest id must be kebab-case (lowercase, digits, hyphens only), got '{id}'", id = self.id),
+                message: format!(
+                    "manifest id must be kebab-case (lowercase, digits, hyphens only), got '{id}'",
+                    id = self.id
+                ),
             });
         }
 
@@ -172,10 +174,7 @@ impl ModuleManifest {
                     });
                 }
                 let parts: Vec<&str> = perm.split(':').collect();
-                if parts.len() != 2
-                    || parts[0].is_empty()
-                    || parts[1].is_empty()
-                {
+                if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
                     return Err(KernelError::ManifestParseError {
                         module: self.id.clone(),
                         message: format!(
@@ -429,7 +428,10 @@ mod tests {
         };
         let err = manifest.validate().unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("kebab-case"), "expected kebab-case error, got: {msg}");
+        assert!(
+            msg.contains("kebab-case"),
+            "expected kebab-case error, got: {msg}"
+        );
     }
 
     #[test]
@@ -491,7 +493,10 @@ mod tests {
         };
         let err = manifest.validate().unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("domain"), "expected domain:action error, got: {msg}");
+        assert!(
+            msg.contains("domain"),
+            "expected domain:action error, got: {msg}"
+        );
     }
 
     #[test]
@@ -513,11 +518,7 @@ mod tests {
     fn load_from_file_valid() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("manifest.json");
-        std::fs::write(
-            &path,
-            r#"{"id":"test","name":"Test","version":"1.0.0"}"#,
-        )
-        .unwrap();
+        std::fs::write(&path, r#"{"id":"test","name":"Test","version":"1.0.0"}"#).unwrap();
 
         let manifest = ModuleManifest::load_from_file(&path).unwrap();
         assert_eq!(manifest.id, "test");
@@ -548,11 +549,7 @@ mod tests {
     fn load_from_file_invalid_semver() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("manifest.json");
-        std::fs::write(
-            &path,
-            r#"{"id":"test","name":"Test","version":"bad"}"#,
-        )
-        .unwrap();
+        std::fs::write(&path, r#"{"id":"test","name":"Test","version":"bad"}"#).unwrap();
 
         let result = ModuleManifest::load_from_file(&path);
         assert!(result.is_err());

@@ -65,6 +65,7 @@ const SCREENS: ScreenEntry[] = [
     name: 'ProductManagementScreen',
     tsx: 'products/ProductManagementScreen.tsx',
     css: ['products/ProductManagementScreen.css'],
+    dynamicClassPrefixes: ['product-mgmt-type--'],
   },
   {
     name: 'BundleManagementScreen',
@@ -135,7 +136,7 @@ const SCREENS: ScreenEntry[] = [
     name: 'KdsScreen',
     tsx: 'kds/KdsScreen.tsx',
     css: ['kds/KdsScreen.css'],
-    dynamicClassPrefixes: ['kds-column--'],
+    dynamicClassPrefixes: ['kds-column--', 'kds-ticket'],
     externalClasses: ['kds-workspace', 'kds-workspace-header', 'kds-workspace-back'],
   },
 
@@ -173,7 +174,6 @@ const SCREENS: ScreenEntry[] = [
     name: 'DataManagementScreen',
     tsx: 'settings/DataManagementScreen.tsx',
     css: ['settings/DataManagementScreen.css'],
-    dynamicClassPrefixes: ['data-mgmt-toast--'],
   },
   {
     name: 'FeatureToggleScreen',
@@ -229,7 +229,7 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'workspaces/WorkspaceHome.tsx',
     css: ['workspaces/WorkspaceHome.css'],
     dynamicClassPrefixes: ['ws-color-', 'role-badge--'],
-    externalClasses: ['workspace-home-user', 'workspace-card--active', 'workspace-card-ripple'],
+    externalClasses: ['workspace-home-user', 'workspace-card--active', 'workspace-card-ripple', 'workspace-card--exiting'],
   },
 
   // ── Kiosk ─────────────────────────────────────────────
@@ -383,6 +383,7 @@ const SCREENS: ScreenEntry[] = [
       'settings-size-controls',
       'settings-size-btn',
       'settings-size-value',
+      'settings-page-actions',
     ],
   },
 ];

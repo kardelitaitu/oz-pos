@@ -227,12 +227,7 @@ mod tests {
         }
     }
 
-    fn seed_product(
-        conn: &Connection,
-        sku: &str,
-        price_minor: i64,
-        cost_minor: i64,
-    ) -> String {
+    fn seed_product(conn: &Connection, sku: &str, price_minor: i64, cost_minor: i64) -> String {
         let store = oz_core::db::Store::new(conn);
         let money = Money {
             minor_units: price_minor,
@@ -282,8 +277,7 @@ mod tests {
     #[test]
     fn menu_engineering_empty_range() {
         let conn = fresh();
-        let result =
-            query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
+        let result = query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
         assert!(result.rows.is_empty());
         assert_eq!(result.median_volume, 0.0);
         assert_eq!(result.median_margin, 0.0);
@@ -295,8 +289,7 @@ mod tests {
         seed_product(&conn, "STEAK", 2500, 800);
         complete_sale(&conn, "STEAK", 2, 2500);
 
-        let result =
-            query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
+        let result = query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
 
         assert_eq!(result.rows.len(), 1);
         let row = &result.rows[0];
@@ -322,8 +315,7 @@ mod tests {
         complete_sale(&conn, "SALAD", 3, 1200);
         complete_sale(&conn, "SODA", 5, 300);
 
-        let result =
-            query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
+        let result = query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
 
         assert_eq!(result.rows.len(), 3);
 
@@ -347,8 +339,7 @@ mod tests {
         seed_product(&conn, "FREE", 500, 0); // cost = 0
         complete_sale(&conn, "FREE", 1, 500);
 
-        let result =
-            query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
+        let result = query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
 
         let row = &result.rows[0];
         assert_eq!(row.unit_cost_minor, 0);
@@ -384,10 +375,7 @@ mod tests {
 
     #[test]
     fn classify_dog() {
-        assert_eq!(
-            classify_quadrant(10, 1000, 50.0, 2500.0),
-            MenuQuadrant::Dog
-        );
+        assert_eq!(classify_quadrant(10, 1000, 50.0, 2500.0), MenuQuadrant::Dog);
     }
 
     #[test]
@@ -400,10 +388,7 @@ mod tests {
 
     #[test]
     fn classify_zero_values() {
-        assert_eq!(
-            classify_quadrant(0, 0, 0.0, 0.0),
-            MenuQuadrant::Star
-        );
+        assert_eq!(classify_quadrant(0, 0, 0.0, 0.0), MenuQuadrant::Star);
     }
 
     // ── Recommendations ──────────────────────────────────────────

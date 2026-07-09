@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { withToastProviders } from '@/__tests__/test-utils/providers';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
-  return withFluent(
+  return withToastProviders(
     <BrandProvider>
       <AuthProvider>{children}</AuthProvider>
     </BrandProvider>,
@@ -70,7 +70,7 @@ describe('SettingsPage', () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /general/i })).toBeInTheDocument();
     });
     expect(screen.getByRole('heading', { name: /receipt/i })).toBeInTheDocument();
   });

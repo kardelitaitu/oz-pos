@@ -7,6 +7,7 @@ import DashboardScreen from '@/features/reports/DashboardScreen';
 // ── FTL bundles ────────────────────────────────────────────────────────
 const sharedFtl = `
 error-occurred = An error occurred
+spinner-label = Loading dashboard
 `;
 
 // dashboard keys only exist in id locale, so fallback children are used

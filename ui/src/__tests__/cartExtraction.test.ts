@@ -39,6 +39,7 @@ const CSS_FILES = [
   'CartPanelLineItem.css',
   'CartPanelFooterTotals.css',
   'CartPanelActions.css',
+  'CartPanelCourseBar.css',
 ];
 
 // ── Tests ─────────────────────────────────────────────────────────

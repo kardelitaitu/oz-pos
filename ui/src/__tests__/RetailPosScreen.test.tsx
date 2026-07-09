@@ -73,13 +73,13 @@ vi.mock('@/api/products', () => ({
   listProducts: vi.fn(() =>
     Promise.resolve([
       { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '',
-      price_updated_at: '' },
+      price_updated_at: '', product_type: 'retail' },
       { sku: 'SKU-002', name: 'Teh Botol Sosro', category: 'cat-drink', price: { minor_units: 5000, currency: 'IDR' }, barcode: '8991002100220', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: '',
-      price_updated_at: '' },
+      price_updated_at: '', product_type: 'retail' },
       { sku: 'SKU-003', name: 'Nasi Goreng Spesial', category: 'cat-food', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: '',
-      price_updated_at: '' },
+      price_updated_at: '', product_type: 'retail' },
       { sku: 'SKU-004', name: 'Aqua 600ml', category: 'cat-drink', price: { minor_units: 3000, currency: 'IDR' }, barcode: '8991002100330', in_stock: true, stock_qty: 3, tax_rate_ids: [], created_at: '',
-      price_updated_at: '' },
+      price_updated_at: '', product_type: 'retail' },
     ]),
   ),
   listCategories: vi.fn(() =>

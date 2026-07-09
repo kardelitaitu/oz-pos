@@ -63,11 +63,7 @@ impl LanDiscoverer {
     /// Create a new `LanDiscoverer` without starting advertising.
     ///
     /// Call [`start()`](Self::start) to begin broadcasting on the LAN.
-    pub fn new(
-        terminal_id: impl Into<String>,
-        role: impl Into<String>,
-        tcp_port: u16,
-    ) -> Self {
+    pub fn new(terminal_id: impl Into<String>, role: impl Into<String>, tcp_port: u16) -> Self {
         Self {
             terminal_id: terminal_id.into(),
             role: role.into(),
@@ -90,8 +86,8 @@ impl LanDiscoverer {
             return Ok(());
         }
 
-        let daemon = ServiceDaemon::new()
-            .map_err(|e| format!("failed to create mDNS daemon: {e}"))?;
+        let daemon =
+            ServiceDaemon::new().map_err(|e| format!("failed to create mDNS daemon: {e}"))?;
 
         let service_info = self.build_service_info()?;
 
@@ -152,7 +148,7 @@ impl LanDiscoverer {
             SERVICE_TYPE,
             instance_name,
             &host_name,
-            "",       // empty — enable_addr_auto will fill in the IP
+            "", // empty — enable_addr_auto will fill in the IP
             self.tcp_port,
             properties,
         )
@@ -181,11 +177,7 @@ mod tests {
 
     #[test]
     fn new_discoverer_accepts_any_string_types() {
-        let d = LanDiscoverer::new(
-            String::from("term-kds"),
-            "kds_kiosk",
-            9180,
-        );
+        let d = LanDiscoverer::new(String::from("term-kds"), "kds_kiosk", 9180);
         assert_eq!(d.terminal_id, "term-kds");
         assert_eq!(d.role, "kds_kiosk");
     }
@@ -230,15 +222,9 @@ mod tests {
             "fullname should contain service type: {fullname}"
         );
         assert_eq!(info.get_port(), 9180);
-        assert_eq!(
-            info.get_property_val_str("terminal_id"),
-            Some("term-1")
-        );
+        assert_eq!(info.get_property_val_str("terminal_id"), Some("term-1"));
         assert_eq!(info.get_property_val_str("role"), Some("counter_pos"));
-        assert_eq!(
-            info.get_property_val_str("tcp_port"),
-            Some("9180")
-        );
+        assert_eq!(info.get_property_val_str("tcp_port"), Some("9180"));
         assert!(info.is_addr_auto(), "addr_auto should be enabled");
     }
 
@@ -263,10 +249,7 @@ mod tests {
     fn build_service_info_properties_match_input() {
         let d = LanDiscoverer::new("t-42", "kds_kiosk", 8080);
         let info = d.build_service_info().unwrap();
-        assert_eq!(
-            info.get_property_val_str("terminal_id"),
-            Some("t-42")
-        );
+        assert_eq!(info.get_property_val_str("terminal_id"), Some("t-42"));
         assert_eq!(info.get_property_val_str("role"), Some("kds_kiosk"));
         assert_eq!(info.get_property_val_str("tcp_port"), Some("8080"));
     }

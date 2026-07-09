@@ -8,7 +8,11 @@
 
 use std::sync::Arc;
 
-use axum::{Router, extract::State, routing::{get, post}};
+use axum::{
+    Router,
+    extract::State,
+    routing::{get, post},
+};
 use rusqlite::{Connection, params};
 use tokio::sync::Mutex;
 
@@ -118,9 +122,7 @@ async fn pull_handler(
 }
 
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.
-async fn status_handler(
-    State(state): State<SyncState>,
-) -> axum::Json<SyncStatusResponse> {
+async fn status_handler(State(state): State<SyncState>) -> axum::Json<SyncStatusResponse> {
     let pending_count = {
         let conn = state.db.lock().await;
         conn.query_row(
@@ -227,7 +229,11 @@ mod tests {
         // Verify both persisted
         let conn = state.db.lock().await;
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM offline_queue WHERE id IN ('a1','a2')", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE id IN ('a1','a2')",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(count, 2);
     }

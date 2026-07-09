@@ -50,12 +50,12 @@ pub mod refund;
 pub mod sale;
 pub mod settings;
 pub mod shift;
-pub mod sync;
 pub mod sku;
 pub mod stock_count;
 pub mod stock_transfer;
 pub mod store_profile;
 pub mod supplier;
+pub mod sync;
 pub mod sync_client;
 /// Restaurant table management — floor plan positions and statuses.
 pub mod table;

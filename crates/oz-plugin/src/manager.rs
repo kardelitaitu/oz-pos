@@ -120,9 +120,9 @@ impl PluginManager {
             let on_fn = lua
                 .create_function(move |lua, (event, callback): (String, rlua::Function)| {
                     if let Ok(mut guard) = br.lock() {
-                        guard.register(lua, event, callback).map_err(|e| {
-                            rlua::Error::RuntimeError(format!("oz.on error: {e}"))
-                        })?;
+                        guard
+                            .register(lua, event, callback)
+                            .map_err(|e| rlua::Error::RuntimeError(format!("oz.on error: {e}")))?;
                     }
                     Ok(())
                 })

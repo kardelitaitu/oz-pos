@@ -50,18 +50,20 @@ fn schema_file_is_valid_json() {
     let parsed: serde_json::Value =
         serde_json::from_str(&content).expect("schema file must be valid JSON");
     assert_eq!(
-        parsed["$schema"],
-        "https://json-schema.org/draft-07/schema#",
+        parsed["$schema"], "https://json-schema.org/draft-07/schema#",
         "schema must use draft-07"
     );
-    assert!(parsed["properties"].is_object(), "schema must have properties");
-    assert!(parsed["required"].is_array(), "schema must have required array");
+    assert!(
+        parsed["properties"].is_object(),
+        "schema must have properties"
+    );
+    assert!(
+        parsed["required"].is_array(),
+        "schema must have required array"
+    );
 
     let required = parsed["required"].as_array().unwrap();
-    let required_set: HashSet<&str> = required
-        .iter()
-        .filter_map(|v| v.as_str())
-        .collect();
+    let required_set: HashSet<&str> = required.iter().filter_map(|v| v.as_str()).collect();
     for field in REQUIRED_FIELDS {
         assert!(
             required_set.contains(field),
@@ -142,12 +144,11 @@ fn all_modules_have_manifest() {
 #[test]
 fn each_manifest_is_valid_json() {
     for path in &discover_manifests() {
-        let content = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("failed to read {path}: {e}"));
-        let parsed: serde_json::Value =
-            serde_json::from_str(&content).unwrap_or_else(|e| {
-                panic!("invalid JSON in {path}: {e}");
-            });
+        let content =
+            std::fs::read_to_string(path).unwrap_or_else(|e| panic!("failed to read {path}: {e}"));
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            panic!("invalid JSON in {path}: {e}");
+        });
         assert!(parsed.is_object(), "{path} must be a JSON object");
     }
 }
@@ -163,38 +164,37 @@ fn each_manifest_has_required_fields() {
                 parsed.get(*field).is_some(),
                 "{path} is missing required field '{field}'"
             );
-            let val = parsed[field].as_str().unwrap_or_else(|| {
-                panic!("{path}: '{field}' must be a string")
-            });
-            assert!(
-                !val.is_empty(),
-                "{path}: '{field}' must be non-empty"
-            );
+            let val = parsed[field]
+                .as_str()
+                .unwrap_or_else(|| panic!("{path}: '{field}' must be a string"));
+            assert!(!val.is_empty(), "{path}: '{field}' must be non-empty");
         }
     }
-}    #[test]
-    fn each_manifest_id_is_kebab_case() {
-        for path in &discover_manifests() {
-            let content = std::fs::read_to_string(path).unwrap();
-            let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-            let id = parsed["id"].as_str().unwrap();
-            assert!(
-                is_kebab_case(id),
-                "{path}: 'id' must be kebab-case, got '{id}'"
-            );
-        }
-    }    #[test]
-    fn each_manifest_version_is_semver() {
-        for path in &discover_manifests() {
-            let content = std::fs::read_to_string(path).unwrap();
-            let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-            let version = parsed["version"].as_str().unwrap();
-            assert!(
-                is_semver(version),
-                "{path}: 'version' must be SemVer (X.Y.Z), got '{version}'"
-            );
-        }
+}
+#[test]
+fn each_manifest_id_is_kebab_case() {
+    for path in &discover_manifests() {
+        let content = std::fs::read_to_string(path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let id = parsed["id"].as_str().unwrap();
+        assert!(
+            is_kebab_case(id),
+            "{path}: 'id' must be kebab-case, got '{id}'"
+        );
     }
+}
+#[test]
+fn each_manifest_version_is_semver() {
+    for path in &discover_manifests() {
+        let content = std::fs::read_to_string(path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let version = parsed["version"].as_str().unwrap();
+        assert!(
+            is_semver(version),
+            "{path}: 'version' must be SemVer (X.Y.Z), got '{version}'"
+        );
+    }
+}
 
 #[test]
 fn each_manifest_dependencies_are_unique() {
@@ -205,10 +205,7 @@ fn each_manifest_dependencies_are_unique() {
             let items: Vec<&str> = deps.iter().filter_map(|v| v.as_str()).collect();
             let mut unique = std::collections::HashSet::new();
             for dep in &items {
-                assert!(
-                    unique.insert(dep),
-                    "{path}: duplicate dependency '{dep}'"
-                );
+                assert!(unique.insert(dep), "{path}: duplicate dependency '{dep}'");
             }
         }
     }
@@ -223,10 +220,7 @@ fn each_manifest_permissions_are_unique() {
             let items: Vec<&str> = perms.iter().filter_map(|v| v.as_str()).collect();
             let mut unique = std::collections::HashSet::new();
             for perm in &items {
-                assert!(
-                    unique.insert(perm),
-                    "{path}: duplicate permission '{perm}'"
-                );
+                assert!(unique.insert(perm), "{path}: duplicate permission '{perm}'");
             }
         }
     }
