@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useRef, useEffect } from 'react';
+import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Localized, useLocalization } from '@fluent/react';
+import { Modal } from '@/components/Modal';
 import './WorkspaceHome.css';
 
 // ── Per-workspace accent color classes ────────────────────────────
@@ -96,6 +97,66 @@ function SkeletonGrid() {
   );
 }
 
+// ── Time-based greeting ───────────────────────────────────────
+
+function getGreeting(hour: number): { id: string } {
+  if (hour >= 5 && hour < 12) return { id: 'workspace-home-greeting-morning' };
+  if (hour >= 12 && hour < 18) return { id: 'workspace-home-greeting-afternoon' };
+  if (hour >= 18 && hour < 22) return { id: 'workspace-home-greeting-evening' };
+  return { id: 'workspace-home-greeting-night' };
+}
+
+// ── LogoutModal (extracted so it's defined before usage) ──────────
+
+function LogoutModal({
+  open,
+  onCancel,
+  onConfirm,
+  l10n,
+}: {
+  open: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  l10n: ReturnType<typeof useLocalization>['l10n'];
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onCancel}
+      title={l10n.getString('workspace-home-logout-confirm-title')}
+      footer={
+        <div className="logout-confirm-actions">
+          <button
+            type="button"
+            className="logout-confirm-cancel"
+            onClick={onCancel}
+          >
+            <Localized id="workspace-home-logout-confirm-cancel">
+              <span>Cancel</span>
+            </Localized>
+          </button>
+          <button
+            type="button"
+            className="logout-confirm-confirm"
+            onClick={onConfirm}
+            autoFocus
+          >
+            <Localized id="workspace-home-logout-confirm-confirm">
+              <span>Logout</span>
+            </Localized>
+          </button>
+        </div>
+      }
+    >
+      <p className="logout-confirm-desc">
+        <Localized id="workspace-home-logout-confirm-desc">
+          <span>You will be returned to the login screen. Any unsaved work will be lost.</span>
+        </Localized>
+      </p>
+    </Modal>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────
 
 export default function WorkspaceHome() {
@@ -103,8 +164,18 @@ export default function WorkspaceHome() {
   const { availableWorkspaces, loading, error, retry, setActiveWorkspace } = useWorkspace();
   const { session, logout } = useAuth();
   const gridRef = useRef<HTMLDivElement>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const roleName = (session?.role_name ?? '').toLowerCase();
+
+  // Sort workspaces for consistent order
+  const sortedWorkspaces = useMemo(
+    () =>
+      [...availableWorkspaces].sort(
+        (a, b) => (WS_ORDER[a.key] ?? 99) - (WS_ORDER[b.key] ?? 99),
+      ),
+    [availableWorkspaces],
+  );
 
   const cashierOnly = useMemo(() => new Set(['restaurant-pos', 'store-pos']), []);
   const kitchenOnly = useMemo(() => new Set(['kds']), []);
@@ -118,10 +189,32 @@ export default function WorkspaceHome() {
     [roleName, cashierOnly, kitchenOnly],
   );
 
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    return getGreeting(hour);
+  }, []);
+
+  const displayName = session?.display_name ?? session?.role_name ?? '';
+
   const handleSelect = useCallback((key: string) => {
     if (!canAccess(key)) return;
     setActiveWorkspace(key);
   }, [canAccess, setActiveWorkspace]);
+
+  // ── Logout confirmation ────────────────────────────────────────
+
+  const handleLogoutClick = useCallback(() => {
+    setShowLogoutModal(true);
+  }, []);
+
+  const handleLogoutCancel = useCallback(() => {
+    setShowLogoutModal(false);
+  }, []);
+
+  const handleLogoutConfirm = useCallback(() => {
+    setShowLogoutModal(false);
+    logout();
+  }, [logout]);
 
   // ── Keyboard navigation ──────────────────────────────────────
 
@@ -140,17 +233,28 @@ export default function WorkspaceHome() {
     }
 
     function getColumns(): number {
-      // Compute columns from grid layout
       const style = getComputedStyle(grid!);
       const gridCols = style.gridTemplateColumns.split(' ');
       return gridCols.length;
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // ── Quick-launch: number keys 1-9 select workspace by index ───
+      if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx < cards.length) {
+          e.preventDefault();
+          const target = cards[idx];
+          if (target && !target.disabled) {
+            target.click();
+          }
+        }
+        return;
+      }
+
       const active = document.activeElement;
       if (!active || !grid.contains(active)) return;
 
-      // Find the index of the currently focused card
       let currentIndex = -1;
       for (let i = 0; i < cards.length; i++) {
         if (cards[i] === active) {
@@ -192,7 +296,7 @@ export default function WorkspaceHome() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [availableWorkspaces]);
+  }, [sortedWorkspaces]);
 
   // ── Mousemove glow effect ────────────────────────────────────
 
@@ -212,7 +316,7 @@ export default function WorkspaceHome() {
       <div className="workspace-home">
         <div className="workspace-home-top-bar">
           {session && (
-            <button type="button" className="workspace-home-logout-btn" onClick={logout}>
+            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
@@ -231,6 +335,12 @@ export default function WorkspaceHome() {
           </p>
         </header>
         <SkeletonGrid />
+        <LogoutModal
+          open={showLogoutModal}
+          onCancel={handleLogoutCancel}
+          onConfirm={handleLogoutConfirm}
+          l10n={l10n}
+        />
       </div>
     );
   }
@@ -242,7 +352,7 @@ export default function WorkspaceHome() {
       <div className="workspace-home">
         <div className="workspace-home-top-bar">
           {session && (
-            <button type="button" className="workspace-home-logout-btn" onClick={logout}>
+            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
@@ -284,6 +394,12 @@ export default function WorkspaceHome() {
             </Localized>
           </button>
         </div>
+        <LogoutModal
+          open={showLogoutModal}
+          onCancel={handleLogoutCancel}
+          onConfirm={handleLogoutConfirm}
+          l10n={l10n}
+        />
       </div>
     );
   }
@@ -294,7 +410,7 @@ export default function WorkspaceHome() {
     <div className="workspace-home">
       <div className="workspace-home-top-bar">
         {session && (
-          <button type="button" className="workspace-home-logout-btn" onClick={logout}>
+          <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
@@ -327,14 +443,16 @@ export default function WorkspaceHome() {
             <span>Select a workspace to start</span>
           </Localized>
         </p>
-        {session && (
-          <span className="workspace-home-user">
-            {session.display_name} ({session.role_name})
-          </span>
+        {session && displayName && (
+          <p className="workspace-home-greeting">
+            <Localized id={greeting.id} vars={{ name: displayName }}>
+              <span>Hello, {displayName}</span>
+            </Localized>
+          </p>
         )}
       </header>
 
-      {availableWorkspaces.length === 0 ? (
+      {sortedWorkspaces.length === 0 ? (
         <div className="workspace-empty">
           <div className="workspace-empty-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -357,9 +475,7 @@ export default function WorkspaceHome() {
         </div>
       ) : (
         <div className="workspace-grid" ref={gridRef} role="listbox" aria-label="Workspaces">
-          {[...availableWorkspaces]
-            .sort((a, b) => (WS_ORDER[a.key] ?? 99) - (WS_ORDER[b.key] ?? 99))
-            .map((ws) => {
+          {sortedWorkspaces.map((ws, idx) => {
             const disabled = !canAccess(ws.key);
             const colorClass = WS_COLORS[ws.key] ?? '';
             return (
@@ -378,16 +494,28 @@ export default function WorkspaceHome() {
                 )}
                 title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
               >
+                <div className="workspace-card-key-hint">{idx + 1}</div>
                 <div className="workspace-card-icon">
                   {getIcon(ws.key)}
                 </div>
                 <div className="workspace-card-body">
                   <h2 className="workspace-card-name">{ws.name}</h2>
                   <p className="workspace-card-desc">{ws.description}</p>
-                  {disabled && (
+                  {disabled ? (
                     <span className="workspace-card-badge">
                       <Localized id="workspace-card-no-access-badge">
                         <span>Not available</span>
+                      </Localized>
+                    </span>
+                  ) : (
+                    <span className="workspace-card-keyboard-hint">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                        <rect x="2" y="4" width="20" height="16" rx="2" />
+                        <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
+                        <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
+                      </svg>
+                      <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
+                        <span>Press {idx + 1} to open</span>
                       </Localized>
                     </span>
                   )}
@@ -397,6 +525,13 @@ export default function WorkspaceHome() {
           })}
         </div>
       )}
+
+      <LogoutModal
+        open={showLogoutModal}
+        onCancel={handleLogoutCancel}
+        onConfirm={handleLogoutConfirm}
+        l10n={l10n}
+      />
     </div>
   );
 }

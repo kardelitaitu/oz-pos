@@ -218,7 +218,7 @@ describe('WorkspaceHome', () => {
       expect(screen.getByText('Admin')).toBeInTheDocument();
     });
 
-    it('shows user display name and role in header', async () => {
+    it('shows user display name in greeting', async () => {
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
         loading: false,
@@ -233,8 +233,54 @@ describe('WorkspaceHome', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Test Owner/)).toBeInTheDocument();
-        expect(screen.getByText(/owner/)).toBeInTheDocument();
       });
+    });
+
+    it('shows number key hint badges on each card', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      const hints = document.querySelectorAll('.workspace-card-key-hint');
+      expect(hints.length).toBe(5);
+      expect(hints[0]?.textContent).toBe('1');
+      expect(hints[4]?.textContent).toBe('5');
+    });
+
+    it('shows keyboard shortcut hint text on cards', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      // Each card should have a shortcut hint (hidden until hover)
+      const hints = document.querySelectorAll('.workspace-card-keyboard-hint');
+      expect(hints.length).toBe(5);
+      expect(hints[0]?.textContent).toMatch(/1/);
+      expect(hints[4]?.textContent).toMatch(/5/);
     });
 
     it('calls setActiveWorkspace when a card is clicked', async () => {
@@ -400,9 +446,208 @@ describe('WorkspaceHome', () => {
     });
   });
 
-  // ── Keyboard navigation ────────────────────────────────────
+  // ── Logout confirmation ────────────────────────────────────
 
-  describe('keyboard navigation', () => {
+  describe('logout confirmation', () => {
+    it('shows logout confirmation modal when logout is clicked', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      // Click the logout button
+      const logoutBtn = screen.getByRole('button', { name: /Logout/i });
+      await userEvent.click(logoutBtn);
+
+      // Should show the logout confirmation modal
+      await waitFor(() => {
+        expect(screen.getByText(/Logout\?/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/Any unsaved work will be lost/i)).toBeInTheDocument();
+    });
+
+    it('calls logout when confirmed in modal', async () => {
+      const mockLogout = vi.fn();
+      mockAuthSession.mockReturnValue({
+        session: {
+          user_id: 'user-1',
+          display_name: 'Test Owner',
+          role_name: 'owner',
+          role_id: 'role-owner',
+        },
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: mockLogout,
+        clearError: vi.fn(),
+        isManager: false,
+        isOwner: true,
+      });
+
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      // Click the logout button
+      const logoutBtn = screen.getByRole('button', { name: /Logout/i });
+      await userEvent.click(logoutBtn);
+
+      // Click confirm in the modal
+      await waitFor(() => {
+        expect(screen.getByText(/Logout\?/i)).toBeInTheDocument();
+      });
+
+      const confirmBtn = document.querySelector('.logout-confirm-confirm') as HTMLButtonElement;
+      await userEvent.click(confirmBtn);
+
+      expect(mockLogout).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call logout when cancelled in modal', async () => {
+      const mockLogout = vi.fn();
+      mockAuthSession.mockReturnValue({
+        session: {
+          user_id: 'user-1',
+          display_name: 'Test Owner',
+          role_name: 'owner',
+          role_id: 'role-owner',
+        },
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: mockLogout,
+        clearError: vi.fn(),
+        isManager: false,
+        isOwner: true,
+      });
+
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      // Click the logout button
+      const logoutBtn = screen.getByRole('button', { name: /Logout/i });
+      await userEvent.click(logoutBtn);
+
+      // Click cancel in the modal
+      await waitFor(() => {
+        expect(screen.getByText(/Logout\?/i)).toBeInTheDocument();
+      });
+
+      const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+      await userEvent.click(cancelBtn);
+
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Keyboard shortcuts (number keys) ────────────────────────
+
+  describe('keyboard shortcuts', () => {
+    it('selects workspace when number key is pressed', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      // Press '3' to select the third card (KDS)
+      fireEvent.keyDown(document.activeElement!, { key: '3' });
+      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('kds');
+    });
+
+    it('pressing 1 selects the first workspace', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      fireEvent.keyDown(document.activeElement!, { key: '1' });
+      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('restaurant-pos');
+    });
+
+    it('does nothing for number keys beyond workspace count', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      // Press '9' — only 5 cards, so no action
+      fireEvent.keyDown(document.activeElement!, { key: '9' });
+      expect(mockSetActiveWorkspace).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Arrow-key navigation ────────────────────────────────────
+
+  describe('arrow-key navigation', () => {
     it('moves focus with arrow right and left keys', async () => {
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
@@ -484,4 +729,6 @@ describe('WorkspaceHome', () => {
       expect(document.activeElement).toBe(cards[4]);
     });
   });
+
+
 });
