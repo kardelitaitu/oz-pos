@@ -14,8 +14,8 @@
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 13 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 2 |
-| 5 | Cloud Server & Docker Containerization | 8 | 2 |
-| | **Total** | **46** | **40** |
+| 5 | Cloud Server & Docker Containerization | 8 | 3 |
+| | **Total** | **46** | **41** |
 
 ---
 
@@ -196,7 +196,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 - [x] **5.1.1 [Crate Scaffolding]**: Create new Cargo crate `apps/cloud-server/` (`Cargo.toml`) depending on `oz-api`, `oz-core`, `platform-sync`, and `tokio`. Ensure no Tauri or WebView UI crates are linked.
 - [x] **5.1.2 [Sync Transport Receiver Endpoints]**: In `apps/cloud-server/src/sync_api.rs`, wire `POST /api/sync/push` and `POST /api/sync/pull` handlers accepting `PushResponse` / `PullRequest` bodies (`platform/sync/src/transport.rs`) and persisting to the central server database.
-- [ ] **5.1.3 [Main Async Entrypoint]**: In `apps/cloud-server/src/main.rs`, initialize structured logging (`oz-logging`), open central database pool (`OZ_DB_PATH` / PostgreSQL connection string), run pending schema migrations, and spawn `oz_api::serve()` alongside `sync_api` routes on `OZ_API_PORT` (default `3099`).
+- [x] **5.1.3 [Main Async Entrypoint]**: In `apps/cloud-server/src/main.rs`, initialize structured logging (`oz-logging`), open central database pool (`OZ_DB_PATH` / PostgreSQL connection string), run pending schema migrations, and spawn `oz_api::serve()` alongside `sync_api` routes on `OZ_API_PORT` (default `3099`).
 
 #### 5.2 Tenant ID / Store ID Scoping (Multi-Store Cloud Separation)
 

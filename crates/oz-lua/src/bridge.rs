@@ -141,14 +141,14 @@ impl LuaEventBridge {
     /// Remove a specific callback by event name and index.
     /// Returns `true` if a callback was removed.
     pub fn remove_callback(&mut self, event: &str, index: usize) -> bool {
-        if let Some(keys) = self.callbacks.get_mut(event) {
-            if index < keys.len() {
-                keys.remove(index);
-                if keys.is_empty() {
-                    self.callbacks.remove(event);
-                }
-                return true;
+        if let Some(keys) = self.callbacks.get_mut(event)
+            && index < keys.len()
+        {
+            keys.remove(index);
+            if keys.is_empty() {
+                self.callbacks.remove(event);
             }
+            return true;
         }
         false
     }
@@ -258,7 +258,7 @@ mod tests {
         let received_clone = received.clone();
 
         let callback = lua
-            .create_function(move |ctx, args: rlua::Table| {
+            .create_function(move |_ctx, args: rlua::Table| {
                 let val: i64 = args.get("value").unwrap();
                 *received_clone.lock().unwrap() = Some(val);
                 Ok(())

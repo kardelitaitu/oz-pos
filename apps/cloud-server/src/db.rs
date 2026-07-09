@@ -20,7 +20,7 @@ use tracing::info;
 
 /// A pooled database connection, either SQLite (behind a Mutex) or
 /// PostgreSQL (via deadpool).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DbPool {
     /// SQLite connection wrapped in `Arc<Mutex<>>` (compatible with
     /// `CloudServerState` and existing handlers).
@@ -222,17 +222,17 @@ mod tests {
         assert!(path.exists(), "database file should exist");
     }
 
-    #[test]
-    fn postgres_url_parsing_rejects_bad_url() {
-        let result = DbPool::connect_postgres("not-a-url");
+    #[tokio::test]
+    async fn postgres_url_parsing_rejects_bad_url() {
+        let result = DbPool::connect_postgres("not-a-url").await;
         // This should fail because Config::from_str will reject invalid URLs
         assert!(result.is_err());
     }
 
-    #[test]
-    fn postgres_url_parsing_accepts_valid_url() {
+    #[tokio::test]
+    async fn postgres_url_parsing_accepts_valid_url() {
         // This won't connect, but the URL parsing should succeed
-        let result = DbPool::connect_postgres("postgresql://localhost:5432/test");
+        let result = DbPool::connect_postgres("postgresql://localhost:5432/test").await;
         // Will fail at connection, not parsing
         let err = result.unwrap_err();
         let msg = err.to_string();
@@ -244,19 +244,21 @@ mod tests {
 
     #[tokio::test]
     async fn from_env_defaults_to_sqlite() {
-        // Without DATABASE_URL, should use SQLite
-        std::env::remove_var("DATABASE_URL");
-        std::env::set_var("OZ_DB_PATH", ":memory:");
+        // Explicitly set DATABASE_URL to empty so a parallel test's
+        // postgres:// value doesn't race in.
+        unsafe { std::env::set_var("DATABASE_URL", "") };
+        unsafe { std::env::set_var("OZ_DB_PATH", ":memory:") };
         let pool = DbPool::from_env().await.unwrap();
         assert!(pool.is_sqlite());
-        std::env::remove_var("OZ_DB_PATH");
+        unsafe { std::env::remove_var("DATABASE_URL") };
+        unsafe { std::env::remove_var("OZ_DB_PATH") };
     }
 
     #[tokio::test]
     async fn from_env_detects_postgres_url() {
-        std::env::set_var("DATABASE_URL", "postgresql://localhost:5432/test");
+        unsafe { std::env::set_var("DATABASE_URL", "postgresql://localhost:5432/test") };
         let pool = DbPool::from_env().await;
-        std::env::remove_var("DATABASE_URL");
+        unsafe { std::env::remove_var("DATABASE_URL") };
         // Should attempt connection but fail
         assert!(pool.is_err());
         let msg = pool.unwrap_err().to_string();

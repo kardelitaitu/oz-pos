@@ -92,7 +92,6 @@ impl PluginDb {
             .prepare(sql)
             .map_err(|e| PluginError::Internal(format!("query prepare error: {e}")))?;
 
-        let column_count = stmt.column_count();
         let column_names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
 
         let mut rows: Vec<serde_json::Value> = Vec::new();
@@ -100,8 +99,7 @@ impl PluginDb {
         let row_iter = stmt
             .query_map([], |row| {
                 let mut obj = serde_json::Map::new();
-                for i in 0..column_count {
-                    let name = &column_names[i];
+                for (i, name) in column_names.iter().enumerate() {
                     let val: rusqlite::types::Value = row.get_unwrap(i);
                     let json_val = sqlite_value_to_json(val);
                     obj.insert(name.clone(), json_val);
@@ -762,6 +760,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn sqlite_real_to_json() {
         assert_eq!(
             sqlite_value_to_json(rusqlite::types::Value::Real(3.14)),
