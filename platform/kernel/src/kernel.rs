@@ -97,6 +97,44 @@ impl Kernel {
         Ok(())
     }
 
+    /// Register a module together with its [`ModuleManifest`].
+    ///
+    /// Validates the manifest against the JSON Schema rules before
+    /// registering. If validation fails, the module is **not** registered
+    /// and the error is returned.
+    ///
+    /// Shorthand for:
+    /// 1. `manifest.validate()`
+    /// 2. `kernel.register(module)`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`KernelError::ManifestParseError`] if the manifest is
+    /// invalid. Returns [`KernelError::DuplicateModule`] if the module
+    /// is already registered.
+    pub fn register_with_manifest(
+        &mut self,
+        module: Box<dyn Module>,
+        manifest: &crate::manifest::ModuleManifest,
+    ) -> Result<(), KernelError> {
+        // Validate the manifest first.
+        manifest.validate()?;
+
+        // Confirm the module id matches the manifest id.
+        let module_id = module.id();
+        if module_id != manifest.id {
+            return Err(KernelError::ManifestParseError {
+                module: module_id.to_string(),
+                message: format!(
+                    "module id '{module_id}' does not match manifest id '{}'",
+                    manifest.id
+                ),
+            });
+        }
+
+        self.register(module)
+    }
+
     /// Register a service with the kernel.
     pub fn register_service(&mut self, service: Box<dyn Service>) {
         debug!(svc = service.id(), "registering service");

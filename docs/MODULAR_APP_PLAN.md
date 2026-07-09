@@ -13,9 +13,9 @@
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 13 |
-| 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 1 |
+| 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 2 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **34** |
+| | **Total** | **46** | **35** |
 
 ---
 
@@ -175,7 +175,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 #### 4.1 Module Manifest Verification
 
 - [x] **4.1.1 [JSON Schema Spec Definition]**: Create formal JSON schema `docs/specs/module-manifest.schema.json` defining mandatory properties (`id`, `name`, `version`, `author`, `dependencies`, `permissions`, `database_namespace`).
-- [ ] **4.1.2 [Manifest Validator in Kernel]**: In `platform/kernel/src/manifest.rs`, validate `manifest.json` against `module-manifest.schema.json` during `kernel.register()`. Return structured `ManifestError` if validation fails.
+- [x] **4.1.2 [Manifest Validator in Kernel]**: In `platform/kernel/src/manifest.rs`, validate `manifest.json` against `module-manifest.schema.json` during `kernel.register()`. Return structured `ManifestError` if validation fails.
 
 #### 4.2 Sandboxed Plugin Loader (`crates/oz-plugin` + `crates/oz-lua`)
 
