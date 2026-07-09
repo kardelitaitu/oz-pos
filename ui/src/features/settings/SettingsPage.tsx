@@ -183,8 +183,8 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-page">
-      <Localized id="settings-page-title">
-        <h1 className="settings-title">Settings</h1>
+      <Localized id="nav-general">
+        <h1 className="settings-title">General</h1>
       </Localized>
 
       {/* ── Store section ────────────────────────── */}
