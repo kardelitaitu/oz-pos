@@ -1,5 +1,5 @@
 import { useTheme } from './ThemeProvider';
-import { Localized } from '@/frontend/shared/Localized';
+import { Localized, useLocalization } from '@fluent/react';
 
 /**
  * A toggle button that switches between light and dark themes.
@@ -8,14 +8,20 @@ import { Localized } from '@/frontend/shared/Localized';
  */
 export default function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
+  const { l10n } = useLocalization();
 
   return (
-    <Localized id="theme-toggle-aria" attrs={{ 'aria-label': true }} vars={{ mode: theme === 'light' ? 'dark' : 'light' }}>
+    <Localized
+      id="theme-toggle-aria"
+      attrs={{ 'aria-label': true }}
+      vars={{ mode: theme === 'light' ? 'dark' : 'light' }}
+    >
       <button
         type="button"
         onClick={toggleTheme}
         className="theme-toggle"
         data-testid="theme-toggle"
+        title={l10n.getString('theme-toggle-label')}
       >
         <Localized id="theme-toggle-label">
           <span className="sr-only">Toggle theme</span>
