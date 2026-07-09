@@ -127,6 +127,61 @@
   gap: var(--space-2);
 }
 
+/* ── User profile in top bar ───────────────────────────────────── */
+
+.workspace-home-user-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: default;
+}
+
+.workspace-home-user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-mono);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.workspace-home-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+.workspace-home-user-name {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.workspace-home-user-role {
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.role-badge--owner   { color: #f59e0b; }
+.role-badge--manager { color: #3b82f6; }
+.role-badge--cashier { color: #22c55e; }
+.role-badge--kitchen { color: #a855f7; }
+.role-badge--default { color: var(--color-fg-tertiary); }
+
 /* ── Header ──────────────────────────────────────────────────────── */
 
 .workspace-home-header {

@@ -158,6 +158,30 @@ function LogoutModal({
   );
 }
 
+// ── Avatar initials ────────────────────────────────────────────────
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+// ── Role color map ────────────────────────────────────────────────
+
+function getRoleColor(role: string): string {
+  switch (role.toLowerCase()) {
+    case 'owner':   return 'role-badge--owner';
+    case 'manager': return 'role-badge--manager';
+    case 'cashier': return 'role-badge--cashier';
+    case 'kitchen': return 'role-badge--kitchen';
+    default:        return 'role-badge--default';
+  }
+}
+
 // ── Component ─────────────────────────────────────────────────────
 
 export default function WorkspaceHome() {
@@ -379,14 +403,23 @@ export default function WorkspaceHome() {
             </svg>
           </button>
           {session && (
-            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              <Localized id="workspace-home-logout"><span>Logout</span></Localized>
-            </button>
+            <>
+              <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
+                <div className="workspace-home-user-avatar">{getInitials(displayName)}</div>
+                <div className="workspace-home-user-info">
+                  <span className="workspace-home-user-name">{displayName}</span>
+                  <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
+                </div>
+              </div>
+              <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <Localized id="workspace-home-logout"><span>Logout</span></Localized>
+              </button>
+            </>
           )}
         </div>
         <header className="workspace-home-header">
@@ -425,14 +458,23 @@ export default function WorkspaceHome() {
           </svg>
         </button>
         {session && (
-          <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <Localized id="workspace-home-logout"><span>Logout</span></Localized>
-          </button>
+          <>
+            <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
+              <div className="workspace-home-user-avatar">{getInitials(displayName)}</div>
+              <div className="workspace-home-user-info">
+                <span className="workspace-home-user-name">{displayName}</span>
+                <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
+              </div>
+            </div>
+            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <Localized id="workspace-home-logout"><span>Logout</span></Localized>
+            </button>
+          </>
         )}
       </div>
       <div className="workspace-error">
@@ -493,14 +535,23 @@ export default function WorkspaceHome() {
           </svg>
         </button>
         {session && (
-          <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <Localized id="workspace-home-logout"><span>Logout</span></Localized>
-          </button>
+          <>
+            <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
+              <div className="workspace-home-user-avatar">{getInitials(displayName)}</div>
+              <div className="workspace-home-user-info">
+                <span className="workspace-home-user-name">{displayName}</span>
+                <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
+              </div>
+            </div>
+            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <Localized id="workspace-home-logout"><span>Logout</span></Localized>
+            </button>
+          </>
         )}
         {error && (
           <button

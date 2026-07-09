@@ -52,6 +52,30 @@
   gap: 16px;
 }
 
+.retail-header-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: rgba(255,255,255,0.12);
+  border: none;
+  border-radius: 3px;
+  color: var(--color-bg-elevated);
+  cursor: pointer;
+  transition: background var(--duration-150) var(--ease-out);
+}
+
+.retail-header-nav-btn:hover {
+  background: rgba(255,255,255,0.22);
+}
+
+.retail-header-nav-btn:focus-visible {
+  outline: 2px solid var(--color-bg-elevated);
+  outline-offset: 2px;
+}
+
 .retail-header-cashier {
   display: flex;
   align-items: center;

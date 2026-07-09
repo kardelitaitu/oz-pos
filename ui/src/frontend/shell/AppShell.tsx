@@ -47,7 +47,15 @@ export default function AppShell() {
   const { activeWorkspace, setActiveWorkspace } = useWorkspace();
 
   useIdleTimer(() => {
-    if (session) logout();
+    if (activeWorkspace) {
+      setActiveWorkspace(null);
+      addToast({
+        type: 'info',
+        message: 'Returned to workspace picker due to inactivity',
+      });
+    } else if (session) {
+      logout();
+    }
   });
 
   // On mount, check if setup was already completed.

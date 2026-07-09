@@ -211,6 +211,7 @@ spinner-label = Memuat…
 
 # ── Workspace Home ──
 workspace-home-fullscreen-aria = Alihkan layar penuh
+workspace-home-user-aria = Masuk sebagai { $name }
 workspace-home-loading = Memuat ruang kerja…
 workspace-home-subtitle = Pilih ruang kerja untuk memulai
 workspace-home-empty = Tidak ada ruang kerja tersedia

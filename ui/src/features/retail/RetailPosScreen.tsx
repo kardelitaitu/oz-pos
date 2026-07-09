@@ -9,6 +9,7 @@ import { useExitAnimation } from '@/hooks/useExitAnimation';
 import PaymentModal from '@/features/sales/PaymentModal';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
 import { overrideLinePrice, startSale, getProductTrackSerial, lookupSaleByReceiptBarcode } from '@/api/sales';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import RefundModal from '@/features/sales/RefundModal';
 import { listProducts, listCategories, lookupProductBySku, lookupByBarcode, type ProductDto, type CategoryDto } from '@/api/products';
@@ -64,6 +65,7 @@ interface RetailPosScreenProps {
 
 export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { l10n } = useLocalization();
+  const { setActiveWorkspace } = useWorkspace();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
   const userId = session!.user_id;
@@ -964,6 +966,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           ) : (
             <span className="retail-shift-badge" style={{ opacity: 0.6 }}>{l10n.getString('retail-no-shift')}</span>
           )}
+          <button
+            type="button"
+            className="retail-header-nav-btn"
+            onClick={() => setActiveWorkspace(null)}
+            title={l10n.getString('retail-header-workspaces-title') || 'Back to workspaces'}
+            aria-label={l10n.getString('retail-header-workspaces-aria') || 'Back to workspaces'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+              <rect x="2" y="3" width="22" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          </button>
           <div className="retail-header-cashier">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
               <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />

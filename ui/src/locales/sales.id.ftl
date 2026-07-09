@@ -704,6 +704,8 @@ retail-low-stock-banner =
     }
 retail-held-cart-delete-aria = Hapus pesanan ditahan
 retail-fn-quick-return = Retur Cepat
+retail-header-workspaces-title = Kembali ke ruang kerja
+retail-header-workspaces-aria = Kembali ke ruang kerja
 
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan

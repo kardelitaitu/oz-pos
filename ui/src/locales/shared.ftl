@@ -191,6 +191,7 @@ workspace-home-greeting-afternoon = Good afternoon, { $name }
 workspace-home-greeting-evening = Good evening, { $name }
 workspace-home-greeting-night = Good night, { $name }
 workspace-home-shortcut-hint = Press { $key } to open
+workspace-home-user-aria = Logged in as { $name }
 workspace-home-error-title = Connection Error
 workspace-home-error-desc = Could not load your workspaces. Check your connection and try again.
 workspace-home-retry = Try Again

@@ -238,7 +238,9 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText(/Test Owner/)).toBeInTheDocument();
+        // Name appears in both the user profile and the greeting
+        const nameElements = screen.getAllByText(/Test Owner/);
+        expect(nameElements.length).toBeGreaterThanOrEqual(2);
       });
     });
 

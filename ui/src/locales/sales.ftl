@@ -713,6 +713,8 @@ scale-read-error = Scale error
 
 # ── Retail POS shortcut keys ───────────────────────────────────────────────
 retail-fn-quick-return = Quick Return
+retail-header-workspaces-title = Back to workspaces
+retail-header-workspaces-aria = Back to workspaces
 
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...
