@@ -116,17 +116,20 @@ export function useAnimatedToastQueue<T>(
   // Without this, timers fire against an unmounted component
   // (React warning + wasted render) and leak across navigations.
   useEffect(() => {
+    const fadeTimers = fadeTimersRef.current;
+    const autoTimers = autoTimersRef.current;
     return () => {
-      fadeTimersRef.current.forEach((t) => clearTimeout(t));
-      fadeTimersRef.current.clear();
-      autoTimersRef.current.forEach((t) => clearTimeout(t));
-      autoTimersRef.current.clear();
+      fadeTimers.forEach((t) => clearTimeout(t));
+      fadeTimers.clear();
+      autoTimers.forEach((t) => clearTimeout(t));
+      autoTimers.clear();
       if (clearAllTimerRef.current !== null) {
         clearTimeout(clearAllTimerRef.current);
         clearAllTimerRef.current = null;
       }
     };
   }, []);
+
 
   const dismiss = useCallback(
     (id: string) => {

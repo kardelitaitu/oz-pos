@@ -107,7 +107,8 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
     // flips the parent's `open` to false and unmounts.
     onRefunded();
     exit.requestClose();
-  }, [onRefunded, exit.requestClose]);
+  }, [onRefunded, exit]);
+
 
   if (!exit.shouldRender) return null;
 

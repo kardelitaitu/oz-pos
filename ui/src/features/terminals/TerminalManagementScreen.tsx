@@ -246,7 +246,7 @@ export default function TerminalManagementScreen() {
         setOverridesError(l10n.getString('terminal-error-override-update'));
       }
     },
-    [editingId, l10n],
+    [editingId, session?.user_id, l10n],
   );
 
   const handleResetOverrides = useCallback(async () => {
@@ -261,7 +261,7 @@ export default function TerminalManagementScreen() {
     } catch {
       setOverridesError(l10n.getString('terminal-error-override-reset'));
     }
-  }, [editingId, overrides, l10n]);
+  }, [editingId, overrides, session?.user_id, l10n]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -305,7 +305,7 @@ export default function TerminalManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load, l10n]);
+  }, [form, editingId, session?.user_id, closeModal, load, l10n]);
 
   // ── Delete ─────────────────────────────────────────────────────
 
@@ -321,7 +321,7 @@ export default function TerminalManagementScreen() {
     } finally {
       setDeleting(false);
     }
-  }, [deleteTarget, closeDelete, load]);
+  }, [deleteTarget, session?.user_id, closeDelete, load]);
 
   // ── Render ─────────────────────────────────────────────────────
 

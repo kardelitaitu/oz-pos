@@ -185,6 +185,15 @@ export default function StockTransfersScreen() {
   const removeLineEntry = useCallback((index: number) => {
     setCreateLines(createLines.filter((_, i) => i !== index));
   }, [createLines]);
+  const resetCreateForm = useCallback(() => {
+    setCreateSourceLoc('');
+    setCreateDestLoc('');
+    setCreateSourceTerminalId('');
+    setCreateDestTerminalId('');
+    setCreateNotes('');
+    setCreateLines([]);
+    setCreateError(null);
+  }, []);
 
   const handleCreate = useCallback(async () => {
     if (!session?.user_id) return;
@@ -223,17 +232,8 @@ export default function StockTransfersScreen() {
     } finally {
       setCreateSaving(false);
     }
-  }, [session, createLines, createSourceLoc, createDestLoc, createSourceTerminalId, createDestTerminalId, createNotes, l10n, load]);
+  }, [session, createLines, createSourceLoc, createDestLoc, createSourceTerminalId, createDestTerminalId, createNotes, l10n, load, resetCreateForm]);
 
-  const resetCreateForm = useCallback(() => {
-    setCreateSourceLoc('');
-    setCreateDestLoc('');
-    setCreateSourceTerminalId('');
-    setCreateDestTerminalId('');
-    setCreateNotes('');
-    setCreateLines([]);
-    setCreateError(null);
-  }, []);
 
   const openCreate = useCallback(() => {
     resetCreateForm();

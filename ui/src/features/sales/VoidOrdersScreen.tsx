@@ -198,7 +198,8 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
     } finally {
       setVoiding(false);
     }
-  }, [activeSaleId, detail, voidReason, customReason, l10n]);
+  }, [activeSaleId, detail, voidReason, customReason, session?.user_id, l10n]);
+
 
   const openDetail = useCallback((id: string) => {
     setActiveSaleId(id);

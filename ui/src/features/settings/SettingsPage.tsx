@@ -175,7 +175,8 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [receipt, store, defaultCurrency, userId, displayCardSize, displayFontSize, displayFontSmoothing, brandColour, brandStoreName, addToast, l10n, refreshBrandSettings]);
+  }, [receipt, store, defaultCurrency, userId, session?.user_id, sync.enabled, syncServerUrl, syncApiKey, displayCardSize, displayFontSize, displayFontSmoothing, brandColour, brandStoreName, addToast, l10n, refreshBrandSettings]);
+
 
   if (loading) {
     return <div className="settings-page"><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;

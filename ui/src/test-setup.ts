@@ -29,7 +29,13 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
 // to set up their own bundles via <LocalizationProvider>.
 const originalError = console.error;
 console.error = (...args: unknown[]) => {
-  const msg = typeof args[0] === 'string' ? args[0] : '';
+  const arg0 = args[0];
+  const msg =
+    typeof arg0 === 'string'
+      ? arg0
+      : arg0 && typeof arg0 === 'object' && 'message' in arg0
+        ? String((arg0 as { message?: unknown }).message)
+        : String(arg0 ?? '');
   // Only suppress @fluent/react missing-key warnings — not all
   // @fluent/react errors, which could mask genuine issues.
   if (msg.includes('[@fluent/react]') && msg.includes('did not match any messages')) {
@@ -37,3 +43,4 @@ console.error = (...args: unknown[]) => {
   }
   originalError(...args);
 };
+

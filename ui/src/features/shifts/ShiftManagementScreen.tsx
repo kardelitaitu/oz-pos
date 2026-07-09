@@ -133,7 +133,8 @@ export default function ShiftManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [activeShift, closingBalance, shiftNotes]);
+  }, [activeShift, closingBalance, shiftNotes, userId]);
+
 
   const dismissCloseSummary = useCallback(async () => {
     setClosedShiftSummary(null);

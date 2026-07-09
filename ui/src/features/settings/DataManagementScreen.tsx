@@ -139,7 +139,7 @@ export default function DataManagementScreen() {
       setBackup((prev) => ({ ...prev, backingUp: false }));
       addToast({ message: l10n.getString('data-mgmt-toast-backup-fail'), type: 'error' });
     }
-  }, [l10n]);
+  }, [addToast, l10n]);
 
   // ── Toggle data type selection ──────────────────────────────────
 
@@ -170,7 +170,7 @@ export default function DataManagementScreen() {
       return;
     }
     setExportState((prev) => ({ ...prev, step: 'encrypt', error: null }));
-  }, [exportState.selectedTypes, l10n]);
+  }, [addToast, exportState.selectedTypes, l10n]);
 
   const confirmExport = useCallback(async () => {
     if (exportState.password.length < 8) {
@@ -216,7 +216,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: l10n.getString('data-mgmt-toast-export-fail'), type: 'error' });
     }
-  }, [exportState.password, exportState.passwordConfirm, l10n]);
+  }, [addToast, exportState.dateFrom, exportState.dateTo, exportState.password, exportState.passwordConfirm, exportState.selectedTypes, l10n]);
 
   const resetExport = useCallback(() => {
     setExportState(INITIAL_EXPORT);
@@ -240,7 +240,7 @@ export default function DataManagementScreen() {
     } catch {
       addToast({ message: l10n.getString('data-mgmt-toast-file-picker-fail'), type: 'error' });
     }
-  }, [l10n]);
+  }, [addToast, l10n]);
 
   const startImport = useCallback(async () => {
     if (!importState.password) {
@@ -309,7 +309,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), type: 'error' });
     }
-  }, [importState.password, importState.selectedFile, l10n]);
+  }, [addToast, importState.password, importState.selectedFile, l10n]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);

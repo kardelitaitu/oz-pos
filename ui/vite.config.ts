@@ -46,6 +46,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    onConsoleLog(log, _type) {
+      if (log.includes('[@fluent/react]') && log.includes('did not match any messages')) {
+        return false;
+      }
+    },
+
 
     // ── Coverage ────────────────────────────────────────────────────────
     //

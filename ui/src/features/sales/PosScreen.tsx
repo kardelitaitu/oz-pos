@@ -1016,7 +1016,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     } finally {
       setClosingShift(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, l10n]);
+  }, [activeShift, closingBalance, shiftNotes, userId, l10n]);
 
   const handleOpenShiftClick = useCallback(() => {
     setOpeningBalance('');
@@ -1095,7 +1095,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     } finally {
       setOpeningBill(false);
     }
-  }, [lines, subtotal, openBillName, discountPercent, discountLabel, resetCart, loadOpenBills, addToast, openBillInputExit]);
+  }, [activeShift, lines, subtotal, openBillName, discountPercent, discountLabel, resetCart, loadOpenBills, addToast, openBillInputExit]);
 
   const handleResumeOpenBill = useCallback(async (id: string) => {
     try {

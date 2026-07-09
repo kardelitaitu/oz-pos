@@ -43,12 +43,21 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **CONTRIBUTING.md date**: Fixed invalid `30-02-26` → `09-07-26` (caught by skill-drift-guard).
 - **Various Clippy warnings**: Fixed across `oz-lua`, `oz-plugin`, and other crates.
 - **Feature key parity**: All `feature:` strings in `registerPage` and `registerNavItem` now verified against `FEATURES` set.
+- **CI pipeline repairs**: Resolved all Clippy `-D warnings` across `oz-pos-app`, `oz-pos-tablet`, and `oz-cloud-server` (unused variables, items-after-test-module, bool-assert-comparison, hold-Mutex-across-await).
+- **Test race conditions**: Fixed `tokio::time::interval` first-tick-immediate behavior in LAN server heartbeat tests; serialized `std::env::set_var` tests in `oz-cloud-server` with `tokio::sync::Mutex`; switched `std::sync::Mutex` → `tokio::sync::Mutex` to stop clippy `await-holding-lock`.
+- **UI lint errors**: Fixed all 17 ESLint errors (no-explicit-any, label-has-associated-control, no-noninteractive-element-interactions, click-events-have-key-events, no-autofocus) across `App.tsx`, 3 test files, `StaffLoginScreen`, `ProductManagementScreen`, `PaymentModal`, `SettingsPage`, `WorkspaceHome`.
+- **UI typecheck errors**: Removed stale `UseTerminalProfileResult` import; fixed `usePosState` scope reference in `RetailPosScreen.test.tsx`.
 
 ## [0.0.3] — 2026-06-30
+
 
 ### Added
 - Pre-commit hook (auto `cargo fmt --all`)
 - CI fixes for cross-platform compilation (macOS keychain, Linux libudev+zbus, Windows Tauri)
+
+### Fixed
+- **UI test & lint quality**: Suppressed `@fluent/react` missing-key noise in Vitest logs (`onConsoleLog` + `test-setup.ts` `Error` object check); resolved all 15 React Hook `exhaustive-deps` lint warnings across all UI screens (`PosScreen`, `DataManagementScreen`, `WeightScaleWidget`, `PriceOverrideModal`, `VoidOrdersScreen`, `RefundModal`, `SettingsPage`, `ShiftManagementScreen`, `StockTransfersScreen`, `TerminalManagementScreen`, `useAnimatedToastQueue`).
+
 
 ## [0.0.2] — 2026-06-30
 

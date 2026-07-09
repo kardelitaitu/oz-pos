@@ -22,10 +22,11 @@ export interface WeightScaleWidgetProps {
  */
 export function WeightScaleWidget({
   onWeightObtained,
-  vendorId = '0x0000',
-  productId = '0x0000',
-  devicePath = '/dev/hidraw0',
+  vendorId: _vendorId = '0x0000',
+  productId: _productId = '0x0000',
+  devicePath: _devicePath = '/dev/hidraw0',
 }: WeightScaleWidgetProps) {
+
   const { isEnabled } = useFeatures();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
@@ -54,7 +55,8 @@ export function WeightScaleWidget({
     } finally {
       if (mountedRef.current) setWeighing(false);
     }
-  }, [vendorId, productId, devicePath, onWeightObtained, addToast]);
+  }, [onWeightObtained, addToast]);
+
 
   if (!isEnabled(FEATURES.USB_SCALE)) return null;
 

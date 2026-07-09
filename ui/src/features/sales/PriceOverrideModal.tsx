@@ -34,15 +34,34 @@ export default function PriceOverrideModal({
     }
   }, [step]);
 
+  const attemptVerify = useCallback(async () => {
+    if (pin.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await staffLogin({ username: username.trim(), pin: pin.join('') });
+      await onConfirm(newPriceMinor, result.session.user_id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'PIN verification failed';
+      setError(message);
+      setPin([]);
+      pinSubmitted.current = false;
+    } finally {
+      setLoading(false);
+    }
+  }, [pin, username, newPriceMinor, onConfirm]);
+
   useEffect(() => {
     if (pin.length === MAX_PIN_LENGTH && !loading && !pinSubmitted.current) {
+
       pinSubmitted.current = true;
       attemptVerify();
     }
     if (pin.length < MAX_PIN_LENGTH) {
       pinSubmitted.current = false;
     }
-  }, [pin, loading]);
+  }, [pin, loading, attemptVerify]);
+
 
   const handlePriceConfirm = useCallback(() => {
     if (newPriceMinor > 0) {
@@ -75,22 +94,6 @@ export default function PriceOverrideModal({
     pinSubmitted.current = false;
   }, []);
 
-  const attemptVerify = useCallback(async () => {
-    if (pin.length === 0) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await staffLogin({ username: username.trim(), pin: pin.join('') });
-      await onConfirm(newPriceMinor, result.session.user_id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'PIN verification failed';
-      setError(message);
-      setPin([]);
-      pinSubmitted.current = false;
-    } finally {
-      setLoading(false);
-    }
-  }, [pin, username, newPriceMinor, onConfirm]);
 
   const handleGoBack = useCallback(() => {
     if (step === 'username') {
