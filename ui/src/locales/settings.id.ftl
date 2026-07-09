@@ -15,26 +15,6 @@ settings-general = Umum
 settings-data = Manajemen Data
 settings-features = Fitur
 
-categories-title = Kategori
-categories-add = Tambah Kategori
-categories-name = Nama
-categories-colour = Warna
-categories-delete = Hapus Kategori
-categories-no-categories = Belum ada kategori
-categories-loading = Memuat kategori…
-categories-empty-desc = Kategori mengelompokkan produk Anda (mis. Minuman, Makanan, Merchandise).
-categories-add-first = Tambah kategori pertama Anda
-categories-delete-confirm = Hapus "{ $name }"?
-categories-delete-warning = Apakah Anda yakin ingin menghapus kategori ini? Tindakan ini tidak dapat dibatalkan. Produk yang ditetapkan ke kategori ini akan kehilangan asosiasi kategorinya.
-categories-name-placeholder = mis. Roti, Merchandise
-categories-id-preview = ID Kategori akan menjadi:
-categories-preview = Pratinjau
-categories-create = Buat
-categories-icon = Ikon
-categories-icon-aria = Pilih ikon untuk kategori
-categories-edit = Edit Kategori
-categories-save = Simpan Perubahan
-
 appearance-preview-btn-label = Tombol Utama
 appearance-preview-btn-outline-label = Sekunder
 appearance-preview-badge-label = Aktif
@@ -427,17 +407,12 @@ settings-data-tab = Data
 settings-sync-tab = Sinkronisasi
 
 settings-header-options = Opsi
-settings-page-title = Pengaturan
 settings-saving-btn = Menyimpan…
 
 # ── General Settings ──
 settings-general-heading = Pengaturan Umum
 settings-branch-label = Cabang
 settings-tax-id-label = NPWP
-settings-store-name-placeholder = Toko OZ-POS
-settings-address-placeholder = Jl. Contoh No. 123
-settings-tax-id-placeholder = 12-345-678-9-000
-
 # ── Receipt Settings ──
 settings-receipt-heading = Pengaturan Nota
 settings-show-currency-label = Tampilkan simbol mata uang
@@ -446,7 +421,6 @@ settings-show-table-label = Tampilkan nomor meja
 settings-decimal-sep-label = Pemisah desimal
 settings-paper-width-label = Lebar kertas
 settings-footer-label = Teks kaki nota
-settings-footer-placeholder = Terima kasih telah berbelanja!
 settings-margins-heading = Margin Kertas (mm)
 settings-margin-top = Atas
 settings-margin-bottom = Bawah
@@ -511,8 +485,6 @@ settings-app-version-label = Versi aplikasi
 settings-cashier-label = Kasir
 settings-terminal-label = Terminal
 settings-theme-label = Tema
-settings-theme-light = Terang
-settings-theme-dark = Gelap
 settings-auto-lock-label = Kunci otomatis setelah (menit)
 settings-auto-lock-hint = Kunci sesi setelah tidak aktif (1–120 mnt)
 
