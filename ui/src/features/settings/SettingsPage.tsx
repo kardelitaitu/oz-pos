@@ -496,135 +496,95 @@ export default function SettingsPage() {
         shadow="sm"
         header={<Localized id="settings-section-sync"><h2 className="settings-section-title">Cloud Sync</h2></Localized>}
       >
-        {sync.serverUrl === null && !sync.enabled ? (
-          <div className="settings-form">
-              <p className="settings-hint">
-                <Localized id="settings-sync-not-configured">
-                  <span>Sync is not configured. Enter a server URL and enable sync.</span>
-                </Localized>
-              </p>
-            <label className="settings-field" htmlFor="settings-field-server-url">
-              {l10n.getString('settings-sync-server-url')}
-              <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
-                <input
-                  className="settings-input"
-                  type="url"
-                  id="settings-field-server-url"
-                  placeholder="https://api.example.com"
-                  value={syncServerUrl}
-                  onChange={(e) => setSyncServerUrl(e.target.value)}
-                />
+        <div className="settings-form">
+          {sync.serverUrl === null && !sync.enabled && (
+            <p className="settings-hint">
+              <Localized id="settings-sync-not-configured">
+                <span>Sync is not configured. Enter a server URL and enable sync.</span>
               </Localized>
-            </label>
+            </p>
+          )}
 
-            <label className="settings-field" htmlFor="settings-field-api-key">
-              {l10n.getString('settings-sync-api-key')}
-              <Localized id="settings-api-key-placeholder" attrs={{ placeholder: true }}>
-                <input
-                  className="settings-input"
-                  type="password"
-                  id="settings-field-api-key"
-                  placeholder="Enter API key"
-                  value={syncApiKey}
-                  onChange={(e) => setSyncApiKey(e.target.value)}
-                />
-              </Localized>
-            </label>
+          <label className="settings-field" htmlFor="settings-field-server-url">
+            {l10n.getString('settings-sync-server-url')}
+            <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="settings-input"
+                type="url"
+                id="settings-field-server-url"
+                placeholder="https://api.example.com"
+                value={syncServerUrl}
+                onChange={(e) => setSyncServerUrl(e.target.value)}
+              />
+            </Localized>
+          </label>
 
-            <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled">
-              <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
-                <input
-                  type="checkbox"
-                  id="settings-toggle-sync-enabled"
-                  checked={sync.enabled}
-                  onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
-                  aria-label="Enable Cloud Sync"
-                />
-              </Localized>
-              <Localized id="settings-sync-enabled">
-                <span>Enable Cloud Sync</span>
-              </Localized>
-            </label>
-          </div>
-        ) : (
-          <div className="settings-form">
-            <label className="settings-field" htmlFor="settings-field-server-url">
-              {l10n.getString('settings-sync-server-url')}
-              <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
-                <input
-                  className="settings-input"
-                  type="url"
-                  id="settings-field-server-url"
-                  placeholder="https://api.example.com"
-                  value={syncServerUrl}
-                  onChange={(e) => setSyncServerUrl(e.target.value)}
-                />
-              </Localized>
-            </label>
+          <label className="settings-field" htmlFor="settings-field-api-key">
+            {l10n.getString('settings-sync-api-key')}
+            <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
+              <input
+                className="settings-input"
+                type="password"
+                id="settings-field-api-key"
+                placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
+                value={syncApiKey}
+                onChange={(e) => setSyncApiKey(e.target.value)}
+              />
+            </Localized>
+          </label>
 
-            <label className="settings-field" htmlFor="settings-field-api-key">
-              {l10n.getString('settings-sync-api-key')}
-              <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
-                <input
-                  className="settings-input"
-                  type="password"
-                  id="settings-field-api-key"
-                  placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
-                  value={syncApiKey}
-                  onChange={(e) => setSyncApiKey(e.target.value)}
-                />
-              </Localized>
-            </label>
+          <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled">
+            <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
+              <input
+                type="checkbox"
+                id="settings-toggle-sync-enabled"
+                checked={sync.enabled}
+                onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
+                aria-label="Enable Cloud Sync"
+              />
+            </Localized>
+            <Localized id="settings-sync-enabled">
+              <span>Enable Cloud Sync</span>
+            </Localized>
+          </label>
 
-            <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled">
-              <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
-                <input
-                  type="checkbox"
-                  id="settings-toggle-sync-enabled"
-                  checked={sync.enabled}
-                  onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
-                  aria-label="Enable Cloud Sync"
-                />
-              </Localized>
-              <Localized id="settings-sync-enabled">
-                <span>Enable Cloud Sync</span>
-              </Localized>
-            </label>
-
-            <div className="settings-actions">
-              <Button
-                variant="secondary"
-                loading={syncing}
-                onClick={async () => {
-                  setSyncing(true);
-                  try {
-                    const result = await syncRun();
-                    setSyncResult(result);
-                  } catch {
-                    setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });
-                  } finally {
-                    setSyncing(false);
-                  }
-                }}
-              >
-                <Localized id={syncing ? 'settings-sync-syncing' : 'settings-sync-sync-now'}>
-                  <span>{syncing ? 'Syncing…' : 'Sync Now'}</span>
-                </Localized>
-              </Button>
-            </div>
-
-            {syncResult && (
-              <p className="settings-hint">
-                <Localized
-                  id="settings-sync-result"
-                  vars={{ synced: syncResult.synced, failed: syncResult.failed }}
+          {(sync.serverUrl !== null || sync.enabled) && (
+            <>
+              <div className="settings-actions">
+                <Button
+                  variant="secondary"
+                  loading={syncing}
+                  onClick={async () => {
+                    setSyncing(true);
+                    try {
+                      const result = await syncRun();
+                      setSyncResult(result);
+                    } catch {
+                      setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });
+                    } finally {
+                      setSyncing(false);
+                    }
+                  }}
                 >
-                  <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
-                </Localized>
-              </p>
-            )}
-          </div>
-        )}
+                  <Localized id={syncing ? 'settings-sync-syncing' : 'settings-sync-sync-now'}>
+                    <span>{syncing ? 'Syncing…' : 'Sync Now'}</span>
+                  </Localized>
+                </Button>
+              </div>
+
+              {syncResult && (
+                <p className="settings-hint">
+                  <Localized
+                    id="settings-sync-result"
+                    vars={{ synced: syncResult.synced, failed: syncResult.failed }}
+                  >
+                    <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
+                  </Localized>
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </Card>
 
       {/* ── Page-level Save ───────────────────────── */}
