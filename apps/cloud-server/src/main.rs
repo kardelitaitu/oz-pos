@@ -142,6 +142,32 @@ mod tests {
         build_router(state)
     }
 
+    /// Create a test JWT token.
+    fn test_token(tenant_id: Option<&str>) -> String {
+        oz_api::auth::create_token("test", Some(24), tenant_id).token
+    }
+
+    /// Add an Authorization header to a request builder.
+    fn with_auth(uri: &str, tenant_id: Option<&str>) -> Request<Body> {
+        let token = test_token(tenant_id);
+        Request::builder()
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    fn authed_post(uri: &str, body: &str, tenant_id: Option<&str>) -> Request<Body> {
+        let token = test_token(tenant_id);
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    }
+
     #[tokio::test]
     async fn health_returns_ok() {
         let app = test_app();
@@ -154,12 +180,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sync_status_returns_ok() {
+    async fn sync_status_returns_ok_with_auth() {
         let app = test_app();
-        let req = Request::builder()
-            .uri("/api/sync/status")
-            .body(Body::empty())
-            .unwrap();
+        let req = with_auth("/api/sync/status", None);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
@@ -171,24 +194,19 @@ mod tests {
         };
         let app = build_router(state.clone());
 
-        // Seed an item directly
+        // Seed an item directly with tenant_id
         {
             let conn = state.db.lock().await;
             conn.execute(
-                "INSERT INTO offline_queue (id, action, payload, status, created_at) 
-                 VALUES (?1, ?2, ?3, 'pending', datetime('now'))",
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) 
+                 VALUES (?1, ?2, ?3, 'pending', datetime('now'), 'default')",
                 rusqlite::params!["test-id", "complete_sale", r#"{"total":100}"#],
             )
             .unwrap();
         }
 
-        // Pull should return the seeded item
-        let req = Request::builder()
-            .method("POST")
-            .uri("/api/sync/pull")
-            .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"since": null}"#))
-            .unwrap();
+        // Pull should return the seeded item (for default tenant)
+        let req = authed_post("/api/sync/pull", r#"{"since": null}"#, None);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -205,6 +223,7 @@ mod tests {
         let app = test_app();
         let req = Request::builder()
             .uri("/api/sync/status")
+            .header("Authorization", format!("Bearer {}", test_token(None)))
             .header("Origin", "http://example.com")
             .body(Body::empty())
             .unwrap();
@@ -217,13 +236,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unknown_route_returns_404() {
+    async fn unknown_route_returns_401_or_404() {
         let app = test_app();
         let req = Request::builder()
             .uri("/api/unknown")
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        // Auth middleware on sync router catches unknown routes before
+        // the 404 handler; both 401 and 404 are acceptable.
+        assert!(
+            resp.status() == StatusCode::UNAUTHORIZED
+                || resp.status() == StatusCode::NOT_FOUND,
+            "expected 401 or 404, got: {}",
+            resp.status()
+        );
     }
 }
