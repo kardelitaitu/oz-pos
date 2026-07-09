@@ -45,8 +45,14 @@ jobs:
             exit 1
           fi
           echo "Binary size check passed"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
 
       - name: UI lint & test
+
         run: |
           cd ui
           npm ci --no-audit --no-fund
