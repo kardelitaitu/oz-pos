@@ -25,6 +25,13 @@ import {
   type SyncSettingsDto,
   type SyncAttemptResult,
 } from '@/api/offline';
+import {
+  getBrandSettings,
+  setBrandPrimaryColour,
+  setBrandStoreName as setBrandStoreNameApi,
+} from '@/api/branding';
+import { useBrand } from '@/contexts/BrandContext';
+import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
@@ -49,6 +56,7 @@ export default function SettingsPage() {
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { refreshBrandSettings } = useBrand();
 
   const [receipt, setReceipt] = useState<ReceiptSettingsDto>({
     showCurrency: false,
@@ -89,6 +97,8 @@ export default function SettingsPage() {
   const [displayCardSize, setDisplayCardSize] = useState(0);
   const [displayFontSize, setDisplayFontSize] = useState(0);
   const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
+  const [brandColour, setBrandColour] = useState('#10b981');
+  const [brandStoreName, setBrandStoreName] = useState('');
 
   // Sync font-smoothing to <html> whenever it changes
   useEffect(() => {
@@ -99,13 +109,14 @@ export default function SettingsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [r, s, currenciesData, defaultCurrencyData, syncData, prefs] = await Promise.all([
+        const [r, s, currenciesData, defaultCurrencyData, syncData, prefs, brand] = await Promise.all([
           getReceiptSettings(),
           getStoreSettings(),
           listCurrencies(),
           getDefaultCurrency(),
           getSyncSettings(),
           getUserPreferences(userId),
+          getBrandSettings(),
         ]);
         if (!cancelled) {
           setReceipt(r);
@@ -120,6 +131,10 @@ export default function SettingsPage() {
           const fs = prefs['fontsize'];
           if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
           if (prefs['font-smoothing'] !== undefined) setDisplayFontSmoothing(prefs['font-smoothing']);
+          setBrandColour(brand.primary_colour);
+          setBrandStoreName(brand.store_name);
+          const palette = deriveAccentPalette(brand.primary_colour);
+          applyAccentPalette(palette);
         }
       } catch {
         // IPC unavailable — use defaults.
@@ -148,16 +163,19 @@ export default function SettingsPage() {
           apiKey: syncApiKey || null,
           enabled: sync.enabled,
         }),
+        setBrandPrimaryColour(brandColour),
+        setBrandStoreNameApi(brandStoreName),
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       setSyncApiKey('');
+      refreshBrandSettings();
     } catch {
       addToast(l10n.getString('settings-save-error'), 'error');
     } finally {
       setSaving(false);
     }
-  }, [receipt, store, defaultCurrency, userId, displayCardSize, displayFontSize, displayFontSmoothing, addToast, l10n]);
+  }, [receipt, store, defaultCurrency, userId, displayCardSize, displayFontSize, displayFontSmoothing, brandColour, brandStoreName, addToast, l10n, refreshBrandSettings]);
 
   if (loading) {
     return <div className="settings-page"><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;
@@ -339,7 +357,17 @@ export default function SettingsPage() {
       </Card>
 
       {/* ── Appearance section ──────────────────── */}
-      <AppearanceSettings />
+      <AppearanceSettings
+        embedded
+        colour={brandColour}
+        storeName={brandStoreName}
+        onColourChange={(c) => {
+          setBrandColour(c);
+          const palette = deriveAccentPalette(c);
+          applyAccentPalette(palette);
+        }}
+        onStoreNameChange={setBrandStoreName}
+      />
 
       {/* ── Receipt section ───────────────────────── */}
       <Card
