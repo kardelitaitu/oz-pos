@@ -6,6 +6,7 @@ import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import CategoryManagementScreen from '@/features/categories/CategoryManagementScreen';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import settingsFtl from '@/locales/settings.ftl?raw';
+import productsFtl from '@/locales/products.ftl?raw';
 import type { CategoryDto } from '@/api/products';
 
 const { mockListCategories, mockCreateCategory, mockUpdateCategory, mockDeleteCategory } =
@@ -26,6 +27,7 @@ vi.mock('@/api/products', () => ({
 const bundle = new FluentBundle('en-US');
 bundle.addResource(new FluentResource(sharedFtl));
 bundle.addResource(new FluentResource(settingsFtl));
+bundle.addResource(new FluentResource(productsFtl));
 const l10n = new ReactLocalization([bundle]);
 
 function renderScreen() {
@@ -126,7 +128,7 @@ describe('CategoryManagementScreen', () => {
     await userEvent.click(deleteBtn);
 
     await waitFor(() =>
-      expect(screen.getByText(/Are you sure you want to delete/)).toBeDefined(),
+      expect(screen.getByText(/unlink all products/)).toBeDefined(),
     );
   });
 
@@ -163,6 +165,6 @@ describe('CategoryManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
 
     await userEvent.click(document.querySelector('.cat-mgmt-edit-btn')!);
-    await waitFor(() => expect(screen.getByText('Edit Category')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Edit')).toBeDefined());
   });
 });

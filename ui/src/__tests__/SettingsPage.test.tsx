@@ -7,6 +7,8 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { BrandProvider } from '@/contexts/BrandContext';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { getAvailableLocales, getLocaleLabel } from '@/i18n';
 
 const SAMPLE_CURRENCIES = [
   { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
@@ -55,9 +57,18 @@ beforeEach(() => {
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return withToastProviders(
-    <BrandProvider>
-      <AuthProvider>{children}</AuthProvider>
-    </BrandProvider>,
+    <LocaleContext.Provider
+      value={{
+        locale: 'en',
+        setLocale: () => {},
+        availableLocales: getAvailableLocales(),
+        getLocaleLabel,
+      }}
+    >
+      <BrandProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </BrandProvider>
+    </LocaleContext.Provider>,
     settingsFtl,
     sharedFtl,
   );
