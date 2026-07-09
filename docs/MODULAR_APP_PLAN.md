@@ -185,7 +185,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 4.3 Feature Matrix Automated Testing
 
-- [ ] **4.3.1 [Rust Preset Integration Test Suite]**: In `crates/oz-core/tests/feature_matrix_tests.rs`, iterate over all 6 built-in presets (`simple_retail`, `restaurant`, `full_store`, `cafe`, `franchise`, `custom`) verifying `from_set` succeeds, `count()` matches expected, and `to_settings_rows()` roundtrips cleanly (`from_settings_rows`).
+- [x] **4.3.1 [Rust Preset Integration Test Suite]**: In `crates/oz-core/tests/feature_matrix_tests.rs`, iterate over all 6 built-in presets verifying `from_set` succeeds, `count()` matches expected, and settings roundtrips.
 - [ ] **4.3.2 [Frontend Registry Parity CI Gate]**: Create validation script `scripts/verify-feature-registry.py` and register it inside `scripts/check.sh`. Verifies that every `feature: string` referenced in `registerPage` or `registerNavItem` exists precisely in `FEATURES` (`useFeatures.ts`) and `crates/oz-core/src/features.rs`.
 
 ---
