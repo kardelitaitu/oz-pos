@@ -11,11 +11,11 @@
 | Phase | Area | Total Tasks | Done |
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
-| 2 | Dynamic Runtime Kernel & Safeguards | 10 | 0 |
+| 2 | Dynamic Runtime Kernel & Safeguards | 10 | 2 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 0 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **10** |
+| | **Total** | **46** | **12** |
 
 ---
 
@@ -108,12 +108,12 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ---
 
-### Phase 2: Dynamic Runtime Kernel & Safeguards (Backend Polish) `[0/10]`
+### Phase 2: Dynamic Runtime Kernel & Safeguards (Backend Polish) `[2/10]`
 
 #### 2.1 Dynamic Module Lifecycle (`platform/kernel`)
 
-- [ ] **2.1.1 [Kernel Module Status Tracking]**: In `platform/kernel/src/kernel.rs`, update `Kernel` struct to maintain runtime state per registered module: `ModuleStatus::Registered | Loaded | Started | Stopped`.
-- [ ] **2.1.2 [Runtime Start/Stop Methods]**: Implement `kernel.start_module(id: &str)` and `kernel.stop_module(id: &str)`. When `stop_module` is called, invoke `module.stop()`, `module.unload()`, and update status to `Stopped`.
+- [x] **2.1.1 [Kernel Module Status Tracking]**: In `platform/kernel/src/kernel.rs`, update `Kernel` struct to maintain runtime state per registered module: `ModuleStatus::Registered | Loaded | Started | Stopped`.
+- [x] **2.1.2 [Runtime Start/Stop Methods]**: Implement `kernel.start_module(id: &str)` and `kernel.stop_module(id: &str)`. When `stop_module` is called, invoke `module.stop()`, `module.unload()`, and update status to `Stopped`.
 - [ ] **2.1.3 [Dynamic EventBus Unsubscribe]**: In `platform/kernel/src/event_bus.rs`, add subscription ownership tags (`module_id`) when handlers are registered (`bus.subscribe_for_module(module_id, topic, handler)`). Implement `bus.unsubscribe_module(module_id: &str)` to cleanly drop all handlers owned by a stopped module.
 - [ ] **2.1.4 [IPC Command to Kernel Wiring]**: Connect `set_feature` in `apps/desktop-client/src/commands/features.rs` to invoke `kernel.start_module()` when a top-level module feature is enabled, and `kernel.stop_module()` when disabled, without restarting the application.
 

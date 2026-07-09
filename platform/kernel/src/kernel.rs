@@ -3,6 +3,14 @@
 //! The [`Kernel`] is the sole owner of the module lifecycle. It maintains
 //! a registry of modules, resolves dependencies via topological sort,
 //! and drives the lifecycle: **register → load → start → stop**.
+//!
+//! Per-module runtime status is tracked via [`ModuleStatus`]:
+//!
+//! ```text
+//! Registered → Loaded → Started
+//!                           ↓
+//!                        Stopped
+//! ```
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -11,6 +19,19 @@ use tracing::{debug, error, info};
 
 use crate::error::KernelError;
 use crate::event_bus::EventBus;
+
+/// Runtime lifecycle status of a registered module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ModuleStatus {
+    /// Module is registered but not yet loaded.
+    Registered,
+    /// Module's `on_load` has been called.
+    Loaded,
+    /// Module's `on_start` has been called.
+    Started,
+    /// Module has been stopped (after `on_stop`). Can be restarted.
+    Stopped,
+}
 
 /// The module system kernel.
 ///
@@ -34,6 +55,8 @@ pub struct Kernel {
     modules: HashMap<&'static str, Box<dyn Module>>,
     /// Registered services.
     services: Vec<Box<dyn Service>>,
+    /// Per-module runtime lifecycle status.
+    statuses: HashMap<&'static str, ModuleStatus>,
     /// Whether `load_all` has been called.
     loaded: bool,
     /// Whether `start_all` has been called.
@@ -48,6 +71,7 @@ impl Kernel {
         Self {
             modules: HashMap::new(),
             services: Vec::new(),
+            statuses: HashMap::new(),
             loaded: false,
             started: false,
             event_bus: EventBus::new(),
@@ -69,6 +93,7 @@ impl Kernel {
         }
         debug!(module = id, "registering module");
         self.modules.insert(id, module);
+        self.statuses.insert(id, ModuleStatus::Registered);
         Ok(())
     }
 
@@ -91,6 +116,18 @@ impl Kernel {
     /// IDs of all registered modules.
     pub fn module_ids(&self) -> Vec<&'static str> {
         self.modules.keys().copied().collect()
+    }
+
+    /// Get the runtime status of a registered module.
+    ///
+    /// Returns `None` if the module is not registered.
+    pub fn module_status(&self, id: &str) -> Option<ModuleStatus> {
+        self.statuses.get(id).copied()
+    }
+
+    /// Get the runtime statuses of all registered modules.
+    pub fn all_statuses(&self) -> &HashMap<&'static str, ModuleStatus> {
+        &self.statuses
     }
 
     /// Get a reference to a registered module by id.
@@ -128,6 +165,7 @@ impl Kernel {
                 operation: "load",
                 source: e,
             })?;
+            self.statuses.insert(id, ModuleStatus::Loaded);
         }
 
         self.loaded = true;
@@ -156,12 +194,22 @@ impl Kernel {
             let module = self.modules.get_mut(id).ok_or_else(|| {
                 KernelError::Internal(format!("module '{id}' not found during start"))
             })?;
+            // Ensure module is in Loaded state before starting.
+            let current_status = self.statuses.get(id).copied().unwrap_or(ModuleStatus::Registered);
+            if current_status != ModuleStatus::Loaded && current_status != ModuleStatus::Stopped {
+                let msg = format!(
+                    "module '{id}' is in state {current_status:?}, expected Loaded or Stopped"
+                );
+                return Err(KernelError::Internal(msg));
+            }
+
             debug!(module = id, "starting module");
             module.on_start().map_err(|e| KernelError::LifecycleError {
                 module: id,
                 operation: "start",
                 source: e,
             })?;
+            self.statuses.insert(id, ModuleStatus::Started);
         }
 
         // Start services after modules.
@@ -222,6 +270,13 @@ impl Kernel {
                         });
                     }
                 }
+            }
+        }
+
+        // Update statuses to Stopped for any module that was Started or Loaded.
+        for (id, status) in self.statuses.iter_mut() {
+            if *status == ModuleStatus::Started || *status == ModuleStatus::Loaded {
+                *status = ModuleStatus::Stopped;
             }
         }
 
@@ -312,6 +367,84 @@ impl Kernel {
         }
 
         Ok(sorted)
+    }
+
+    // ── Lifecycle: Individual Module Start/Stop ────────────────
+
+    /// Start a single module by id.
+    ///
+    /// The module must be in [`Loaded`](ModuleStatus::Loaded) or
+    /// [`Stopped`](ModuleStatus::Stopped) state. Calls `on_start()` on
+    /// the module and updates its status to [`Started`](ModuleStatus::Started).
+    ///
+    /// Only starts the module itself — dependencies must be started
+    /// separately via `start_all()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`KernelError::LifecycleError`] if `on_start` fails, or
+    /// [`KernelError::Internal`] if the module is not registered or is
+    /// in an invalid state.
+    pub fn start_module(&mut self, id: &'static str) -> Result<(), KernelError> {
+        let module = self.modules.get_mut(id).ok_or_else(|| {
+            KernelError::Internal(format!("module '{id}' is not registered"))
+        })?;
+
+        let current_status = self.statuses.get(id).copied().unwrap_or(ModuleStatus::Registered);
+        if current_status != ModuleStatus::Loaded && current_status != ModuleStatus::Stopped {
+            let msg = format!(
+                "module '{id}' is in state {current_status:?}, expected Loaded or Stopped"
+            );
+            return Err(KernelError::Internal(msg));
+        }
+
+        debug!(module = id, "starting single module");
+        module.on_start().map_err(|e| KernelError::LifecycleError {
+            module: id,
+            operation: "start",
+            source: e,
+        })?;
+        self.statuses.insert(id, ModuleStatus::Started);
+        info!(module = id, "single module started");
+        Ok(())
+    }
+
+    /// Stop a single module by id.
+    ///
+    /// The module must be in [`Started`](ModuleStatus::Started) state.
+    /// Calls `on_stop()` on the module and updates its status to
+    /// [`Stopped`](ModuleStatus::Stopped).
+    ///
+    /// Does **not** cascade to dependents — callers must decide whether
+    /// to stop modules that depend on this one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`KernelError::LifecycleError`] if `on_stop` fails, or
+    /// [`KernelError::Internal`] if the module is not registered or is
+    /// in an invalid state.
+    pub fn stop_module(&mut self, id: &'static str) -> Result<(), KernelError> {
+        let module = self.modules.get_mut(id).ok_or_else(|| {
+            KernelError::Internal(format!("module '{id}' is not registered"))
+        })?;
+
+        let current_status = self.statuses.get(id).copied().unwrap_or(ModuleStatus::Registered);
+        if current_status != ModuleStatus::Started {
+            let msg = format!(
+                "module '{id}' is in state {current_status:?}, expected Started"
+            );
+            return Err(KernelError::Internal(msg));
+        }
+
+        debug!(module = id, "stopping single module");
+        module.on_stop().map_err(|e| KernelError::LifecycleError {
+            module: id,
+            operation: "stop",
+            source: e,
+        })?;
+        self.statuses.insert(id, ModuleStatus::Stopped);
+        info!(module = id, "single module stopped");
+        Ok(())
     }
 
     // ── Event Bus ────────────────────────────────────────────────
@@ -749,6 +882,203 @@ mod tests {
     fn is_registered_returns_false_for_unknown() {
         let kernel = Kernel::new();
         assert!(!kernel.is_registered("nonexistent"));
+    }
+
+    // ── ModuleStatus tests ──────────────────────────────────────
+
+    #[test]
+    fn register_sets_status_to_registered() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        assert_eq!(
+            kernel.module_status("test"),
+            Some(ModuleStatus::Registered)
+        );
+    }
+
+    #[test]
+    fn load_all_updates_status_to_loaded() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        kernel.load_all().unwrap();
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Loaded));
+    }
+
+    #[test]
+    fn start_all_updates_status_to_started() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        kernel.start_all().unwrap();
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Started));
+    }
+
+    #[test]
+    fn stop_all_updates_status_to_stopped() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        kernel.start_all().unwrap();
+        kernel.stop_all().unwrap();
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Stopped));
+    }
+
+    #[test]
+    fn module_status_unknown_for_unregistered() {
+        let kernel = Kernel::new();
+        assert_eq!(kernel.module_status("nonexistent"), None);
+    }
+
+    #[test]
+    fn all_statuses_returns_all_registered() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("a"))).unwrap();
+        kernel.register(Box::new(TestModule::new("b"))).unwrap();
+        let statuses = kernel.all_statuses();
+        assert_eq!(statuses.len(), 2);
+        assert_eq!(
+            statuses.get("a"),
+            Some(&ModuleStatus::Registered)
+        );
+    }
+
+    #[test]
+    fn status_transition_register_load_start_stop() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("m"))).unwrap();
+        assert_eq!(kernel.module_status("m"), Some(ModuleStatus::Registered));
+
+        kernel.load_all().unwrap();
+        assert_eq!(kernel.module_status("m"), Some(ModuleStatus::Loaded));
+
+        kernel.start_all().unwrap();
+        assert_eq!(kernel.module_status("m"), Some(ModuleStatus::Started));
+
+        kernel.stop_all().unwrap();
+        assert_eq!(kernel.module_status("m"), Some(ModuleStatus::Stopped));
+    }
+
+    // ── Individual start/stop tests ──────────────────────────────
+
+    #[test]
+    fn start_module_starts_single_module() {
+        let mut kernel = Kernel::new();
+        let module = TestModule::new("test");
+        kernel.register(Box::new(module)).unwrap();
+        kernel.load_all().unwrap();
+
+        kernel.start_module("test").unwrap();
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Started));
+    }
+
+    #[test]
+    fn start_module_fails_if_not_registered() {
+        let mut kernel = Kernel::new();
+        let result = kernel.start_module("nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn start_module_fails_if_registered_only() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        let result = kernel.start_module("test");
+        assert!(result.is_err());
+        // Status should remain Registered.
+        assert_eq!(
+            kernel.module_status("test"),
+            Some(ModuleStatus::Registered)
+        );
+    }
+
+    #[test]
+    fn start_module_fails_if_already_started() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        kernel.start_all().unwrap();
+        let result = kernel.start_module("test");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn stop_module_stops_single_module() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        kernel.start_all().unwrap();
+
+        kernel.stop_module("test").unwrap();
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Stopped));
+    }
+
+    #[test]
+    fn stop_module_fails_if_not_registered() {
+        let mut kernel = Kernel::new();
+        let result = kernel.stop_module("nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn stop_module_fails_if_not_started() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        kernel.load_all().unwrap();
+        let result = kernel.stop_module("test");
+        assert!(result.is_err());
+        // Status should remain Loaded.
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Loaded));
+    }
+
+    #[test]
+    fn start_module_allows_restart_after_stop() {
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("test"))).unwrap();
+        kernel.start_all().unwrap();
+        kernel.stop_module("test").unwrap();
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Stopped));
+
+        // Can restart a stopped module.
+        kernel.start_module("test").unwrap();
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Started));
+    }
+
+    #[test]
+    fn start_module_propagates_lifecycle_error() {
+        let mut kernel = Kernel::new();
+        kernel
+            .register(Box::new(TestModule::new("bad").with_fail_start()))
+            .unwrap();
+        kernel.load_all().unwrap();
+
+        let result = kernel.start_module("bad");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            KernelError::LifecycleError {
+                module, operation, ..
+            } => {
+                assert_eq!(module, "bad");
+                assert_eq!(operation, "start");
+            }
+            other => panic!("expected LifecycleError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stop_module_propagates_lifecycle_error() {
+        let mut kernel = Kernel::new();
+        kernel
+            .register(Box::new(TestModule::new("bad").with_fail_stop()))
+            .unwrap();
+        kernel.start_all().unwrap();
+
+        let result = kernel.stop_module("bad");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            KernelError::LifecycleError {
+                module, operation, ..
+            } => {
+                assert_eq!(module, "bad");
+                assert_eq!(operation, "stop");
+            }
+            other => panic!("expected LifecycleError, got {other:?}"),
+        }
     }
 
     #[test]
