@@ -210,6 +210,7 @@ audit-action-system-restore = Pulihkan
 spinner-label = Memuat…
 
 # ── Workspace Home ──
+workspace-home-fullscreen-aria = Alihkan layar penuh
 workspace-home-loading = Memuat ruang kerja…
 workspace-home-subtitle = Pilih ruang kerja untuk memulai
 workspace-home-logout = Keluar
