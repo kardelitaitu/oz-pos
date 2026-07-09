@@ -7,9 +7,15 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-const { mockGetKdsQueue, mockUpdateKdsStatus } = vi.hoisted(() => ({
+const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
+  mockUseTicketSla: vi.fn(() => ({
+    level: 'green' as const,
+    elapsedSeconds: 120,
+    display: '2m 0s',
+  })),
+  mockPlayAlert: vi.fn(),
 }));
 
 vi.mock('@/api/kds', () => ({
@@ -19,6 +25,20 @@ vi.mock('@/api/kds', () => ({
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ session: { user_id: 'user-1', display_name: 'Alice', role_name: 'cashier' } }),
+}));
+
+vi.mock('@/features/kds/hooks/useTicketSla', () => ({
+  useTicketSla: (...args: unknown[]) => mockUseTicketSla(...args),
+}));
+
+vi.mock('@/frontend/shared/useSound', () => ({
+  useSound: () => ({
+    playAlert: mockPlayAlert,
+    playBeep: vi.fn(),
+    playError: vi.fn(),
+    playSuccess: vi.fn(),
+    setSoundEnabled: vi.fn(),
+  }),
 }));
 
 const bundle = new FluentBundle('en-US');
@@ -211,5 +231,69 @@ describe('KdsScreen', () => {
     // Cancelled order should not be visible
     expect(screen.queryByText('#999')).toBeNull();
     expect(screen.queryByText('Cancel Item')).toBeNull();
+  });
+
+  // ── SLA class tests ──────────────────────────────────────────────────
+
+  it('applies green SLA class by default', async () => {
+    mockUseTicketSla.mockReturnValue({ level: 'green', elapsedSeconds: 120, display: '2m 0s' });
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => {
+      const ticket = document.querySelector('.kds-ticket');
+      expect(ticket).not.toBeNull();
+      expect(ticket?.classList.contains('kds-ticket--green')).toBe(true);
+    });
+  });
+
+  it('applies yellow SLA class', async () => {
+    mockUseTicketSla.mockReturnValue({ level: 'yellow', elapsedSeconds: 720, display: '12m 0s' });
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => {
+      const ticket = document.querySelector('.kds-ticket');
+      expect(ticket?.classList.contains('kds-ticket--yellow')).toBe(true);
+    });
+  });
+
+  it('applies red SLA class', async () => {
+    mockUseTicketSla.mockReturnValue({ level: 'red', elapsedSeconds: 1200, display: '20m 0s' });
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => {
+      const ticket = document.querySelector('.kds-ticket');
+      expect(ticket?.classList.contains('kds-ticket--red')).toBe(true);
+    });
+  });
+
+  it('shows SLA display string instead of timeAgo', async () => {
+    mockUseTicketSla.mockReturnValue({ level: 'green', elapsedSeconds: 300, display: '5m 0s' });
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => {
+      const timeCell = document.querySelector('.kds-ticket-time');
+      expect(timeCell?.textContent).toBe('5m 0s');
+    });
+  });
+
+  it('does not fire playAlert on initial render with red ticket (no transition)', async () => {
+    // From the code: prevLevel starts null, so on first render it doesn't play
+    mockUseTicketSla.mockReturnValue({ level: 'red', elapsedSeconds: 1200, display: '20m 0s' });
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => {
+      expect(document.querySelector('.kds-ticket--red')).not.toBeNull();
+    });
+    expect(mockPlayAlert).not.toHaveBeenCalled();
+  });
+
+  it('applies color class on time element matching SLA level', async () => {
+    mockUseTicketSla.mockReturnValue({ level: 'yellow', elapsedSeconds: 720, display: '12m 0s' });
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => {
+      const timeCell = document.querySelector('.kds-ticket-time');
+      expect(timeCell?.classList.contains('kds-ticket-time--yellow')).toBe(true);
+    });
   });
 });

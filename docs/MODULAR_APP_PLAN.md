@@ -12,10 +12,10 @@
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
-| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 8 |
+| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 9 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **28** |
+| | **Total** | **46** | **29** |
 
 ---
 
@@ -150,7 +150,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 - [x] **3.3.1 [KDS Ticket Schema & Transitions]**: Add CHECK constraint on `kds_orders.status` via table recreation (SQLite limitation). Existing timestamp columns (`received_at`, `started_at`, `ready_at`, `served_at`) verified present. Add `kds_orders` and `kds_daily_counters` to expected_tables.
 - [x] **3.3.2 [SLA Aging Timer Hook]**: Create `ui/src/features/kds/hooks/useTicketSla.ts` accepting `created_at: string`. Computes elapsed seconds every second (`setInterval`) and returns threshold level (`'green' | 'yellow' | 'red'`). Green: `< 600s` (10m), Yellow: `600s..900s`, Red: `> 900s` (15m).
-- [ ] **3.3.3 [KDS Screen Visual & Audio Alerts]**: Upgrade `ui/src/features/kds/KdsScreen.tsx` to apply dynamic header classes (`kds-ticket--green`, `kds-ticket--yellow`, `kds-ticket--red`) based on `useTicketSla`. Add optional audio chime/pulse when a ticket enters the `red` threshold.
+- [x] **3.3.3 [KDS Screen Visual & Audio Alerts]**: Upgrade `ui/src/features/kds/KdsScreen.tsx` with `<KdsTicketCard>` component that applies dynamic SLA classes (`kds-ticket--green`, `kds-ticket--yellow`, `kds-ticket--red`) based on `useTicketSla`. Audio chime (`playAlert`) fires when a ticket transitions into the `red` threshold.
 
 #### 3.4 LAN / mDNS Peer-to-Peer KDS Discovery
 

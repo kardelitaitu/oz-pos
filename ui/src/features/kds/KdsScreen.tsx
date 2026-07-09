@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Localized, useLocalization } from '@fluent/react';
+import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
+import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -14,7 +15,6 @@ const STATUS_LABELS: Record<KdsStatus, string> = {
 };
 
 export default function KdsScreen() {
-  const { l10n } = useLocalization();
   const { session } = useAuth();
   const userId = session?.user_id ?? '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
@@ -68,24 +68,11 @@ export default function KdsScreen() {
                 <p className="kds-empty"><Localized id="kds-no-orders">No orders yet</Localized></p>
               ) : (
                 grouped(status).map((order) => (
-                  <button
+                  <KdsTicketCard
                     key={order.id}
-                    className="kds-ticket"
-                    onClick={() => advanceStatus(order)}
-                    aria-label={l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })}
-                  >
-                    <div className="kds-ticket-header">
-                      <span className="kds-ticket-number">#{order.display_number}</span>
-                      <span className="kds-ticket-time">{timeAgo(order.received_at)}</span>
-                    </div>
-                    <span className="kds-ticket-items">{order.items_summary}</span>
-                    {order.notes && <span className="kds-ticket-notes">{order.notes}</span>}
-                    <span className="kds-ticket-count">
-                      <Localized id="kds-items" vars={{ count: order.item_count }}>
-                        {`${order.item_count} items`}
-                      </Localized>
-                    </span>
-                  </button>
+                    order={order}
+                    onAdvance={advanceStatus}
+                  />
                 ))
               )}
             </div>
@@ -94,10 +81,4 @@ export default function KdsScreen() {
       </div>
     </div>
   );
-}
-
-function timeAgo(iso: string): string {
-  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return 'now';
-  return `${minutes}m`;
 }

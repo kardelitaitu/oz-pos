@@ -201,6 +201,42 @@
   border-left: 4px solid var(--kds-ready);
 }
 
+/* ── SLA level color modifiers ─────────────────────────────────── */
+
+.kds-ticket--green {
+  --sla-glow: rgba(16, 185, 129, 0.25);
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.kds-ticket--yellow {
+  --sla-glow: rgba(245, 158, 11, 0.35);
+  border-color: var(--kds-pending);
+  box-shadow: 0 0 8px var(--sla-glow);
+}
+
+.kds-ticket--red {
+  --sla-glow: rgba(239, 68, 68, 0.5);
+  border-color: #ef4444;
+  box-shadow: 0 0 12px var(--sla-glow);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kds-ticket--red {
+    animation: kds-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes kds-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.7);
+  }
+}
+
+/* ── Ticket header ──────────────────────────────────────────────── */
+
 .kds-ticket-header {
   display: flex;
   justify-content: space-between;
@@ -220,6 +256,19 @@
   background: var(--kds-column-bg);
   padding: 2px 10px;
   border-radius: 20px;
+}
+
+.kds-ticket-time--green {
+  color: #10b981;
+}
+
+.kds-ticket-time--yellow {
+  color: var(--kds-pending);
+}
+
+.kds-ticket-time--red {
+  color: #ef4444;
+  font-weight: 700;
 }
 
 .kds-ticket-items {

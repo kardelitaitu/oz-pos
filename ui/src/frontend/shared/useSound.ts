@@ -80,5 +80,26 @@ export function useSound() {
     } catch { /* ignore */ }
   }, []);
 
-  return { playBeep, playError, playSuccess, setSoundEnabled: setEnabled };
+  const playAlert = useCallback(() => {
+    if (!enabledRef.current) return;
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    try {
+      // Three ascending pulses: 523Hz → 659Hz → 784Hz (C5 → E5 → G5)
+      [523, 659, 784].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'square';
+        gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.15);
+        osc.start(ctx.currentTime + i * 0.18);
+        osc.stop(ctx.currentTime + i * 0.18 + 0.2);
+      });
+    } catch { /* ignore */ }
+  }, []);
+
+  return { playBeep, playError, playSuccess, playAlert, setSoundEnabled: setEnabled };
 }
