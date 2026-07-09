@@ -13,6 +13,7 @@
 
 pub mod commands;
 pub mod error;
+pub mod lan_server;
 pub mod state;
 
 use crate::error::AppError;
@@ -47,6 +48,34 @@ pub fn run() {
                 let state = app_handle.state::<AppState>();
                 state.sync_daemon.start(db).await;
             });
+
+            // ── LAN event forwarder ────────────────────────────────────
+            let forwarder = crate::lan_server::LanEventForwarder::new();
+            let handle = forwarder.handle();
+            tauri::async_runtime::spawn(forwarder.run());
+
+            // Subscribe event bus handlers for LAN forwarding.
+            // Use try_lock() because .setup() is synchronous.
+            {
+                let state = app.state::<AppState>();
+                if let Ok(kernel) = state.kernel.try_lock() {
+                    let bus = kernel.event_bus();
+                    bus.subscribe(
+                        "sale.completed",
+                        Box::new(handle.sale_completed_handler()),
+                    );
+                    bus.subscribe(
+                        "order.course_fired",
+                        Box::new(handle.course_fired_handler()),
+                    );
+                    tracing::info!(
+                        "LAN event forwarder handlers registered for sale.completed and order.course_fired"
+                    );
+                } else {
+                    tracing::warn!("kernel lock contended, LAN handlers not registered");
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
