@@ -359,6 +359,8 @@ data-mgmt-backup-backing-up = Backing up…
 
 # Toast notifications
 data-mgmt-toast-backup-success = Backup created successfully
+data-mgmt-export-complete-aria = Export complete
+data-mgmt-import-complete-aria = Import complete
 data-mgmt-toast-backup-fail = Backup failed
 data-mgmt-toast-export-select-type = Select at least one data type to export
 data-mgmt-toast-export-password-length = Password must be at least 8 characters

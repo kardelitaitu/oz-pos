@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Spinner } from '@/components/Spinner';
 import { useToast } from '@/hooks/useToast';
 import {
   getBackupStatus,
@@ -495,13 +496,13 @@ export default function DataManagementScreen() {
                   </Localized>
                 )}
 
-                <div className="data-mgmt-progress-bar">
-                  <div
-                    className="data-mgmt-progress-fill"
-                    style={{ width: `${exportState.progress}%` }}
-                  />
+                <div className="data-mgmt-progress">
+                  {exportState.step === 'exporting' ? (
+                    <Spinner size="md" />
+                  ) : (
+                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-export-complete-aria')}>✓</span>
+                  )}
                 </div>
-                <span className="data-mgmt-progress-text">{exportState.progress}%</span>
 
                 {exportState.step === 'done' && (
                   <>
@@ -639,13 +640,13 @@ export default function DataManagementScreen() {
                   </Localized>
                 )}
 
-                <div className="data-mgmt-progress-bar">
-                  <div
-                    className="data-mgmt-progress-fill"
-                    style={{ width: `${importState.progress}%` }}
-                  />
+                <div className="data-mgmt-progress">
+                  {importState.step === 'importing' ? (
+                    <Spinner size="md" />
+                  ) : (
+                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-import-complete-aria')}>✓</span>
+                  )}
                 </div>
-                <span className="data-mgmt-progress-text">{importState.progress}%</span>
 
                 {importState.dryRun && (
                   <div className="data-mgmt-dry-run">
