@@ -249,9 +249,10 @@ Each app crate has an identical command surface, wired through `platform-startup
 - See [MODULAR_APP_PLAN.md](./MODULAR_APP_PLAN.md) for detailed execution roadmaps covering dynamic module lifecycle hot-reloading (`platform/kernel`), LAN peer-to-peer KDS sync, and Docker containerized cloud server deployments (`apps/cloud-server`).
 
 ---
-## License & Contributions
-- Open‑source MIT license.
-- Contributions welcome via pull‑requests; follow the project's coding standards (Rust fmt, Clippy, TypeScript lint).
+## License & Commercial Governance
+- **Proprietary & Confidential (`All Rights Reserved`)**: See [`LICENSE`](../LICENSE) for terms.
+- No commercial deployment, redistribution, or modification is permitted without an executed commercial license agreement from OZ-POS Contributors.
+- Internal developer contributions are governed under proprietary contributor agreements; all code strictly adheres to pre-commit quality gates (`cargo fmt + clippy + i18n lint + bundle parity`).
 
 ---
 *Document generated on 2026‑06‑29.*

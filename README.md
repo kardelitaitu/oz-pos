@@ -212,6 +212,10 @@ New contributors are encouraged to start with documentation improvements, UI pol
 
 ---
 
-## License
+## License & Commercial Use
 
-MIT License — see [LICENSE](./LICENSE) for details. By contributing, you agree that your contributions will be licensed under the MIT License.
+**Proprietary and Confidential — Copyright (c) 2024-2026 OZ-POS Contributors / All Rights Reserved.**
+
+This software (`oz-pos`) is **NOT open source**. No part of this codebase, associated binaries, or documentation may be copied, modified, distributed, sublicensed, hosted, or deployed in any commercial, non-commercial, or production setting without explicit written permission and a valid executed Commercial License Agreement.
+
+See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **license@oz-pos.com**.
