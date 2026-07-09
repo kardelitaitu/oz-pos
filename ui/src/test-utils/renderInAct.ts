@@ -16,9 +16,9 @@
 //   await renderInAct(<MyComponent />);
 //   await waitFor(() => expect(screen.getByText('…')).toBeInTheDocument());
 
+import { act } from 'react';
 import type { ReactElement } from 'react';
 import {
-  act,
   render,
   renderHook,
   type RenderHookOptions,

@@ -44,7 +44,7 @@
 
 import { vi, expect } from 'vitest';
 import { useState, type ReactNode } from 'react';
-import { act } from '@testing-library/react';
+import { act } from 'react';
 
 // ── Mutable ref ───────────────────────────────────────────────────
 
