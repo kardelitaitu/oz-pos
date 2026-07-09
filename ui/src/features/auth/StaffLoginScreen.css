@@ -73,14 +73,6 @@
 }
 
 
-.staff-login-title {
-  margin: 0;
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--color-accent);
-  letter-spacing: var(--tracking-tight);
-}
-
 /* ── Step indicator ──────────────────────────────────────────────── */
 
 .staff-login-steps {

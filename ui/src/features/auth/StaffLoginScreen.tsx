@@ -302,21 +302,10 @@ export default function StaffLoginScreen() {
             <UserIcon />
           )}
         </div>
-        {brandSettings?.store_name?.trim() ? (
-          <h1 className="staff-login-title">{brandSettings.store_name}</h1>
-        ) : (
-          <Localized id="staff-login-title">
-            <h1 className="staff-login-title">OZ-POS</h1>
-          </Localized>
-        )}
 
-        {step === 'username' ? (
+        {step === 'username' && (
           <Localized id="staff-login-step-username">
             <p className="staff-login-step-label">Enter your username</p>
-          </Localized>
-        ) : (
-          <Localized id="staff-login-step-pin">
-            <p className="staff-login-step-label">Enter your PIN</p>
           </Localized>
         )}
 
