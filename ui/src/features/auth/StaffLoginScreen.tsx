@@ -310,13 +310,6 @@ export default function StaffLoginScreen() {
           </Localized>
         )}
 
-        {/* Step indicator */}
-        <div className="staff-login-steps" role="status" aria-label={l10n.getString('staff-login-progress-aria')}>
-          <span className={`staff-login-step-dot ${step === 'username' ? 'staff-login-step-dot--active' : 'staff-login-step-dot--done'}`} />
-          <span className="staff-login-step-line" />
-          <span className={`staff-login-step-dot ${step === 'pin' ? 'staff-login-step-dot--active' : ''}`} />
-        </div>
-
         {step === 'username' ? (
           <Localized id="staff-login-step-username">
             <p className="staff-login-step-label">Enter your username</p>
@@ -420,6 +413,13 @@ export default function StaffLoginScreen() {
             </button>
           </Localized>
         )}
+
+        {/* Step indicator */}
+        <div className="staff-login-steps" role="status" aria-label={l10n.getString('staff-login-progress-aria')}>
+          <span className={`staff-login-step-dot ${step === 'username' ? 'staff-login-step-dot--active' : 'staff-login-step-dot--done'}`} />
+          <span className="staff-login-step-line" />
+          <span className={`staff-login-step-dot ${step === 'pin' ? 'staff-login-step-dot--active' : ''}`} />
+        </div>
       </div>
     </div>
   );
