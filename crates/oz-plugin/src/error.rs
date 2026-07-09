@@ -12,6 +12,8 @@ pub enum PluginError {
     NotFound(String),
     #[error("permission denied: {0}")]
     PermissionDenied(String),
+    #[error("archive error: {0}")]
+    Archive(String),
 }
 
 #[cfg(test)]
