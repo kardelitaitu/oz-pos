@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import { act } from 'react';
 import { usePosState } from '@/features/sales/usePosState';
 import { COURSES, courseLabel, courseEmoji } from '@/types/domain';
@@ -46,18 +46,18 @@ describe('Course domain types', () => {
 // ── usePosState course methods ───────────────────────────────────────
 
 describe('usePosState course methods', () => {
-  function renderHarness() {
+  async function renderHarness() {
     const ref: { current: ReturnType<typeof usePosState> } = { current: null! };
     function Harness() {
       ref.current = usePosState();
       return null;
     }
-    render(<Harness />);
+    await renderInAct(<Harness />);
     return ref;
   }
 
-  it('assignCourse sets courseId and coursingStatus to hold', () => {
-    const ref = renderHarness();
+  it('assignCourse sets courseId and coursingStatus to hold', async () => {
+    const ref = await renderHarness();
     act(() => {
       ref.current.addProduct({
         sku: 'STEAK' as never, name: 'Ribeye', category: 'Main',
@@ -72,8 +72,8 @@ describe('usePosState course methods', () => {
     expect(ref.current.lines[0]!.coursingStatus).toBe('hold');
   });
 
-  it('fireCourse fires only the specified course', () => {
-    const ref = renderHarness();
+  it('fireCourse fires only the specified course', async () => {
+    const ref = await renderHarness();
     act(() => {
       ref.current.addProduct({ sku: 'STEAK' as never, name: 'Ribeye', category: 'Main', price: { minor_units: 150000, currency: 'IDR' }, barcode: null, inStock: true, stockQty: null, productType: 'restaurant' });
       ref.current.addProduct({ sku: 'COLA' as never, name: 'Cola', category: 'Beverage', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, inStock: true, stockQty: null, productType: 'restaurant' });
@@ -89,8 +89,8 @@ describe('usePosState course methods', () => {
     expect(ref.current.lines.find((l) => l.sku === 'COLA')!.coursingStatus).toBe('hold');
   });
 
-  it('fireAllCourses fires all held items', () => {
-    const ref = renderHarness();
+  it('fireAllCourses fires all held items', async () => {
+    const ref = await renderHarness();
     act(() => {
       ref.current.addProduct({ sku: 'STEAK' as never, name: 'Ribeye', category: 'Main', price: { minor_units: 150000, currency: 'IDR' }, barcode: null, inStock: true, stockQty: null, productType: 'restaurant' });
       ref.current.addProduct({ sku: 'COLA' as never, name: 'Cola', category: 'Beverage', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, inStock: true, stockQty: null, productType: 'restaurant' });
@@ -105,8 +105,8 @@ describe('usePosState course methods', () => {
     expect(ref.current.lines.every((l) => l.coursingStatus === 'fired')).toBe(true);
   });
 
-  it('assignCourse same course twice is a no-op', () => {
-    const ref = renderHarness();
+  it('assignCourse same course twice is a no-op', async () => {
+    const ref = await renderHarness();
     act(() => {
       ref.current.addProduct({ sku: 'STEAK' as never, name: 'Ribeye', category: 'Main', price: { minor_units: 150000, currency: 'IDR' }, barcode: null, inStock: true, stockQty: null, productType: 'restaurant' });
     });
@@ -117,8 +117,8 @@ describe('usePosState course methods', () => {
     expect(ref.current.lines[0]!.coursingStatus).toBe('hold');
   });
 
-  it('unassigned items have undefined courseId and coursingStatus', () => {
-    const ref = renderHarness();
+  it('unassigned items have undefined courseId and coursingStatus', async () => {
+    const ref = await renderHarness();
     act(() => {
       ref.current.addProduct({ sku: 'STEAK' as never, name: 'Ribeye', category: 'Main', price: { minor_units: 150000, currency: 'IDR' }, barcode: null, inStock: true, stockQty: null, productType: 'retail' });
     });
@@ -127,8 +127,8 @@ describe('usePosState course methods', () => {
     expect(ref.current.lines[0]!.coursingStatus).toBeUndefined();
   });
 
-  it('fireCourse on empty course does not crash', () => {
-    const ref = renderHarness();
+  it('fireCourse on empty course does not crash', async () => {
+    const ref = await renderHarness();
     act(() => { ref.current.fireCourse('appetizer'); });
     expect(ref.current.lines.length).toBe(0);
   });

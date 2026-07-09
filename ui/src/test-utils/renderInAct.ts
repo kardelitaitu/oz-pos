@@ -49,6 +49,25 @@ export async function renderInAct(
 }
 
 /**
+ * Wrap an async operation in `await act()` so state updates triggered
+ * by user interactions (e.g., `userEvent.click()`, `fireEvent.change()`)
+ * are flushed inside React's act() boundary. Use this when a test
+ * triggers async state changes and you want to avoid act() warnings.
+ *
+ * Usage:
+ *
+ *   await actAsync(async () => {
+ *     await userEvent.click(screen.getByRole('button'));
+ *   });
+ *   await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
+ */
+export async function actAsync(fn: () => Promise<void> | void): Promise<void> {
+  await act(async () => {
+    await fn();
+  });
+}
+
+/**
  * Render a hook via `renderHook` inside an `await act()` boundary.
  * Same rationale as `renderInAct` — async mount-effect state updates
  * (e.g., a hook whose `useEffect` fires an async IPC on mount) are
