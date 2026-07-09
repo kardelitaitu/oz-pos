@@ -259,8 +259,10 @@ describe('AppShell — KDS workspace navigation', () => {
         expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
       });
 
-      // Invoke the idle callback to simulate timeout
-      idleCallback?.();
+      // Invoke the idle callback to simulate timeout inside act
+      await act(() => {
+        idleCallback?.();
+      });
 
       expect(mockSetActive).toHaveBeenCalledWith(null);
     });
@@ -302,8 +304,10 @@ describe('AppShell — KDS workspace navigation', () => {
         expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
       });
 
-      // Invoke the idle callback to simulate timeout on the picker
-      idleCallback?.();
+      // Invoke the idle callback to simulate timeout on the picker inside act
+      await act(() => {
+        idleCallback?.();
+      });
 
       expect(mockLogout).toHaveBeenCalledTimes(1);
     });
@@ -346,8 +350,10 @@ describe('AppShell — KDS workspace navigation', () => {
         expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
       });
 
-      // Invoke the idle callback
-      idleCallback?.();
+      // Invoke the idle callback inside act
+      await act(() => {
+        idleCallback?.();
+      });
 
       // Should NOT call setActiveWorkspace when already on picker
       expect(mockSetActive).not.toHaveBeenCalled();

@@ -15,7 +15,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
-import { render, act, fireEvent, screen } from '@testing-library/react';
+import { act } from 'react';
+import { render, fireEvent, screen } from '@testing-library/react';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 
 import {

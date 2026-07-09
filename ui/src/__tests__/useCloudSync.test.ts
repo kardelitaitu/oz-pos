@@ -12,7 +12,7 @@
 // `vi.hoisted` so the mock factories can reference them.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from '@testing-library/react';
+import { act } from 'react';
 import { renderHookInAct } from '@/test-utils/renderInAct';
 import {
   useCloudSync,

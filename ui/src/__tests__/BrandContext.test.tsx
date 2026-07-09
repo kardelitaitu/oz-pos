@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // `render` is kept in the import below — the 'throws when used outside
 // BrandProvider' test relies on a synchronous throw during render, so
 // `renderInAct`'s async boundary cannot be used there.
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { act } from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { BrandProvider, useBrand } from '@/contexts/BrandContext';
 

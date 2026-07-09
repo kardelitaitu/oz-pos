@@ -12,7 +12,7 @@
 // if fake timers are already active at mount.
 
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act } from 'react';
 import { renderHookInAct } from '@/test-utils/renderInAct';
 import { useAnimatedUndoStack } from '@/hooks/useAnimatedUndoStack';
 

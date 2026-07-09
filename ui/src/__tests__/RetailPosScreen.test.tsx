@@ -5,7 +5,7 @@
 // payment modal, credit reminders, quantity picker, keyboard shortcuts.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act } from 'react';
 import type { ReactNode } from 'react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';

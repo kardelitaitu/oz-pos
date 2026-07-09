@@ -14,7 +14,8 @@
 // outcomes without touching the real Tauri runtime.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, act, fireEvent } from '@testing-library/react';
+import { act } from 'react';
+import { render, fireEvent } from '@testing-library/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import UpdateBanner from '@/components/UpdateBanner';

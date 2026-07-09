@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, act } from '@testing-library/react';
+import { act } from 'react';
+import { screen, waitFor } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';

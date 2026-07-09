@@ -6,7 +6,7 @@
 // 3. Expanded items appear in the cart
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act } from 'react';
 import type { ReactNode } from 'react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { screen, waitFor } from '@testing-library/react';

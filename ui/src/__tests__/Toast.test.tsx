@@ -7,7 +7,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useRef } from 'react';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { act } from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import { ToastProvider, useToast } from '@/frontend/shared/Toast';
