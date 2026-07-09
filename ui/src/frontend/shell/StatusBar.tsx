@@ -72,6 +72,7 @@ export default function StatusBar() {
           className="statusbar-btn"
           onClick={goToWorkspacePicker}
           aria-label={l10n.getString('nav-switch-workspace')}
+          title={l10n.getString('nav-switch-workspace')}
         >
           <svg
             viewBox="0 0 24 24"
