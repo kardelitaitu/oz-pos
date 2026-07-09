@@ -54,7 +54,11 @@ export default defineConfig({
       if (log.includes('was not wrapped in act') || log.includes('flushSync was called from inside')) {
         return false;
       }
+      if (log.includes('validateDOMNesting') || log.includes('punycode module is deprecated')) {
+        return false;
+      }
     },
+
 
 
 

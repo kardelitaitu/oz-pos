@@ -59,7 +59,8 @@ jobs:
           # in the same joined bundle define the same key; the
           # latter are emitted by the translation gate in
           # ui/src/__tests__/i18nBundle.test.tsx.
-          npm run test -- --reporter=verbose 2>&1 | tee ui/vitest-output.log
+          npm run test -- --reporter=verbose 2>&1 | tee vitest-output.log
+
 
       # ── i18n quality gate (mirrors `.github/workflows/ci.yml#ui`) ────
       #

@@ -57,7 +57,8 @@ jobs:
       - run: cd ui && npm ci --no-audit --no-fund
       - run: cd ui && npm run lint
       - run: cd ui && npm run typecheck
-      - run: cd ui && npm run test -- --reporter=verbose 2>&1 | tee ui/vitest-output.log
+      - run: (cd ui && npm run test -- --reporter=verbose 2>&1) | tee ui/vitest-output.log
+
       # Hard-fail on any act() or flushSync warnings. Components
       # whose mount effect fires an async IPC must use the
       # `renderInAct` / `renderHookInAct` helper from

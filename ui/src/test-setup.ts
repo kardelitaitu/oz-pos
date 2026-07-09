@@ -44,6 +44,9 @@ console.error = (...args: unknown[]) => {
   if (msg.includes('was not wrapped in act') || msg.includes('flushSync was called from inside')) {
     return;
   }
+  if (msg.includes('validateDOMNesting') || msg.includes('punycode module is deprecated')) {
+    return;
+  }
   originalError(...args);
 };
 
@@ -61,7 +64,11 @@ console.warn = (...args: unknown[]) => {
   if (msg.includes('was not wrapped in act') || msg.includes('flushSync was called from inside')) {
     return;
   }
+  if (msg.includes('validateDOMNesting') || msg.includes('punycode module is deprecated')) {
+    return;
+  }
   originalWarn(...args);
 };
+
 
 

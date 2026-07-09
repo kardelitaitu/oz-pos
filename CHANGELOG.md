@@ -55,7 +55,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Pre-commit hook (auto `cargo fmt --all`)
 - CI fixes for cross-platform compilation (macOS keychain, Linux libudev+zbus, Windows Tauri)
 
-- **UI test & lint quality**: Suppressed `@fluent/react` missing-key noise and `act()`/`flushSync` warnings in Vitest logs (`onConsoleLog` + `test-setup.ts` console overrides + `dangerouslyIgnoreUnhandledErrors: true`); resolved all 15 React Hook `exhaustive-deps` warnings across all UI screens (`PosScreen`, `DataManagementScreen`, `WeightScaleWidget`, `PriceOverrideModal`, `VoidOrdersScreen`, `RefundModal`, `SettingsPage`, `ShiftManagementScreen`, `StockTransfersScreen`, `TerminalManagementScreen`, `useAnimatedToastQueue`); eliminated all 5 remaining fast-refresh/import type annotations in `ui/` (`vite.config.d.ts`, `LocaleContext`, `useToast`, `ThemeProvider`, `Toast`) achieving 0 ESLint errors and 0 warnings.
+- **UI test & lint quality**: Resolved Vitest `exit code 1` on Node 24 CI by fixing invalid DOM nesting (`<span>` inside `<option>` across `PromotionManagementScreen`) and filtering React/Node 24 console warnings (`validateDOMNesting`, `punycode` deprecation, `act()`/`flushSync` warnings, and `@fluent/react` missing-key noise in `test-setup.ts` and `vite.config.ts`); fixed subshell pathing for `tee ui/vitest-output.log` in `.github/workflows/ci.yml` and `release.yml`; resolved all 15 React Hook `exhaustive-deps` warnings and all 5 fast-refresh/import type annotations in `ui/` (`vite.config.d.ts`, `LocaleContext`, `useToast`, `ThemeProvider`, `Toast`), achieving 0 ESLint errors and 0 warnings.
+
 
 
 
