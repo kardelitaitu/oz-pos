@@ -9,8 +9,8 @@ Separate retail products from restaurant menu items at the data model level.
 |------|------|------|
 | 1.1 | **DB migration** | Add `product_type TEXT NOT NULL DEFAULT 'retail'` to `products` ✓ |
 | 1.2 | **Rust** | Update `Product` struct + `ProductType` enum + DB queries + command args ✓ |
-| 1.3 | **Rust** | Update KDS order creation to skip lines whose product has `product_type = 'retail'` |
-| 1.4 | **Rust** | Add optional `restaurant_meta` table (prep_time_seconds, course_number, recipe_id, modifier_group_ids) |
+| 1.3 | **Rust** | Update KDS order creation to skip lines whose product has `product_type = 'retail'` ✓ |
+| 1.4 | **Rust** | *(deferred)* Add optional `restaurant_meta` table (prep_time_seconds, course_number, recipe_id, modifier_group_ids) |
 | 1.5 | **TS types** | Update `Product` / `ProductDto` / `CreateProductInput` with `productType` |
 | 1.6 | **RetailPosScreen** | Filter product grid to `product_type IN ('retail','both')` |
 | 1.7 | **RestaurantMenu** | Filter to `product_type IN ('restaurant','both')` |

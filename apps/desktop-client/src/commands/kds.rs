@@ -74,7 +74,7 @@ pub async fn create_kds_order_from_sale(
     user_id: String,
     sale_id: String,
     state: State<'_, AppState>,
-) -> Result<KdsOrder, AppError> {
+) -> Result<Option<KdsOrder>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;

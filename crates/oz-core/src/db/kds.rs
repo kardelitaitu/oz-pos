@@ -187,22 +187,35 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
-    /// Complete a sale to a KDS order: creates a KDS ticket from a completed sale.
+    /// Complete a sale to a KDS order: creates a KDS ticket from a completed sale
+    /// for items whose product type is `restaurant` or `both`.
     ///
-    /// Builds items_summary from sale line data and creates the KDS order
-    /// with 'pending' status.
-    pub fn complete_sale_to_kds(&self, sale_id: &str) -> Result<KdsOrder, CoreError> {
+    /// Returns `Ok(None)` when the sale has no restaurant-eligible items.
+    pub fn complete_sale_to_kds(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
             id: sale_id.to_owned(),
         })?;
 
-        let items_summary = sale
+        // Keep only lines whose product is restaurant or both.
+        let kds_lines: Vec<_> = sale
             .lines
             .iter()
+            .filter(|l| {
+                self.product_type_by_sku(&l.sku)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|pt| pt == "restaurant" || pt == "both")
+            })
+            .collect();
+
+        if kds_lines.is_empty() {
+            return Ok(None);
+        }
+
+        let items_summary = kds_lines
+            .iter()
             .map(|l| {
-                // Strip the SKU prefix from the line for display.
-                // If we can find a product name, use that; otherwise fall back to SKU.
                 let name = self
                     .product_name_by_sku(&l.sku)
                     .ok()
@@ -217,7 +230,7 @@ impl Store<'_> {
             .collect::<Vec<_>>()
             .join(", ");
 
-        let item_count: i64 = sale.lines.iter().map(|l| l.qty).sum();
+        let item_count: i64 = kds_lines.iter().map(|l| l.qty).sum();
 
         let notes = String::new();
 
@@ -227,6 +240,19 @@ impl Store<'_> {
             item_count,
             notes,
         })
+        .map(Some)
+    }
+
+    fn product_type_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT product_type FROM products WHERE sku = ?1")?;
+        let result = stmt.query_row(params![sku], |row| row.get::<_, String>(0));
+        match result {
+            Ok(pt) => Ok(Some(pt)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn product_name_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
@@ -270,7 +296,7 @@ mod tests {
 
     fn seed_product(conn: &Connection, sku: &str, name: &str) {
         let s = store(conn);
-        s.create_product(sku, name, price(500), None, None, 100, None)
+        s.create_product(sku, name, price(500), None, None, 100, Some("restaurant"))
             .unwrap();
     }
 
@@ -619,7 +645,7 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        let order = s.complete_sale_to_kds(&sale.id).unwrap();
+        let order = s.complete_sale_to_kds(&sale.id).unwrap().unwrap();
         assert_eq!(order.sale_id, sale.id);
         assert_eq!(order.status, "pending");
         assert!(order.items_summary.contains("Coffee"));
