@@ -13,7 +13,7 @@
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 13 |
-| 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 2 |
+| 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 5 |
 | 5 | Cloud Server & Docker Containerization | 8 | 8 |
 | | **Total** | **46** | **46** |
 
@@ -108,7 +108,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ---
 
-### Phase 2: Dynamic Runtime Kernel & Safeguards (Backend Polish) `[4/10]`
+### Phase 2: Dynamic Runtime Kernel & Safeguards (Backend Polish) `[10/10]`
 
 #### 2.1 Dynamic Module Lifecycle (`platform/kernel`)
 
@@ -132,7 +132,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ---
 
-### Phase 3: Restaurant Workflow & Offline LAN KDS Sync `[0/13]`
+### Phase 3: Restaurant Workflow & Offline LAN KDS Sync `[13/13]`
 
 #### 3.1 Recipe / Bill of Materials (BOM) Stock Deduction
 
@@ -170,7 +170,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ---
 
-### Phase 4: Packaging, Plugin Ecosystem & Automated Matrix Testing `[0/5]`
+### Phase 4: Packaging, Plugin Ecosystem & Automated Matrix Testing `[5/5]`
 
 #### 4.1 Module Manifest Verification
 
@@ -190,7 +190,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ---
 
-### Phase 5: Cloud Server & Docker Containerization `[0/8]`
+### Phase 5: Cloud Server & Docker Containerization `[8/8]`
 
 #### 5.1 Headless Cloud Server Binary (`apps/cloud-server`)
 
