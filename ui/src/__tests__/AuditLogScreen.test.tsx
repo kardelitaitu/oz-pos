@@ -18,6 +18,8 @@ vi.mock('@/api/audit', () => ({
 
 const bundle = new FluentBundle('en-US');
 bundle.addResource(new FluentResource(sharedFtl));
+// Suppress Fluent errors for fallback test: 'shows fallback action key for unknown actions'
+bundle.addResource(new FluentResource('custom.event = Custom Event\n'));
 const l10n = new ReactLocalization([bundle]);
 
 async function renderScreen() {

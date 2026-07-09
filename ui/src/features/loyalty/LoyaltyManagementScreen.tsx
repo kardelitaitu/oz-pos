@@ -285,7 +285,8 @@ export default function LoyaltyManagementScreen() {
                                           <td>{txn.description}</td>
                                           <td className="loyalty-txn-date">{new Date(txn.created_at).toLocaleDateString()}</td>
                                         </tr>
-                                      ))}                                      </tbody>
+                                      ))}
+                                    </tbody>
                                     </table>
                                 )}
                               </div>
@@ -294,7 +295,8 @@ export default function LoyaltyManagementScreen() {
                         )}
                       </Fragment>
                     );
-                  })}                  </tbody>
+                  })}
+                </tbody>
                 </table>
               </div>
           )}

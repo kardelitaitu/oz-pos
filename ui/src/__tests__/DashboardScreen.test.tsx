@@ -237,7 +237,7 @@ describe('DashboardScreen', () => {
   it('renders low stock items with name and quantity', async () => {
     const alerts = [
       buildLowStockAlert({ name: 'Milk', current_qty: 2 }),
-      buildLowStockAlert({ name: 'Sugar', current_qty: 5 }),
+      buildLowStockAlert({ product_id: 'prod-sugar', name: 'Sugar', current_qty: 5 }),
     ];
     mockGetDailyRevenue.mockResolvedValue([]);
     mockGetTopProducts.mockResolvedValue([]);

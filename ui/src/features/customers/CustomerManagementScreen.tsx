@@ -277,8 +277,9 @@ export default function CustomerManagementScreen() {
                     </Localized>
                   </td>
                 </tr>
-              ))}                  </tbody>
-                </table>
+              ))}
+            </tbody>
+          </table>
               </div>
       )}
 
