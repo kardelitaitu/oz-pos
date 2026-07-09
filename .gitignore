@@ -57,3 +57,6 @@ ui/vitest-output.log
 /ui/.eslintcache
 /ui/.stylelintcache
 nul
+ui/vite.config.js
+ui/tsconfig.tsbuildinfo
+ui/tsconfig.node.tsbuildinfo

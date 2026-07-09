@@ -7,7 +7,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import type { UseTerminalProfileResult } from '@/hooks/useTerminalProfile';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@/frontend/shared/Toast';
