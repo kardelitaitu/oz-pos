@@ -218,4 +218,4 @@ New contributors are encouraged to start with documentation improvements, UI pol
 
 This software (`oz-pos`) is **NOT open source**. No part of this codebase, associated binaries, or documentation may be copied, modified, distributed, sublicensed, hosted, or deployed in any commercial, non-commercial, or production setting without explicit written permission and a valid executed Commercial License Agreement.
 
-See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **license@oz-pos.com**.
+See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **adikaradwiatmaja@gmail.com**.

@@ -78,6 +78,27 @@ else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
 fi
 
+# ── Docker build smoke test (optional: --docker-dry-run) ──────────────────
+if [ "${1:-}" = "--docker-dry-run" ]; then
+    if command -v docker &>/dev/null; then
+        step "docker build" "docker build -f Dockerfile.server -t oz-pos-cloud:local ." docker build -f Dockerfile.server -t oz-pos-cloud:local .
+
+        SIZE=$(docker run --rm --entrypoint stat oz-pos-cloud:local --format=%s /app/oz-cloud-server 2>/dev/null || echo "0")
+        if [ "$SIZE" -gt "0" ]; then
+            MAX=$((50 * 1024 * 1024))
+            if [ "$SIZE" -gt "$MAX" ]; then
+                echo -e "${RED}Binary size $SIZE exceeds 50 MB limit${NC}"
+                exit 1
+            fi
+            echo -e "${GREEN}Binary size: $((SIZE / 1024 / 1024)) MB (OK)${NC}"
+        else
+            echo -e "${YELLOW}⚠ Could not verify binary size (container may have exited)${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠ Docker build skipped (docker not found)${NC}"
+    fi
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────
 total_end=$(date +%s)
 echo -e "${GREEN}all checks passed ($((total_end - total_start))s)${NC}"
