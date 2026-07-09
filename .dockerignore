@@ -1,0 +1,46 @@
+# ── OZ-POS .dockerignore ────────────────────────────────────────────
+#
+# Exclude everything that is not needed for building the cloud-server
+# binary: node_modules, Tauri build artifacts, IDE configs, etc.
+
+# Version control
+.git
+.gitignore
+.gitattributes
+.gitmodules
+.githooks
+
+# CI / GitHub
+.github
+
+# Documentation & design docs (not needed at compile time)
+docs
+
+# Front-end (Node.js / Tauri) — not needed for cloud-server
+ui
+node_modules
+apps/desktop-client
+apps/tablet-client
+
+# IDE / editor configs
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS garbage
+.DS_Store
+Thumbs.db
+
+# Rust build artifacts (will be rebuilt in the container)
+target
+
+# Environment / secrets
+.env
+*.env
+oz-pos-updater.key.pub
+
+# Temporary / generated files
+*.log
+*.tmp
+Cargo.lock.bak

@@ -198,8 +198,7 @@ mod tests {
 
     /// Create a test JWT token scoped to the given tenant.
     fn test_token(tenant_id: Option<&str>) -> String {
-        oz_api::auth::create_token("test", Some(24), tenant_id)
-            .token
+        oz_api::auth::create_token("test", Some(24), tenant_id).token
     }
 
     /// Helper: build an authorized request builder with a Bearer token.
@@ -440,7 +439,11 @@ mod tests {
         }
 
         // Should return mid and new for default tenant
-        let req = authed_post("/api/sync/pull", r#"{"since":"2026-01-15T00:00:00Z"}"#, None);
+        let req = authed_post(
+            "/api/sync/pull",
+            r#"{"since":"2026-01-15T00:00:00Z"}"#,
+            None,
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -492,14 +495,22 @@ mod tests {
         }
 
         // Tenant A sees 2 pending
-        let req_a = authed(axum::http::Method::GET, "/api/sync/status", Some("tenant-a"));
+        let req_a = authed(
+            axum::http::Method::GET,
+            "/api/sync/status",
+            Some("tenant-a"),
+        );
         let resp_a = app.clone().oneshot(req_a).await.unwrap();
         let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
         let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
         assert_eq!(json_a["pending_count"], 2);
 
         // Tenant B sees 1 pending
-        let req_b = authed(axum::http::Method::GET, "/api/sync/status", Some("tenant-b"));
+        let req_b = authed(
+            axum::http::Method::GET,
+            "/api/sync/status",
+            Some("tenant-b"),
+        );
         let resp_b = app.clone().oneshot(req_b).await.unwrap();
         let body_b = resp_b.into_body().collect().await.unwrap().to_bytes();
         let json_b: serde_json::Value = serde_json::from_slice(&body_b).unwrap();
@@ -523,7 +534,11 @@ mod tests {
         }
 
         // Tenant C (no items) sees 0
-        let req = authed(axum::http::Method::GET, "/api/sync/status", Some("tenant-c"));
+        let req = authed(
+            axum::http::Method::GET,
+            "/api/sync/status",
+            Some("tenant-c"),
+        );
         let resp = app.oneshot(req).await.unwrap();
         let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();

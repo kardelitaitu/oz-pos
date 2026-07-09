@@ -246,8 +246,7 @@ mod tests {
         // Auth middleware on sync router catches unknown routes before
         // the 404 handler; both 401 and 404 are acceptable.
         assert!(
-            resp.status() == StatusCode::UNAUTHORIZED
-                || resp.status() == StatusCode::NOT_FOUND,
+            resp.status() == StatusCode::UNAUTHORIZED || resp.status() == StatusCode::NOT_FOUND,
             "expected 401 or 404, got: {}",
             resp.status()
         );

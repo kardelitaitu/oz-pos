@@ -1,0 +1,141 @@
+# ── OZ-POS Cloud Server ──────────────────────────────────────────────
+#
+# Multi-stage Dockerfile that builds the headless cloud-sync binary
+# (oz-cloud-server) and packages it into a minimal runtime image.
+#
+# Usage:
+#
+#   docker build -f Dockerfile.server -t oz-pos-cloud:latest .
+#   docker run -d -p 3099:3099 -v oz-data:/data oz-pos-cloud:latest
+#
+# Environment variables:
+#   OZ_DB_PATH   — SQLite database path (default: /data/oz-pos.db)
+#   OZ_API_PORT  — HTTP listen port (default: 3099)
+#   RUST_LOG     — log level filter (default: info)
+#   OZ_API_SECRET— JWT signing secret (REQUIRED in production)
+
+# ── Stage 1: Builder ─────────────────────────────────────────────────
+FROM rust:1.88-slim AS builder
+
+# Install build dependencies needed by some native crates (rusqlite
+# bundles its own libsqlite3, but some transitive deps might need
+# pkg-config / libc-dev).
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        pkg-config \
+        libc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy manifest files first so Docker can cache dependency downloads.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates/oz-core/Cargo.toml crates/oz-core/
+COPY crates/oz-api/Cargo.toml crates/oz-api/
+COPY crates/oz-logging/Cargo.toml crates/oz-logging/
+COPY crates/oz-hal/Cargo.toml crates/oz-hal/
+COPY crates/oz-lua/Cargo.toml crates/oz-lua/
+COPY crates/oz-plugin/Cargo.toml crates/oz-plugin/
+COPY crates/oz-security/Cargo.toml crates/oz-security/
+COPY crates/oz-payment/Cargo.toml crates/oz-payment/
+COPY crates/oz-reporting/Cargo.toml crates/oz-reporting/
+COPY crates/oz-cli/Cargo.toml crates/oz-cli/
+COPY foundation/Cargo.toml foundation/
+COPY platform/core/Cargo.toml platform/core/
+COPY platform/kernel/Cargo.toml platform/kernel/
+COPY platform/startup/Cargo.toml platform/startup/
+COPY platform/sync/Cargo.toml platform/sync/
+COPY modules/sales/Cargo.toml modules/sales/
+COPY modules/inventory/Cargo.toml modules/inventory/
+COPY modules/crm/Cargo.toml modules/crm/
+COPY modules/tax/Cargo.toml modules/tax/
+COPY modules/settings/Cargo.toml modules/settings/
+COPY modules/staff/Cargo.toml modules/staff/
+COPY modules/reporting/Cargo.toml modules/reporting/
+COPY modules/terminal/Cargo.toml modules/terminal/
+COPY modules/currency/Cargo.toml modules/currency/
+COPY apps/cloud-server/Cargo.toml apps/cloud-server/
+
+# Prime the dependency cache. This layer is cached unless a manifest
+# or lockfile changes.
+RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
+             crates/oz-hal/src crates/oz-lua/src crates/oz-plugin/src \
+             crates/oz-security/src crates/oz-payment/src crates/oz-reporting/src \
+             crates/oz-cli/src foundation/src \
+             platform/core/src platform/kernel/src platform/startup/src \
+             platform/sync/src \
+             modules/sales/src modules/inventory/src \
+             modules/crm/src modules/tax/src modules/settings/src \
+             modules/staff/src modules/reporting/src modules/terminal/src \
+             modules/currency/src \
+             apps/cloud-server/src \
+    && echo "// dummy" > crates/oz-core/src/lib.rs \
+    && echo "// dummy" > crates/oz-api/src/lib.rs \
+    && echo "// dummy" > crates/oz-logging/src/lib.rs \
+    && echo "// dummy" > crates/oz-hal/src/lib.rs \
+    && echo "// dummy" > crates/oz-lua/src/lib.rs \
+    && echo "// dummy" > crates/oz-plugin/src/lib.rs \
+    && echo "// dummy" > crates/oz-security/src/lib.rs \
+    && echo "// dummy" > crates/oz-payment/src/lib.rs \
+    && echo "// dummy" > crates/oz-reporting/src/lib.rs \
+    && echo "// dummy" > crates/oz-cli/src/lib.rs \
+    && echo "// dummy" > foundation/src/lib.rs \
+    && echo "// dummy" > platform/core/src/lib.rs \
+    && echo "// dummy" > platform/kernel/src/lib.rs \
+    && echo "// dummy" > platform/startup/src/lib.rs \
+    && echo "// dummy" > platform/sync/src/lib.rs \
+    && echo "// dummy" > modules/sales/src/lib.rs \
+    && echo "// dummy" > modules/inventory/src/lib.rs \
+    && echo "// dummy" > modules/crm/src/lib.rs \
+    && echo "// dummy" > modules/tax/src/lib.rs \
+    && echo "// dummy" > modules/settings/src/lib.rs \
+    && echo "// dummy" > modules/staff/src/lib.rs \
+    && echo "// dummy" > modules/reporting/src/lib.rs \
+    && echo "// dummy" > modules/terminal/src/lib.rs \
+    && echo "// dummy" > modules/currency/src/lib.rs \
+    && echo "// dummy" > apps/cloud-server/src/main.rs \
+    && cargo build --package oz-cloud-server --release 2>/dev/null || true
+
+# Now copy the actual source and rebuild (only changed source files
+# invalidate this layer).
+COPY crates/ crates/
+COPY foundation/ foundation/
+COPY platform/ platform/
+COPY modules/ modules/
+COPY apps/ apps/
+
+# Build for real.
+RUN cargo build --package oz-cloud-server --release
+
+# ── Stage 2: Runtime ────────────────────────────────────────────────
+FROM debian:bookworm-slim AS runtime
+
+# Install CA certificates for outbound HTTPS (needed by reqwest in
+# oz-api / platform-sync for calling external services).
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libc6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for security.
+RUN groupadd --system ozpos && \
+    useradd --system --gid ozpos --no-create-home --home-dir /data ozpos
+
+WORKDIR /app
+
+COPY --from=builder /build/target/release/oz-cloud-server /app/oz-cloud-server
+
+# Runtime volume for persistent SQLite data.
+VOLUME ["/data"]
+
+# Default environment.
+ENV OZ_DB_PATH=/data/oz-pos.db
+ENV OZ_API_PORT=3099
+ENV RUST_LOG=info
+
+EXPOSE 3099
+
+USER ozpos
+
+ENTRYPOINT ["/app/oz-cloud-server"]

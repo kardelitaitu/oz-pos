@@ -14,8 +14,8 @@
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 13 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 2 |
-| 5 | Cloud Server & Docker Containerization | 8 | 6 |
-| | **Total** | **46** | **44** |
+| 5 | Cloud Server & Docker Containerization | 8 | 7 |
+| | **Total** | **46** | **45** |
 
 ---
 
@@ -206,9 +206,9 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 5.3 Production Docker & Compose Setup (`Dockerfile.server` & `docker-compose.yml`)
 
-- [ ] **5.3.1 [Multi-Stage Dockerfile]**: Create `Dockerfile.server` in root with two stages:
-  - Stage 1 (`builder`): `FROM rust:1.80-slim`, `cargo build --release --bin cloud-server`.
-  - Stage 2 (`runtime`): `FROM debian:bookworm-slim`, copy binary to `/usr/local/bin/cloud-server`, expose `3099`, set `VOLUME ["/data"]`, and `ENTRYPOINT ["cloud-server"]`.
+- [x] **5.3.1 [Multi-Stage Dockerfile]**: Create `Dockerfile.server` in root with two stages:
+  - Stage 1 (`builder`): `FROM rust:1.88-slim`, `cargo build --release --package oz-cloud-server`.
+  - Stage 2 (`runtime`): `FROM debian:bookworm-slim`, copy binary to `/app/oz-cloud-server`, expose `3099`, set `VOLUME ["/data"]`, and `ENTRYPOINT ["/app/oz-cloud-server"]`.
 - [ ] **5.3.2 [Docker Compose Topology]**: Create `docker-compose.yml` defining two services:
   - `pos-cloud-server`: built from `Dockerfile.server`, port `3099:3099`, environment `OZ_DB_PATH=/data/cloud.db` (or `DATABASE_URL=postgres://...`), volume `oz_cloud_data:/data`.
   - `pos-cloud-db` (optional): `postgres:16-alpine` container with health checks and persistent storage volume for enterprises using PostgreSQL replication (`pg_transport.rs`).
