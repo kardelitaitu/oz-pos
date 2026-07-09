@@ -10,12 +10,12 @@
 
 | Phase | Area | Total Tasks | Done |
 | :--- | :--- | ---: | ---: |
-| 1 | Admin Setup & Preset Polish | 10 | 4 |
+| 1 | Admin Setup & Preset Polish | 10 | 8 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 0 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 0 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **4** |
+| | **Total** | **46** | **8** |
 
 ---
 
@@ -82,7 +82,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ---
 
-### Phase 1: Admin Setup & Preset Polish (Quick Wins) `[4/10]`
+### Phase 1: Admin Setup & Preset Polish (Quick Wins) `[8/10]`
 
 #### 1.1 Expand Preset Templates (`Quick Service Cafe / Bakery`, `Franchise Restaurant`)
 
@@ -95,10 +95,10 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 1.2 Real-time Setup Preview (Live Navigation & Workspace Indicator Box)
 
-- [ ] **1.2.1 [Preview Component Creation]**: Create `ui/src/features/setup/components/LiveSetupPreview.tsx` accepting prop `{ selectedFeatures: Set<string> }`.
-- [ ] **1.2.2 [Workspace Matcher Logic]**: In `LiveSetupPreview.tsx`, compute which of the 5 Workspaces (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`) are active based on `selectedFeatures` and display them with their accent badge colors (`WS_COLORS`).
-- [ ] **1.2.3 [Sidebar Navigation Matcher]**: Use `getNavItems(selectedFeatures, 'owner')` (`menu-registry`) to compute and render the exact list of navigation items (`sales`, `kds`, `products`, `inventory`, `settings`, etc.) that will appear on the staff sidebar.
-- [ ] **1.2.4 [Wizard & Settings Integration]**: Embed `<LiveSetupPreview selectedFeatures={...} />` into `SetupWizard.tsx` (on Step 8 Review and side panel) and into `FeatureToggleScreen.tsx`.
+- [x] **1.2.1 [Preview Component Creation]**: Create `ui/src/features/setup/components/LiveSetupPreview.tsx` accepting prop `{ selectedFeatures: Set<string> }`.
+- [x] **1.2.2 [Workspace Matcher Logic]**: In `LiveSetupPreview.tsx`, compute which of the 5 Workspaces (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`) are active based on `selectedFeatures` and display them with their accent badge colors (`WS_COLORS`).
+- [x] **1.2.3 [Sidebar Navigation Matcher]**: Use `getNavItems(selectedFeatures, 'owner')` (`menu-registry`) to compute and render the exact list of navigation items (`sales`, `kds`, `products`, `inventory`, `settings`, etc.) that will appear on the staff sidebar.
+- [x] **1.2.4 [Wizard & Settings Integration]**: Embed `<LiveSetupPreview selectedFeatures={...} />` into `SetupWizard.tsx` (on Step 8 Review and side panel) and into `FeatureToggleScreen.tsx`.
 
 #### 1.3 Category Search & Bulk Controls in Feature Toggle Screen
 

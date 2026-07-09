@@ -48,6 +48,10 @@
   color: var(--color-fg-tertiary);
 }
 
+.feature-toggle-preview {
+  margin-bottom: var(--space-lg);
+}
+
 .feature-toggle-group {
   margin-bottom: var(--space-xl);
 }

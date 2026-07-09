@@ -6,12 +6,13 @@
 //! enabling a feature, required dependencies are also enabled.
 //! When disabling, only the selected feature is turned off.
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
+import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import './FeatureToggleScreen.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -144,6 +145,13 @@ export default function FeatureToggleScreen() {
     }
   }, [l10n]);
 
+  // ── Active feature set for preview ───────────────────────────
+
+  const activeFeatureSet = useMemo(
+    () => new Set(features.filter((f) => f.enabled).map((f) => f.key)),
+    [features],
+  );
+
   // ── Group features ────────────────────────────────────────────
 
   const grouped = GROUP_ORDER
@@ -191,6 +199,13 @@ export default function FeatureToggleScreen() {
             <Localized id="feature-toggle-empty"><p>No features found.</p></Localized>
           </div>
         </Card>
+      )}
+
+      {/* Live Preview */}
+      {!loading && !error && features.length > 0 && (
+        <div className="feature-toggle-preview">
+          <LiveSetupPreview selectedFeatures={activeFeatureSet} />
+        </div>
       )}
 
       {!loading && !error && grouped.map(({ group, features: groupFeatures }) => (

@@ -155,6 +155,25 @@ setup-skip = Skip setup
 setup-finish = Complete Setup
 setup-next = Next
 
+# Live Setup Preview
+lsp-title = Feature Preview
+lsp-subtitle =
+  The sidebar will show { $count } route(s) enabled by your selection
+lsp-section-workspaces = Workspaces
+lsp-section-nav = Navigation Items
+lsp-workspaces-aria = Workspace preview
+lsp-nav-aria = Navigation preview
+lsp-nav-empty = No navigation items unlocked
+lsp-nav-count = { $count } / { $total } items unlocked
+lsp-ws-status-active = { $name } — active
+lsp-ws-status-inactive = { $name } — inactive
+
+ws-preview-name-restaurant-pos = Restaurant POS
+ws-preview-name-store-pos = Store POS
+ws-preview-name-kds = Kitchen Display
+ws-preview-name-inventory = Inventory
+ws-preview-name-admin = Admin
+
 # Settings Page
 settings-page-title = Settings
 settings-loading = Loading settings…

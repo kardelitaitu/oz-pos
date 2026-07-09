@@ -166,6 +166,25 @@ setup-skip = Lewati
 setup-finish = Selesaikan Setup
 setup-next = Lanjut
 
+# Live Setup Preview
+lsp-title = Pratinjau Fitur
+lsp-subtitle =
+  Sidebar akan menampilkan { $count } rute yang diaktifkan oleh pilihan Anda
+lsp-section-workspaces = Ruang Kerja
+lsp-section-nav = Item Navigasi
+lsp-workspaces-aria = Pratinjau ruang kerja
+lsp-nav-aria = Pratinjau navigasi
+lsp-nav-empty = Belum ada item navigasi yang terbuka
+lsp-nav-count = { $count } / { $total } item terbuka
+lsp-ws-status-active = { $name } — aktif
+lsp-ws-status-inactive = { $name } — nonaktif
+
+ws-preview-name-restaurant-pos = POS Restoran
+ws-preview-name-store-pos = POS Toko
+ws-preview-name-kds = Tampilan Dapur
+ws-preview-name-inventory = Inventaris
+ws-preview-name-admin = Admin
+
 # ── Settings Page (remaining) ──
 settings-page-title = Pengaturan
 settings-loading = Memuat pengaturan…

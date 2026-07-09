@@ -4,6 +4,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
+import LiveSetupPreview from './components/LiveSetupPreview';
 import './SetupWizard.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -472,6 +473,13 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
                 preset={preset}
                 features={features}
                 allFeatures={allFeatures}
+              />
+            )}
+
+            {/* Side preview panel on preset & review steps */}
+            {(step === 0 || step === 7) && (
+              <LiveSetupPreview
+                selectedFeatures={new Set(Object.keys(features).filter((k) => features[k]))}
               />
             )}
           </div>
