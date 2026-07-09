@@ -32,6 +32,12 @@
 
 /* ── Home layout ─────────────────────────────────────────────────── */
 
+@keyframes ws-bg-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 .workspace-home {
   display: flex;
   flex-direction: column;
@@ -41,6 +47,18 @@
   padding: var(--space-8);
   gap: var(--space-8);
   position: relative;
+  background:
+    radial-gradient(ellipse 600px 400px at 20% 10%, var(--ws-accent-bg, rgba(99, 102, 241, 0.03)) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 300px at 80% 90%, var(--ws-accent-bg, rgba(99, 102, 241, 0.02)) 0%, transparent 70%);
+  background-size: 200% 200%;
+  animation: ws-bg-shift 20s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-home {
+    animation: none;
+    background: none;
+  }
 }
 
 .workspace-home-top-bar {
@@ -140,6 +158,7 @@
 
 @keyframes ws-shimmer {
   0% { background-position: -200% 0; }
+  50% { background-position: 0% 0; }
   100% { background-position: 200% 0; }
 }
 
@@ -150,6 +169,10 @@
   width: 100%;
   max-width: 900px;
   animation: ws-fade-in 0.3s var(--ease-out) both;
+}
+
+.workspace-skeleton-grid .workspace-skeleton-card {
+  border-color: transparent;
 }
 
 .workspace-skeleton-card {
@@ -226,7 +249,7 @@
 @keyframes ws-card-enter {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.97);
+    transform: translateY(20px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -248,12 +271,15 @@
   position: relative;
   overflow: hidden;
   transition:
-    box-shadow var(--duration-200) var(--ease-out),
-    border-color var(--duration-200) var(--ease-out),
-    transform var(--duration-200) var(--ease-out),
-    background var(--duration-200) var(--ease-out);
+    box-shadow var(--duration-250) var(--ease-out),
+    border-color var(--duration-250) var(--ease-out),
+    transform var(--duration-250) var(--ease-out),
+    background var(--duration-250) var(--ease-out);
   min-height: var(--touch-target-comfortable);
-  animation: ws-card-enter 0.35s var(--ease-out) both;
+  animation: ws-card-enter 0.4s var(--ease-out) both;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 1px 4px rgba(0, 0, 0, 0.02);
 }
 
 .workspace-card::before {
@@ -278,9 +304,10 @@
 .workspace-card:hover {
   box-shadow:
     var(--shadow-md),
-    0 0 0 1px var(--ws-accent, transparent);
+    0 0 0 1px var(--ws-accent, transparent),
+    0 4px 12px var(--ws-glow, transparent);
   border-color: var(--ws-accent, var(--color-border-hover));
-  transform: translateY(-3px);
+  transform: translateY(-4px);
   background: var(--ws-accent-bg, var(--color-bg-elevated));
 }
 
@@ -308,21 +335,44 @@
 
 /* ── Card icon ───────────────────────────────────────────────────── */
 
+@keyframes ws-icon-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.12); }
+  50% { transform: scale(0.95); }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes ws-icon-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.85; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .workspace-card-icon {
   width: 48px;
   height: 48px;
   color: var(--ws-accent, var(--color-accent));
-  transition: transform var(--duration-200) var(--ease-out);
+  transition: transform var(--duration-250) var(--ease-out);
 }
 
 .workspace-card:hover .workspace-card-icon {
-  transform: scale(1.1);
+  animation: ws-icon-bounce 0.5s var(--ease-out);
+}
+
+.workspace-card--active .workspace-card-icon {
+  animation: ws-icon-pulse 3s ease-in-out infinite;
 }
 
 .workspace-card-icon svg {
   width: 100%;
   height: 100%;
   filter: drop-shadow(0 0 6px var(--ws-glow, transparent));
+  transition: filter var(--duration-200) var(--ease-out);
+}
+
+.workspace-card:hover .workspace-card-icon svg {
+  filter: drop-shadow(0 0 10px var(--ws-glow, transparent));
 }
 
 /* ── Card body ───────────────────────────────────────────────────── */
@@ -493,18 +543,25 @@
 
 /* ── Active workspace indicator ───────────────────────────────── */
 
+@keyframes ws-dot-pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
 .workspace-card--active {
   border-color: var(--ws-accent, var(--color-accent)) !important;
   background: var(--ws-accent-bg, var(--color-bg-elevated));
   box-shadow:
     0 0 0 1px var(--ws-accent, var(--color-accent)),
-    var(--shadow-md);
+    var(--shadow-md),
+    0 0 20px var(--ws-glow, transparent);
 }
 
 .workspace-card--active:hover {
   border-color: var(--ws-accent, var(--color-accent)) !important;
   background: var(--ws-accent-bg, var(--color-bg-elevated));
-  transform: translateY(-3px);
+  transform: translateY(-4px);
 }
 
 .workspace-card-active-dot {
@@ -514,7 +571,7 @@
   width: 10px;
   height: 10px;
   color: var(--ws-accent, var(--color-accent));
-  opacity: 0.8;
+  animation: ws-dot-pulse 2s ease-in-out infinite;
 }
 
 /* ── Click ripple effect ──────────────────────────────────────── */
@@ -684,7 +741,16 @@
   }
 
   .workspace-card:hover .workspace-card-icon {
+    animation: none;
     transform: none;
+  }
+
+  .workspace-card--active .workspace-card-icon {
+    animation: none;
+  }
+
+  .workspace-card-active-dot {
+    animation: none;
   }
 
   .workspace-empty {
