@@ -1,5 +1,52 @@
 # TODO — OZ-POS v0.0.3
 
+## Admin Screen Audit Findings
+
+### Critical i18n Bugs
+- [ ] **AuditLogScreen** — filter button labels (`All`, `Success`, `Failure`) are hardcoded English in `outcomeLabels` record; `<Localized>` wrapper does not override them
+- [ ] **OfflineQueueScreen:80** — `setError('Failed to load queue')` hardcoded English string
+- [ ] **DashboardScreen** — `<Spinner aria-label="Loading dashboard">` hardcoded English
+- [ ] **TerminalManagementScreen:379** — table `aria-label="Terminals"` not localized
+- [ ] **SettingsPage:328-329** — font smoothing options (`"Antialiased (crisp)"` / `"Subpixel (smooth)"`) hardcoded English
+
+### Dark Mode (missing in admin screen CSS)
+- [ ] CustomerManagementScreen.css
+- [ ] StaffManagementScreen.css
+- [ ] TerminalManagementScreen.css
+- [ ] ShiftManagementScreen.css
+- [ ] BundleManagementScreen.css
+- [ ] PromotionManagementScreen.css
+- [ ] DataManagementScreen.css
+- [ ] FeatureToggleScreen.css
+- [ ] OfflineQueueScreen.css
+- [ ] VoidOrdersScreen.css
+- [ ] EodReportScreen.css
+- [ ] SettingsPage.css
+
+### Responsive Layout (missing `@media` breakpoints)
+- [ ] CustomerManagementScreen.css
+- [ ] StaffManagementScreen.css
+- [ ] ShiftManagementScreen.css
+- [ ] AuditLogScreen.css
+- [ ] BundleManagementScreen.css
+- [ ] PromotionManagementScreen.css
+- [ ] DataManagementScreen.css
+- [ ] FeatureToggleScreen.css
+- [ ] OfflineQueueScreen.css
+- [ ] VoidOrdersScreen.css
+
+### Error Handling Gaps
+- [ ] **6 screens** silently catch initial load errors (`// IPC unavailable.`) with no error state shown: CustomerManagement, StaffManagement, BundleManagement, ShiftManagement, PromotionManagement, SettingsPage
+- [ ] **BundleManagementScreen** — no error state for any operation (create, update, delete)
+- [ ] **PromotionManagementScreen** — no error state for any operation
+
+### Inconsistent Patterns
+- [ ] **11 files** import custom `@/frontend/shared/Localized` instead of `@fluent/react`
+- [ ] **Mixed `placeholder` i18n** — some use `<Localized attrs={{placeholder: true}}>`, others use `l10n.getString()` directly
+
+### Missing Feature
+- [ ] **Admin overview dashboard** — no single page for system health, staff status, terminal status
+
 ## Active Sprint
 
 ### 1. Product Type Separation (`product_type` enum)
