@@ -12,10 +12,10 @@
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
-| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 0 |
+| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 1 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **20** |
+| | **Total** | **46** | **21** |
 
 ---
 
@@ -136,7 +136,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 3.1 Recipe / Bill of Materials (BOM) Stock Deduction
 
-- [ ] **3.1.1 [SQLite BOM Schema]**: Create migration adding table `product_recipes` (`id TEXT PRIMARY KEY, parent_product_id TEXT NOT NULL, ingredient_product_id TEXT NOT NULL, quantity_required INTEGER NOT NULL, unit TEXT NOT NULL, FOREIGN KEY(parent_product_id) REFERENCES products(id), FOREIGN KEY(ingredient_product_id) REFERENCES products(id))`.
+- [x] **3.1.1 [SQLite BOM Schema]**: Create migration adding table `product_recipes` (`id TEXT PRIMARY KEY, parent_product_id TEXT NOT NULL, ingredient_product_id TEXT NOT NULL, quantity_required INTEGER NOT NULL, unit TEXT NOT NULL, FOREIGN KEY(parent_product_id) REFERENCES products(id), FOREIGN KEY(ingredient_product_id) REFERENCES products(id))`.
 - [ ] **3.1.2 [Recipe Repository & Domain]**: In `modules/inventory/src/repositories/recipe_repo.rs`, implement `RecipeRepository::get_recipe_ingredients(parent_product_id: &str) -> Result<Vec<RecipeItem>, CoreError>`.
 - [ ] **3.1.3 [InventoryStockHandler Upgrade]**: Upgrade `modules/inventory/src/handlers/stock_handler.rs` (`InventoryStockHandler::handle`). When processing `SaleCompleted`, check each sold `item.product_id`. If `get_recipe_ingredients` returns rows, deduct `item.quantity * recipe_item.quantity_required` from each `ingredient_product_id` inside the atomic SQLite transaction.
 
