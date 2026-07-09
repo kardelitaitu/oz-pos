@@ -137,7 +137,7 @@
   width: 2px;
   height: 32px;
   border-radius: 9999px;
-  background: #c0c0c0;
+  background: var(--color-border-strong);
   transform: translate(-50%, -50%);
   transition:
     background-color var(--duration-150) var(--ease-out),
@@ -238,7 +238,7 @@
 }
 
 .retail-categories::-webkit-scrollbar-thumb {
-  background: #b0b0b0;
+  background: var(--color-border-strong);
   border-radius: 2px;
 }
 
@@ -372,7 +372,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #eab308;
+  background: var(--color-warning);
   animation: retail-price-pulse 2s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -404,8 +404,8 @@
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  background: var(--color-border-hover);
-  border-top: 1px solid #b0b0b0;
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border-strong);
 }
 
 .retail-sku-label {
@@ -499,7 +499,7 @@
 
 .retail-cart-table-inner td {
   padding: 3px 4px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--color-border-subtle);
   vertical-align: middle;
 }
 
@@ -737,7 +737,7 @@
 }
 
 .retail-fn-btn:active {
-  background: #4a4a4a;
+  background: var(--color-dark-border-pos);
 }
 
 .retail-fn-btn:focus-visible {
@@ -1106,7 +1106,7 @@
   gap: 2px;
 }
 .retail-held-cart-info:hover {
-  background: #e8f0fe;
+  background: var(--color-primary-pos-light);
 }
 .retail-held-cart-label {
   font-size: 13px;
@@ -1128,7 +1128,7 @@
   line-height: 1;
 }
 .retail-held-cart-delete:hover {
-  background: #fee;
+  background: var(--color-danger-bg);
 }
 .retail-held-carts-actions {
   display: flex;
@@ -1293,7 +1293,7 @@
 }
 
 .retail-menu-item:hover {
-  background: #d8e4f0;
+  background: var(--color-primary-pos-light);
 }
 
 .retail-menu-item svg {
@@ -1349,7 +1349,7 @@
   padding: 8px 12px;
   border: none;
   background: transparent;
-  color: #bbb;
+  color: var(--color-fg-tertiary);
   font-size: 12px;
   font-family: inherit;
   text-align: left;
@@ -1543,7 +1543,7 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0,0,0,0.55);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1556,7 +1556,7 @@
   overflow: auto;
   background: var(--color-bg-elevated);
   padding: 20px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  box-shadow: var(--shadow-2xl);
 }
 
 .retail-preview-close {
@@ -1566,7 +1566,7 @@
   width: 28px;
   height: 28px;
   border: none;
-  background: #333;
+  background: var(--color-dark-bg-pos);
   color: var(--color-bg-elevated);
   font-size: 18px;
   cursor: pointer;
@@ -1608,7 +1608,7 @@
   display: flex;
   font-weight: 700;
   text-transform: uppercase;
-  border-bottom: 1px solid #222;
+  border-bottom: 1px solid var(--color-fg);
   padding-bottom: 2px;
   margin-bottom: 4px;
 }
@@ -1663,7 +1663,7 @@
 .retail-receipt-total-line--grand {
   font-weight: 700;
   font-size: 13px;
-  border-top: 1px solid #222;
+  border-top: 1px solid var(--color-fg);
   padding-top: 4px;
   margin-top: 4px;
 }
@@ -1826,7 +1826,7 @@
   font-size: 20px;
   font-weight: 700;
   padding: 4px;
-  border: 2px solid #1a3a5c;
+  border: 2px solid var(--color-primary-pos);
   background: var(--color-bg-elevated);
   color: var(--color-fg);
   font-family: inherit;
@@ -2208,12 +2208,12 @@
 }
 
 .retail-customer-search-item:hover {
-  background: #d8e4f0;
+  background: var(--color-primary-pos-light);
 }
 
 .retail-customer-search-item--selected {
-  background: #c8e6c9;
-  border-color: #a5d6a7;
+  background: var(--color-success-bg);
+  border-color: var(--color-success-dim);
 }
 
 .retail-customer-search-item-name {

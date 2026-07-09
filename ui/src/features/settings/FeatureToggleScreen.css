@@ -255,7 +255,7 @@
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background: var(--color-bg-tertiary, #d1d5db);
+  background: var(--color-border-hover);
   border-radius: 24px;
   transition: background 0.2s ease;
 }
@@ -267,7 +267,7 @@
   width: 18px;
   left: 3px;
   bottom: 3px;
-  background: white;
+  background: var(--color-bg-elevated);
   border-radius: 50%;
   transition: transform 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
@@ -294,11 +294,11 @@
 /* ── Dark mode overrides ─────────────────────────────────────────── */
 
 [data-theme='dark'] .feature-toggle-slider {
-  background: var(--color-bg-tertiary, #4b5563);
+  background: var(--color-border-strong);
 }
 
 [data-theme='dark'] .feature-toggle-slider::before {
-  background: var(--color-bg-tertiary, #e5e7eb);
+  background: var(--color-bg-elevated);
 }
 
 [data-theme='dark'] .feature-toggle-item {

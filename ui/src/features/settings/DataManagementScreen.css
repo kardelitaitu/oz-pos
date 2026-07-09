@@ -38,12 +38,12 @@
 
 .data-mgmt-tab:hover {
   color: var(--color-fg-primary);
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.05));
+  background: var(--color-bg-hover);
 }
 
 .data-mgmt-tab--active {
-  color: var(--color-accent, #6366f1);
-  border-bottom: 2px solid var(--color-accent, #6366f1);
+  color: var(--color-accent);
+  border-bottom: 2px solid var(--color-accent);
   font-weight: 600;
 }
 
@@ -88,7 +88,7 @@
 }
 
 .data-mgmt-type-checkbox:hover {
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.05));
+  background: var(--color-bg-hover);
 }
 
 .data-mgmt-type-checkbox--all {
@@ -101,7 +101,7 @@
   width: 18px;
   height: 18px;
   margin-top: 2px;
-  accent-color: var(--color-accent, #6366f1);
+  accent-color: var(--color-accent);
 }
 
 .data-mgmt-type-info {
@@ -163,8 +163,8 @@
 
 .data-mgmt-input:focus {
   outline: none;
-  border-color: var(--color-accent, #6366f1);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle, rgba(99, 102, 241, 0.15));
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
 
 .data-mgmt-form {
@@ -186,10 +186,10 @@
 
 .data-mgmt-error {
   padding: var(--space-sm) var(--space-md);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
   border-radius: var(--radius-sm);
-  color: var(--color-danger, #ef4444);
+  color: var(--color-danger);
   font-size: var(--text-sm);
 }
 
@@ -204,7 +204,7 @@
 
 .data-mgmt-progress-done {
   font-size: 2rem;
-  color: var(--color-success, #10b981);
+  color: var(--color-success);
   line-height: 1;
 }
 
@@ -220,7 +220,7 @@
   font-family: var(--font-mono, monospace);
   font-size: var(--text-xs);
   padding: 1px 4px;
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.08));
+  background: var(--color-bg-surface);
   border-radius: 3px;
 }
 
@@ -238,14 +238,14 @@
   padding: var(--space-2xl);
   border: 2px dashed var(--color-border, rgba(128, 128, 128, 0.25));
   border-radius: var(--radius-md);
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.03));
+  background: var(--color-bg-surface);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .data-mgmt-file-dropzone:hover {
-  border-color: var(--color-accent, #6366f1);
-  background: var(--color-accent-subtle, rgba(99, 102, 241, 0.04));
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
 }
 
 .data-mgmt-file-dropzone p {
@@ -265,7 +265,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   padding: var(--space-md);
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.04));
+  background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
 }
 
@@ -295,7 +295,7 @@
 
 .data-mgmt-dry-run {
   padding: var(--space-md);
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.04));
+  background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
 }
 
@@ -323,7 +323,7 @@
 .data-mgmt-dry-run-count {
   font-size: var(--text-xl);
   font-weight: 700;
-  color: var(--color-accent, #6366f1);
+  color: var(--color-accent);
 }
 
 /* ── Backup status ───────────────────────────────────────────────── */
@@ -333,7 +333,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   padding: var(--space-md);
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.04));
+  background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
 }
 
