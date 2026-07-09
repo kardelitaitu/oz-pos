@@ -13,7 +13,10 @@ use super::Store;
 
 impl Store<'_> {
     /// Get the profile for a terminal, if one exists.
-    pub fn get_terminal_profile(&self, terminal_id: &str) -> Result<Option<TerminalProfile>, CoreError> {
+    pub fn get_terminal_profile(
+        &self,
+        terminal_id: &str,
+    ) -> Result<Option<TerminalProfile>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT terminal_id, profile_type, locked_screen, updated_at
              FROM terminal_profiles WHERE terminal_id = ?1",
@@ -75,9 +78,10 @@ impl Store<'_> {
 
     /// Delete a terminal's profile row.
     pub fn delete_terminal_profile(&self, terminal_id: &str) -> Result<(), CoreError> {
-        let affected = self
-            .conn
-            .execute("DELETE FROM terminal_profiles WHERE terminal_id = ?1", params![terminal_id])?;
+        let affected = self.conn.execute(
+            "DELETE FROM terminal_profiles WHERE terminal_id = ?1",
+            params![terminal_id],
+        )?;
         if affected == 0 {
             return Err(CoreError::NotFound {
                 entity: "terminal_profile",
@@ -221,7 +225,9 @@ mod tests {
     #[test]
     fn delete_profile_not_found() {
         let conn = fresh();
-        let err = store(&conn).delete_terminal_profile("nonexistent").unwrap_err();
+        let err = store(&conn)
+            .delete_terminal_profile("nonexistent")
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "terminal_profile"));
     }
 

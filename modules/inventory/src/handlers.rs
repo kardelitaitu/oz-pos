@@ -88,24 +88,25 @@ impl InventoryStockHandler {
         } else {
             // Composite product — deduct each ingredient by qty × quantity_required.
             for ingredient in &ingredients {
-                let ingredient_sku = match store.product_sku_by_id(&ingredient.ingredient_product_id) {
-                    Ok(Some(sku)) => sku,
-                    Ok(None) => {
-                        error!(
-                            ingredient_id = %ingredient.ingredient_product_id,
-                            "inventory handler: ingredient product not found by ID"
-                        );
-                        continue;
-                    }
-                    Err(e) => {
-                        error!(
-                            ingredient_id = %ingredient.ingredient_product_id,
-                            error = %e,
-                            "inventory handler: failed to look up ingredient SKU"
-                        );
-                        continue;
-                    }
-                };
+                let ingredient_sku =
+                    match store.product_sku_by_id(&ingredient.ingredient_product_id) {
+                        Ok(Some(sku)) => sku,
+                        Ok(None) => {
+                            error!(
+                                ingredient_id = %ingredient.ingredient_product_id,
+                                "inventory handler: ingredient product not found by ID"
+                            );
+                            continue;
+                        }
+                        Err(e) => {
+                            error!(
+                                ingredient_id = %ingredient.ingredient_product_id,
+                                error = %e,
+                                "inventory handler: failed to look up ingredient SKU"
+                            );
+                            continue;
+                        }
+                    };
 
                 let deduct_qty = qty * ingredient.quantity_required;
                 match store.adjust_stock(&ingredient_sku, -deduct_qty) {
@@ -318,8 +319,8 @@ mod tests {
         let patty_id = store.product_id_by_sku("PATTY").unwrap().unwrap();
         let cheese_id = store.product_id_by_sku("CHEESE").unwrap().unwrap();
 
-        assert_eq!(store.get_stock(&bun_id).unwrap(), 97);    // 100 - 3
-        assert_eq!(store.get_stock(&patty_id).unwrap(), 47);  // 50 - 3
+        assert_eq!(store.get_stock(&bun_id).unwrap(), 97); // 100 - 3
+        assert_eq!(store.get_stock(&patty_id).unwrap(), 47); // 50 - 3
         assert_eq!(store.get_stock(&cheese_id).unwrap(), 194); // 200 - 6
     }
 
@@ -397,8 +398,8 @@ mod tests {
         let patty_id = store.product_id_by_sku("PATTY").unwrap().unwrap();
         let cheese_id = store.product_id_by_sku("CHEESE").unwrap().unwrap();
 
-        assert_eq!(store.get_stock(&bun_id).unwrap(),  88);  // 100 - 2 (BOM) - 10 (direct)
-        assert_eq!(store.get_stock(&patty_id).unwrap(), 48);  // 50 - 2
+        assert_eq!(store.get_stock(&bun_id).unwrap(), 88); // 100 - 2 (BOM) - 10 (direct)
+        assert_eq!(store.get_stock(&patty_id).unwrap(), 48); // 50 - 2
         assert_eq!(store.get_stock(&cheese_id).unwrap(), 196); // 200 - 4
     }
 

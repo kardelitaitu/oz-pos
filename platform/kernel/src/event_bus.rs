@@ -166,14 +166,20 @@ impl EventBus {
             let removed = before - entries.len();
             total_removed += removed;
             if removed > 0 {
-                debug!(module = module_id, topic, removed, "unsubscribed module handlers");
+                debug!(
+                    module = module_id,
+                    topic, removed, "unsubscribed module handlers"
+                );
             }
             // Drop the topic key entirely if no handlers remain.
             !entries.is_empty()
         });
 
         if total_removed > 0 {
-            debug!(module = module_id, total_removed, "module fully unsubscribed");
+            debug!(
+                module = module_id,
+                total_removed, "module fully unsubscribed"
+            );
         }
         total_removed
     }

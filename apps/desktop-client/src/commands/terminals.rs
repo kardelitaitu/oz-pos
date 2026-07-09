@@ -327,7 +327,11 @@ pub async fn set_terminal_profile(
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.set_terminal_profile(&args.terminal_id, &args.profile_type, args.locked_screen.as_deref())?;
+    store.set_terminal_profile(
+        &args.terminal_id,
+        &args.profile_type,
+        args.locked_screen.as_deref(),
+    )?;
     drop(db);
 
     tracing::info!(

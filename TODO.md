@@ -2,6 +2,19 @@
 
 ## Admin Screen Audit Findings
 
+### UX Layout & Interaction Issues
+- [ ] **Settings save button only inside Receipt card** — users won't find it; empty catch block swallows failures
+- [ ] **AppearanceSettings is an island** — separate `<Card>`, separate Save, separate API calls — not part of unified save
+- [ ] **Page title says "Settings"** — `<h1>` key `settings-page-title` doesn't match sidebar rename to "General"
+- [ ] **3 different toast systems** — DataManagementScreen + FeatureToggleScreen + app-wide `ToastProvider`
+- [ ] **Hardcoded aria-labels in Display steppers** — "Decrease card size", "Increase card size" not localized
+- [ ] **Emoji as icons** — FeatureToggleScreen group icons + DataManagementScreen tabs lack `role="img"` / `aria-hidden`
+- [ ] **FeatureToggleScreen imports from `@/frontend/shared/Localized`** — inconsistent with `@fluent/react` everywhere else
+- [ ] **Cloud Sync section duplicated** — two almost-identical `<div className="settings-form">` branches (configured vs not)
+- [ ] **Fake progress bars** — export/import hardcode 10→30→50→100 instead of real progress
+- [ ] **Inconsistent content widths** — SettingsPage 600px, FeatureToggleScreen 800px, DataManagementScreen 700px
+- [ ] **AppearanceSettings save doesn't integrate** — separate API calls instead of unified `handleSave`
+
 ### Critical i18n Bugs
 - [ ] **AuditLogScreen** — filter button labels (`All`, `Success`, `Failure`) are hardcoded English in `outcomeLabels` record; `<Localized>` wrapper does not override them
 - [ ] **OfflineQueueScreen:80** — `setError('Failed to load queue')` hardcoded English string

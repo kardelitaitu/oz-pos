@@ -12,10 +12,10 @@
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
-| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 3 |
+| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 5 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **23** |
+| | **Total** | **46** | **25** |
 
 ---
 
@@ -142,8 +142,8 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 3.2 Order Modifiers & Coursing Engine
 
-- [ ] **3.2.1 [Modifiers Schema & DTOs]**: Create migration adding `modifier_groups` (`id TEXT PRIMARY KEY, name TEXT NOT NULL, min_selections INTEGER DEFAULT 0, max_selections INTEGER DEFAULT 1`), `modifiers` (`id TEXT PRIMARY KEY, group_id TEXT NOT NULL, name TEXT NOT NULL, price_minor_units INTEGER DEFAULT 0`), and `product_modifier_groups` (`product_id TEXT NOT NULL, group_id TEXT NOT NULL`).
-- [ ] **3.2.2 [Resto PosScreen Modifiers UI]**: Build `ui/src/features/sales/components/ItemModifierModal.tsx`. Tapping a menu item with attached modifier groups opens the modal, enforces selection limits (`min_selections`/`max_selections`), calculates total price adjustment, and appends modifier metadata to `CartItem`.
+- [x] **3.2.1 [Modifiers Schema & DTOs]**: Create migration adding `modifier_groups` (`id TEXT PRIMARY KEY, name TEXT NOT NULL, min_selections INTEGER DEFAULT 0, max_selections INTEGER DEFAULT 1`), `modifiers` (`id TEXT PRIMARY KEY, group_id TEXT NOT NULL, name TEXT NOT NULL, price_minor_units INTEGER DEFAULT 0`), and `product_modifier_groups` (`product_id TEXT NOT NULL, group_id TEXT NOT NULL`).
+- [x] **3.2.2 [Resto PosScreen Modifiers UI]**: Build `ui/src/features/sales/components/ItemModifierModal.tsx`. Tapping a menu item with attached modifier groups opens the modal, enforces selection limits (`min_selections`/`max_selections`), calculates total price adjustment, and appends modifier metadata to `CartItem`.
 - [ ] **3.2.3 [Course Firing State Engine]**: Add `course_id: 'appetizer' | 'main' | 'dessert' | 'drinks'` and `coursing_status: 'hold' | 'fired'` to `CartItem` in `ui/src/features/sales/state/cart.ts`. Add a "Fire Course" button in `PosScreen.tsx` that updates ticket status and emits `order.course_fired` event to the kitchen.
 
 #### 3.3 KDS Ticket State Machine & SLA Alerts

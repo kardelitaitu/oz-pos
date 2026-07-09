@@ -179,7 +179,9 @@ pub async fn set_feature(
                 }
                 Err(e) => {
                     let status = kernel.module_status(module_id);
-                    if status != Some(ModuleStatus::Stopped) && status != Some(ModuleStatus::Registered) {
+                    if status != Some(ModuleStatus::Stopped)
+                        && status != Some(ModuleStatus::Registered)
+                    {
                         tracing::warn!(
                             module = module_id,
                             error = %e,
@@ -469,14 +471,8 @@ mod tests {
 
     #[test]
     fn feature_to_module_id_staff() {
-        assert_eq!(
-            feature_to_module_id(Feature::StaffLogin),
-            Some("staff")
-        );
-        assert_eq!(
-            feature_to_module_id(Feature::StaffRoles),
-            Some("staff")
-        );
+        assert_eq!(feature_to_module_id(Feature::StaffLogin), Some("staff"));
+        assert_eq!(feature_to_module_id(Feature::StaffRoles), Some("staff"));
         assert_eq!(
             feature_to_module_id(Feature::ShiftManagement),
             Some("staff")

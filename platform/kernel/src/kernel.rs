@@ -195,7 +195,11 @@ impl Kernel {
                 KernelError::Internal(format!("module '{id}' not found during start"))
             })?;
             // Ensure module is in Loaded state before starting.
-            let current_status = self.statuses.get(id).copied().unwrap_or(ModuleStatus::Registered);
+            let current_status = self
+                .statuses
+                .get(id)
+                .copied()
+                .unwrap_or(ModuleStatus::Registered);
             if current_status != ModuleStatus::Loaded && current_status != ModuleStatus::Stopped {
                 let msg = format!(
                     "module '{id}' is in state {current_status:?}, expected Loaded or Stopped"
@@ -386,15 +390,19 @@ impl Kernel {
     /// [`KernelError::Internal`] if the module is not registered or is
     /// in an invalid state.
     pub fn start_module(&mut self, id: &'static str) -> Result<(), KernelError> {
-        let module = self.modules.get_mut(id).ok_or_else(|| {
-            KernelError::Internal(format!("module '{id}' is not registered"))
-        })?;
+        let module = self
+            .modules
+            .get_mut(id)
+            .ok_or_else(|| KernelError::Internal(format!("module '{id}' is not registered")))?;
 
-        let current_status = self.statuses.get(id).copied().unwrap_or(ModuleStatus::Registered);
+        let current_status = self
+            .statuses
+            .get(id)
+            .copied()
+            .unwrap_or(ModuleStatus::Registered);
         if current_status != ModuleStatus::Loaded && current_status != ModuleStatus::Stopped {
-            let msg = format!(
-                "module '{id}' is in state {current_status:?}, expected Loaded or Stopped"
-            );
+            let msg =
+                format!("module '{id}' is in state {current_status:?}, expected Loaded or Stopped");
             return Err(KernelError::Internal(msg));
         }
 
@@ -424,15 +432,18 @@ impl Kernel {
     /// [`KernelError::Internal`] if the module is not registered or is
     /// in an invalid state.
     pub fn stop_module(&mut self, id: &'static str) -> Result<(), KernelError> {
-        let module = self.modules.get_mut(id).ok_or_else(|| {
-            KernelError::Internal(format!("module '{id}' is not registered"))
-        })?;
+        let module = self
+            .modules
+            .get_mut(id)
+            .ok_or_else(|| KernelError::Internal(format!("module '{id}' is not registered")))?;
 
-        let current_status = self.statuses.get(id).copied().unwrap_or(ModuleStatus::Registered);
+        let current_status = self
+            .statuses
+            .get(id)
+            .copied()
+            .unwrap_or(ModuleStatus::Registered);
         if current_status != ModuleStatus::Started {
-            let msg = format!(
-                "module '{id}' is in state {current_status:?}, expected Started"
-            );
+            let msg = format!("module '{id}' is in state {current_status:?}, expected Started");
             return Err(KernelError::Internal(msg));
         }
 
@@ -890,10 +901,7 @@ mod tests {
     fn register_sets_status_to_registered() {
         let mut kernel = Kernel::new();
         kernel.register(Box::new(TestModule::new("test"))).unwrap();
-        assert_eq!(
-            kernel.module_status("test"),
-            Some(ModuleStatus::Registered)
-        );
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Registered));
     }
 
     #[test]
@@ -934,10 +942,7 @@ mod tests {
         kernel.register(Box::new(TestModule::new("b"))).unwrap();
         let statuses = kernel.all_statuses();
         assert_eq!(statuses.len(), 2);
-        assert_eq!(
-            statuses.get("a"),
-            Some(&ModuleStatus::Registered)
-        );
+        assert_eq!(statuses.get("a"), Some(&ModuleStatus::Registered));
     }
 
     #[test]
@@ -983,10 +988,7 @@ mod tests {
         let result = kernel.start_module("test");
         assert!(result.is_err());
         // Status should remain Registered.
-        assert_eq!(
-            kernel.module_status("test"),
-            Some(ModuleStatus::Registered)
-        );
+        assert_eq!(kernel.module_status("test"), Some(ModuleStatus::Registered));
     }
 
     #[test]

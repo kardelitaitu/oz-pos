@@ -223,6 +223,10 @@ pub const ALL: &[Migration] = &[
         id: "051_product_recipes.sql",
         sql: include_str!("../migrations/051_product_recipes.sql"),
     },
+    Migration {
+        id: "052_order_modifiers.sql",
+        sql: include_str!("../migrations/052_order_modifiers.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -384,6 +388,9 @@ mod tests {
             "held_carts",
             "product_variants",
             "product_recipes",
+            "modifier_groups",
+            "modifiers",
+            "product_modifier_groups",
             "category_taxes",
             "payments",
             "cash_payouts",
