@@ -242,10 +242,17 @@
 }
 
 .workspace-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 1px var(--ws-accent, transparent);
   border-color: var(--ws-accent, var(--color-border-hover));
   transform: translateY(-3px);
   background: var(--ws-accent-bg, var(--color-bg-elevated));
+}
+
+/* Subtle scale-in for the icon on the active card */
+.workspace-card--active .workspace-card-icon {
+  transform: scale(1.05);
 }
 
 .workspace-card:focus-visible {

@@ -16,6 +16,22 @@ import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import PosScreen from '@/features/sales/PosScreen';
 import KdsScreen from '@/features/kds/KdsScreen';
 
+// ── Escape key: return to workspace picker ─────────────────────────
+// Only fires when no modal overlay is open, so in-workspace dialogs
+// (PaymentModal, RefundModal, etc.) can handle Escape themselves.
+function useWorkspaceEscape(active: string | null, onBack: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.querySelector('.modal-overlay')) {
+        onBack();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [active, onBack]);
+}
+
 /**
  * Application shell — handles setup wizard flow, auth gates,
  * and renders the main AppLayout with registry-based page routing.
@@ -26,7 +42,7 @@ export default function AppShell() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session, logout } = useAuth();
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace } = useWorkspace();
 
   useIdleTimer(() => {
     if (session) logout();
@@ -84,6 +100,14 @@ export default function AppShell() {
     dismissSetupWizard().catch(console.error);
     setHasCompletedSetup(true);
   }, []);
+
+  // ── Escape key navigates back to workspace picker ────────────
+
+  const handleBackToPicker = useCallback(() => {
+    setActiveWorkspace(null);
+  }, [setActiveWorkspace]);
+
+  useWorkspaceEscape(activeWorkspace, handleBackToPicker);
 
   const userRole = session?.role_name ?? '';
 
