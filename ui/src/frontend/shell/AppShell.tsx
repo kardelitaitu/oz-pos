@@ -3,6 +3,7 @@ import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
+import { useFullscreen } from '@/hooks/useFullscreen';
 import AppLayout, { type AppRoute } from './AppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
@@ -100,6 +101,9 @@ export default function AppShell() {
     dismissSetupWizard().catch(console.error);
     setHasCompletedSetup(true);
   }, []);
+
+  // ── F11 toggles fullscreen across all workpaces ───────────────
+  useFullscreen();
 
   // ── Escape key navigates back to workspace picker ────────────
 

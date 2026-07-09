@@ -867,18 +867,6 @@ describe('RetailPosScreen', () => {
 
   // ── Keyboard shortcuts ─────────────────────────────────────────
 
-  it('shows shortcuts overlay on F11', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
-
-    await waitFor(() => {
-      expect(screen.getByText('F1')).toBeInTheDocument();
-    });
-
-    await userEvent.keyboard('{F11}');
-
-    expect(screen.getByText(/Keyboard Shortcuts/)).toBeInTheDocument();
-  });
-
   it('shows shortcuts overlay on ? key', async () => {
     await renderInAct(wrap(<RetailPosScreen />));
 
