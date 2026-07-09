@@ -35,7 +35,7 @@ import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/frontend/shared/Toast';
 import { AppearanceSettings } from './AppearanceSettings';
 import './SettingsPage.css';
 
@@ -171,7 +171,7 @@ export default function SettingsPage() {
       setSyncApiKey('');
       refreshBrandSettings();
     } catch {
-      addToast(l10n.getString('settings-save-error'), 'error');
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }

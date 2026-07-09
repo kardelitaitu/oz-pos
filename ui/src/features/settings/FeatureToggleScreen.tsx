@@ -11,7 +11,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { Localized, useLocalization } from '@fluent/react';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/frontend/shared/Toast';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import './FeatureToggleScreen.css';
 
@@ -129,21 +129,21 @@ export default function FeatureToggleScreen() {
       setFeatures(result.features);
 
       if (newValue && result.auto_enabled.length > 0) {
-        addToast(
-          l10n.getString('feature-toggle-auto-enabled', { list: result.auto_enabled.join(', ') }),
-          'success',
-        );
+        addToast({
+          message: l10n.getString('feature-toggle-auto-enabled', { list: result.auto_enabled.join(', ') }),
+          type: 'success',
+        });
       } else {
-        addToast(
-          l10n.getString(newValue ? 'feature-toggle-enabled' : 'feature-toggle-disabled'),
-          'success',
-        );
+        addToast({
+          message: l10n.getString(newValue ? 'feature-toggle-enabled' : 'feature-toggle-disabled'),
+          type: 'success',
+        });
       }
     } catch (err) {
-      addToast(
-        err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
-        'error',
-      );
+      addToast({
+        message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
+        type: 'error',
+      });
     }
   }, [l10n, addToast]);
 
@@ -192,18 +192,18 @@ export default function FeatureToggleScreen() {
       // Reload full state after batch completes.
       const result = await listAllFeatures();
       setFeatures(result.features);
-      addToast(
-        l10n.getString(
+      addToast({
+        message: l10n.getString(
           enable ? 'feature-toggle-bulk-enabled' : 'feature-toggle-bulk-disabled',
           { group },
         ),
-        'success',
-      );
+        type: 'success',
+      });
     } catch (err) {
-      addToast(
-        err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
-        'error',
-      );
+      addToast({
+        message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
+        type: 'error',
+      });
     } finally {
       setTogglingBatch(null);
     }

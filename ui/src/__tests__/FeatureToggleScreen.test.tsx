@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import salesFtl from '@/locales/sales.ftl?raw';
-import { ToastProvider } from '@/hooks/useToast';
+import { ToastProvider } from '@/frontend/shared/Toast';
 
 // ── Mock Tauri IPC ─────────────────────────────────────────────────
 
