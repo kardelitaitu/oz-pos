@@ -161,12 +161,12 @@ Every phase and high-level objective is broken down below into actionable, atomi
 #### 3.5 Menu Engineering Analytics Matrix
 
 - [x] **3.5.1 [Analytics Aggregation Query]**: In `crates/oz-reporting/src/menu_engineering.rs`, write SQL aggregation calculating total volume (`SUM(quantity)`) and total contribution margin (`SUM((unit_price - unit_cost) * quantity)`) per product over a selected date range.
-- [ ] **3.5.2 [Quadrants Calculator Engine]**: Calculate median volume and median margin across all sold items. Assign classification:
+- [x] **3.5.2 [Quadrants Calculator Engine]**: Calculate median volume and median margin across all sold items with `classify_quadrant()`, `median_of()`, and `quadrant_recommendation()` functions. Assign classification:
   - **Star**: Volume ≥ Median AND Margin ≥ Median.
   - **Plowhorse**: Volume ≥ Median AND Margin < Median.
   - **Puzzle**: Volume < Median AND Margin ≥ Median.
   - **Dog**: Volume < Median AND Margin < Median.
-- [ ] **3.5.3 [Matrix Scatter Plot & Table UI]**: Create `ui/src/features/reports/MenuEngineeringScreen.tsx` rendering an interactive 4-quadrant scatter plot and actionable recommendations ("Promote Star", "Increase Price on Plowhorse", "Reposition Puzzle", "Remove Dog").
+- [x] **3.5.3 [Matrix Scatter Plot & Table UI]**: Create `ui/src/features/reports/MenuEngineeringScreen.tsx` rendering an interactive 4-quadrant scatter plot and actionable recommendations.
 
 ---
 

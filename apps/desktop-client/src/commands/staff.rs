@@ -255,7 +255,7 @@ mod tests {
         let json = r##"{"id":"u1","username":"jdoe2","display_name":"John D","role_id":"r2","is_active":false,"caller_user_id":"admin1"}"##;
         let args: UpdateStaffArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.id, "u1");
-        assert_eq!(args.is_active, false);
+        assert!(!args.is_active);
     }
 
     #[test]

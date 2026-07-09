@@ -376,6 +376,249 @@ fn device_hostname() -> String {
         .unwrap_or_else(|_| "unknown-device".to_string())
 }
 
+// ── Feature metadata ────────────────────────────────────────────────
+
+/// Returns all 32 features with their human-readable name, description,
+/// and logical group.
+fn all_feature_metadata() -> Vec<(Feature, &'static str, &'static str, &'static str)> {
+    vec![
+        (
+            Feature::SimpleRetail,
+            "Simple Retail",
+            "Core POS: scan, sell, print receipt",
+            "Core",
+        ),
+        (
+            Feature::Restaurant,
+            "Restaurant Mode",
+            "Table management and KDS",
+            "Core",
+        ),
+        (
+            Feature::CashPayment,
+            "Cash Payment",
+            "Accept cash at checkout",
+            "Payments",
+        ),
+        (
+            Feature::CardPayment,
+            "Card Payment",
+            "Accept debit/credit cards",
+            "Payments",
+        ),
+        (
+            Feature::MultiCurrency,
+            "Multi-Currency",
+            "Support multiple currencies with exchange rates",
+            "Payments",
+        ),
+        (
+            Feature::InventoryTracking,
+            "Inventory Tracking",
+            "Track stock levels per product",
+            "Products",
+        ),
+        (
+            Feature::ProductVariants,
+            "Product Variants",
+            "Size, colour, flavour variants",
+            "Products",
+        ),
+        (
+            Feature::CategoriesEnabled,
+            "Categories",
+            "Group products into categories",
+            "Products",
+        ),
+        (
+            Feature::StaffLogin,
+            "Staff Login",
+            "PIN/password login for staff",
+            "Staff",
+        ),
+        (
+            Feature::StaffRoles,
+            "Staff Roles",
+            "Role-based permissions (owner, manager, cashier)",
+            "Staff",
+        ),
+        (
+            Feature::ShiftManagement,
+            "Shift Management",
+            "Open/close shift with cash reconciliation",
+            "Staff",
+        ),
+        (
+            Feature::AuditLog,
+            "Audit Log",
+            "Immutable append-only action log",
+            "Staff",
+        ),
+        (
+            Feature::BarcodeScanning,
+            "Barcode Scanning",
+            "USB/serial/Bluetooth barcode scanner",
+            "Hardware",
+        ),
+        (
+            Feature::ReceiptPrinting,
+            "Receipt Printing",
+            "USB/serial/network receipt printer",
+            "Hardware",
+        ),
+        (
+            Feature::CashDrawer,
+            "Cash Drawer",
+            "Cash drawer trigger via printer GPIO",
+            "Hardware",
+        ),
+        (
+            Feature::CustomerDisplay,
+            "Customer Display",
+            "Secondary customer-facing screen",
+            "Hardware",
+        ),
+        (
+            Feature::NfcReader,
+            "NFC Reader",
+            "Contactless card/NFC reader",
+            "Hardware",
+        ),
+        (
+            Feature::DiscountEngine,
+            "Discount Engine",
+            "Percentage and fixed-amount discounts",
+            "Business Rules",
+        ),
+        (
+            Feature::TaxEngine,
+            "Tax Engine",
+            "Tax calculation with configurable rates",
+            "Business Rules",
+        ),
+        (
+            Feature::LoyaltyProgram,
+            "Loyalty Program",
+            "Customer points, tiers, and redemption",
+            "Business Rules",
+        ),
+        (
+            Feature::GiftCards,
+            "Gift Cards",
+            "Issue, redeem, and manage gift card balances",
+            "Payments",
+        ),
+        (
+            Feature::PromotionsEngine,
+            "Promotions Engine",
+            "Time-limited buy-X-get-Y and % off",
+            "Business Rules",
+        ),
+        (
+            Feature::ProductBundles,
+            "Product Bundles",
+            "Sell multiple SKUs as one bundle",
+            "Business Rules",
+        ),
+        (
+            Feature::KitchenDisplay,
+            "Kitchen Display",
+            "Order routing to kitchen screens",
+            "Restaurant",
+        ),
+        (
+            Feature::TableManagement,
+            "Table Management",
+            "Interactive restaurant floor plan",
+            "Restaurant",
+        ),
+        (
+            Feature::SelfServiceKiosk,
+            "Self-Service Kiosk",
+            "Locked-down fullscreen kiosk mode",
+            "Restaurant",
+        ),
+        (
+            Feature::CloudSync,
+            "Cloud Sync",
+            "Database synchronisation to cloud",
+            "Scaling",
+        ),
+        (
+            Feature::MultiStore,
+            "Multi-Store",
+            "Manage multiple store locations",
+            "Scaling",
+        ),
+        (
+            Feature::MultiTerminal,
+            "Multi-Terminal",
+            "Multiple terminals per store",
+            "Scaling",
+        ),
+        (
+            Feature::Reporting,
+            "Reporting",
+            "Sales, inventory, and shift reports",
+            "Reporting",
+        ),
+        (
+            Feature::Analytics,
+            "Analytics",
+            "Advanced charts and data exports",
+            "Reporting",
+        ),
+        (
+            Feature::ExportImport,
+            "Export / Import",
+            "Data export/import in .ozpkg format",
+            "Advanced",
+        ),
+        (
+            Feature::PluginSystem,
+            "Plugin System",
+            "Third-party plugin support",
+            "Advanced",
+        ),
+        (
+            Feature::StockCounting,
+            "Stock Counting",
+            "Periodic stock counting",
+            "Inventory",
+        ),
+        (
+            Feature::StockTransfers,
+            "Stock Transfers",
+            "Transfer stock between locations",
+            "Inventory",
+        ),
+        (
+            Feature::PurchaseOrders,
+            "Purchase Orders",
+            "Create and manage purchase orders",
+            "Inventory",
+        ),
+        (
+            Feature::SerialTracking,
+            "Serial Tracking",
+            "Track products by serial number",
+            "Inventory",
+        ),
+        (
+            Feature::QuickReturn,
+            "Quick Return",
+            "Fast return without original sale lookup",
+            "Core",
+        ),
+        (
+            Feature::UsbScale,
+            "USB Scale",
+            "USB-connected weight scale",
+            "Hardware",
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -699,211 +942,4 @@ mod tests {
         sorted.dedup();
         assert_eq!(sorted.len(), keys.len(), "feature keys must be unique");
     }
-}
-
-// ── Feature metadata ────────────────────────────────────────────────
-
-/// Returns all 32 features with their human-readable name, description,
-/// and logical group.
-fn all_feature_metadata() -> Vec<(Feature, &'static str, &'static str, &'static str)> {
-    vec![
-        (
-            Feature::SimpleRetail,
-            "Simple Retail",
-            "Core POS: scan, sell, print receipt",
-            "Core",
-        ),
-        (
-            Feature::Restaurant,
-            "Restaurant Mode",
-            "Table management and KDS",
-            "Core",
-        ),
-        (
-            Feature::CashPayment,
-            "Cash Payment",
-            "Accept cash at checkout",
-            "Payments",
-        ),
-        (
-            Feature::CardPayment,
-            "Card Payment",
-            "Accept debit/credit cards",
-            "Payments",
-        ),
-        (
-            Feature::MultiCurrency,
-            "Multi-Currency",
-            "Support multiple currencies with exchange rates",
-            "Payments",
-        ),
-        (
-            Feature::InventoryTracking,
-            "Inventory Tracking",
-            "Track stock levels per product",
-            "Products",
-        ),
-        (
-            Feature::ProductVariants,
-            "Product Variants",
-            "Size, colour, flavour variants",
-            "Products",
-        ),
-        (
-            Feature::CategoriesEnabled,
-            "Categories",
-            "Group products into categories",
-            "Products",
-        ),
-        (
-            Feature::StaffLogin,
-            "Staff Login",
-            "PIN/password login for staff",
-            "Staff",
-        ),
-        (
-            Feature::StaffRoles,
-            "Staff Roles",
-            "Role-based permissions (owner, manager, cashier)",
-            "Staff",
-        ),
-        (
-            Feature::ShiftManagement,
-            "Shift Management",
-            "Open/close shift with cash reconciliation",
-            "Staff",
-        ),
-        (
-            Feature::AuditLog,
-            "Audit Log",
-            "Immutable append-only action log",
-            "Staff",
-        ),
-        (
-            Feature::BarcodeScanning,
-            "Barcode Scanning",
-            "USB/serial/Bluetooth barcode scanner",
-            "Hardware",
-        ),
-        (
-            Feature::ReceiptPrinting,
-            "Receipt Printing",
-            "USB/serial/network receipt printer",
-            "Hardware",
-        ),
-        (
-            Feature::CashDrawer,
-            "Cash Drawer",
-            "Cash drawer trigger via printer GPIO",
-            "Hardware",
-        ),
-        (
-            Feature::CustomerDisplay,
-            "Customer Display",
-            "Secondary customer-facing screen",
-            "Hardware",
-        ),
-        (
-            Feature::NfcReader,
-            "NFC Reader",
-            "Contactless card/NFC reader",
-            "Hardware",
-        ),
-        (
-            Feature::DiscountEngine,
-            "Discount Engine",
-            "Percentage and fixed-amount discounts",
-            "Business Rules",
-        ),
-        (
-            Feature::TaxEngine,
-            "Tax Engine",
-            "Tax calculation with configurable rates",
-            "Business Rules",
-        ),
-        (
-            Feature::LoyaltyProgram,
-            "Loyalty Program",
-            "Customer points, tiers, and redemption",
-            "Business Rules",
-        ),
-        (
-            Feature::GiftCards,
-            "Gift Cards",
-            "Issue, redeem, and manage gift card balances",
-            "Payments",
-        ),
-        (
-            Feature::PromotionsEngine,
-            "Promotions Engine",
-            "Time-limited buy-X-get-Y and % off",
-            "Business Rules",
-        ),
-        (
-            Feature::ProductBundles,
-            "Product Bundles",
-            "Sell multiple SKUs as one bundle",
-            "Business Rules",
-        ),
-        (
-            Feature::KitchenDisplay,
-            "Kitchen Display",
-            "Order routing to kitchen screens",
-            "Restaurant",
-        ),
-        (
-            Feature::TableManagement,
-            "Table Management",
-            "Interactive restaurant floor plan",
-            "Restaurant",
-        ),
-        (
-            Feature::SelfServiceKiosk,
-            "Self-Service Kiosk",
-            "Locked-down fullscreen kiosk mode",
-            "Restaurant",
-        ),
-        (
-            Feature::CloudSync,
-            "Cloud Sync",
-            "Database synchronisation to cloud",
-            "Scaling",
-        ),
-        (
-            Feature::MultiStore,
-            "Multi-Store",
-            "Manage multiple store locations",
-            "Scaling",
-        ),
-        (
-            Feature::MultiTerminal,
-            "Multi-Terminal",
-            "Multiple terminals per store",
-            "Scaling",
-        ),
-        (
-            Feature::Reporting,
-            "Reporting",
-            "Sales, inventory, and shift reports",
-            "Reporting",
-        ),
-        (
-            Feature::Analytics,
-            "Analytics",
-            "Advanced charts and data exports",
-            "Reporting",
-        ),
-        (
-            Feature::ExportImport,
-            "Export / Import",
-            "Data export/import in .ozpkg format",
-            "Advanced",
-        ),
-        (
-            Feature::PluginSystem,
-            "Plugin System",
-            "Third-party plugin support",
-            "Advanced",
-        ),
-    ]
 }

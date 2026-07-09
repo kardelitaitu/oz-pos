@@ -207,6 +207,9 @@ async fn handle_peer(
     // Phase 2: Normal broadcast loop with heartbeat.
     let mut heartbeat =
         tokio::time::interval(std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
+    // Skip the immediate first tick so the heartbeat doesn't fire
+    // before initial events are flushed.
+    heartbeat.tick().await;
 
     loop {
         tokio::select! {
@@ -584,7 +587,7 @@ mod tests {
     #[tokio::test]
     async fn offline_buffer_stores_events_on_disconnect() {
         let buffer: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::new(Mutex::new(HashMap::new()));
-        let (tx, rx) = broadcast::channel(16);
+        let (_tx, rx) = broadcast::channel::<String>(16);
 
         // Set up a peer that disconnects immediately (stream is closed).
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -598,7 +601,7 @@ mod tests {
             // Wait a beat for the broadcast message to arrive and fail.
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             // Send a message — it should be buffered.
-            let mut rx = rx;
+            let _rx = rx;
             // rx.recv() is blocking within the async task, but we put it
             // in a select or just don't call it. Instead, we manually
             // push to the buffer to simulate the write-failure path.

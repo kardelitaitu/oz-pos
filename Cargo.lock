@@ -4032,6 +4032,7 @@ dependencies = [
  "oz-logging",
  "oz-lua",
  "oz-plugin",
+ "oz-reporting",
  "platform-kernel",
  "platform-startup",
  "platform-sync",

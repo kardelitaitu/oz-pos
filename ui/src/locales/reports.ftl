@@ -27,3 +27,20 @@ day-wednesday = Wed
 day-thursday = Thu
 day-friday = Fri
 day-saturday = Sat
+
+# Menu Engineering
+menu-eng-title = Menu Engineering
+menu-eng-products = Products
+menu-eng-total-revenue = Total Revenue
+menu-eng-total-margin = Total Margin
+menu-eng-margin-rate = Margin Rate
+menu-eng-scatter-title = Volume vs. Margin Matrix
+menu-eng-table-title = Product Breakdown
+menu-eng-quadrant = Quadrant
+menu-eng-recommendation = Recommendation
+menu-eng-median-volume = Median Volume
+menu-eng-median-margin = Median Margin
+menu-eng-star = Star
+menu-eng-plowhorse = Plowhorse
+menu-eng-puzzle = Puzzle
+menu-eng-dog = Dog

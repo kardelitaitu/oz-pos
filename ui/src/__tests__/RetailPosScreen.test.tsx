@@ -62,6 +62,9 @@ vi.mock('@/features/sales/usePosState', () => ({
     setServiceCharge: vi.fn(),
     resetCart: vi.fn(),
     setLines: vi.fn(),
+    assignCourse: vi.fn(),
+    fireCourse: vi.fn(),
+    fireAllCourses: vi.fn(),
   })),
 }));
 
@@ -274,6 +277,9 @@ describe('RetailPosScreen', () => {
       setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
       setLines: vi.fn(),
+      assignCourse: vi.fn(),
+      fireCourse: vi.fn(),
+      fireAllCourses: vi.fn(),
     }));
   });
 
@@ -504,7 +510,7 @@ describe('RetailPosScreen', () => {
       setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
       setLines: vi.fn(),
-    });
+    } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
 
@@ -552,7 +558,7 @@ describe('RetailPosScreen', () => {
       setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
       setLines: vi.fn(),
-    });
+    } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
 
@@ -587,7 +593,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
-    });
+    } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
 
@@ -613,7 +619,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
-    });
+    } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
 
@@ -681,7 +687,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
-    });
+    } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
 
@@ -759,6 +765,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     await renderInAct(wrap(<RetailPosScreen />));

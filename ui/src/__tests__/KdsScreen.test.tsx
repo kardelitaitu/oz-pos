@@ -10,8 +10,8 @@ import type { KdsOrder } from '@/api/kds';
 const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
-  mockUseTicketSla: vi.fn(() => ({
-    level: 'green' as const,
+  mockUseTicketSla: vi.fn((): { level: 'green' | 'yellow' | 'red'; elapsedSeconds: number; display: string } => ({
+    level: 'green',
     elapsedSeconds: 120,
     display: '2m 0s',
   })),
@@ -28,7 +28,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/features/kds/hooks/useTicketSla', () => ({
-  useTicketSla: (...args: unknown[]) => mockUseTicketSla(...args),
+  useTicketSla: (..._args: any[]) => mockUseTicketSla(),
 }));
 
 vi.mock('@/frontend/shared/useSound', () => ({

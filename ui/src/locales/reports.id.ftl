@@ -37,3 +37,20 @@ reports-export-csv = Ekspor CSV
 
 # ── Kiosk Mode ──
 # ── Shared UI (remaining) ──
+
+# Menu Engineering
+menu-eng-title = Rekayasa Menu
+menu-eng-products = Produk
+menu-eng-total-revenue = Total Pendapatan
+menu-eng-total-margin = Total Margin
+menu-eng-margin-rate = Rasio Margin
+menu-eng-scatter-title = Matriks Volume vs. Margin
+menu-eng-table-title = Rincian Produk
+menu-eng-quadrant = Kuadran
+menu-eng-recommendation = Rekomendasi
+menu-eng-median-volume = Median Volume
+menu-eng-median-margin = Median Margin
+menu-eng-star = Bintang
+menu-eng-plowhorse = Kuda Beban
+menu-eng-puzzle = Teka-teki
+menu-eng-dog = Anjing

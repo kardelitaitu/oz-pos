@@ -265,6 +265,7 @@ pub fn run() {
             commands::refunds::process_refund,
             commands::refunds::list_refunds,
             commands::refunds::lookup_sale_by_receipt_barcode,
+            commands::reports::get_menu_engineering,
             commands::reports::get_daily_revenue,
             commands::reports::get_weekly_revenue,
             commands::reports::get_monthly_revenue,

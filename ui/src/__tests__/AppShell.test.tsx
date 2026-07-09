@@ -353,7 +353,7 @@ describe('AppShell — KDS workspace navigation', () => {
         loading: false,
         isKdsKiosk: true,
         error: null,
-      });
+      } as any);
     });
 
     it('renders KdsScreen when terminal is in kds_kiosk lockdown', async () => {

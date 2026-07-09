@@ -589,6 +589,7 @@ mod tests {
             tax_rate_ids: vec![],
             created_at: "2025-01-01T00:00:00Z".into(),
             price_updated_at: "2025-01-01T00:00:00Z".into(),
+            product_type: "retail".into(),
         };
         let d = format!("{dto:?}");
         assert!(d.contains("LATTE"));
@@ -648,6 +649,7 @@ mod tests {
             barcode: None,
             initial_stock: 0,
             tax_rate_ids: vec![],
+            product_type: "retail".into(),
         };
         let d = format!("{args:?}");
         assert!(d.contains("Green Tea"));

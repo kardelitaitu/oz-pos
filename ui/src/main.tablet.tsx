@@ -37,6 +37,7 @@ import { MultiStoreDashboardScreen } from '@/features/stores';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import _DesignSystem from '@/features/design/DesignSystem';
+import MenuEngineeringScreen from '@/features/reports/MenuEngineeringScreen';
 import type { ReactNode } from 'react';
 
 // ── SVG icon factory ─────────────────────────────────────────────
@@ -89,6 +90,8 @@ registerPage({ route: 'features', component: FeatureToggleScreen, label: 'Featur
 registerPage({ route: 'data-management', component: DataManagementScreen, label: 'Data', requiredRole: 'owner' });
 registerPage({ route: 'audit-log', component: AuditLogScreen, label: 'Audit Log', requiredRole: 'manager' });
 registerPage({ route: 'offline-queue', component: OfflineQueueScreen, label: 'Offline Queue', requiredRole: 'manager' });
+
+registerPage({ route: 'menu-engineering', component: MenuEngineeringScreen, label: 'Menu Engineering', feature: 'restaurant', requiredRole: 'manager' });
 
 // ── Render ───────────────────────────────────────────────────────
 const l10n = createEnUsLocalization();
