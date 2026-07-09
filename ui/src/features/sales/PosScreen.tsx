@@ -186,7 +186,7 @@ function CartLineItem({
     if (!exiting) return;
     const timer = setTimeout(() => onRemove(line), MS_200);
     return () => clearTimeout(timer);
-  }, [exiting, onRemove, line.id]);
+  }, [exiting, onRemove, line, MS_200]);
 
   // Flash + click on qty change.
   useEffect(() => {
@@ -979,7 +979,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     getReceiptSettings()
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
       .catch(() => addToast({ message: 'Failed to load receipt settings', type: 'error' }));
-  }, []);
+  }, [addToast]);
 
   const handleCloseShiftClick = useCallback(() => {
     setCloseShiftError(null);

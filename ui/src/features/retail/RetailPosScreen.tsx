@@ -846,7 +846,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate]);
+  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate]);
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -1845,7 +1845,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
   onSetWeighTarget: (p: ProductDto) => void;
 }) {
   const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
-  const priceRecent = useMemo(() => isPriceRecent(product), [product.price_updated_at]);
+  const priceRecent = useMemo(() => isPriceRecent(product), [product]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
 

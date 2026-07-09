@@ -138,7 +138,7 @@ export default function PaymentModal({
         })
         .catch(() => addToast({ message: 'Failed to load currency data', type: 'error' }));
     }
-  }, [open, multiCurrency]);
+  }, [open, multiCurrency, addToast]);
 
   const exchangeRateInfo = useMemo(() => {
     if (selectedCurrency === total.currency) return null;
@@ -180,7 +180,7 @@ export default function PaymentModal({
         { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
       ]);
     }
-  }, [open, total.currency]);
+  }, [open, total.currency, notifyCustomerChange]);
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -403,7 +403,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount]);
+  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -492,7 +492,7 @@ export default function PaymentModal({
     if (method === 'cash') return sufficient;
     if (method === 'qris') return qrReference.length > 0;
     return true;
-  }, [splitMode, splitComplete, method, otherLabel, sufficient, customerName]);
+  }, [splitMode, splitComplete, method, otherLabel, sufficient, customerName, qrReference]);
 
   const complete = useCallback(async () => {
     setProcessing(true);
@@ -669,7 +669,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount]);
+  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
 
   useEffect(() => {
     if (!done) return;
@@ -684,7 +684,7 @@ export default function PaymentModal({
     if (!leaving) return;
     const timer = setTimeout(handleLeaveEnd, MS_200);
     return () => clearTimeout(timer);
-  }, [leaving, handleLeaveEnd]);
+  }, [leaving, handleLeaveEnd, MS_200]);
 
   if (!open && !leaving) return null;
 
