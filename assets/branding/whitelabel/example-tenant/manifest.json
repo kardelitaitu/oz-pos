@@ -1,0 +1,38 @@
+{
+  "brandId": "example-tenant",
+  "appName": "Acme Retail POS",
+  "companyName": "Acme Corporation",
+  "description": "Custom Whitelabel POS powered by OZ-POS",
+  "themeTokens": {
+    "primaryHsl": "340, 82%, 52%",
+    "accentHsl": "38, 92%, 50%",
+    "fontFamily": "Outfit, sans-serif"
+  },
+  "assets": {
+    "vector": {
+      "logoFullLight": "vector/logo-full.svg",
+      "logoFullDark": "vector/logo-full.svg",
+      "logoMark": "vector/logo-mark.svg",
+      "logoMonochrome": "vector/logo-mark.svg"
+    },
+    "web": {
+      "faviconIco": "web/favicon.ico",
+      "faviconSvg": "web/favicon.svg",
+      "appleTouchIcon": "web/apple-touch-icon.png",
+      "icon192": "web/icon-192.png",
+      "icon512": "web/icon-512.png",
+      "iconMaskable512": "web/icon-maskable-512.png"
+    },
+    "desktop": {
+      "iconIco": "desktop/icon.ico",
+      "iconIcns": "desktop/icon.icns",
+      "iconPng": "desktop/icon.png",
+      "trayIcon": "desktop/tray-icon.png"
+    },
+    "hardware": {
+      "receiptLogo58mm": "hardware/receipt-logo-58mm.png",
+      "receiptLogo80mm": "hardware/receipt-logo-80mm.png",
+      "invoiceWatermark": "hardware/invoice-watermark.png"
+    }
+  }
+}
