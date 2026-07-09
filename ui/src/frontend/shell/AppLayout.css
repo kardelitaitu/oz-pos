@@ -85,11 +85,9 @@
 }
 
 .app-sidebar.collapsed .app-sidebar-user,
-.app-sidebar.collapsed .app-sidebar-gateway,
 .app-sidebar.collapsed .app-sidebar-section-header,
 .app-sidebar.collapsed .app-sidebar-chevron,
-.app-sidebar.collapsed .app-nav-item span:not(.app-nav-icon),
-.app-sidebar.collapsed .app-sidebar-footer span {
+.app-sidebar.collapsed .app-nav-item span:not(.app-nav-icon) {
   display: none;
 }
 
@@ -164,13 +162,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.app-sidebar-gateway {
-  padding: var(--space-2) var(--space-2) var(--space-1);
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  justify-content: center;
 }
 
 .app-sidebar-nav {
@@ -291,8 +282,6 @@
   height: 18px;
 }
 
-/* ── Sidebar footer (removed — moved to StatusBar) ── */
-
 /* ── Sidebar toggle button ────────────────────────── */
 .sidebar-toggle {
   display: none;
@@ -378,11 +367,10 @@
     writing-mode: horizontal-tb;
     font-size: var(--text-lg);
   }
-  .app-sidebar.collapsed .app-sidebar-user,
-  .app-sidebar.collapsed .app-sidebar-gateway,
-  .app-sidebar.collapsed .app-sidebar-section-header,
-  .app-sidebar.collapsed .app-sidebar-chevron,
-  .app-sidebar.collapsed .app-nav-item span:not(.app-nav-icon) {
+.app-sidebar.collapsed .app-sidebar-user,
+.app-sidebar.collapsed .app-sidebar-section-header,
+.app-sidebar.collapsed .app-sidebar-chevron,
+.app-sidebar.collapsed .app-nav-item span:not(.app-nav-icon) {
     display: revert;
   }
   .app-sidebar.collapsed .app-sidebar-section-items {

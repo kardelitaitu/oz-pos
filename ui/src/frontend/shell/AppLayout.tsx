@@ -4,7 +4,6 @@ import RoleBadge from './RoleBadge';
 import UpdateBanner from './UpdateBanner';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import { useBrand } from '@/contexts/BrandContext';
-import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import StatusBar from './StatusBar';
 
 import { getNavItems, SECTION_LABELS, type SectionName } from '@/platform/ui/menu-registry';
