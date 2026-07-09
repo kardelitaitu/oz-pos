@@ -23,15 +23,15 @@ Use the existing but unused `section` field on nav items to group them, rendered
 
 | Step | Area | What |
 |------|------|------|
-| 2.1 | **NavItemRegistration** | Ensure `section` field has proper union type (e.g. `'management' | 'reporting' | 'config' | 'system'`) |
-| 2.2 | **menu-registry** | Assign every nav item to a section; add section labels + i18n keys |
-| 2.3 | **AppLayout.tsx** | Group items by `section`; render collapsible accordion groups |
-| 2.4 | **AppLayout.tsx** | Persist per-section collapse state in localStorage |
-| 2.5 | **AppLayout.tsx** | Respect global collapsed mode (icon-only → hide section controls) |
-| 2.6 | **AppLayout.css** | Section header styles, chevron animation, indent items |
-| 2.7 | **i18n** | Add FTL keys for section labels (en + id) |
-| 2.8 | **Admin workspace** | Verify all 15 admin screens render correctly under their sections |
-| 2.9 | **Tests** | Update AppLayout / sidebar tests if they reference DOM structure |
+| 2.1 | **NavItemRegistration** | `section` field typed as `SectionName` union ✓ |
+| 2.2 | **menu-registry** | All 35 nav items assigned to sections; `SECTION_LABELS` map ✓ |
+| 2.3 | **AppLayout.tsx** | `groupBySection()` helper + accordion rendering with chevron ✓ |
+| 2.4 | **AppLayout.tsx** | Per-section collapse persisted in `localStorage['app-sidebar-sections']` ✓ |
+| 2.5 | **AppLayout.tsx** | Collapsed mode hides section headers, shows flat icons ✓ |
+| 2.6 | **AppLayout.css** | Chevron rotate animation, indent items, section header hover ✓ |
+| 2.7 | **i18n** | 10 section labels added (en + id FTL) ✓ |
+| 2.8 | **Admin workspace** | *(verify on next Tauri launch)* |
+| 2.9 | **Tests** | *(check if tests reference DOM structure)* |
 
 ## Retail POS Improvements
 
