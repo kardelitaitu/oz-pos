@@ -287,19 +287,31 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   const [squareKey, setSquareKey] = useState('');
   const [midtransKey, setMidtransKey] = useState('');
   useEffect(() => {
-    getGatewayStatus().then(setGateways).catch(() => addToast({ message: 'Failed to load gateway status', type: 'error' }));
+    let mounted = true;
+    getGatewayStatus()
+      .then((statuses) => {
+        if (!mounted) return;
+        setGateways(Array.isArray(statuses) ? statuses : []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        // Treat failure as no gateways so the UI shows the fallback message.
+        setGateways([]);
+      });
     // Load existing keys from secure DB-backed settings
     (async () => {
       try {
         const sk: string | null = await invoke('get_setting', { key: 'stripe.api_key' });
         const sq: string | null = await invoke('get_setting', { key: 'square.api_key' });
         const mt: string | null = await invoke('get_setting', { key: 'midtrans.server_key' });
+        if (!mounted) return;
         if (sk) setStripeKey(sk);
         if (sq) setSquareKey(sq);
         if (mt) setMidtransKey(mt);
       } catch { /* ignore — settings DB may not be available yet */ }
     })();
-  }, [addToast, l10n]);
+    return () => { mounted = false; };
+  }, []);
 
   // ── Quick tender presets ───────────────────────────────────────
 
