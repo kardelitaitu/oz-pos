@@ -60,14 +60,14 @@
 }
 
 .staff-login-logo svg {
-  width: 40px;
-  height: 40px;
+  width: 96px;
+  height: 96px;
   color: var(--color-accent);
 }
 
 .staff-login-logo-img {
-  width: 80px;
-  height: 80px;
+  width: 256px;
+  height: 256px;
   border-radius: 32px;
   object-fit: contain;
 }
