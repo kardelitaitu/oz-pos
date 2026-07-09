@@ -1,5 +1,5 @@
 .promo-mgmt {
-  padding: 1.5rem;
+  padding: var(--space-6);
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -8,24 +8,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-6);
 }
 
 .promo-mgmt-title {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-semibold);
 }
 
 .promo-mgmt-loading {
   text-align: center;
-  color: var(--color-text-secondary, #666);
+  color: var(--color-fg-tertiary);
 }
 
 .promo-mgmt-empty {
   text-align: center;
-  padding: 3rem 1rem;
-  color: var(--color-text-secondary, #666);
+  padding: var(--space-12) var(--space-4);
+  color: var(--color-fg-secondary);
 }
 
 .promo-mgmt-table-wrap {
@@ -35,58 +35,60 @@
 .promo-mgmt-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--color-surface, #fff);
-  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .promo-mgmt-table th,
 .promo-mgmt-table td {
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   text-align: left;
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .promo-mgmt-table th {
-  background: var(--color-surface-secondary, #f8fafc);
-  font-weight: 600;
-  font-size: 0.8rem;
+  background: var(--color-bg-surface);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-fg-secondary);
 }
 
 .promo-mgmt-table tbody tr:hover {
-  background: var(--color-surface-hover, #f1f5f9);
+  background: var(--color-bg-hover);
 }
 
 .promo-mgmt-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
   white-space: nowrap;
 }
 
 .promo-mgmt-btn {
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  transition: all var(--duration-150) var(--ease-out);
 }
 
 .promo-mgmt-btn:hover {
-  background: var(--color-surface-hover, #f1f5f9);
+  background: var(--color-bg-hover);
 }
 
 .promo-mgmt-btn--danger {
-  color: var(--color-danger, #ef4444);
-  border-color: var(--color-danger-dim, #fecaca);
+  color: var(--color-danger);
+  border-color: var(--color-danger-dim);
 }
 
 .promo-mgmt-btn--danger:hover {
-  background: var(--color-danger-bg, #fef2f2);
+  background: var(--color-danger-bg);
 }
 
 .promo-mgmt-toggle {
@@ -106,8 +108,8 @@
 .promo-mgmt-toggle-slider {
   position: absolute;
   inset: 0;
-  background: var(--color-bg-tertiary, #cbd5e1);
-  border-radius: 22px;
+  background: var(--color-border-hover);
+  border-radius: var(--radius-full);
 }
 
 .promo-mgmt-toggle-slider::before {
@@ -117,12 +119,12 @@
   height: 18px;
   left: 2px;
   bottom: 2px;
-  background: var(--color-bg, #fff);
+  background: var(--color-bg-elevated);
   border-radius: 50%;
 }
 
 .promo-mgmt-toggle input:checked + .promo-mgmt-toggle-slider {
-  background: var(--color-success, #22c55e);
+  background: var(--color-success);
 }
 
 .promo-mgmt-toggle input:checked + .promo-mgmt-toggle-slider::before {
@@ -132,20 +134,21 @@
 .promo-mgmt-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.4);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal, 100);
 }
 
 .promo-mgmt-modal {
-  background: var(--color-surface, #fff);
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
   min-width: 400px;
   max-width: 90vw;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--color-border);
 }
 
 .promo-mgmt-modal--wide {
@@ -156,33 +159,39 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-4);
 }
 
 .promo-mgmt-modal-title {
   margin: 0;
-  font-size: 1.2rem;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
 }
 
 .promo-mgmt-modal-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: var(--text-xl);
   cursor: pointer;
-  color: var(--color-text-secondary, #666);
-  padding: 0;
+  color: var(--color-fg-tertiary);
+  padding: var(--space-1);
   line-height: 1;
+  border-radius: var(--radius-md);
+}
+
+.promo-mgmt-modal-close:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-fg);
 }
 
 .promo-mgmt-modal-body {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-6);
 }
 
 .promo-mgmt-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .promo-mgmt-form {
