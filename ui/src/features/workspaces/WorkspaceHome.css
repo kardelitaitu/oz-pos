@@ -244,6 +244,20 @@
   max-width: 900px;
 }
 
+@media (max-width: 400px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-home {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .workspace-home-top-bar {
+    gap: var(--space-1);
+  }
+}
+
 /* ── Card ────────────────────────────────────────────────────────── */
 
 @keyframes ws-card-enter {

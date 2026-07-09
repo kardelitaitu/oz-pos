@@ -165,6 +165,7 @@ export default function WorkspaceHome() {
   const { availableWorkspaces, loading, error, retry, setActiveWorkspace, lastWorkspace } = useWorkspace();
   const { session, logout } = useAuth();
   const gridRef = useRef<HTMLDivElement>(null);
+  const ripplesRef = useRef<HTMLSpanElement[]>([]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const roleName = (session?.role_name ?? '').toLowerCase();
@@ -190,10 +191,7 @@ export default function WorkspaceHome() {
     [roleName, cashierOnly, kitchenOnly],
   );
 
-  const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    return getGreeting(hour);
-  }, []);
+  const greeting = getGreeting(new Date().getHours());
 
   const displayName = session?.display_name ?? session?.role_name ?? '';
 
@@ -215,36 +213,51 @@ export default function WorkspaceHome() {
     logout();
   }, [logout]);
 
+  // ── Ripple cleanup on unmount ──────────────────────────────
+
+  useEffect(() => {
+    return () => {
+      ripplesRef.current.forEach(r => r.remove());
+      ripplesRef.current = [];
+    };
+  }, []);
+
   // ── Click ripple effect ─────────────────────────────────────────
 
   const handleCardClick = useCallback(
     (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
       if (!canAccess(key)) return;
+      if (error) return;
       const card = e.currentTarget;
       const rect = card.getBoundingClientRect();
       const ripple = document.createElement('span');
       ripple.className = 'workspace-card-ripple';
       const size = Math.max(rect.width, rect.height);
       // Center the ripple when triggered by keyboard (clientX/Y default to 0)
-      const clickX = e.clientX > 0 ? e.clientX : rect.left + rect.width / 2;
-      const clickY = e.clientY > 0 ? e.clientY : rect.top + rect.height / 2;
+      const clickX = e.clientX !== 0 ? e.clientX : rect.left + rect.width / 2;
+      const clickY = e.clientY !== 0 ? e.clientY : rect.top + rect.height / 2;
       const x = clickX - rect.left - size / 2;
       const y = clickY - rect.top - size / 2;
       ripple.style.width = ripple.style.height = `${size}px`;
       ripple.style.left = `${x}px`;
       ripple.style.top = `${y}px`;
       card.appendChild(ripple);
+      ripplesRef.current.push(ripple);
       // Remove the ripple element after the animation completes
       ripple.addEventListener('animationend', () => {
         ripple.remove();
+        ripplesRef.current = ripplesRef.current.filter(r => r !== ripple);
       });
       // Also remove after a timeout in case animationend doesn't fire
       setTimeout(() => {
-        if (ripple.parentNode) ripple.remove();
+        if (ripple.parentNode) {
+          ripple.remove();
+          ripplesRef.current = ripplesRef.current.filter(r => r !== ripple);
+        }
       }, 600);
       setActiveWorkspace(key);
     },
-    [canAccess, setActiveWorkspace],
+    [canAccess, setActiveWorkspace, error],
   );
 
   // ── Keyboard navigation ──────────────────────────────────────
@@ -272,6 +285,8 @@ export default function WorkspaceHome() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // ── Quick-launch: number keys 1-9 select workspace by index ───
       if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
         const idx = parseInt(e.key, 10) - 1;
         if (idx < cards.length) {
           e.preventDefault();
@@ -330,7 +345,7 @@ export default function WorkspaceHome() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedWorkspaces, setActiveWorkspace, canAccess]);
+  }, [sortedWorkspaces, setActiveWorkspace, canAccess, error]);
 
   // ── Mousemove glow effect ────────────────────────────────────
 
@@ -347,11 +362,14 @@ export default function WorkspaceHome() {
 
   if (loading) {
     return (
-      <div className="workspace-home">
-        <div className="workspace-home-top-bar">
-          <button
-            type="button"
-            className="workspace-home-fullscreen-btn"
+    <div className="workspace-home">
+      <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }} role="status" aria-live="polite">
+        {loading ? 'Loading workspaces...' : error && !loading ? 'Connection error' : `${sortedWorkspaces.length} workspaces available`}
+      </span>
+      <div className="workspace-home-top-bar">
+        <button
+          type="button"
+          className="workspace-home-fullscreen-btn"
             onClick={toggleFullscreen}
             aria-label={l10n.getString('workspace-home-fullscreen-aria')}
             title="F11"
@@ -539,7 +557,7 @@ export default function WorkspaceHome() {
           </p>
         </div>
       ) : (
-        <div className="workspace-grid" ref={gridRef} role="listbox" aria-label="Workspaces">
+        <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
           {sortedWorkspaces.map((ws, idx) => {
             const disabled = !canAccess(ws.key);
             const colorClass = WS_COLORS[ws.key] ?? '';
@@ -548,8 +566,7 @@ export default function WorkspaceHome() {
               <button
                 key={ws.key}
                 type="button"
-                role="option"
-                aria-selected={isActive}
+                aria-current={isActive ? 'true' : undefined}
                 className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}`}
                 onClick={(e) => handleCardClick(ws.key, e)}
                 disabled={disabled}

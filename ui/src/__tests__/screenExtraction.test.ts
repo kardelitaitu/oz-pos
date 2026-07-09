@@ -136,6 +136,7 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'kds/KdsScreen.tsx',
     css: ['kds/KdsScreen.css'],
     dynamicClassPrefixes: ['kds-column--'],
+    externalClasses: ['kds-workspace', 'kds-workspace-header', 'kds-workspace-back'],
   },
 
   // ── Loyalty ───────────────────────────────────────────
@@ -227,6 +228,8 @@ const SCREENS: ScreenEntry[] = [
     name: 'WorkspaceHome',
     tsx: 'workspaces/WorkspaceHome.tsx',
     css: ['workspaces/WorkspaceHome.css'],
+    dynamicClassPrefixes: ['ws-color-'],
+    externalClasses: ['workspace-home-user', 'workspace-card--active', 'workspace-card-ripple'],
   },
 
   // ── Kiosk ─────────────────────────────────────────────

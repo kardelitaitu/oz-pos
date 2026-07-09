@@ -810,11 +810,11 @@ describe('WorkspaceHome', () => {
       });
 
       const adminCard = document.querySelectorAll('.workspace-card')[4] as HTMLButtonElement;
-      expect(adminCard.getAttribute('aria-selected')).toBe('true');
+      expect(adminCard.getAttribute('aria-current')).toBe('true');
 
-      // Other cards should not be aria-selected
+      // Other cards should not have aria-current
       const firstCard = document.querySelectorAll('.workspace-card')[0] as HTMLButtonElement;
-      expect(firstCard.getAttribute('aria-selected')).toBe('false');
+      expect(firstCard.getAttribute('aria-current')).toBeNull();
     });
   });
 
