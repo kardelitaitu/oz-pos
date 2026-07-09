@@ -126,6 +126,18 @@ update-banner-installing-aria =
 update-banner-dismiss-aria =
     .aria-label = Tutup notifikasi pembaruan
 
+# Navigation section labels
+nav-section-operations = Operasional
+nav-section-sales = Penjualan
+nav-section-products = Produk
+nav-section-finance = Keuangan
+nav-section-customers = Pelanggan
+nav-section-reports = Laporan
+nav-section-management = Manajemen
+nav-section-inventory = Persediaan
+nav-section-settings = Pengaturan
+nav-section-dev = Pengembang
+
 # Navigation (remaining)
 nav-pos-terminal = Terminal POS
 nav-kds = KDS

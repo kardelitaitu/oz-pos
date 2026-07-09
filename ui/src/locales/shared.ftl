@@ -126,7 +126,18 @@ language-selector-select-aria = Select language
 locale-en = English
 locale-id = Bahasa Indonesia
 
-# Navigation
+# Navigation section labels
+nav-section-operations = Operations
+nav-section-sales = Sales
+nav-section-products = Products
+nav-section-finance = Finance
+nav-section-customers = Customers
+nav-section-reports = Reports
+nav-section-management = Management
+nav-section-inventory = Inventory
+nav-section-settings = Settings
+nav-section-dev = Dev
+
 nav-pos-terminal = POS Terminal
 nav-kds = KDS
 nav-products = Products

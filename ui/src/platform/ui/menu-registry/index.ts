@@ -18,6 +18,33 @@
 import type { ReactNode } from 'react';
 import type { RequiredRole } from '@/platform/ui/page-registry';
 
+// ── Section names ────────────────────────────────────────────────────
+
+export type SectionName =
+  | 'operations'
+  | 'sales'
+  | 'products'
+  | 'finance'
+  | 'customers'
+  | 'reports'
+  | 'management'
+  | 'inventory'
+  | 'settings'
+  | 'dev';
+
+export const SECTION_LABELS: Record<SectionName, string> = {
+  operations: 'nav-section-operations',
+  sales: 'nav-section-sales',
+  products: 'nav-section-products',
+  finance: 'nav-section-finance',
+  customers: 'nav-section-customers',
+  reports: 'nav-section-reports',
+  management: 'nav-section-management',
+  inventory: 'nav-section-inventory',
+  settings: 'nav-section-settings',
+  dev: 'nav-section-dev',
+};
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface NavItemRegistration {
@@ -33,8 +60,8 @@ export interface NavItemRegistration {
   feature?: string;
   /** Optional role required to see this nav item. 'manager' includes owner. */
   requiredRole?: RequiredRole;
-  /** Optional section label to group nav items (e.g. "App", "Management"). */
-  section?: string;
+  /** Section this nav item belongs to for sidebar grouping. */
+  section?: SectionName;
 }
 
 // ── Registry ───────────────────────────────────────────────────────
