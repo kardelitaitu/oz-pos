@@ -12,6 +12,7 @@ import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
+import { useToast } from '@/hooks/useToast';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import './FeatureToggleScreen.css';
 
@@ -104,7 +105,7 @@ export default function FeatureToggleScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [toggling, setToggling] = useState<string | null>(null);
   const [togglingBatch, setTogglingBatch] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
+  const { addToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,23 +130,23 @@ export default function FeatureToggleScreen() {
       setFeatures(result.features);
 
       if (newValue && result.auto_enabled.length > 0) {
-        setToast({
-          message: l10n.getString('feature-toggle-auto-enabled', { list: result.auto_enabled.join(', ') }),
-          variant: 'success',
-        });
+        addToast(
+          l10n.getString('feature-toggle-auto-enabled', { list: result.auto_enabled.join(', ') }),
+          'success',
+        );
       } else {
-        setToast({
-          message: l10n.getString(newValue ? 'feature-toggle-enabled' : 'feature-toggle-disabled'),
-          variant: 'success',
-        });
+        addToast(
+          l10n.getString(newValue ? 'feature-toggle-enabled' : 'feature-toggle-disabled'),
+          'success',
+        );
       }
     } catch (err) {
-      setToast({
-        message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
-        variant: 'error',
-      });
+      addToast(
+        err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
+        'error',
+      );
     }
-  }, [l10n]);
+  }, [l10n, addToast]);
 
   // ── Active feature set for preview ───────────────────────────
 
@@ -192,22 +193,22 @@ export default function FeatureToggleScreen() {
       // Reload full state after batch completes.
       const result = await listAllFeatures();
       setFeatures(result.features);
-      setToast({
-        message: l10n.getString(
+      addToast(
+        l10n.getString(
           enable ? 'feature-toggle-bulk-enabled' : 'feature-toggle-bulk-disabled',
           { group },
         ),
-        variant: 'success',
-      });
+        'success',
+      );
     } catch (err) {
-      setToast({
-        message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
-        variant: 'error',
-      });
+      addToast(
+        err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
+        'error',
+      );
     } finally {
       setTogglingBatch(null);
     }
-  }, [features, l10n]);
+  }, [features, l10n, addToast]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -368,17 +369,6 @@ export default function FeatureToggleScreen() {
           </Card>
         </div>
       ))}
-
-      {toast && (
-        <button
-          type="button"
-          className={toast.variant === 'success' ? 'feature-toggle-toast feature-toggle-toast--success' : 'feature-toggle-toast feature-toggle-toast--error'}
-          onClick={() => setToast(null)}
-          aria-label={l10n.getString('feature-toggle-dismiss-aria')}
-        >
-          {toast.message}
-        </button>
-      )}
     </div>
   );
 }

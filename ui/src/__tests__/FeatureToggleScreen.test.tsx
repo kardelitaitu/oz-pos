@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import salesFtl from '@/locales/sales.ftl?raw';
+import { ToastProvider } from '@/hooks/useToast';
 
 // ── Mock Tauri IPC ─────────────────────────────────────────────────
 
@@ -43,7 +44,11 @@ function FluentWrapper({ children }: { children: ReactNode }) {
   bundle.addResource(new FluentResource(settingsFtl));
   bundle.addResource(new FluentResource(salesFtl));
   const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
+  return (
+    <LocalizationProvider l10n={l10n}>
+      <ToastProvider>{children}</ToastProvider>
+    </LocalizationProvider>
+  );
 }
 
 describe('FeatureToggleScreen', () => {

@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { useToast } from '@/hooks/useToast';
 import {
   getBackupStatus,
   createBackup,
@@ -103,7 +104,7 @@ export default function DataManagementScreen() {
     backingUp: false,
   });
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'backup'>('export');
-  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
+  const { addToast } = useToast();
 
   // ── Load backup status on mount ─────────────────────────────────
 
@@ -132,10 +133,10 @@ export default function DataManagementScreen() {
         lastBackupSize: `${(result.sizeBytes / 1024 / 1024).toFixed(1)} MB`,
         backingUp: false,
       });
-      setToast({ message: l10n.getString('data-mgmt-toast-backup-success'), variant: 'success' });
+      addToast(l10n.getString('data-mgmt-toast-backup-success'), 'success');
     } catch {
       setBackup((prev) => ({ ...prev, backingUp: false }));
-      setToast({ message: l10n.getString('data-mgmt-toast-backup-fail'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-backup-fail'), 'error');
     }
   }, [l10n]);
 
@@ -164,7 +165,7 @@ export default function DataManagementScreen() {
 
   const startExport = useCallback(() => {
     if (exportState.selectedTypes.size === 0) {
-      setToast({ message: l10n.getString('data-mgmt-toast-export-select-type'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-export-select-type'), 'error');
       return;
     }
     setExportState((prev) => ({ ...prev, step: 'encrypt', error: null }));
@@ -172,11 +173,11 @@ export default function DataManagementScreen() {
 
   const confirmExport = useCallback(async () => {
     if (exportState.password.length < 8) {
-      setToast({ message: l10n.getString('data-mgmt-toast-export-password-length'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-export-password-length'), 'error');
       return;
     }
     if (exportState.password !== exportState.passwordConfirm) {
-      setToast({ message: l10n.getString('data-mgmt-toast-export-password-match'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-export-password-match'), 'error');
       return;
     }
 
@@ -205,14 +206,14 @@ export default function DataManagementScreen() {
         progress: 100,
         outputFile: result.path,
       }));
-      setToast({ message: l10n.getString('data-mgmt-toast-export-success'), variant: 'success' });
+      addToast(l10n.getString('data-mgmt-toast-export-success'), 'success');
     } catch (err) {
       setExportState((prev) => ({
         ...prev,
         step: 'encrypt',
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-export-fail'),
       }));
-      setToast({ message: l10n.getString('data-mgmt-toast-export-fail'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-export-fail'), 'error');
     }
   }, [exportState.password, exportState.passwordConfirm, l10n]);
 
@@ -236,17 +237,17 @@ export default function DataManagementScreen() {
       // Preview the file (requires password — skip for now, user enters it later)
       // We just set the file path and let the user enter the password.
     } catch {
-      setToast({ message: l10n.getString('data-mgmt-toast-file-picker-fail'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-file-picker-fail'), 'error');
     }
   }, [l10n]);
 
   const startImport = useCallback(async () => {
     if (!importState.password) {
-      setToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-import-enter-password'), 'error');
       return;
     }
     if (!importState.selectedFile) {
-      setToast({ message: l10n.getString('data-mgmt-toast-import-no-file'), variant: 'error' });
+      addToast(l10n.getString('data-mgmt-toast-import-no-file'), 'error');
       return;
     }
 
@@ -298,29 +299,20 @@ export default function DataManagementScreen() {
         },
         step: 'done',
       }));
-      setToast({ message: l10n.getString('data-mgmt-toast-import-success'), variant: 'success' });
+      addToast(l10n.getString('data-mgmt-toast-import-success'), 'success');
     } catch (err) {
       setImportState((prev) => ({
         ...prev,
         step: 'select',
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
       }));
-      setToast({ message: l10n.getString('data-mgmt-toast-import-fail'), variant: 'error' });
+      addToast(err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), 'error');
     }
   }, [importState.password, importState.selectedFile, l10n]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
   }, []);
-
-  // ── Toast auto-dismiss ──────────────────────────────────────────
-
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   // ── Render ──────────────────────────────────────────────────────
 
@@ -767,18 +759,6 @@ export default function DataManagementScreen() {
             </div>
           </Card>
         </div>
-      )}
-
-      {/* ── Toast ──────────────────────────────────── */}
-      {toast && (
-        <button
-          type="button"
-          className={`data-mgmt-toast data-mgmt-toast--${toast.variant}`}
-          onClick={() => setToast(null)}
-          aria-label={l10n.getString('data-mgmt-dismiss-aria')}
-        >
-          {toast.message}
-        </button>
       )}
     </div>
   );
