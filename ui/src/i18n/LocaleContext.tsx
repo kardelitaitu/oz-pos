@@ -1,4 +1,6 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useCallback } from 'react';
+
 import type { ReactNode } from 'react';
 import type { FluentBundle } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';

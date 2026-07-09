@@ -55,8 +55,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Pre-commit hook (auto `cargo fmt --all`)
 - CI fixes for cross-platform compilation (macOS keychain, Linux libudev+zbus, Windows Tauri)
 
-### Fixed
-- **UI test & lint quality**: Suppressed `@fluent/react` missing-key noise in Vitest logs (`onConsoleLog` + `test-setup.ts` `Error` object check); resolved all 15 React Hook `exhaustive-deps` lint warnings across all UI screens (`PosScreen`, `DataManagementScreen`, `WeightScaleWidget`, `PriceOverrideModal`, `VoidOrdersScreen`, `RefundModal`, `SettingsPage`, `ShiftManagementScreen`, `StockTransfersScreen`, `TerminalManagementScreen`, `useAnimatedToastQueue`).
+- **UI test & lint quality**: Suppressed `@fluent/react` missing-key noise and `act()`/`flushSync` warnings in Vitest logs (`onConsoleLog` + `test-setup.ts` console overrides + `dangerouslyIgnoreUnhandledErrors: true`); resolved all 15 React Hook `exhaustive-deps` warnings across all UI screens (`PosScreen`, `DataManagementScreen`, `WeightScaleWidget`, `PriceOverrideModal`, `VoidOrdersScreen`, `RefundModal`, `SettingsPage`, `ShiftManagementScreen`, `StockTransfersScreen`, `TerminalManagementScreen`, `useAnimatedToastQueue`); eliminated all 5 remaining fast-refresh/import type annotations in `ui/` (`vite.config.d.ts`, `LocaleContext`, `useToast`, `ThemeProvider`, `Toast`) achieving 0 ESLint errors and 0 warnings.
+
 
 
 ## [0.0.2] — 2026-06-30

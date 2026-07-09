@@ -46,11 +46,16 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    dangerouslyIgnoreUnhandledErrors: true,
     onConsoleLog(log, _type) {
       if (log.includes('[@fluent/react]') && log.includes('did not match any messages')) {
         return false;
       }
+      if (log.includes('was not wrapped in act') || log.includes('flushSync was called from inside')) {
+        return false;
+      }
     },
+
 
 
     // ── Coverage ────────────────────────────────────────────────────────

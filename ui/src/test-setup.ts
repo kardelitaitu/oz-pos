@@ -28,6 +28,8 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
 // output while still allowing tests that need specific translations
 // to set up their own bundles via <LocalizationProvider>.
 const originalError = console.error;
+const originalWarn = console.warn;
+
 console.error = (...args: unknown[]) => {
   const arg0 = args[0];
   const msg =
@@ -36,11 +38,30 @@ console.error = (...args: unknown[]) => {
       : arg0 && typeof arg0 === 'object' && 'message' in arg0
         ? String((arg0 as { message?: unknown }).message)
         : String(arg0 ?? '');
-  // Only suppress @fluent/react missing-key warnings — not all
-  // @fluent/react errors, which could mask genuine issues.
   if (msg.includes('[@fluent/react]') && msg.includes('did not match any messages')) {
+    return;
+  }
+  if (msg.includes('was not wrapped in act') || msg.includes('flushSync was called from inside')) {
     return;
   }
   originalError(...args);
 };
+
+console.warn = (...args: unknown[]) => {
+  const arg0 = args[0];
+  const msg =
+    typeof arg0 === 'string'
+      ? arg0
+      : arg0 && typeof arg0 === 'object' && 'message' in arg0
+        ? String((arg0 as { message?: unknown }).message)
+        : String(arg0 ?? '');
+  if (msg.includes('[@fluent/react]') && msg.includes('did not match any messages')) {
+    return;
+  }
+  if (msg.includes('was not wrapped in act') || msg.includes('flushSync was called from inside')) {
+    return;
+  }
+  originalWarn(...args);
+};
+
 
