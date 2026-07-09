@@ -316,13 +316,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   useEffect(() => {
-    listProducts().then(setProducts).catch(() => { addToast({ message: l10n.getString('retail-toast-failed-products') || 'Failed to load products', type: 'error' }); playError(); });
+    const controller = new AbortController();
+    listProducts().then(setProducts).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-products') || 'Failed to load products', type: 'error' }); playError(); } });
     listCategories().then((cats) => {
+      if (controller.signal.aborted) return;
       setCategories(cats);
       const first = cats[0];
       if (first) setActiveCategory(first.id);
-    }).catch(() => { addToast({ message: l10n.getString('retail-toast-failed-categories') || 'Failed to load categories', type: 'error' }); playError(); });
-  }, []);
+    }).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-categories') || 'Failed to load categories', type: 'error' }); playError(); } });
+    return () => { controller.abort(); };
+  }, [addToast, l10n, playError]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -460,8 +463,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const [storeSettings, setStoreSettings] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' });
   useEffect(() => {
-    getStoreSettings().then(setStoreSettings).catch(() => addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }));
-  }, []);
+    let mounted = true;
+    getStoreSettings().then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
+    return () => { mounted = false; };
+  }, [addToast, l10n]);
 
   // ── Shift management ─────────────────────────────────────────
 
@@ -515,7 +520,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setOpeningShift(false);
     }
-  }, [openingBalance, userId, addToast]);
+  }, [openingBalance, userId, addToast, l10n]);
 
   const handleCloseShift = useCallback(async () => {
     if (!activeShift) return;
@@ -532,7 +537,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setClosingShift(false);
     }
-  }, [activeShift, closingBalance, shiftNotes]);
+  }, [activeShift, closingBalance, shiftNotes, l10n, userId]);
 
   // ── Live tax preview ────────────────────────────────────────
 
@@ -649,7 +654,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       })
       .catch(() => setCustomerSearchResults([]))
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch]);
+  }, [showCustomerSearch, customerSearchQuery]);
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -673,7 +678,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handlePay = useCallback(() => {
     if (!activeShift) { addToast({ message: l10n.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
     setShowPayment(true);
-  }, [activeShift, addToast]);
+  }, [activeShift, addToast, l10n]);
 
   // ── Hold cart ────────────────────────────────────────────────
 
@@ -704,7 +709,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch {
       addToast({ message: l10n.getString('retail-toast-failed-hold') || 'Failed to hold order', type: 'error' });
     }
-  }, [lines, discountPercent, discountLabel, subtotal, resetCart, addToast]);
+  }, [lines, discountPercent, discountLabel, subtotal, resetCart, addToast, l10n]);
 
   const handleResumeCart = useCallback(async (cartId: string) => {
     try {
@@ -723,7 +728,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch {
       addToast({ message: l10n.getString('retail-toast-failed-resume') || 'Failed to resume order', type: 'error' });
     }
-  }, [addProduct, setDiscount, addToast]);
+  }, [addProduct, setDiscount, addToast, l10n]);
 
   const handleResume = useCallback(async () => {
     const carts = await listHeldCarts();
@@ -746,18 +751,21 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch {
       addToast({ type: 'error', message: l10n.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
     }
-  }, [heldCartId, addToast]);
+  }, [heldCartId, addToast, l10n]);
 
   // ── Load persisted held carts on mount ───────────────────────
 
   useEffect(() => {
+    let mounted = true;
     listHeldCarts()
       .then((carts) => {
+        if (!mounted) return;
         const held = carts.find((c) => c.bill_type === 'hold');
         if (held) setHeldCartId(held.id);
       })
-      .catch(() => addToast({ message: 'Failed to load held carts', type: 'error' }));
-  }, []);
+      .catch(() => { if (mounted) addToast({ message: 'Failed to load held carts', type: 'error' }); });
+    return () => { mounted = false; };
+  }, [addToast]);
 
   // ── Options full-screen page ─────────────────────────────────
 
@@ -794,7 +802,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setSettlingId(null);
     }
-  }, [userId, addToast]);
+  }, [userId, addToast, l10n]);
 
   // ── Clock ────────────────────────────────────────────────────
 

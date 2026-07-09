@@ -209,7 +209,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   const [taxRates, setTaxRates] = useState<TaxRateDto[]>([]);
 
   useEffect(() => {
-    listTaxRates().then(setTaxRates).catch(() => addToast({ message: l10n.getString('settings-toast-failed-tax-rates') || 'Failed to load tax rates', type: 'error' }));
+    let mounted = true;
+    listTaxRates().then((rates) => { if (mounted) setTaxRates(rates); }).catch(() => { if (mounted) addToast({ message: l10n.getString('settings-toast-failed-tax-rates') || 'Failed to load tax rates', type: 'error' }); });
+    return () => { mounted = false; };
   }, [addToast, l10n]);
 
   // ── Store settings ────────────────────────────────────────────
@@ -218,10 +220,12 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   const [storeLoaded, setStoreLoaded] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     getStoreSettings()
-      .then(setStore)
-      .catch(() => addToast({ message: l10n.getString('settings-toast-failed-store-settings') || 'Failed to load store settings', type: 'error' }))
-      .finally(() => setStoreLoaded(true));
+      .then((s) => { if (mounted) setStore(s); })
+      .catch(() => { if (mounted) addToast({ message: l10n.getString('settings-toast-failed-store-settings') || 'Failed to load store settings', type: 'error' }); })
+      .finally(() => { if (mounted) setStoreLoaded(true); });
+    return () => { mounted = false; };
   }, [addToast, l10n]);
 
   // ── Receipt settings ──────────────────────────────────────────
@@ -234,10 +238,12 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   const [receiptLoaded, setReceiptLoaded] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     getReceiptSettings()
-      .then(setReceipt)
-      .catch(() => addToast({ message: l10n.getString('settings-toast-failed-receipt-settings') || 'Failed to load receipt settings', type: 'error' }))
-      .finally(() => setReceiptLoaded(true));
+      .then((r) => { if (mounted) setReceipt(r); })
+      .catch(() => { if (mounted) addToast({ message: l10n.getString('settings-toast-failed-receipt-settings') || 'Failed to load receipt settings', type: 'error' }); })
+      .finally(() => { if (mounted) setReceiptLoaded(true); });
+    return () => { mounted = false; };
   }, [addToast, l10n]);
 
   // ── Credit settings ───────────────────────────────────────────
@@ -249,10 +255,12 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   const [autoLockMinutes, setAutoLockLocal] = useState(getAutoLockMinutes);
 
   useEffect(() => {
+    let mounted = true;
     getCreditSettings()
-      .then(setCredit)
-      .catch(() => addToast({ message: l10n.getString('settings-toast-failed-credit-settings') || 'Failed to load credit settings', type: 'error' }))
-      .finally(() => setCreditLoaded(true));
+      .then((c) => { if (mounted) setCredit(c); })
+      .catch(() => { if (mounted) addToast({ message: l10n.getString('settings-toast-failed-credit-settings') || 'Failed to load credit settings', type: 'error' }); })
+      .finally(() => { if (mounted) setCreditLoaded(true); });
+    return () => { mounted = false; };
   }, [addToast, l10n]);
 
   // ── Hardware settings ─────────────────────────────────────────
@@ -267,17 +275,21 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   const [hardwareLoaded, setHardwareLoaded] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     getHardwareSettings()
-      .then(setHardware)
-      .catch(() => addToast({ message: l10n.getString('settings-toast-failed-hardware-settings') || 'Failed to load hardware settings', type: 'error' }))
-      .finally(() => setHardwareLoaded(true));
+      .then((h) => { if (mounted) setHardware(h); })
+      .catch(() => { if (mounted) addToast({ message: l10n.getString('settings-toast-failed-hardware-settings') || 'Failed to load hardware settings', type: 'error' }); })
+      .finally(() => { if (mounted) setHardwareLoaded(true); });
+    return () => { mounted = false; };
   }, [addToast, l10n]);
 
   // ── Scanner list ──────────────────────────────────────────────
 
   const [scanners, setScanners] = useState<ScannerInfo[]>([]);
   useEffect(() => {
-    listScanners().then(setScanners).catch(() => addToast({ message: l10n.getString('settings-toast-failed-scanners') || 'Failed to load scanners', type: 'error' }));
+    let mounted = true;
+    listScanners().then((s) => { if (mounted) setScanners(s); }).catch(() => { if (mounted) addToast({ message: l10n.getString('settings-toast-failed-scanners') || 'Failed to load scanners', type: 'error' }); });
+    return () => { mounted = false; };
   }, [addToast, l10n]);
 
   // ── Payment gateway config ─────────────────────────────────────
@@ -358,7 +370,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   const [displayTestMsg, setDisplayTestMsg] = useState('');
 
   useEffect(() => {
-    listDisplays().then(setDisplays).catch(() => addToast({ message: l10n.getString('settings-toast-failed-displays') || 'Failed to load displays', type: 'error' }));
+    let mounted = true;
+    listDisplays().then((d) => { if (mounted) setDisplays(d); }).catch(() => { if (mounted) addToast({ message: l10n.getString('settings-toast-failed-displays') || 'Failed to load displays', type: 'error' }); });
+    return () => { mounted = false; };
   }, [addToast, l10n]);
 
   // ── Save ──────────────────────────────────────────────────────
