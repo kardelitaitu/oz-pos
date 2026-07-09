@@ -592,6 +592,7 @@ mod tests {
             tax_rate_ids: vec!["t1".into()],
             created_at: "2025-01-01".into(),
             price_updated_at: "2025-01-01".into(),
+            product_type: "retail".into(),
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["sku"], "COFFEE");
@@ -614,6 +615,7 @@ mod tests {
             tax_rate_ids: vec![],
             created_at: "2025-01-01".into(),
             price_updated_at: "2025-01-01".into(),
+            product_type: "retail".into(),
         };
         let d = format!("{dto:?}");
         assert!(d.contains("Green Tea"));
@@ -679,6 +681,7 @@ mod tests {
             barcode: None,
             initial_stock: 0,
             tax_rate_ids: vec![],
+            product_type: "retail".into(),
         };
         let d = format!("{args:?}");
         assert!(d.contains("N"));

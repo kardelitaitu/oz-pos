@@ -104,7 +104,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 - [x] **1.3.1 [Keyword Search Bar UI]**: In `FeatureToggleScreen.tsx` (`ui/src/features/settings/FeatureToggleScreen.tsx`), add `searchQuery` state and search input box. Filter `grouped` items so only features whose `key`, `name`, or `description` match `searchQuery` case-insensitively are displayed.
 - [x] **1.3.2 [Group Bulk Action Buttons]**: In `FeatureToggleScreen.tsx`, render "Enable All" and "Disable All" buttons in the header of each group category card (`Core`, `Hardware`, `Business Rules`, etc.).
-- [ ] **1.3.3 [Bulk IPC Backend Command]**: Implement `set_features_bulk(keys: Vec<String>, enabled: bool)` in `apps/desktop-client/src/commands/features.rs` and register it in `lib.rs` so toggling an entire group of features executes atomically in a single SQLite transaction and returns the updated `ListAllFeaturesResult`.
+- [x] **1.3.3 [Bulk IPC Backend Command]**: Implement `set_features_bulk(keys: Vec<String>, enabled: bool)` in `apps/desktop-client/src/commands/features.rs` and register it in `lib.rs` so toggling an entire group of features executes atomically in a single SQLite transaction and returns the updated `ListAllFeaturesResult`.
 
 ---
 

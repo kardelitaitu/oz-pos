@@ -133,18 +133,16 @@ pub async fn set_features_bulk(
     args: SetFeaturesBulkArgs,
     state: State<'_, AppState>,
 ) -> Result<ListAllFeaturesResult, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
+    let mut db = state.db.lock().await;
 
     // Start a SQLite transaction for atomicity.
-    let tx = store.conn.transaction().map_err(|e| {
+    let tx = db.transaction().map_err(|e| {
         AppError::Internal(format!("failed to start transaction for bulk toggle: {e}"))
     })?;
 
-    // Load features within the transaction.
-    let mut reg = oz_core::FeatureRegistry::load_from_store(&tx).map_err(|e| {
-        AppError::Internal(format!("failed to load features in bulk toggle: {e}"))
-    })?;
+    // Use Store within the transaction (Transaction derefs to Connection).
+    let store = Store::new(&tx);
+    let mut reg = store.load_features()?;
 
     // Parse and apply each key.
     for key in &args.keys {
@@ -159,17 +157,12 @@ pub async fn set_features_bulk(
     }
 
     // Persist and prune within the transaction.
-    reg.save_to_store(&tx).map_err(|e| {
-        AppError::Internal(format!("failed to persist bulk feature toggle: {e}"))
-    })?;
-    reg.prune_stale_features(&tx).map_err(|e| {
-        AppError::Internal(format!("failed to prune stale features in bulk toggle: {e}"))
-    })?;
+    store.save_features(&reg)?;
+    store.prune_stale_features(&reg)?;
 
     // Commit the transaction.
-    tx.commit().map_err(|e| {
-        AppError::Internal(format!("failed to commit bulk feature toggle: {e}"))
-    })?;
+    tx.commit()
+        .map_err(|e| AppError::Internal(format!("failed to commit bulk feature toggle: {e}")))?;
 
     let features = build_feature_list(&reg);
     Ok(ListAllFeaturesResult { features })
@@ -341,26 +334,7 @@ pub async fn set_feature(
         }
     }
 
-    // Build the full feature list response.
-    let features = all_feature_metadata()
-        .into_iter()
-        .map(|(feat, name, desc, group)| {
-            let key = oz_core::features::feature_key(feat).to_string();
-            let deps: Vec<String> = feat
-                .dependencies()
-                .iter()
-                .map(|d| oz_core::features::feature_key(*d).to_string())
-                .collect();
-            FeatureDto {
-                key,
-                name,
-                description: desc,
-                group,
-                enabled: reg.is_enabled(feat),
-                dependencies: deps,
-            }
-        })
-        .collect();
+    let features = build_feature_list(&reg);
 
     Ok(SetFeatureResult {
         success: true,
@@ -663,6 +637,46 @@ mod tests {
                 );
             }
         }
+    }
+
+    // ── SetFeaturesBulkArgs ────────────────────────────────────────
+
+    #[test]
+    fn set_features_bulk_args_deserialize() {
+        let json = r#"{"keys": ["simple-retail", "cash-payment"], "enabled": true}"#;
+        let args: SetFeaturesBulkArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.keys.len(), 2);
+        assert_eq!(args.keys[0], "simple-retail");
+        assert_eq!(args.keys[1], "cash-payment");
+        assert!(args.enabled);
+    }
+
+    #[test]
+    fn set_features_bulk_args_deserialize_disable() {
+        let json = r#"{"keys": ["kitchen-display"], "enabled": false}"#;
+        let args: SetFeaturesBulkArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.keys.len(), 1);
+        assert_eq!(args.keys[0], "kitchen-display");
+        assert!(!args.enabled);
+    }
+
+    #[test]
+    fn set_features_bulk_args_empty_keys() {
+        let json = r#"{"keys": [], "enabled": true}"#;
+        let args: SetFeaturesBulkArgs = serde_json::from_str(json).unwrap();
+        assert!(args.keys.is_empty());
+        assert!(args.enabled);
+    }
+
+    #[test]
+    fn set_features_bulk_args_debug() {
+        let args = SetFeaturesBulkArgs {
+            keys: vec!["hardware".into()],
+            enabled: false,
+        };
+        let debug = format!("{args:?}");
+        assert!(debug.contains("hardware"));
+        assert!(debug.contains("false"));
     }
 
     // ── all_feature_metadata ─────────────────────────────────────

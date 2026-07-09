@@ -787,6 +787,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -812,6 +813,7 @@ describe('RetailPosScreen', () => {
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount, resetCart: vi.fn(),
       updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -842,6 +844,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     const shiftsApi = await import('@/api/shifts');
@@ -904,6 +907,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -929,6 +933,7 @@ describe('RetailPosScreen', () => {
       addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), resetCart,
       updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -957,6 +962,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -982,6 +988,7 @@ describe('RetailPosScreen', () => {
       addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
       setDiscount: vi.fn(), resetCart,
       updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
     const shiftsApi = await import('@/api/shifts');
