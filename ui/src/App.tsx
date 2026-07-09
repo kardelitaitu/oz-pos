@@ -73,8 +73,8 @@ function icon(path: string, ...children: ReactNode[]) {
 registerPage({ route: 'sales', component: PosScreen, label: 'POS Terminal', feature: 'simple-retail' });
 registerNavItem({ route: 'sales', label: 'POS Terminal', feature: 'simple-retail', i18nKey: 'nav-pos-terminal', section: 'operations', icon: icon('M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', <polyline points="3.29 7 12 12 20.71 7" />) });
 
-registerPage({ route: 'kds', component: KdsScreen, label: 'KDS', feature: 'kds' });
-registerNavItem({ route: 'kds', label: 'KDS', feature: 'kds', i18nKey: 'nav-kds', section: 'operations',
+registerPage({ route: 'kds', component: KdsScreen, label: 'KDS', feature: 'kitchen-display' });
+registerNavItem({ route: 'kds', label: 'KDS', feature: 'kitchen-display', i18nKey: 'nav-kds', section: 'operations',
   icon: icon('M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 5h6') });
 
 registerPage({ route: 'products', component: ProductLookupScreen, label: 'Products' });
@@ -172,8 +172,8 @@ registerPage({ route: 'kiosk', component: KioskScreen, label: 'Kiosk', feature: 
 registerNavItem({ route: 'kiosk', label: 'Kiosk', feature: 'self-service-kiosk', i18nKey: 'nav-kiosk', section: 'operations',
   icon: icon('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z') });
 
-registerPage({ route: 'tables', component: TableManagementScreen, label: 'Tables', feature: 'tables' });
-registerNavItem({ route: 'tables', label: 'Tables', feature: 'tables', i18nKey: 'nav-tables', section: 'operations',
+registerPage({ route: 'tables', component: TableManagementScreen, label: 'Tables', feature: 'table-management' });
+registerNavItem({ route: 'tables', label: 'Tables', feature: 'table-management', i18nKey: 'nav-tables', section: 'operations',
   icon: icon('M3 3h7v7H3V3zm11 0h7v7h-7V3zM3 14h7v7H3v-7zm11 0h7v7h-7v-7z') });
 
 registerPage({ route: 'promotions', component: PromotionManagementScreen, label: 'Promotions', requiredRole: 'manager' });

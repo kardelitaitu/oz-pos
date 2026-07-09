@@ -18,7 +18,8 @@ step_counter=1
 step() {
     local name=$1; shift
     local retry_cmd=$1; shift
-    echo -n "${step_counter}. checking ${name}... "
+    local step_str; step_str=$(printf "%02d" "${step_counter}")
+    echo -n "${step_str}. checking ${name}... "
     step_counter=$((step_counter + 1))
 
     local start; start=$(date +%s)

@@ -28,7 +28,9 @@ export const FEATURES = {
   QUICK_RETURN: 'quick-return',
   PROMOTIONS_ENGINE: 'promotions-engine',
   PRODUCT_BUNDLES: 'product-bundles',
+  PURCHASE_ORDERS: 'purchase-orders',
   SERIAL_TRACKING: 'serial-tracking',
+  STOCK_COUNTING: 'stock-counting',
   STOCK_TRANSFERS: 'stock-transfers',
   KITCHEN_DISPLAY: 'kitchen-display',
   TABLE_MANAGEMENT: 'table-management',
@@ -39,6 +41,7 @@ export const FEATURES = {
   REPORTING: 'reporting',
   ANALYTICS: 'analytics',
   EXPORT_IMPORT: 'export-import',
+  GIFT_CARDS: 'gift-cards',
   PLUGIN_SYSTEM: 'plugin-system',
 } as const;
 
