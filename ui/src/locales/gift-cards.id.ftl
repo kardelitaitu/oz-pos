@@ -1,28 +1,28 @@
-# ui/src/locales/gift-cards.ftl — Gift Cards
+# ui/src/locales/gift-cards.id.ftl — Kartu Hadiah
 
-gift-cards-title = Gift Cards
-gift-cards-issue-btn = + Issue New Card
-gift-cards-no-cards = No gift cards found.
-gift-cards-search-placeholder = Search by card number or issued to…
-gift-cards-search-aria = Search gift cards
-gift-cards-status-aria = Filter by status
+gift-cards-title = Kartu Hadiah
+gift-cards-issue-btn = + Terbitkan Kartu Baru
+gift-cards-no-cards = Tidak ada kartu hadiah ditemukan.
+gift-cards-search-placeholder = Cari berdasarkan nomor kartu atau penerima…
+gift-cards-search-aria = Cari kartu hadiah
+gift-cards-status-aria = Saring berdasarkan status
 
-gift-cards-issue-title = Issue Gift Card
-gift-cards-issue-number-label = Card Number
-gift-cards-issue-number-aria = Card number
-gift-cards-issue-invalid-number = Invalid card number format
-gift-cards-issue-amount-label = Initial Amount
-gift-cards-issue-amount-aria = Initial amount
-gift-cards-issue-invalid-amount = Amount must be positive
-gift-cards-issue-to-label = Issued To (optional)
-gift-cards-issue-to-aria = Issued to
-gift-cards-issue-pin-label = PIN (optional)
+gift-cards-issue-title = Terbitkan Kartu Hadiah
+gift-cards-issue-number-label = Nomor Kartu
+gift-cards-issue-number-aria = Nomor kartu
+gift-cards-issue-invalid-number = Format nomor kartu tidak valid
+gift-cards-issue-amount-label = Jumlah Awal
+gift-cards-issue-amount-aria = Jumlah awal
+gift-cards-issue-invalid-amount = Jumlah harus positif
+gift-cards-issue-to-label = Diterbitkan Kepada (opsional)
+gift-cards-issue-to-aria = Diterbitkan kepada
+gift-cards-issue-pin-label = PIN (opsional)
 gift-cards-issue-pin-aria = PIN
-gift-cards-issue-confirm = Issue Card
+gift-cards-issue-confirm = Terbitkan Kartu
 
-gift-cards-topup-invalid = Top-up amount must be positive
+gift-cards-topup-invalid = Jumlah top-up harus positif
 
-gift-cards-payment-enter-number = Enter a gift card number
-gift-cards-payment-not-found = Gift card not found
-gift-cards-payment-not-active = Gift card is not active
-gift-cards-payment-insufficient = Insufficient balance on gift card
+gift-cards-payment-enter-number = Masukkan nomor kartu hadiah
+gift-cards-payment-not-found = Kartu hadiah tidak ditemukan
+gift-cards-payment-not-active = Kartu hadiah tidak aktif
+gift-cards-payment-insufficient = Saldo kartu hadiah tidak mencukupi

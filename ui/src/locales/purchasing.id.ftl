@@ -1,11 +1,11 @@
-# ui/src/locales/purchasing.ftl — Suppliers & Purchase Orders
+# ui/src/locales/purchasing.id.ftl — Pemasok & Pesanan Pembelian
 
-suppliers-title = Suppliers
-suppliers-add = Add Supplier
+suppliers-title = Pemasok
+suppliers-add = Tambah Pemasok
 suppliers-search =
-    .placeholder = Search by name, code, or contact…
-    .aria-label = Search suppliers
-suppliers-loading = Loading suppliers…
+    .placeholder = Cari berdasarkan nama, kode, atau kontak…
+    .aria-label = Cari pemasok
+suppliers-loading = Memuat pemasok…
 
-po-title = Purchase Orders
-po-add = New Purchase Order
+po-title = Pesanan Pembelian
+po-add = Pesanan Pembelian Baru
