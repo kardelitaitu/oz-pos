@@ -53,25 +53,26 @@
 }
 
 .staff-login-logo {
-  width: 56px;
-  height: 56px;
+  width: 72px;
+  height: 72px;
   border-radius: var(--radius-full);
   background: var(--color-accent-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-accent);
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
 }
 
 .staff-login-logo svg {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
 }
 
 .staff-login-logo-img {
-  width: 36px;
-  height: 36px;
+  width: 56px;
+  height: 56px;
   object-fit: contain;
 }
 

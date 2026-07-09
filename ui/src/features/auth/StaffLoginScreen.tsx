@@ -30,6 +30,48 @@ function BackspaceIcon() {
 
 const MAX_PIN_LENGTH = 6;
 
+// ── Resized Logo Helper (1:1 PNG to 256x256) ─────────────────────────
+
+function useResizedLogo(src: string | null | undefined, targetSize = 256) {
+  const [resizedUrl, setResizedUrl] = useState<string | null>(src || null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!src) {
+      setResizedUrl(null);
+      setError(false);
+      return;
+    }
+    setResizedUrl(src);
+    setError(false);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, targetSize, targetSize);
+          setResizedUrl(canvas.toDataURL('image/png'));
+        }
+      } catch {
+        setResizedUrl(src);
+      }
+    };
+    img.onerror = () => {
+      setError(true);
+    };
+    img.src = src;
+  }, [src, targetSize]);
+
+  return { resizedUrl, error };
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 type Step = 'username' | 'pin';
@@ -38,7 +80,9 @@ export default function StaffLoginScreen() {
   const { l10n } = useLocalization();
   const { login, loading, error, clearError } = useAuth();
   const brandSettings = useOptionalBrand();
-  const [logoError, setLogoError] = useState(false);
+  const rawLogoPath = brandSettings?.logo_path || '/256x256.png';
+  const { resizedUrl, error: primaryLogoError } = useResizedLogo(rawLogoPath, 256);
+  const [fallbackSvgError, setFallbackSvgError] = useState(false);
   const [step, setStep] = useState<Step>('username');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState<string[]>([]);
@@ -241,12 +285,18 @@ export default function StaffLoginScreen() {
       <div className="staff-login-card">
         {/* Logo */}
         <div className="staff-login-logo">
-          {!logoError && (brandSettings?.logo_path || '/branding/logo-mark.svg') ? (
+          {!primaryLogoError && resizedUrl ? (
             <img
-              src={brandSettings?.logo_path || '/branding/logo-mark.svg'}
+              src={resizedUrl}
               alt={brandSettings?.store_name || 'OZ-POS'}
               className="staff-login-logo-img"
-              onError={() => setLogoError(true)}
+            />
+          ) : !fallbackSvgError ? (
+            <img
+              src="/branding/logo-mark.svg"
+              alt={brandSettings?.store_name || 'OZ-POS'}
+              className="staff-login-logo-img"
+              onError={() => setFallbackSvgError(true)}
             />
           ) : (
             <UserIcon />

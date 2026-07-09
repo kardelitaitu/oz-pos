@@ -48,6 +48,9 @@ foreach ($size in @("128x128.png", "64x64.png", "32x32.png")) {
 
 # 2. Sync Web & PWA Icons to ui/public/
 $webDir = "$BrandDir/web"
+if (Test-Path "$desktopDir/256x256.png") {
+    Copy-Item -Force "$desktopDir/256x256.png" "ui/public/256x256.png" -ErrorAction SilentlyContinue
+}
 if (Test-Path $webDir) {
     Copy-Item -Force -Recurse "$webDir/*" "ui/public/"
     Write-Host "  [OK] Updated ui/public/ with web & PWA icons from $webDir" -ForegroundColor Green
