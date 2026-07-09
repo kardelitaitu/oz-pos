@@ -28,6 +28,7 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
+import { useToast } from '@/hooks/useToast';
 import { AppearanceSettings } from './AppearanceSettings';
 import './SettingsPage.css';
 
@@ -47,6 +48,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
 
   const [receipt, setReceipt] = useState<ReceiptSettingsDto>({
     showCurrency: false,
@@ -151,11 +153,11 @@ export default function SettingsPage() {
       setTimeout(() => setSaved(false), 2000);
       setSyncApiKey('');
     } catch {
-      // Toast or error state could go here.
+      addToast(l10n.getString('settings-save-error'), 'error');
     } finally {
       setSaving(false);
     }
-  }, [receipt, store, defaultCurrency, userId, displayCardSize, displayFontSize, displayFontSmoothing]);
+  }, [receipt, store, defaultCurrency, userId, displayCardSize, displayFontSize, displayFontSmoothing, addToast, l10n]);
 
   if (loading) {
     return <div className="settings-page"><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;
@@ -450,21 +452,6 @@ export default function SettingsPage() {
             </Localized>
           </label>
 
-          {/* Save */}
-          <div className="settings-actions">
-            <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
-              <Button
-                variant="primary"
-                loading={saving}
-                onClick={handleSave}
-                aria-label={saved ? 'Saved!' : 'Save settings'}
-              >
-                <Localized id={saved ? 'settings-saved' : 'settings-btn-save'}>
-                  <span>{saved ? 'Saved!' : 'Save'}</span>
-                </Localized>
-              </Button>
-            </Localized>
-          </div>
         </div>
       </Card>
 
@@ -603,6 +590,22 @@ export default function SettingsPage() {
           </div>
         )}
       </Card>
+
+      {/* ── Page-level Save ───────────────────────── */}
+      <div className="settings-page-actions">
+        <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
+          <Button
+            variant="primary"
+            loading={saving}
+            onClick={handleSave}
+            aria-label={saved ? 'Saved!' : 'Save settings'}
+          >
+            <Localized id={saved ? 'settings-saved' : 'settings-btn-save'}>
+              <span>{saved ? 'Saved!' : 'Save'}</span>
+            </Localized>
+          </Button>
+        </Localized>
+      </div>
     </div>
   );
 }

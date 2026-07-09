@@ -81,6 +81,12 @@
   padding-top: var(--space-2);
 }
 
+.settings-page-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-6);
+}
+
 .settings-hint {
   font-size: var(--text-sm);
   color: var(--color-fg-secondary);

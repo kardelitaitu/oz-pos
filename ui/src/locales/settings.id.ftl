@@ -236,6 +236,7 @@ settings-btn-save-aria =
         [saved] Tersimpan!
        *[save] Simpan pengaturan
     }
+settings-save-error = Gagal menyimpan pengaturan. Silakan coba lagi.
 settings-sync-not-configured = Sinkronisasi belum dikonfigurasi. Masukkan URL server dan aktifkan sinkronisasi.
 settings-appearance = Tampilan
 appearance-primary-colour = Warna Utama

@@ -225,6 +225,7 @@ settings-btn-save-aria =
         [saved] Saved!
        *[save] Save settings
     }
+settings-save-error = Failed to save settings. Please try again.
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
 settings-font-smoothing-antialiased = Antialiased (crisp)
 settings-font-smoothing-subpixel = Subpixel (smooth)
