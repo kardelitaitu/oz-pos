@@ -42,6 +42,7 @@ mod tests {
             last_error: None,
             created_at: created_at.to_owned(),
             synced_at: None,
+            tenant_id: "default".into(),
         }
     }
 

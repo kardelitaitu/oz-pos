@@ -32,6 +32,10 @@ pub struct ApiTokenClaims {
     pub exp: usize,
     /// When the token was issued (epoch seconds).
     pub iat: usize,
+    /// Tenant / store ID for multi-tenant cloud isolation.
+    /// `None` for single-store deployments (backward compatible).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
 }
 
 /// Response body returned when a new token is created.
@@ -55,11 +59,16 @@ fn signing_secret() -> String {
         .unwrap_or_else(|_| "oz-pos-dev-secret-change-in-production".into())
 }
 
-/// Generate a new signed JWT with the given subject label.
+/// Generate a new signed JWT with the given subject label, optionally
+/// scoped to a tenant.
 ///
 /// The token expires after `expiry_hours` (default 24). Returns the
 /// signed token string and its expiry timestamp.
-pub fn create_token(subject: &str, expiry_hours: Option<i64>) -> TokenResponse {
+pub fn create_token(
+    subject: &str,
+    expiry_hours: Option<i64>,
+    tenant_id: Option<&str>,
+) -> TokenResponse {
     let hours = expiry_hours.unwrap_or(DEFAULT_EXPIRY_HOURS);
     let now = Utc::now();
     let exp_time = now + Duration::hours(hours);
@@ -70,6 +79,7 @@ pub fn create_token(subject: &str, expiry_hours: Option<i64>) -> TokenResponse {
         jti: token_id.clone(),
         exp: exp_time.timestamp() as usize,
         iat: now.timestamp() as usize,
+        tenant_id: tenant_id.map(|s| s.to_owned()),
     };
 
     let secret = signing_secret();
@@ -124,7 +134,7 @@ mod tests {
 
     #[test]
     fn create_and_validate() {
-        let resp = create_token("test-script", Some(1));
+        let resp = create_token("test-script", Some(1), None);
         let claims = validate_token(&resp.token).unwrap();
         assert_eq!(claims.sub, "test-script");
         assert_eq!(claims.jti, resp.token_id);
@@ -137,7 +147,7 @@ mod tests {
 
     #[test]
     fn tampered_token_is_rejected() {
-        let resp = create_token("tamper", Some(24));
+        let resp = create_token("tamper", Some(24), None);
         // Append junk to invalidate the signature.
         let bad = format!("{}x", resp.token);
         assert!(validate_token(&bad).is_err());
@@ -146,7 +156,7 @@ mod tests {
     #[test]
     fn expired_token_is_rejected() {
         // Create a token that was already expired 1 hour ago.
-        let resp = create_token("expired", Some(-1));
+        let resp = create_token("expired", Some(-1), None);
         let result = validate_token(&resp.token);
         assert!(result.is_err(), "expired token should be rejected");
     }
@@ -164,7 +174,7 @@ mod tests {
     #[test]
     fn create_token_default_expiry_works() {
         // None expiry should default to 24 hours and produce a valid token.
-        let resp = create_token("default-exp", None);
+        let resp = create_token("default-exp", None, None);
         assert!(!resp.token.is_empty());
         assert!(!resp.expires_at.is_empty());
         assert!(!resp.token_id.is_empty());
@@ -174,7 +184,7 @@ mod tests {
 
     #[test]
     fn token_id_is_uuid_v4_format() {
-        let resp = create_token("uuid-test", Some(1));
+        let resp = create_token("uuid-test", Some(1), None);
         assert_eq!(resp.token_id.len(), 36, "UUID v4 should be 36 chars");
         assert_eq!(
             resp.token_id.chars().filter(|c| *c == '-').count(),
@@ -185,7 +195,7 @@ mod tests {
 
     #[test]
     fn expires_at_is_valid_rfc3339() {
-        let resp = create_token("rfc3339", Some(1));
+        let resp = create_token("rfc3339", Some(1), None);
         // RFC 3339: "2025-01-15T10:30:00+00:00" or "2025-01-15T10:30:00Z"
         assert!(
             resp.expires_at.contains('T'),
@@ -206,7 +216,7 @@ mod tests {
 
     #[test]
     fn claims_have_non_empty_fields() {
-        let resp = create_token("fields", Some(1));
+        let resp = create_token("fields", Some(1), None);
         let claims = validate_token(&resp.token).unwrap();
         assert!(!claims.sub.is_empty());
         assert!(!claims.jti.is_empty());
@@ -216,15 +226,15 @@ mod tests {
 
     #[test]
     fn claims_exp_is_after_iat() {
-        let resp = create_token("time-order", Some(1));
+        let resp = create_token("time-order", Some(1), None);
         let claims = validate_token(&resp.token).unwrap();
         assert!(claims.exp > claims.iat, "exp should be after iat");
     }
 
     #[test]
     fn two_tokens_have_different_ids() {
-        let a = create_token("a", Some(1));
-        let b = create_token("b", Some(1));
+        let a = create_token("a", Some(1), None);
+        let b = create_token("b", Some(1), None);
         assert_ne!(a.token_id, b.token_id, "each token should have a unique ID");
         assert_ne!(a.token, b.token, "each token should have a unique JWT");
     }
@@ -246,7 +256,7 @@ mod tests {
     fn token_with_zero_hour_expiry_is_well_formed() {
         // 0-hour expiry: token may or may not be valid depending on
         // clock precision, but it should always be structurally correct.
-        let resp = create_token("zero", Some(0));
+        let resp = create_token("zero", Some(0), None);
         assert!(!resp.token.is_empty());
         assert!(!resp.token_id.is_empty());
         assert!(!resp.expires_at.is_empty());

@@ -17,6 +17,8 @@ pub struct CreateTokenRequest {
     pub label: String,
     /// Expiry in hours. Defaults to 24 if omitted.
     pub expiry_hours: Option<i64>,
+    /// Optional tenant / store ID for multi-tenant cloud isolation.
+    pub tenant_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -25,7 +27,7 @@ pub struct CreateTokenResponse {
 }
 
 pub async fn create_token_handler(Json(body): Json<CreateTokenRequest>) -> impl IntoResponse {
-    let resp = create_token(&body.label, body.expiry_hours);
+    let resp = create_token(&body.label, body.expiry_hours, body.tenant_id.as_deref());
     Json(CreateTokenResponse { token: resp })
 }
 
@@ -41,6 +43,7 @@ mod tests {
         let body = CreateTokenRequest {
             label: "test-client".into(),
             expiry_hours: Some(24),
+            tenant_id: None,
         };
         let response = create_token_handler(Json(body)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -56,6 +59,7 @@ mod tests {
         let body = CreateTokenRequest {
             label: "default-expiry".into(),
             expiry_hours: None,
+            tenant_id: None,
         };
         let response = create_token_handler(Json(body)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -72,6 +76,7 @@ mod tests {
         let req: CreateTokenRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.label, "my-token");
         assert_eq!(req.expiry_hours, Some(12));
+        assert_eq!(req.tenant_id, None);
     }
 
     #[test]

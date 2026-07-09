@@ -159,6 +159,7 @@ impl PgTransport {
                     last_error: row.get("last_error"),
                     created_at: row.get::<_, String>("created_at"),
                     synced_at: Some(row.get::<_, String>("synced_at")),
+                    tenant_id: row.get("tenant_id"),
                 }
             })
             .collect();

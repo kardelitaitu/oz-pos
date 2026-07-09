@@ -246,6 +246,7 @@ Each app crate has an identical command surface, wired through `platform-startup
 - Additional business logic can be scripted in Lua files placed in a `scripts/` directory (Phase 3).
 - Payment gateway integrations can be introduced as separate crates linked to `oz-core`.
 - New REST endpoints go in `crates/oz-api/src/routes/` and are registered in `lib.rs`.
+- See [MODULAR_APP_PLAN.md](./MODULAR_APP_PLAN.md) for detailed execution roadmaps covering dynamic module lifecycle hot-reloading (`platform/kernel`), LAN peer-to-peer KDS sync, and Docker containerized cloud server deployments (`apps/cloud-server`).
 
 ---
 ## License & Contributions

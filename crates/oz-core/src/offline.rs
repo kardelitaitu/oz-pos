@@ -17,6 +17,10 @@ pub struct OfflineQueueItem {
     pub retry_count: i64,
     /// Last error message, if any.
     pub last_error: Option<String>,
+    /// Tenant / store ID for multi-tenant cloud isolation.
+    /// Defaults to "default" for single-store deployments.
+    #[serde(default = "default_tenant_id")]
+    pub tenant_id: String,
     /// ISO-8601 creation timestamp.
     pub created_at: String,
     /// ISO-8601 sync timestamp.
@@ -33,6 +37,11 @@ pub enum OfflineQueueStatus {
     Synced,
     /// Sync failed after multiple retries.
     Failed,
+}
+
+/// Default tenant ID for single-store deployments.
+fn default_tenant_id() -> String {
+    String::from("default")
 }
 
 impl OfflineQueueStatus {
@@ -57,7 +66,7 @@ impl OfflineQueueStatus {
 }
 
 impl OfflineQueueItem {
-    /// Create a new offline queue item.
+    /// Create a new offline queue item with the default tenant ("default").
     pub fn new(action: impl Into<String>, payload: impl Into<String>) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -68,7 +77,19 @@ impl OfflineQueueItem {
             last_error: None,
             created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             synced_at: None,
+            tenant_id: String::from("default"),
         }
+    }
+
+    /// Create a new offline queue item scoped to the given tenant.
+    pub fn with_tenant(
+        action: impl Into<String>,
+        payload: impl Into<String>,
+        tenant_id: impl Into<String>,
+    ) -> Self {
+        let mut item = Self::new(action, payload);
+        item.tenant_id = tenant_id.into();
+        item
     }
 }
 

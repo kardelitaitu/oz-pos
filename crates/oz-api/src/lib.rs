@@ -357,7 +357,7 @@ mod tests {
 
     #[tokio::test]
     async fn protected_route_accepts_valid_token() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -365,7 +365,7 @@ mod tests {
 
     #[tokio::test]
     async fn protected_route_rejects_expired_token() {
-        let token = auth::create_token("expired", Some(-1));
+        let token = auth::create_token("expired", Some(-1), None);
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -402,7 +402,7 @@ mod tests {
 
     #[tokio::test]
     async fn protected_route_rejects_tampered_token() {
-        let token = auth::create_token("tamper", Some(24));
+        let token = auth::create_token("tamper", Some(24), None);
         let req = auth_get("/api/v1/products", &format!("{}x", token.token));
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -412,7 +412,7 @@ mod tests {
 
     #[tokio::test]
     async fn products_list_returns_empty_array() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -433,7 +433,7 @@ mod tests {
 
     #[tokio::test]
     async fn product_get_by_sku_returns_null_for_unknown() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/products/ABC123", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -445,7 +445,7 @@ mod tests {
 
     #[tokio::test]
     async fn products_list_returns_seeded_products() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -456,7 +456,7 @@ mod tests {
 
     #[tokio::test]
     async fn product_get_by_sku_returns_detail_with_stock() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/products/DRINK-001", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -477,7 +477,7 @@ mod tests {
 
     #[tokio::test]
     async fn product_get_by_sku_returns_null_for_existing_but_unstocked() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         // DRINK-002 exists but has no inventory row.
         let req = auth_get("/api/v1/products/DRINK-002", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -503,7 +503,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_returns_201() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body =
             r#"{"sku":"NEW-001","name":"New Item","price":{"minor_units":199,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
@@ -513,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_returns_fields() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"sku":"NEW-002","name":"Widget","price":{"minor_units":499,"currency":"USD"},"category_id":"cat-drinks","barcode":"5901234123457"}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -532,7 +532,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_with_initial_stock() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"sku":"STOCKED-1","name":"Stocked","price":{"minor_units":100,"currency":"USD"},"initial_stock":25}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -543,7 +543,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_with_zero_stock_no_inventory_row() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"sku":"NOSTOCK-1","name":"NoStock","price":{"minor_units":100,"currency":"USD"},"initial_stock":0}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -554,7 +554,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_duplicate_sku_returns_409() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"sku":"DRINK-001","name":"Duplicate","price":{"minor_units":100,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -571,7 +571,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_empty_sku_returns_400() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"sku":"   ","name":"Bad","price":{"minor_units":100,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -580,7 +580,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_empty_name_returns_400() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"sku":"SKU-OK","name":"","price":{"minor_units":100,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -589,7 +589,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_negative_price_returns_400() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body =
             r#"{"sku":"SKU-OK","name":"Bad Price","price":{"minor_units":-1,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
@@ -599,7 +599,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_negative_initial_stock_returns_400() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"sku":"SKU-OK","name":"Bad Stock","price":{"minor_units":100,"currency":"USD"},"initial_stock":-5}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -620,7 +620,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_sell_reduces_qty() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"delta":-10}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -633,7 +633,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_restock_increases_qty() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"delta":25}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -645,7 +645,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_oversell_returns_422() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"delta":-100}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -654,7 +654,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_unknown_product_returns_404() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"delta":10}"#;
         let req = auth_patch_json("/api/v1/products/NOPE-999/stock", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -663,7 +663,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_no_inventory_row_treats_as_zero() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         // DRINK-002 exists but has no inventory row.
         let body = r#"{"delta":30}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-002/stock", &token.token, body);
@@ -701,7 +701,7 @@ mod tests {
 
     #[tokio::test]
     async fn categories_list_returns_empty_array() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/categories", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -712,7 +712,7 @@ mod tests {
 
     #[tokio::test]
     async fn categories_list_returns_seeded_categories() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/categories", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -729,7 +729,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_sale_returns_201() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{
             "lines": [
                 {"sku": "COFFEE", "qty": 2, "unit_price": {"minor_units": 350, "currency": "USD"}}
@@ -749,7 +749,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_sale_multi_line() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{
             "lines": [
                 {"sku": "COFFEE", "qty": 2, "unit_price": {"minor_units": 350, "currency": "USD"}},
@@ -771,7 +771,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_sale_empty_lines_rejected() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let body = r#"{"lines": []}"#;
         let req = auth_post_json("/api/v1/sales", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -789,7 +789,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_sale_returns_detail() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         // Create a sale first.
         let create_body = r#"{
             "lines": [
@@ -814,7 +814,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_sale_not_found_returns_null() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_get("/api/v1/sales/nonexistent-id", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -834,7 +834,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_pending_to_active() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let app = test_app();
 
         // Create a sale.
@@ -864,7 +864,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_full_flow() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let app = test_app();
 
         let create_body = r#"{
@@ -898,7 +898,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_invalid_transition_returns_422() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let app = test_app();
 
         let create_body = r#"{
@@ -923,7 +923,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_not_found_returns_404() {
-        let token = auth::create_token("test", Some(1));
+        let token = auth::create_token("test", Some(1), None);
         let req = auth_patch_json(
             "/api/v1/sales/nope-999/status",
             &token.token,

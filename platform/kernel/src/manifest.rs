@@ -90,8 +90,6 @@ impl ModuleManifest {
     ///
     /// Returns `Ok(())` if the manifest is valid, or a descriptive error.
     pub fn validate(&self) -> Result<(), KernelError> {
-        let module = &self.id;
-
         // ── id must be non-empty and kebab-case ───────────────────
         if self.id.is_empty() {
             return Err(KernelError::ManifestParseError {

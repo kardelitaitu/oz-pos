@@ -54,12 +54,13 @@ async fn push_handler(
 
     for item in &items {
         match conn.execute(
-            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 item.id, item.action, item.payload,
                 OfflineQueueStatus::Pending.as_stored_str(),
                 item.retry_count, item.last_error, item.created_at, item.synced_at,
+                item.tenant_id,
             ],
         ) {
             Ok(_) => results.push(PushOutcome::Accepted),
@@ -93,7 +94,7 @@ async fn pull_handler(
     let items = if let Some(ref since) = req.since {
         let mut stmt = conn
             .prepare(
-                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
+                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
                  FROM offline_queue WHERE created_at >= ?1 ORDER BY created_at ASC",
             )
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -106,7 +107,7 @@ async fn pull_handler(
     } else {
         let mut stmt = conn
             .prepare(
-                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
+                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
                  FROM offline_queue ORDER BY created_at ASC",
             )
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -161,6 +162,7 @@ fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<oz_core::offline::Offlin
         last_error: row.get("last_error")?,
         created_at: row.get("created_at")?,
         synced_at: row.get("synced_at")?,
+        tenant_id: row.get("tenant_id")?,
     })
 }
 

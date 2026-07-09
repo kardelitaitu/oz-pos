@@ -576,6 +576,9 @@ Phase 1 (MVP)
 
 On-Features can be activated at any phase once the core infrastructure is in place.
 
+> [!NOTE]
+> For granular, step-by-step checklists covering admin feature configuration, restaurant workflows (`Resto POS + KDS + Inventory`), LAN peer-to-peer sync, and Docker containerized cloud server deployments (`apps/cloud-server`), see **[MODULAR_APP_PLAN.md](./MODULAR_APP_PLAN.md)**.
+
 ---
 
-*Last updated: 2026-06-30.* (Phases 1–3 ✓. Phase 4 ~95% — mobile builds + acceptance criteria need infra. Phase 5 ~95% — key pages migrated to i18n, benchmarks, Prometheus, print report, RTL scaffold, flamegraph docs, tokio-console done. Next: Phase 6 — Ecosystem.)
+*Last updated: 2026-07-09.* (Phases 1–3 ✓. Phase 4 ~95% — mobile builds + acceptance criteria need infra. Phase 5 ~95% — key pages migrated to i18n, benchmarks, Prometheus, print report, RTL scaffold, flamegraph docs, tokio-console done. Next: Phase 6 — Ecosystem.)

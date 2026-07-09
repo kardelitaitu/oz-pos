@@ -116,7 +116,7 @@ pub fn query_menu_engineering(
     rows = merge_same_product_rows(rows);
 
     // Sort by total revenue descending.
-    rows.sort_by(|a, b| b.total_revenue_minor.cmp(&a.total_revenue_minor));
+    rows.sort_by_key(|b| std::cmp::Reverse(b.total_revenue_minor));
 
     // Calculate medians.
     let median_volume = median_of(&rows, |r| r.total_volume as f64);
@@ -151,7 +151,7 @@ fn merge_same_product_rows(rows: Vec<MenuEngineeringRow>) -> Vec<MenuEngineering
     }
 
     let mut result: Vec<MenuEngineeringRow> = merged.into_values().collect();
-    result.sort_by(|a, b| b.total_revenue_minor.cmp(&a.total_revenue_minor));
+    result.sort_by_key(|b| std::cmp::Reverse(b.total_revenue_minor));
     result
 }
 
@@ -165,7 +165,7 @@ fn median_of<T>(items: &[T], extract: impl Fn(&T) -> f64) -> f64 {
     values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let len = values.len();
-    if len % 2 == 0 {
+    if len.is_multiple_of(2) {
         (values[len / 2 - 1] + values[len / 2]) / 2.0
     } else {
         values[len / 2]

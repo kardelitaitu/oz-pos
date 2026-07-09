@@ -14,8 +14,8 @@
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 13 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 2 |
-| 5 | Cloud Server & Docker Containerization | 8 | 3 |
-| | **Total** | **46** | **41** |
+| 5 | Cloud Server & Docker Containerization | 8 | 4 |
+| | **Total** | **46** | **42** |
 
 ---
 
@@ -200,7 +200,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 5.2 Tenant ID / Store ID Scoping (Multi-Store Cloud Separation)
 
-- [ ] **5.2.1 [Store ID Schema & Auth Claim]**: Add `tenant_id TEXT NOT NULL DEFAULT 'default'` column to `offline_queue` and central mutations log. Update JWT token generator/validator (`crates/oz-api/src/auth.rs`) to embed `tenant_id` claim in `Bearer` tokens.
+- [x] **5.2.1 [Store ID Schema & Auth Claim]**: Add `tenant_id TEXT NOT NULL DEFAULT 'default'` column to `offline_queue` and central mutations log. Update JWT token generator/validator (`crates/oz-api/src/auth.rs`) to embed `tenant_id` claim in `Bearer` tokens.
 - [ ] **5.2.2 [Scoped Sync Queries]**: Update `/api/sync/push` and `/api/sync/pull` endpoint queries (`apps/cloud-server/src/sync_api.rs`) to filter all incoming and outgoing items strictly by `WHERE tenant_id = ?1` extracted from the caller's JWT token.
 - [ ] **5.2.3 [Multi-Tenant Isolation Tests]**: Add integration test `tests/multi_tenant_sync_test.rs` spinning up `cloud-server` with two distinct tokens (`Tenant A` and `Tenant B`). Assert mutations pushed by Tenant A are completely invisible when Tenant B calls `pull`.
 
