@@ -16,6 +16,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
+import { act } from 'react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import RefundModal from '@/features/sales/RefundModal';
@@ -232,22 +234,24 @@ describe('RefundModal exit-animation polish', () => {
 
   it('Done button applies the layered exit and fires onRefunded SYNCHRONOUSLY', async () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />, { wrapper });
+    await renderInAct(<HostModal hostRef={hostRef} />, { wrapper });
 
     // Simulate clicking the refund checkbox to enable the submit.
     fireEvent.click(document.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
     fireEvent.change(document.querySelector<HTMLInputElement>('input[type="text"]')!, {
       target: { value: 'Customer changed mind' },
     });
-    // Click submit.
-    fireEvent.click(screen.getByRole('button', { name: /Process refund/i }));
-
-    // Flush microtasks so the processRefund Promise resolves and the
-    // done-state mounts.
-    await vi.advanceTimersByTimeAsync(0);
+    // Click submit — wrap in act() so the async handler's state update
+    // (processRefund resolving, done-state mounting) is flushed.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Process refund/i }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
     // Now the done-state is visible. Click Done.
-    fireEvent.click(screen.getByRole('button', { name: /Done/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Done/i }));
+    });
 
     // onRefunded fired eagerly (before the fade).
     expect(hostRef.refunded).toBe(true);
@@ -257,7 +261,9 @@ describe('RefundModal exit-animation polish', () => {
     expectExiting(document.querySelector('.refund-modal'), 'refund-modal');
 
     // After the fade, parent unmounted.
-    await vi.advanceTimersByTimeAsync(200);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
     expect(document.querySelector('.refund-overlay')).toBeNull();
     expect(hostRef.open).toBe(false);
   });

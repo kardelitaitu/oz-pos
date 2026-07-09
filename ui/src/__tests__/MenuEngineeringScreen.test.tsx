@@ -148,13 +148,15 @@ describe('MenuEngineeringScreen', () => {
     });
   });
 
-  it('calls getMenuEngineering with default date range', () => {
+  it('calls getMenuEngineering with default date range', async () => {
     renderWithLocales(<MenuEngineeringScreen />);
 
-    expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-    );
+    await waitFor(() => {
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+      );
+    });
   });
 
   it('shows error state when API fails', async () => {

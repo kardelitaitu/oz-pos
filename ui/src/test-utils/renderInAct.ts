@@ -24,6 +24,7 @@ import {
   type RenderHookOptions,
   type RenderHookResult,
   type RenderResult,
+  type RenderOptions,
 } from '@testing-library/react';
 
 /**
@@ -32,11 +33,17 @@ import {
  * standard `@testing-library/react` `RenderResult` so callers can use
  * the `rerender` / `unmount` methods when needed (most tests just
  * use `screen` directly and ignore the return value).
+ *
+ * Accepts an optional second argument `options` that is forwarded to
+ * `@testing-library/react`'s `render()` call (e.g. `{ wrapper }`).
  */
-export async function renderInAct(ui: ReactElement): Promise<RenderResult> {
+export async function renderInAct(
+  ui: ReactElement,
+  options?: RenderOptions,
+): Promise<RenderResult> {
   let result!: RenderResult;
   await act(async () => {
-    result = render(ui);
+    result = render(ui, options);
   });
   return result;
 }

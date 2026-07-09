@@ -6,6 +6,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import { act } from 'react';
 import type { ReactNode } from 'react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
@@ -249,6 +250,11 @@ describe('AppShell — KDS workspace navigation', () => {
 
       await renderInAct(wrap(<AppShell />));
 
+      // Flush pending microtask state updates from async useEffects
+      // (e.g. getSetupStatus, getStoreSettings) that resolve after the
+      // act() block of renderInAct has already returned.
+      await act(async () => {});
+
       await waitFor(() => {
         expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
       });
@@ -288,6 +294,9 @@ describe('AppShell — KDS workspace navigation', () => {
       });
 
       await renderInAct(wrap(<AppShell />));
+
+      // Flush pending microtask state updates from async useEffects
+      await act(async () => {});
 
       await waitFor(() => {
         expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
@@ -329,6 +338,9 @@ describe('AppShell — KDS workspace navigation', () => {
       });
 
       await renderInAct(wrap(<AppShell />));
+
+      // Flush pending microtask state updates from async useEffects
+      await act(async () => {});
 
       await waitFor(() => {
         expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
