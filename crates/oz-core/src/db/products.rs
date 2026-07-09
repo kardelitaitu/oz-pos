@@ -938,7 +938,14 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let updated = store(&conn)
-            .update_product("DRINK-001", "Latte", price(400), Some("cat-food"), None, None)
+            .update_product(
+                "DRINK-001",
+                "Latte",
+                price(400),
+                Some("cat-food"),
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(updated.category_id.as_deref(), Some("cat-food"));
     }

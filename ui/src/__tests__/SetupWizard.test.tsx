@@ -53,13 +53,15 @@ describe('SetupWizard', () => {
       screen.getByRole('radiogroup', { name: /store preset/i }),
     ).toBeInTheDocument();
 
-    // Should have 4 preset cards.
+    // Should have 6 preset cards.
     const cards = screen.getAllByRole('radio');
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(6);
     expect(cards[0]).toHaveTextContent('Simple Retail');
     expect(cards[1]).toHaveTextContent('Restaurant');
     expect(cards[2]).toHaveTextContent('Full Store');
-    expect(cards[3]).toHaveTextContent('Custom');
+    expect(cards[3]).toHaveTextContent('Cafe / Bakery');
+    expect(cards[4]).toHaveTextContent('Franchise');
+    expect(cards[5]).toHaveTextContent('Custom');
   });
 
   it('shows the skip button on step 1 when no preset is selected', () => {
@@ -144,12 +146,39 @@ describe('SetupWizard', () => {
     expect(checkboxes[2]).toBeChecked();
   });
 
+  it('Cafe / Bakery preset pre-populates correct features', async () => {
+    render(<SetupWizard />, { wrapper: FluentWrapper });
+
+    // Select Cafe / Bakery (card index 3).
+    const cards = screen.getAllByRole('radio');
+    await userEvent.click(cards[3]!);
+
+    // Step 2: Cash and Card should be enabled.
+    const checkboxes = getCheckboxes();
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+  });
+
+  it('Franchise preset pre-populates correct features', async () => {
+    render(<SetupWizard />, { wrapper: FluentWrapper });
+
+    // Select Franchise (card index 4).
+    const cards = screen.getAllByRole('radio');
+    await userEvent.click(cards[4]!);
+
+    // Step 2: Cash, Card, Multi-Currency all enabled.
+    const checkboxes = getCheckboxes();
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+    expect(checkboxes[2]).toBeChecked();
+  });
+
   it('Custom preset starts with no features enabled', async () => {
     render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Custom.
     const cards = screen.getAllByRole('radio');
-    await userEvent.click(cards[3]!);
+    await userEvent.click(cards[5]!);
 
     // All checkboxes should be unchecked.
     const checkboxes = getCheckboxes();
@@ -183,7 +212,8 @@ describe('SetupWizard', () => {
     render(<SetupWizard />, { wrapper: FluentWrapper });
 
     // Select Custom (all off).
-    await userEvent.click(screen.getAllByRole('radio')[3]!);
+    const cards = screen.getAllByRole('radio');
+    await userEvent.click(cards[5]!);
 
     // Toggle all features on.
     const checkboxes = getCheckboxes();
@@ -428,7 +458,8 @@ describe('SetupWizard', () => {
     render(<SetupWizard onComplete={onComplete} />, { wrapper: FluentWrapper });
 
     // Select Custom (all off).
-    await userEvent.click(screen.getAllByRole('radio')[3]!);
+    const cards = screen.getAllByRole('radio');
+    await userEvent.click(cards[5]!);
 
     // Step 2: enable Cash.
     await toggleFeature('Cash');

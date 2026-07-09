@@ -2,7 +2,20 @@
 
 **Status:** Active Planning Document  
 **Target Architecture:** Admin-Configurable Feature & Module Engine (`oz-pos`)  
-**Version:** 1.0  
+**Version:** 4.0 (Granular Step-by-Step Breakdown + Docker Cloud Server)  
+
+---
+
+## Master Progress Tracker
+
+| Phase | Area | Total Tasks | Done |
+| :--- | :--- | ---: | ---: |
+| 1 | Admin Setup & Preset Polish | 10 | 4 |
+| 2 | Dynamic Runtime Kernel & Safeguards | 10 | 0 |
+| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 0 |
+| 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
+| 5 | Cloud Server & Docker Containerization | 8 | 0 |
+| | **Total** | **46** | **4** |
 
 ---
 
@@ -12,8 +25,9 @@ The core philosophy of **OZ-POS** is to provide a **zero-bloat, highly adaptable
 
 Instead of presenting every user with a complex, monolithic interface, the administrator selects the active features (or picks a template preset like **Restaurant** or **Simple Retail**). The system then:
 1. Activates only the necessary backend **Rust modules and event handlers**.
-2. Unlocks the appropriate **Workspaces** (`restaurant-pos`, `kds`, `inventory`, `admin`) for staff members.
+2. Unlocks the appropriate **Workspaces** (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`) for staff members.
 3. Dynamically renders only the required **UI screens, navigation buttons, and dashboard widgets** via frontend registries.
+4. Enforces strict **runtime safety guards and offline-first local network synchronization** across physical hardware devices.
 
 ---
 
@@ -32,88 +46,176 @@ We have already established the foundational architecture across the Rust backen
 
 ---
 
-## 3. Deep Dive: Restaurant ("Resto") Module Stack
+## 3. Deep Dive: Restaurant ("Resto") Module Stack & Inter-Terminal Topology
 
-For a restaurant workflow (`resto pos, kdm, inventory, analysis`), the active stack maps across all three architectural boundaries:
+For a restaurant workflow (`resto pos, kdm, inventory, analysis`), the active stack maps across all three architectural boundaries while supporting multiple physical devices on the local network:
 
 ```mermaid
 graph TD
-    subgraph Admin Setup & Configuration
+    subgraph Admin Setup & Global Entitlements
       Preset[Preset: Restaurant 🍽️] -->|Auto-enables| F1[Feature: restaurant]
       Preset -->|Auto-enables| F2[Feature: kitchen-display / KDM]
       Preset -->|Auto-enables| F3[Feature: inventory-tracking]
       Preset -->|Auto-enables| F4[Feature: reporting & analytics]
+      Preset -->|Auto-enables| F5[Feature: multi-terminal]
     end
 
-    subgraph Staff Workspaces & Layouts
-      F1 -->|Unlocks for Servers/Cashiers| WS1[Workspace: Restaurant POS<br>Table Floor Plan & Order Firing]
-      F2 -->|Unlocks for Chefs/Kitchen| WS2[Workspace: Kitchen Display - KDS<br>Ticket Queue & Prep Timers]
-      F3 -->|Unlocks for Stock Managers| WS3[Workspace: Inventory<br>Stock Adjustments & Counts]
-      F4 -->|Unlocks for Managers/Owners| WS4[Workspace: Admin & Analysis<br>Sales Dashboards & Heatmaps]
+    subgraph Physical Device Lock & Profiles
+      F1 -->|Front Counter / Waiter Tablet| D1[Terminal A: Resto POS Profile<br>Order Firing & Table Floor Plan]
+      F2 -->|Kitchen Prep Screen / Tablet| D2[Terminal B: KDS-Only Kiosk Profile<br>Ticket Queue & Bump Bar SLA]
+      F3 & F4 -->|Manager Laptop / Back-Office| D3[Terminal C: Admin & Analysis Profile<br>Inventory & Sales Dashboards]
     end
 
-    subgraph Event Bus & Service Integration
-      WS1 -->|Emits: sale.completed / order.fired| EventBus((Event Bus))
-      EventBus -->|Subscribed: InventoryStockHandler| Deduct[Deduct Ingredient / BOM Stock]
-      EventBus -->|Subscribed: KdsTicketHandler| Route[Route Ticket to Prep Station]
-      EventBus -->|Subscribed: SaleCompletedReporter| Analytics[Update Real-time Sales Metrics]
+    subgraph Offline-First Local Event Bus LAN Topology
+      D1 -->|Emits: order.fired / sale.completed| LocalBus((In-Process / LAN Event Bus<br>mDNS & Local TCP/WebSocket Sync))
+      LocalBus -->|Guaranteed <50ms LAN Delivery| D2
+      LocalBus -->|Subscribed: InventoryStockHandler| Deduct[Recipe / BOM Ingredient Deduction]
+      LocalBus -->|Subscribed: SaleCompletedReporter| Analytics[Real-Time Analytical Heatmaps]
     end
 ```
 
-### Module Breakdown for Restaurant Mode:
-1. **Resto POS (`modules/sales` + `modules/restaurant`)**:
-   * **Core Responsibilities**: Interactive table floor plan (`TableManagementScreen`), course firing (Appetizer, Main, Dessert), bill splitting (split by item, split evenly), and table status tracking (Vacant, Occupied, Billed, Cleaning).
-   * **Key Feature Flags**: `restaurant`, `table-management`, `discount-engine`, `tax-engine`.
+---
 
-2. **KDM / KDS (`modules/kitchen` / `ui/src/features/kds`)**:
-   * **Core Responsibilities**: Kitchen Display System monitor. Routes order tickets to prep stations based on item categories (e.g. Beverages to Bar screen, Steaks to Grill screen). Displays ticket aging timers and supports bump bar / touchscreen ticket completion.
-   * **Key Feature Flags**: `kitchen-display`, `restaurant`.
+## 4. Detailed Step-by-Step Execution Breakdown
 
-3. **Inventory & BOM (`modules/inventory`)**:
-   * **Core Responsibilities**: Ingredient-level stock deduction. When a "Cheeseburger" is sold in Resto POS, the recipe/BOM (Bill of Materials) automatically deducts 1x Burger Bun, 1x Beef Patty, and 1x Cheese Slice via the event bus (`sale.completed` → `InventoryStockHandler`).
-   * **Key Feature Flags**: `inventory-tracking`, `product-variants`, `categories-enabled`, `stock-counting`.
-
-4. **Analysis & Reporting (`modules/reporting` + `crates/oz-reporting`)**:
-   * **Core Responsibilities**: Restaurant-specific analytical insights:
-     * **Menu Engineering Matrix**: Star vs. Plowhorse vs. Puzzle vs. Dog classification based on profitability and popularity.
-     * **Hourly Sales & Dining Heatmap**: Peak seating times and table turnover rate.
-     * **Ingredient Waste & Valuation Report**: Tracking spoilage and stock valuation.
-   * **Key Feature Flags**: `reporting`, `analytics`.
+Every phase and high-level objective is broken down below into actionable, atomic engineering tasks with precise target files, methods, schemas, and verification steps:
 
 ---
 
-## 4. Gap Analysis & Execution Roadmap
+### Phase 1: Admin Setup & Preset Polish (Quick Wins) `[4/10]`
 
-To make this modular architecture fully seamless from setup to runtime execution, we have broken down the remaining work into four manageable phases:
+#### 1.1 Expand Preset Templates (`Quick Service Cafe / Bakery`, `Franchise Restaurant`)
 
-### Phase 1: Admin Setup & Preset Polish (Quick Wins)
-* [ ] **1.1 Expand Preset Templates**: Add specialized presets to `SetupWizard.tsx` and `oz-core/src/features.rs`:
-  * *Quick Service Cafe / Bakery* (🛒 + 🍽️ hybrid: no table management, fast checkout, KDS enabled, tips enabled).
-  * *Franchise Restaurant* (Multi-store + Multi-terminal + Resto POS + KDS + Cloud Sync).
-* [ ] **1.2 Real-time Setup Preview**: In `SetupWizard.tsx` and `FeatureToggleScreen.tsx`, show a live interactive preview box illustrating which sidebar navigation tabs and Workspaces will unlock as the admin checks/unchecks individual features.
-* [ ] **1.3 Category & Feature Search**: Add search filtering and bulk group toggle buttons ("Enable all Hardware", "Disable all Advanced") to `FeatureToggleScreen.tsx`.
+- [x] **1.1.1 [Rust Core Presets]**: In `crates/oz-core/src/features.rs`, add `cafe()` and `franchise()` constructors to `FeatureRegistry`. Define their exact feature sets:
+  - `cafe()`: `SimpleRetail`, `CashPayment`, `CardPayment`, `ReceiptPrinting`, `CustomerDisplay`, `DiscountEngine`, `TaxEngine`, `KitchenDisplay`, `PromotionsEngine`.
+  - `franchise()`: `Restaurant`, `CashPayment`, `CardPayment`, `MultiCurrency`, `InventoryTracking`, `ProductVariants`, `CategoriesEnabled`, `StaffLogin`, `StaffRoles`, `ShiftManagement`, `AuditLog`, `ReceiptPrinting`, `DiscountEngine`, `TaxEngine`, `KitchenDisplay`, `TableManagement`, `CloudSync`, `MultiStore`, `MultiTerminal`, `Reporting`, `Analytics`.
+- [x] **1.1.2 [Rust Preset Unit Tests]**: Add unit tests in `crates/oz-core/src/features.rs` ensuring `FeatureRegistry::cafe()` and `FeatureRegistry::franchise()` pass dependency closure validation (`from_set` assert).
+- [x] **1.1.3 [Setup Wizard UI Types]**: In `ui/src/features/setup/SetupWizard.tsx`, expand `Preset` union type to `Preset = 'simple-retail' | 'restaurant' | 'full-store' | 'cafe' | 'franchise' | 'custom'`. Update `PRESETS` array with option objects (`emoji`, `name`, `description`). Update `PRESET_FEATURES` mapping with exact kebab-case keys.
+- [x] **1.1.4 [i18n Localization]**: Add Fluent strings (`setup-preset-cafe-name`, `setup-preset-cafe-desc`, `setup-preset-franchise-name`, `setup-preset-franchise-desc`) across `ui/src/locales/en-US/*.ftl` and corresponding translations.
 
-### Phase 2: Dynamic Runtime Kernel & Hot-Reloading
-* [ ] **2.1 Dynamic Module Lifecycle (`platform/kernel`)**: Currently, `platform/startup/src/lib.rs` registers and loads all 9 Rust modules statically on app boot (`k.register(...)`, `k.load_all()`). Refactor `Kernel` so that when `set_feature` is called by the admin:
-  * If a feature is disabled, the kernel invokes `unload()` and `stop()` on the underlying Rust module and unsubscribes its event handlers from the `EventBus`.
-  * If a feature is enabled at runtime, the kernel loads and starts the module and wires its event handlers without requiring an application restart.
-* [ ] **2.2 Database Migration Gating**: Ensure each module's database tables (`modules/<name>/migrations/`) are only executed or queried when the module is actively enabled by the kernel.
+#### 1.2 Real-time Setup Preview (Live Navigation & Workspace Indicator Box)
 
-### Phase 3: Restaurant Workflow & Inter-Module Depth
-* [ ] **3.1 Recipe / Bill of Materials (BOM) Support**: Extend `oz-core` domain models and `InventoryStockHandler` (`platform/startup/src/lib.rs`) so that selling a composite restaurant menu item deducts individual raw ingredients from inventory.
-* [ ] **3.2 KDS Station Routing Rules**: Add admin configuration in Settings → KDS allowing the admin to map product categories (e.g. "Drinks", "Hot Kitchen") to specific KDS terminal screens or bump bars.
-* [ ] **3.3 Menu Engineering Analytics Dashboards**: Enhance `SalesDashboardScreen.tsx` and `oz-reporting` with visual matrix charts for profitability vs. volume.
+- [ ] **1.2.1 [Preview Component Creation]**: Create `ui/src/features/setup/components/LiveSetupPreview.tsx` accepting prop `{ selectedFeatures: Set<string> }`.
+- [ ] **1.2.2 [Workspace Matcher Logic]**: In `LiveSetupPreview.tsx`, compute which of the 5 Workspaces (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`) are active based on `selectedFeatures` and display them with their accent badge colors (`WS_COLORS`).
+- [ ] **1.2.3 [Sidebar Navigation Matcher]**: Use `getNavItems(selectedFeatures, 'owner')` (`menu-registry`) to compute and render the exact list of navigation items (`sales`, `kds`, `products`, `inventory`, `settings`, etc.) that will appear on the staff sidebar.
+- [ ] **1.2.4 [Wizard & Settings Integration]**: Embed `<LiveSetupPreview selectedFeatures={...} />` into `SetupWizard.tsx` (on Step 8 Review and side panel) and into `FeatureToggleScreen.tsx`.
 
-### Phase 4: Packaging & Third-Party Plugin Ecosystem (`.ozpkg`)
-* [ ] **4.1 Module Manifest Verification**: Enforce strict JSON schema validation for all `manifest.json` files in `modules/*`.
-* [ ] **4.2 Sandboxed Plugin Loader (`crates/oz-plugin` + `crates/oz-lua`)**: Allow third-party or custom add-on features (e.g. custom payment gateway adapters, local accounting sync) to register with the feature flag system and `Kernel` at runtime via `.ozpkg` bundles.
+#### 1.3 Category Search & Bulk Controls in Feature Toggle Screen
+
+- [ ] **1.3.1 [Keyword Search Bar UI]**: In `FeatureToggleScreen.tsx` (`ui/src/features/settings/FeatureToggleScreen.tsx`), add `searchQuery` state and search input box. Filter `grouped` items so only features whose `key`, `name`, or `description` match `searchQuery` case-insensitively are displayed.
+- [ ] **1.3.2 [Group Bulk Action Buttons]**: In `FeatureToggleScreen.tsx`, render "Enable All" and "Disable All" buttons in the header of each group category card (`Core`, `Hardware`, `Business Rules`, etc.).
+- [ ] **1.3.3 [Bulk IPC Backend Command]**: Implement `set_features_bulk(keys: Vec<String>, enabled: bool)` in `apps/desktop-client/src/commands/features.rs` and register it in `lib.rs` so toggling an entire group of features executes atomically in a single SQLite transaction and returns the updated `ListAllFeaturesResult`.
 
 ---
 
-## 5. Next Steps for Incremental Execution
+### Phase 2: Dynamic Runtime Kernel & Safeguards (Backend Polish) `[0/10]`
 
-Whenever we are ready to start building, we can pick any single item from **Section 4 (Execution Roadmap)**, verify tests, and progress systematically without disrupting the stability of the active `0.0.3` core.
+#### 2.1 Dynamic Module Lifecycle (`platform/kernel`)
 
-For example:
-* **Step 1:** We can start with **[1.1 Expand Preset Templates]** and **[1.2 Real-time Setup Preview]** to give the admin immediate visual clarity when setting up a restaurant.
-* **Step 2:** Move to **[3.1 Recipe / BOM Support]** to connect Resto POS sales directly to raw inventory deductions.
+- [ ] **2.1.1 [Kernel Module Status Tracking]**: In `platform/kernel/src/kernel.rs`, update `Kernel` struct to maintain runtime state per registered module: `ModuleStatus::Registered | Loaded | Started | Stopped`.
+- [ ] **2.1.2 [Runtime Start/Stop Methods]**: Implement `kernel.start_module(id: &str)` and `kernel.stop_module(id: &str)`. When `stop_module` is called, invoke `module.stop()`, `module.unload()`, and update status to `Stopped`.
+- [ ] **2.1.3 [Dynamic EventBus Unsubscribe]**: In `platform/kernel/src/event_bus.rs`, add subscription ownership tags (`module_id`) when handlers are registered (`bus.subscribe_for_module(module_id, topic, handler)`). Implement `bus.unsubscribe_module(module_id: &str)` to cleanly drop all handlers owned by a stopped module.
+- [ ] **2.1.4 [IPC Command to Kernel Wiring]**: Connect `set_feature` in `apps/desktop-client/src/commands/features.rs` to invoke `kernel.start_module()` when a top-level module feature is enabled, and `kernel.stop_module()` when disabled, without restarting the application.
+
+#### 2.2 Active Operation Guards (Safe Disabling Validation)
+
+- [ ] **2.2.1 [Guard Trait & Error Structure]**: In `crates/oz-core/src/features.rs` (or `platform/kernel/`), define `pub trait FeatureGuard: Send + Sync { fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String>; }`.
+- [ ] **2.2.2 [KDS Tickets Safety Guard]**: Implement `KdsFeatureGuard`. When `feature == Feature::KitchenDisplay`, query `SELECT COUNT(*) FROM kds_tickets WHERE status IN ('new', 'preparing')`. If count > 0, return `Err(format!("Cannot disable Kitchen Display while {} tickets are actively in progress", count))`.
+- [ ] **2.2.3 [Shift Reconciliation Safety Guard]**: Implement `ShiftFeatureGuard`. When `feature == Feature::ShiftManagement`, query `SELECT COUNT(*) FROM shifts WHERE ended_at IS NULL`. If count > 0, return `Err("Cannot disable Shift Management while a shift is actively open and unreconciled")`.
+- [ ] **2.2.4 [IPC Guard Integration]**: In `set_feature` (`apps/desktop-client/src/commands/features.rs`), run all registered `FeatureGuard` checks before mutating `FeatureRegistry`. If any guard returns an `Err`, abort the transaction and return the actionable error string to the front-end toast (`setToast({ variant: 'error', message: err })`).
+
+#### 2.3 Terminal Profiles & Kiosk Lock
+
+- [ ] **2.3.1 [SQLite Schema Migration]**: In `crates/oz-core/src/db/migrations/`, add migration table `terminal_profiles` (`terminal_id TEXT PRIMARY KEY, profile_type TEXT NOT NULL, locked_screen TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`). Profile types: `'counter_pos' | 'kds_kiosk' | 'customer_display' | 'unrestricted'`.
+- [ ] **2.3.2 [Terminal Profile IPC Commands]**: Implement `get_terminal_profile(terminal_id: String) -> Result<TerminalProfileDto, AppError>` and `set_terminal_profile(terminal_id: String, profile_type: String)` in `apps/desktop-client/src/commands/terminals.rs`.
+- [ ] **2.3.3 [UI Kiosk Lockdown Guard]**: In `ui/src/frontend/shell/AppShell.tsx`, load `activeTerminalProfile` via hook `useTerminalProfile()`. If `profile_type === 'kds_kiosk'`, bypass the workspace picker (`WorkspaceHome`), force `currentRoute = 'kds'`, and hide the top header and back buttons to prevent leaving KDS mode.
+
+---
+
+### Phase 3: Restaurant Workflow & Offline LAN KDS Sync `[0/13]`
+
+#### 3.1 Recipe / Bill of Materials (BOM) Stock Deduction
+
+- [ ] **3.1.1 [SQLite BOM Schema]**: Create migration adding table `product_recipes` (`id TEXT PRIMARY KEY, parent_product_id TEXT NOT NULL, ingredient_product_id TEXT NOT NULL, quantity_required INTEGER NOT NULL, unit TEXT NOT NULL, FOREIGN KEY(parent_product_id) REFERENCES products(id), FOREIGN KEY(ingredient_product_id) REFERENCES products(id))`.
+- [ ] **3.1.2 [Recipe Repository & Domain]**: In `modules/inventory/src/repositories/recipe_repo.rs`, implement `RecipeRepository::get_recipe_ingredients(parent_product_id: &str) -> Result<Vec<RecipeItem>, CoreError>`.
+- [ ] **3.1.3 [InventoryStockHandler Upgrade]**: Upgrade `modules/inventory/src/handlers/stock_handler.rs` (`InventoryStockHandler::handle`). When processing `SaleCompleted`, check each sold `item.product_id`. If `get_recipe_ingredients` returns rows, deduct `item.quantity * recipe_item.quantity_required` from each `ingredient_product_id` inside the atomic SQLite transaction.
+
+#### 3.2 Order Modifiers & Coursing Engine
+
+- [ ] **3.2.1 [Modifiers Schema & DTOs]**: Create migration adding `modifier_groups` (`id TEXT PRIMARY KEY, name TEXT NOT NULL, min_selections INTEGER DEFAULT 0, max_selections INTEGER DEFAULT 1`), `modifiers` (`id TEXT PRIMARY KEY, group_id TEXT NOT NULL, name TEXT NOT NULL, price_minor_units INTEGER DEFAULT 0`), and `product_modifier_groups` (`product_id TEXT NOT NULL, group_id TEXT NOT NULL`).
+- [ ] **3.2.2 [Resto PosScreen Modifiers UI]**: Build `ui/src/features/sales/components/ItemModifierModal.tsx`. Tapping a menu item with attached modifier groups opens the modal, enforces selection limits (`min_selections`/`max_selections`), calculates total price adjustment, and appends modifier metadata to `CartItem`.
+- [ ] **3.2.3 [Course Firing State Engine]**: Add `course_id: 'appetizer' | 'main' | 'dessert' | 'drinks'` and `coursing_status: 'hold' | 'fired'` to `CartItem` in `ui/src/features/sales/state/cart.ts`. Add a "Fire Course" button in `PosScreen.tsx` that updates ticket status and emits `order.course_fired` event to the kitchen.
+
+#### 3.3 KDS Ticket State Machine & SLA Alerts
+
+- [ ] **3.3.1 [KDS Ticket Schema & Transitions]**: Ensure `kds_tickets` table enforces valid states: `status TEXT NOT NULL CHECK(status IN ('new', 'preparing', 'ready', 'served', 'recalled'))`. Add timestamp columns (`created_at`, `prepared_at`, `ready_at`, `served_at`).
+- [ ] **3.3.2 [SLA Aging Timer Hook]**: Create `ui/src/features/kds/hooks/useTicketSla.ts` accepting `created_at: string`. Computes elapsed seconds every second (`setInterval`) and returns threshold level (`'green' | 'yellow' | 'red'`). Green: `< 600s` (10m), Yellow: `600s..900s`, Red: `> 900s` (15m).
+- [ ] **3.3.3 [KDS Screen Visual & Audio Alerts]**: Upgrade `ui/src/features/kds/KdsScreen.tsx` to apply dynamic header classes (`kds-ticket--green`, `kds-ticket--yellow`, `kds-ticket--red`) based on `useTicketSla`. Add optional audio chime/pulse when a ticket enters the `red` threshold.
+
+#### 3.4 LAN / mDNS Peer-to-Peer KDS Discovery
+
+- [ ] **3.4.1 [mDNS Service Broadcaster]**: In `crates/oz-core/src/sync/lan_discovery.rs`, implement `LanDiscoverer` advertising service `_oz-pos._tcp.local.` with TXT records `terminal_id`, `role`, and `tcp_port`.
+- [ ] **3.4.2 [Local TCP/WebSocket Event Forwarder]**: Implement a lightweight TCP/WebSocket server inside `apps/desktop-client` (`port 9180`). When `sale.completed` or `order.course_fired` is emitted on Resto POS, forward the JSON event directly over LAN TCP to all connected KDS tablet peers.
+- [ ] **3.4.3 [LAN Offline Buffer & Reconnection]**: Add heartbeat ping (`every 5s`) between Resto POS desktop and KDS tablets. If LAN Wi-Fi drops, buffer fired tickets locally in `offline_lan_queue` and flush immediately upon TCP reconnection.
+
+#### 3.5 Menu Engineering Analytics Matrix
+
+- [ ] **3.5.1 [Analytics Aggregation Query]**: In `crates/oz-reporting/src/menu_engineering.rs`, write SQL aggregation calculating total volume (`SUM(quantity)`) and total contribution margin (`SUM((unit_price - unit_cost) * quantity)`) per product over a selected date range.
+- [ ] **3.5.2 [Quadrants Calculator Engine]**: Calculate median volume and median margin across all sold items. Assign classification:
+  - **Star**: Volume ≥ Median AND Margin ≥ Median.
+  - **Plowhorse**: Volume ≥ Median AND Margin < Median.
+  - **Puzzle**: Volume < Median AND Margin ≥ Median.
+  - **Dog**: Volume < Median AND Margin < Median.
+- [ ] **3.5.3 [Matrix Scatter Plot & Table UI]**: Create `ui/src/features/reports/MenuEngineeringScreen.tsx` rendering an interactive 4-quadrant scatter plot and actionable recommendations ("Promote Star", "Increase Price on Plowhorse", "Reposition Puzzle", "Remove Dog").
+
+---
+
+### Phase 4: Packaging, Plugin Ecosystem & Automated Matrix Testing `[0/5]`
+
+#### 4.1 Module Manifest Verification
+
+- [ ] **4.1.1 [JSON Schema Spec Definition]**: Create formal JSON schema `docs/specs/module-manifest.schema.json` defining mandatory properties (`id`, `name`, `version`, `author`, `dependencies`, `permissions`, `database_namespace`).
+- [ ] **4.1.2 [Manifest Validator in Kernel]**: In `platform/kernel/src/manifest.rs`, validate `manifest.json` against `module-manifest.schema.json` during `kernel.register()`. Return structured `ManifestError` if validation fails.
+
+#### 4.2 Sandboxed Plugin Loader (`crates/oz-plugin` + `crates/oz-lua`)
+
+- [ ] **4.2.1 [.ozpkg Archive Reader]**: Implement `.ozpkg` file parser in `crates/oz-plugin/src/package.rs` (reading zip archives containing `manifest.json`, SQLite migrations, and Lua scripts).
+- [ ] **4.2.2 [Isolated Database Namespace]**: Enforce prefix restrictions (`plugin_<id>_*`) on all SQLite statements executed by plugins to prevent modifying core `sales` or `users` tables directly.
+- [ ] **4.2.3 [Lua Event Bus Bridge]**: In `crates/oz-lua/src/bridge.rs`, expose event subscription callbacks to Lua scripts (`oz.on("sale.completed", function(event) ... end)`) for custom peripheral hardware drivers or local accounting hooks.
+
+#### 4.3 Feature Matrix Automated Testing
+
+- [ ] **4.3.1 [Rust Preset Integration Test Suite]**: In `crates/oz-core/tests/feature_matrix_tests.rs`, iterate over all 6 built-in presets (`simple_retail`, `restaurant`, `full_store`, `cafe`, `franchise`, `custom`) verifying `from_set` succeeds, `count()` matches expected, and `to_settings_rows()` roundtrips cleanly (`from_settings_rows`).
+- [ ] **4.3.2 [Frontend Registry Parity CI Gate]**: Create validation script `scripts/verify-feature-registry.py` and register it inside `scripts/check.sh`. Verifies that every `feature: string` referenced in `registerPage` or `registerNavItem` exists precisely in `FEATURES` (`useFeatures.ts`) and `crates/oz-core/src/features.rs`.
+
+---
+
+### Phase 5: Cloud Server & Docker Containerization `[0/8]`
+
+#### 5.1 Headless Cloud Server Binary (`apps/cloud-server`)
+
+- [ ] **5.1.1 [Crate Scaffolding]**: Create new Cargo crate `apps/cloud-server/` (`Cargo.toml`) depending on `oz-api`, `oz-core`, `platform-sync`, and `tokio`. Ensure no Tauri or WebView UI crates are linked.
+- [ ] **5.1.2 [Sync Transport Receiver Endpoints]**: In `apps/cloud-server/src/sync_api.rs`, wire `POST /api/sync/push` and `POST /api/sync/pull` handlers accepting `PushResponse` / `PullRequest` bodies (`platform/sync/src/transport.rs`) and persisting to the central server database.
+- [ ] **5.1.3 [Main Async Entrypoint]**: In `apps/cloud-server/src/main.rs`, initialize structured logging (`oz-logging`), open central database pool (`OZ_DB_PATH` / PostgreSQL connection string), run pending schema migrations, and spawn `oz_api::serve()` alongside `sync_api` routes on `OZ_API_PORT` (default `3099`).
+
+#### 5.2 Tenant ID / Store ID Scoping (Multi-Store Cloud Separation)
+
+- [ ] **5.2.1 [Store ID Schema & Auth Claim]**: Add `tenant_id TEXT NOT NULL DEFAULT 'default'` column to `offline_queue` and central mutations log. Update JWT token generator/validator (`crates/oz-api/src/auth.rs`) to embed `tenant_id` claim in `Bearer` tokens.
+- [ ] **5.2.2 [Scoped Sync Queries]**: Update `/api/sync/push` and `/api/sync/pull` endpoint queries (`apps/cloud-server/src/sync_api.rs`) to filter all incoming and outgoing items strictly by `WHERE tenant_id = ?1` extracted from the caller's JWT token.
+- [ ] **5.2.3 [Multi-Tenant Isolation Tests]**: Add integration test `tests/multi_tenant_sync_test.rs` spinning up `cloud-server` with two distinct tokens (`Tenant A` and `Tenant B`). Assert mutations pushed by Tenant A are completely invisible when Tenant B calls `pull`.
+
+#### 5.3 Production Docker & Compose Setup (`Dockerfile.server` & `docker-compose.yml`)
+
+- [ ] **5.3.1 [Multi-Stage Dockerfile]**: Create `Dockerfile.server` in root with two stages:
+  - Stage 1 (`builder`): `FROM rust:1.80-slim`, `cargo build --release --bin cloud-server`.
+  - Stage 2 (`runtime`): `FROM debian:bookworm-slim`, copy binary to `/usr/local/bin/cloud-server`, expose `3099`, set `VOLUME ["/data"]`, and `ENTRYPOINT ["cloud-server"]`.
+- [ ] **5.3.2 [Docker Compose Topology]**: Create `docker-compose.yml` defining two services:
+  - `pos-cloud-server`: built from `Dockerfile.server`, port `3099:3099`, environment `OZ_DB_PATH=/data/cloud.db` (or `DATABASE_URL=postgres://...`), volume `oz_cloud_data:/data`.
+  - `pos-cloud-db` (optional): `postgres:16-alpine` container with health checks and persistent storage volume for enterprises using PostgreSQL replication (`pg_transport.rs`).
+- [ ] **5.3.3 [Automated Container CI Build Test]**: Add CI workflow step in `.github/workflows/` (`or scripts/check.sh --docker-dry-run`) executing `docker build -f Dockerfile.server -t oz-pos-cloud:test .` ensuring clean container build and binary size verification (`< 50MB`).
+
+---
+
+## 6. Next Steps for Execution
+
+Whenever we are ready to start building, we can pick any sub-item above (e.g. **1.1.1 [Rust Core Presets]**, **3.1.1 [SQLite BOM Schema]**, or **5.1.1 [Headless Server Crate Scaffolding]**), write the code and tests, verify against `cargo test` / `npm test` / `docker build`, and mark the item completed (`[x]`) while preserving 100% documentation integrity and our version lock (`0.0.3`).

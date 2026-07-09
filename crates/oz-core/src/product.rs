@@ -290,21 +290,23 @@ mod tests {
 
     #[test]
     fn builder_sets_product_type() {
-        let p = Product::new("P", "Test", test_price())
-            .with_product_type(ProductType::Restaurant);
+        let p = Product::new("P", "Test", test_price()).with_product_type(ProductType::Restaurant);
         assert_eq!(p.product_type, ProductType::Restaurant);
     }
 
     #[test]
     fn builder_sets_product_type_both() {
-        let p = Product::new("P", "Test", test_price())
-            .with_product_type(ProductType::Both);
+        let p = Product::new("P", "Test", test_price()).with_product_type(ProductType::Both);
         assert_eq!(p.product_type, ProductType::Both);
     }
 
     #[test]
     fn product_type_roundtrip_serde() {
-        for &(s, expected) in &[("retail", ProductType::Retail), ("restaurant", ProductType::Restaurant), ("both", ProductType::Both)] {
+        for &(s, expected) in &[
+            ("retail", ProductType::Retail),
+            ("restaurant", ProductType::Restaurant),
+            ("both", ProductType::Both),
+        ] {
             assert_eq!(ProductType::from_str(s), Some(expected));
             assert_eq!(expected.as_str(), s);
             let json = serde_json::to_value(expected).unwrap();

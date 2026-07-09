@@ -29,6 +29,11 @@ setup-preset-full-store-desc = Everything except cloud sync and loyalty
 setup-preset-custom = Custom
 setup-preset-custom-desc = Start from scratch — enable exactly what you need
 
+setup-preset-cafe = Cafe / Bakery
+setup-preset-cafe-desc = Quick-service with kitchen display, cash+card, discounts
+setup-preset-franchise = Franchise
+setup-preset-franchise-desc = Multi-store, multi-terminal, restaurant + full admin stack
+
 setup-features-title = { $title }
 setup-features-desc = Toggle the features you need. You can change these later.
 setup-features-group-aria = { $title }

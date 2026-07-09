@@ -8,7 +8,7 @@ import './SetupWizard.css';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type Preset = 'simple-retail' | 'restaurant' | 'full-store' | 'custom';
+export type Preset = 'simple-retail' | 'restaurant' | 'full-store' | 'cafe' | 'franchise' | 'custom';
 
 export interface FeatureDef {
   key: string;
@@ -73,6 +73,18 @@ const PRESETS: PresetOption[] = [
     emoji: '🏪',
     name: 'Full Store',
     description: 'Everything except cloud — payments, staff, loyalty, reports',
+  },
+  {
+    value: 'cafe',
+    emoji: '☕',
+    name: 'Cafe / Bakery',
+    description: 'Quick-service with kitchen display, cash+card, discounts',
+  },
+  {
+    value: 'franchise',
+    emoji: '🏢',
+    name: 'Franchise',
+    description: 'Multi-store, multi-terminal, restaurant + full admin stack',
   },
   {
     value: 'custom',
@@ -199,6 +211,35 @@ const PRESET_FEATURES: Record<Preset, string[]> = {
     'analytics',
     'export-import',
   ],
+  cafe: [
+    'cash-payment',
+    'card-payment',
+    'receipt-printing',
+    'customer-display',
+    'discount-engine',
+    'tax-engine',
+    'promotions-engine',
+  ],
+  franchise: [
+    'cash-payment',
+    'card-payment',
+    'multi-currency',
+    'inventory-tracking',
+    'product-variants',
+    'categories-enabled',
+    'staff-login',
+    'staff-roles',
+    'shift-management',
+    'audit-log',
+    'receipt-printing',
+    'discount-engine',
+    'tax-engine',
+    'reporting',
+    'analytics',
+    'cloud-sync',
+    'multi-store',
+    'multi-terminal',
+  ],
   custom: [],
 };
 
@@ -237,6 +278,8 @@ const PRESET_NAMES: Record<Preset, string> = {
   'simple-retail': 'Simple Retail',
   restaurant: 'Restaurant',
   'full-store': 'Full Store',
+  cafe: 'Cafe / Bakery',
+  franchise: 'Franchise',
   custom: 'Custom',
 };
 

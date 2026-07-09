@@ -356,6 +356,49 @@ impl FeatureRegistry {
         ])
     }
 
+    /// **Cafe / Bakery** — quick-service with kitchen display, cash+card, discounts.
+    pub fn cafe() -> Self {
+        Self::from_set([
+            Feature::SimpleRetail,
+            Feature::Restaurant, // required by KitchenDisplay
+            Feature::CashPayment,
+            Feature::CardPayment,
+            Feature::ReceiptPrinting,
+            Feature::CustomerDisplay,
+            Feature::DiscountEngine,
+            Feature::TaxEngine,
+            Feature::KitchenDisplay,
+            Feature::PromotionsEngine,
+        ])
+    }
+
+    /// **Franchise** — multi-store, multi-terminal, restaurant + full admin stack.
+    pub fn franchise() -> Self {
+        Self::from_set([
+            Feature::Restaurant,
+            Feature::CashPayment,
+            Feature::CardPayment,
+            Feature::MultiCurrency,
+            Feature::InventoryTracking,
+            Feature::ProductVariants,
+            Feature::CategoriesEnabled,
+            Feature::StaffLogin,
+            Feature::StaffRoles,
+            Feature::ShiftManagement,
+            Feature::AuditLog,
+            Feature::ReceiptPrinting,
+            Feature::DiscountEngine,
+            Feature::TaxEngine,
+            Feature::KitchenDisplay,
+            Feature::TableManagement,
+            Feature::CloudSync,
+            Feature::MultiStore,
+            Feature::MultiTerminal,
+            Feature::Reporting,
+            Feature::Analytics,
+        ])
+    }
+
     /// **Custom** — empty; the Setup Wizard will enable features one by one.
     pub fn custom() -> Self {
         Self::new()
@@ -970,6 +1013,51 @@ mod tests {
     }
 
     #[test]
+    fn cafe_preset_has_expected_features() {
+        let reg = FeatureRegistry::cafe();
+        assert!(reg.is_enabled(Feature::SimpleRetail));
+        assert!(reg.is_enabled(Feature::Restaurant));
+        assert!(reg.is_enabled(Feature::CashPayment));
+        assert!(reg.is_enabled(Feature::CardPayment));
+        assert!(reg.is_enabled(Feature::ReceiptPrinting));
+        assert!(reg.is_enabled(Feature::CustomerDisplay));
+        assert!(reg.is_enabled(Feature::DiscountEngine));
+        assert!(reg.is_enabled(Feature::TaxEngine));
+        assert!(reg.is_enabled(Feature::KitchenDisplay));
+        assert!(reg.is_enabled(Feature::PromotionsEngine));
+        assert!(!reg.is_enabled(Feature::StaffLogin));
+        assert_eq!(reg.count(), 10);
+    }
+
+    #[test]
+    fn franchise_preset_has_expected_features() {
+        let reg = FeatureRegistry::franchise();
+        assert!(reg.is_enabled(Feature::Restaurant));
+        assert!(reg.is_enabled(Feature::CashPayment));
+        assert!(reg.is_enabled(Feature::CardPayment));
+        assert!(reg.is_enabled(Feature::MultiCurrency));
+        assert!(reg.is_enabled(Feature::InventoryTracking));
+        assert!(reg.is_enabled(Feature::ProductVariants));
+        assert!(reg.is_enabled(Feature::CategoriesEnabled));
+        assert!(reg.is_enabled(Feature::StaffLogin));
+        assert!(reg.is_enabled(Feature::StaffRoles));
+        assert!(reg.is_enabled(Feature::ShiftManagement));
+        assert!(reg.is_enabled(Feature::AuditLog));
+        assert!(reg.is_enabled(Feature::ReceiptPrinting));
+        assert!(reg.is_enabled(Feature::DiscountEngine));
+        assert!(reg.is_enabled(Feature::TaxEngine));
+        assert!(reg.is_enabled(Feature::KitchenDisplay));
+        assert!(reg.is_enabled(Feature::TableManagement));
+        assert!(reg.is_enabled(Feature::CloudSync));
+        assert!(reg.is_enabled(Feature::MultiStore));
+        assert!(reg.is_enabled(Feature::MultiTerminal));
+        assert!(reg.is_enabled(Feature::Reporting));
+        assert!(reg.is_enabled(Feature::Analytics));
+        assert!(!reg.is_enabled(Feature::SimpleRetail));
+        assert_eq!(reg.count(), 21);
+    }
+
+    #[test]
     #[should_panic]
     fn from_set_panics_on_missing_dependency() {
         FeatureRegistry::from_set([Feature::StaffRoles]);
@@ -1350,6 +1438,32 @@ mod proptests {
                 assert!(
                     reg.is_enabled(dep),
                     "full_store: {f:?} enabled but dep {dep:?} is not"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cafe_preset_satisfies_invariant() {
+        let reg = FeatureRegistry::cafe();
+        for f in reg.enabled_features() {
+            for &dep in f.dependencies() {
+                assert!(
+                    reg.is_enabled(dep),
+                    "cafe: {f:?} enabled but dep {dep:?} is not"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn franchise_preset_satisfies_invariant() {
+        let reg = FeatureRegistry::franchise();
+        for f in reg.enabled_features() {
+            for &dep in f.dependencies() {
+                assert!(
+                    reg.is_enabled(dep),
+                    "franchise: {f:?} enabled but dep {dep:?} is not"
                 );
             }
         }

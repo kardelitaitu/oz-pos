@@ -334,7 +334,8 @@ mod tests {
             minor_units: unit_minor,
             currency: usd(),
         };
-        s.create_product(sku, sku, money, None, None, 100, None).unwrap();
+        s.create_product(sku, sku, money, None, None, 100, None)
+            .unwrap();
 
         let mut cart = Cart::new(usd());
         cart.add_line(CartLine::new(Sku::new(sku), qty, price(unit_minor)))

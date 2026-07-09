@@ -64,6 +64,11 @@ setup-preset-full-store = Toko Lengkap
 setup-preset-full-store-desc = Semuanya kecuali sinkronisasi cloud dan loyalitas
 setup-preset-custom = Kustom
 setup-preset-custom-desc = Mulai dari awal — aktifkan sesuai kebutuhan
+
+setup-preset-cafe = Kafe / Toko Roti
+setup-preset-cafe-desc = Layanan cepat dengan layar dapur, tunai+kartu, diskon
+setup-preset-franchise = Waralaba
+setup-preset-franchise-desc = Multi-toko, multi-terminal, restoran + tumpukan admin lengkap
 setup-features-title = { $title }
 setup-features-desc = Aktifkan fitur yang Anda butuhkan. Anda dapat mengubahnya nanti.
 setup-features-group-aria = { $title }

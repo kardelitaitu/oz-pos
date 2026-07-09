@@ -176,7 +176,15 @@ impl SyncQueue {
                     let barcode = payload["barcode"].as_str();
                     let initial_stock = payload["initial_stock"].as_i64().unwrap_or(0);
                     let product_type = payload["product_type"].as_str().unwrap_or("retail");
-                    store.create_product(sku, name, price, category_id, barcode, initial_stock, Some(product_type))?;
+                    store.create_product(
+                        sku,
+                        name,
+                        price,
+                        category_id,
+                        barcode,
+                        initial_stock,
+                        Some(product_type),
+                    )?;
                 }
                 Ok(())
             }
