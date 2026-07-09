@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listStaff,
   listRoles,
@@ -8,6 +8,13 @@ import {
   type StaffMemberDto,
   type RoleDto,
 } from '@/api/staff';
+import {
+  listAllWorkspaces,
+  setUserWorkspaces,
+  getUserWorkspaces,
+  type WorkspaceDto,
+} from '@/api/workspaces';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -20,6 +27,10 @@ interface FormData {
   displayName: string;
   pin: string;
   roleId: string;
+  /** Only used when editing — workspace assignment mode */
+  wsMode: 'default' | 'custom';
+  /** Only used when editing — selected workspace keys */
+  wsKeys: string[];
 }
 
 const EMPTY_FORM: FormData = {
@@ -27,13 +38,18 @@ const EMPTY_FORM: FormData = {
   displayName: '',
   pin: '',
   roleId: '',
+  wsMode: 'default',
+  wsKeys: [],
 };
 
 // ── Component ───────────────────────────────────────────────────────
 
 export default function StaffManagementScreen() {
+  const { l10n } = useLocalization();
+  const { session } = useAuth();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
+  const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,7 +57,9 @@ export default function StaffManagementScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Load data ──────────────────────────────────────────────────
+  const callerUserId = session?.user_id ?? '';
+
+  // ── Load data
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,7 +79,7 @@ export default function StaffManagementScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Modal handlers ──────────────────────────────────────────────
+  // ── Modal handlers
 
   const openCreate = useCallback(() => {
     setForm(EMPTY_FORM);
@@ -70,21 +88,48 @@ export default function StaffManagementScreen() {
     setShowModal(true);
   }, []);
 
-  const openEdit = useCallback((member: StaffMemberDto) => {
+  const openEdit = useCallback(async (member: StaffMemberDto) => {
     setForm({
       username: member.username,
       displayName: member.display_name,
       pin: '',
       roleId: member.role_id,
+      wsMode: 'default',
+      wsKeys: [],
     });
     setEditingId(member.id);
     setError(null);
     setShowModal(true);
-  }, []);
+
+    // Load workspaces and user's current assignments in parallel.
+    try {
+      const [workspaces, userKeys] = await Promise.all([
+        listAllWorkspaces(callerUserId),
+        getUserWorkspaces(member.id),
+      ]);
+      setAllWorkspaces(workspaces);
+      if (userKeys.length > 0) {
+        setForm((prev) => ({ ...prev, wsMode: 'custom', wsKeys: userKeys }));
+      }
+    } catch {
+      setAllWorkspaces([]);
+    }
+  }, [callerUserId]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
     setError(null);
+  }, []);
+
+  // ── Toggle workspace checkbox ──────────────────────────────────
+
+  const toggleWsKey = useCallback((key: string) => {
+    setForm((prev) => ({
+      ...prev,
+      wsKeys: prev.wsKeys.includes(key)
+        ? prev.wsKeys.filter((k) => k !== key)
+        : [...prev.wsKeys, key],
+    }));
   }, []);
 
   // ── Save / Update ──────────────────────────────────────────────
@@ -97,17 +142,17 @@ export default function StaffManagementScreen() {
       const displayName = form.displayName.trim();
 
       if (!username) {
-        setError('Username is required');
+        setError(l10n.getString('staff-error-username-required'));
         setSaving(false);
         return;
       }
       if (!displayName) {
-        setError('Display name is required');
+        setError(l10n.getString('staff-error-display-name-required'));
         setSaving(false);
         return;
       }
       if (!form.roleId) {
-        setError('Please select a role');
+        setError(l10n.getString('staff-error-role-required'));
         setSaving(false);
         return;
       }
@@ -119,10 +164,18 @@ export default function StaffManagementScreen() {
           display_name: displayName,
           role_id: form.roleId,
           is_active: true,
+          caller_user_id: callerUserId,
         });
+
+        // Save workspace assignments.
+        await setUserWorkspaces(
+          editingId,
+          form.wsMode === 'custom' ? form.wsKeys : [],
+          callerUserId,
+        );
       } else {
         if (!form.pin || form.pin.length < 4) {
-          setError('PIN must be at least 4 characters');
+          setError(l10n.getString('staff-error-pin-length'));
           setSaving(false);
           return;
         }
@@ -131,17 +184,18 @@ export default function StaffManagementScreen() {
           pin: form.pin,
           display_name: displayName,
           role_id: form.roleId,
+          caller_user_id: callerUserId,
         });
       }
 
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save staff member');
+      setError(err instanceof Error ? err.message : l10n.getString('staff-error-save-failed'));
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load]);
+  }, [form, editingId, closeModal, load, l10n, callerUserId]);
 
   // ── Deactivate / Reactivate ────────────────────────────────────
 
@@ -153,12 +207,13 @@ export default function StaffManagementScreen() {
         display_name: member.display_name,
         role_id: member.role_id,
         is_active: !member.is_active,
+        caller_user_id: callerUserId,
       });
       await load();
     } catch {
       // Error handling.
     }
-  }, [load]);
+  }, [load, callerUserId]);
 
   // ── Role colour mapping ────────────────────────────────────────
 
@@ -214,7 +269,7 @@ export default function StaffManagementScreen() {
         </Card>
       ) : (
         <div className="staff-mgmt-table-wrap">
-          <table className="staff-mgmt-table" aria-label="Staff members">
+          <table className="staff-mgmt-table" aria-label={l10n.getString('staff-table-aria')}>
             <thead>
               <tr>
                 <Localized id="staff-col-name"><th>Name</th></Localized>
@@ -308,7 +363,7 @@ export default function StaffManagementScreen() {
 
               <div className="staff-mgmt-modal-body">
                 {/* Username */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-username" aria-label="Username">
+                <label className="staff-mgmt-field" htmlFor="staff-field-username" aria-label={l10n.getString('staff-field-username-aria')}>
                   <Localized id="staff-field-username-label">
                     <span className="staff-mgmt-label">Username *</span>
                   </Localized>
@@ -327,7 +382,7 @@ export default function StaffManagementScreen() {
                 </label>
 
                 {/* Display name */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-name" aria-label="Display Name">
+                <label className="staff-mgmt-field" htmlFor="staff-field-name" aria-label={l10n.getString('staff-field-name-aria')}>
                   <Localized id="staff-field-name-label">
                     <span className="staff-mgmt-label">Display Name *</span>
                   </Localized>
@@ -345,7 +400,7 @@ export default function StaffManagementScreen() {
                 </label>
 
                 {/* PIN */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-pin" aria-label="PIN">
+                <label className="staff-mgmt-field" htmlFor="staff-field-pin" aria-label={l10n.getString('staff-field-pin-aria')}>
                   <Localized id={isEditing ? 'staff-field-pin-edit-label' : 'staff-field-pin-label'}>
                     <span className="staff-mgmt-label">
                       {isEditing ? 'New PIN (leave blank to keep current)' : 'PIN * (4+ characters)'}
@@ -388,6 +443,69 @@ export default function StaffManagementScreen() {
                   </label>
                 )}
 
+                {/* ── Workspace Access Section (edit only) ──────── */}
+                {isEditing && allWorkspaces.length > 0 && (
+                  <fieldset className="staff-mgmt-ws-section">
+                    <Localized id="staff-ws-section-label">
+                      <legend className="staff-mgmt-label">Workspace Access</legend>
+                    </Localized>
+
+                    <div className="staff-mgmt-radio">
+                      <input
+                        type="radio"
+                        name="wsMode"
+                        value="default"
+                        checked={form.wsMode === 'default'}
+                        onChange={() => setForm({ ...form, wsMode: 'default', wsKeys: [] })}
+                        aria-label={l10n.getString('staff-ws-role-defaults')}
+                      />
+                      <Localized id="staff-ws-role-defaults">
+                        <span>Use role defaults</span>
+                      </Localized>
+                    </div>
+
+                    <div className="staff-mgmt-radio">
+                      <input
+                        type="radio"
+                        name="wsMode"
+                        value="custom"
+                        checked={form.wsMode === 'custom'}
+                        onChange={() => setForm({ ...form, wsMode: 'custom' })}
+                        aria-label={l10n.getString('staff-ws-custom')}
+                      />
+                      <Localized id="staff-ws-custom">
+                        <span>Custom</span>
+                      </Localized>
+                    </div>
+
+                    {form.wsMode === 'custom' && (
+                      <div className="staff-mgmt-ws-checkboxes">
+                        {allWorkspaces.map((ws) => (
+                          <label key={ws.key} className="staff-mgmt-ws-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={form.wsKeys.includes(ws.key)}
+                              onChange={() => toggleWsKey(ws.key)}
+                            />
+                            <span className="staff-mgmt-ws-checkbox-label">
+                              {ws.icon && (
+                                <span className="staff-mgmt-ws-icon" aria-hidden="true">
+                                  {ws.icon === 'restaurant' && '🍽 '}
+                                  {ws.icon === 'store' && '🏪 '}
+                                  {ws.icon === 'inventory' && '📦 '}
+                                  {ws.icon === 'admin' && '⚙ '}
+                                </span>
+                              )}
+                              {ws.name}
+                            </span>
+                            <span className="staff-mgmt-ws-desc">{ws.description}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </fieldset>
+                )}
+
                 {/* Error */}
                 {error && (
                   <div className="staff-mgmt-error" role="alert">
@@ -416,7 +534,8 @@ export default function StaffManagementScreen() {
                     !form.username.trim() ||
                     !form.displayName.trim() ||
                     !form.roleId ||
-                    (!isEditing && (!form.pin || form.pin.length < 4))
+                    (!isEditing && (!form.pin || form.pin.length < 4)) ||
+                    (isEditing && form.wsMode === 'custom' && allWorkspaces.length > 0 && form.wsKeys.length === 0)
                   }
                   onClick={handleSave}
                 >

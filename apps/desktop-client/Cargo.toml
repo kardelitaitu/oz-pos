@@ -27,6 +27,7 @@ oz-core = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-lua = { workspace = true }
+oz-plugin = { workspace = true }
 modules-crm = { workspace = true }
 modules-inventory = { workspace = true }
 modules-settings = { workspace = true }
@@ -36,6 +37,7 @@ modules-staff = { workspace = true }
 modules-reporting = { workspace = true }
 modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
+oz-reporting = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
 platform-sync = { workspace = true }
@@ -50,6 +52,7 @@ rusqlite = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
+notify = { workspace = true }
 uuid = { workspace = true }
 
 [features]

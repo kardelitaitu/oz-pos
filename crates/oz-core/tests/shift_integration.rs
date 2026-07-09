@@ -6,10 +6,7 @@
 use oz_core::{Store, migrations};
 
 fn setup() -> rusqlite::Connection {
-    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn).unwrap();
-    conn
+    migrations::fresh_db()
 }
 
 fn store(conn: &rusqlite::Connection) -> Store<'_> {

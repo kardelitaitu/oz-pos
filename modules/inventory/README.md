@@ -18,7 +18,7 @@ The Inventory module owns the entire product and stock management vertical. It h
 ## Currently Owns
 
 - **Backend** — Product CRUD, stock, variants, categories (`crates/oz-core/src/db/products.rs`)
-- **Commands** — Product and variant Tauri commands (`src-tauri/src/commands/products.rs`, `src-tauri/src/commands/product_variants.rs`, `src-tauri/src/commands/categories.rs`)
+- **Commands** — Product and variant Tauri commands (`apps/desktop-client/src/commands/products.rs`, `apps/desktop-client/src/commands/product_variants.rs`, `apps/desktop-client/src/commands/categories.rs`)
 - **Frontend** — Product screens (`ui/src/features/products/`), inventory adjustment (`ui/src/features/inventory/`)
 - **API** — TypeScript API client (`ui/src/api/products.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/*/products.ftl`, `ui/src/locales/*/inventory.ftl`)
@@ -58,3 +58,5 @@ kernel.start_all()?;
   "permissions": ["inventory:view", "inventory:edit", "inventory:adjust"]
 }
 ```
+
+> last audited 07-07-26 by docs-auditor

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './UpdateBanner.css';
+import type * as UpdaterModule from '@tauri-apps/plugin-updater';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -18,7 +21,7 @@ interface UpdateInfo {
 
 interface UpdateState {
   info: UpdateInfo;
-  instance: Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater')['check']>> | null;
+  instance: Awaited<ReturnType<typeof UpdaterModule.check>> | null;
 }
 
 function useUpdateCheck(): UpdateState {
@@ -65,6 +68,7 @@ function useUpdateCheck(): UpdateState {
  * the top of the content area with an "Install" action.
  */
 export default function UpdateBanner() {
+  const { l10n } = useLocalization();
   const { info: update, instance: updateInstance } = useUpdateCheck();
   const [dismissed, setDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -80,13 +84,23 @@ export default function UpdateBanner() {
     }
   }, [updateInstance]);
 
-  if (!update.available || dismissed) {
+  // Mirror the entry keyframe with a 200ms exit fade so the × dismiss
+  // doesn't snap. Install path bypasses the hook entirely: Tauri
+  // either restarts (banner would unmount via the parent route
+  // unmount) or fails (banner stays visible, no dismiss needed).
+  // Per project exit-animation-pattern skill (commit 2d8bab9 sibling).
+  const exit = useExitAnimation(
+    update.available && !dismissed,
+    () => setDismissed(true),
+  );
+
+  if (!exit.shouldRender) {
     return null;
   }
 
   return (
     <div
-      className="update-banner"
+      className={`update-banner${exit.exiting ? ' update-banner--exiting' : ''}`}
       role="alert"
       aria-live="polite"
     >
@@ -107,8 +121,8 @@ export default function UpdateBanner() {
           <polyline points="17 6 23 6 23 12" />
         </svg>
         <span className="update-banner-text">
-          <strong>Update available:</strong>{' '}
-          {update.version ? `v${update.version}` : 'New version'}
+          <Localized id="update-banner-title"><strong>Update available:</strong></Localized>{' '}
+          {update.version ? `v${update.version}` : l10n.getString('update-banner-new-version')}
           {update.notes && <span className="update-banner-notes"> — {update.notes}</span>}
         </span>
       </div>
@@ -118,15 +132,16 @@ export default function UpdateBanner() {
           className="update-banner-btn update-banner-btn--primary"
           onClick={handleInstall}
           disabled={installing}
-          aria-label={installing ? 'Installing update…' : 'Download and install update'}
+          aria-label={l10n.getString(installing ? 'update-banner-installing-aria' : 'update-banner-install-aria')}
         >
-          {installing ? 'Installing…' : 'Install'}
+          {l10n.getString(installing ? 'update-banner-installing' : 'update-banner-install')}
         </button>
         <button
           type="button"
           className="update-banner-btn update-banner-btn--dismiss"
-          onClick={() => setDismissed(true)}
-          aria-label="Dismiss update notification"
+          onClick={() => exit.requestClose()}
+          disabled={exit.exiting}
+          aria-label={l10n.getString('update-banner-dismiss-aria')}
         >
           <svg
             width="14"

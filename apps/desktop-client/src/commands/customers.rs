@@ -10,6 +10,9 @@ use oz_core::db::Store;
 
 use foundation::validate_not_empty;
 
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -70,6 +73,7 @@ pub async fn get_customer(
 
 #[derive(Debug, Deserialize)]
 pub struct CreateCustomerArgs {
+    pub user_id: String,
     pub name: String,
     pub email: Option<String>,
     pub phone: Option<String>,
@@ -91,6 +95,9 @@ pub async fn create_customer(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::CUSTOMERS_CREATE)?;
+
     let customer = store.create_customer(
         args.name.trim(),
         args.email.as_deref(),
@@ -105,6 +112,7 @@ pub async fn create_customer(
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateCustomerArgs {
+    pub user_id: String,
     pub id: String,
     pub name: String,
     pub email: Option<String>,
@@ -127,6 +135,9 @@ pub async fn update_customer(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::CUSTOMERS_EDIT)?;
+
     let customer = store.update_customer(
         &args.id,
         args.name.trim(),
@@ -140,11 +151,23 @@ pub async fn update_customer(
 
 // ── Delete customer ─────────────────────────────────────────────────
 
+#[derive(Debug, Deserialize)]
+pub struct DeleteCustomerArgs {
+    pub user_id: String,
+    pub id: String,
+}
+
 #[command]
-pub async fn delete_customer(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn delete_customer(
+    args: DeleteCustomerArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    store.delete_customer(&id)?;
+
+    require_permission_for_user(&store, &args.user_id, permissions::CUSTOMERS_DELETE)?;
+
+    store.delete_customer(&args.id)?;
     drop(db);
     Ok(())
 }
@@ -326,5 +349,100 @@ mod tests {
         let customer = oz_core::Customer::new("Test");
         let dto = CustomerDto::from(customer);
         assert!(dto.phone.is_none());
+    }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn customer_dto_debug() {
+        let dto = CustomerDto {
+            id: "c1".into(),
+            name: "Alice".into(),
+            email: Some("alice@test.com".into()),
+            phone: None,
+            notes: String::new(),
+            created_at: "2025-01-01".into(),
+            updated_at: "2025-01-01".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Alice"));
+    }
+
+    #[test]
+    fn customer_dto_serialize() {
+        let dto = CustomerDto {
+            id: "c2".into(),
+            name: "Bob".into(),
+            email: None,
+            phone: Some("+123".into()),
+            notes: "VIP".into(),
+            created_at: "2025-02-01".into(),
+            updated_at: "2025-02-01".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["name"], "Bob");
+        assert_eq!(json["notes"], "VIP");
+    }
+
+    #[test]
+    fn create_customer_args_deserialize_minimal() {
+        let json = r##"{"user_id":"u1","name":"Alice"}"##;
+        let args: CreateCustomerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Alice");
+        assert_eq!(args.email, None);
+        assert_eq!(args.notes, None);
+    }
+
+    #[test]
+    fn create_customer_args_debug() {
+        let args = CreateCustomerArgs {
+            user_id: "u1".into(),
+            name: "Test".into(),
+            email: None,
+            phone: None,
+            notes: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("Test"));
+    }
+
+    #[test]
+    fn update_customer_args_deserialize() {
+        let json = r##"{"user_id":"u2","id":"c1","name":"Alice Updated"}"##;
+        let args: UpdateCustomerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Alice Updated");
+        assert_eq!(args.email, None);
+    }
+
+    #[test]
+    fn update_customer_args_debug() {
+        let args = UpdateCustomerArgs {
+            user_id: "u2".into(),
+            id: "c1".into(),
+            name: "U".into(),
+            email: None,
+            phone: None,
+            notes: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("U"));
+    }
+
+    #[test]
+    fn delete_customer_args_deserialize() {
+        let json = r##"{"user_id":"u3","id":"c99"}"##;
+        let args: DeleteCustomerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "c99");
+        assert_eq!(args.user_id, "u3");
+    }
+
+    #[test]
+    fn delete_customer_args_debug() {
+        let args = DeleteCustomerArgs {
+            user_id: "u".into(),
+            id: "c".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("c"));
     }
 }

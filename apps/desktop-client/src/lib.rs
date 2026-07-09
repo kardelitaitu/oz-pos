@@ -13,6 +13,7 @@
 
 pub mod commands;
 pub mod error;
+pub mod lan_server;
 pub mod state;
 
 use crate::error::AppError;
@@ -47,6 +48,34 @@ pub fn run() {
                 let state = app_handle.state::<AppState>();
                 state.sync_daemon.start(db).await;
             });
+
+            // ── LAN event forwarder ────────────────────────────────────
+            let forwarder = crate::lan_server::LanEventForwarder::new();
+            let handle = forwarder.handle();
+            tauri::async_runtime::spawn(forwarder.run());
+
+            // Subscribe event bus handlers for LAN forwarding.
+            // Use try_lock() because .setup() is synchronous.
+            {
+                let state = app.state::<AppState>();
+                if let Ok(kernel) = state.kernel.try_lock() {
+                    let bus = kernel.event_bus();
+                    bus.subscribe(
+                        "sale.completed",
+                        Box::new(handle.sale_completed_handler()),
+                    );
+                    bus.subscribe(
+                        "order.course_fired",
+                        Box::new(handle.course_fired_handler()),
+                    );
+                    tracing::info!(
+                        "LAN event forwarder handlers registered for sale.completed and order.course_fired"
+                    );
+                } else {
+                    tracing::warn!("kernel lock contended, LAN handlers not registered");
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -88,6 +117,7 @@ pub fn run() {
             commands::staff::update_staff,
             commands::categories::list_categories,
             commands::categories::create_category,
+            commands::categories::update_category,
             commands::categories::delete_category,
             commands::currencies::currency_info,
             commands::currencies::list_currencies,
@@ -97,17 +127,60 @@ pub fn run() {
             commands::exchange_rates::create_exchange_rate,
             commands::exchange_rates::delete_exchange_rate,
             commands::features::list_all_features,
+            commands::features::set_features_bulk,
             commands::features::set_feature,
+            commands::gift_cards::issue_gift_card,
+            commands::gift_cards::get_gift_card,
+            commands::gift_cards::list_gift_cards,
+            commands::gift_cards::get_gift_card_balance,
+            commands::gift_cards::redeem_gift_card,
+            commands::gift_cards::top_up_gift_card,
+            commands::gift_cards::freeze_gift_card,
+            commands::gift_cards::unfreeze_gift_card,
+            commands::inventory_counts::create_stock_count,
+            commands::inventory_counts::get_stock_count,
+            commands::inventory_counts::list_stock_counts,
+            commands::inventory_counts::get_count_lines,
+            commands::inventory_counts::add_count_line,
+            commands::inventory_counts::update_count_line,
+            commands::inventory_counts::remove_count_line,
+            commands::inventory_counts::complete_stock_count,
+            commands::inventory_counts::update_stock_count_status,
+            commands::inventory_counts::list_stock_adjustments,
+            commands::purchasing::list_suppliers,
+            commands::purchasing::get_supplier,
+            commands::purchasing::create_supplier,
+            commands::purchasing::update_supplier,
+            commands::purchasing::list_purchase_orders,
+            commands::purchasing::get_purchase_order,
+            commands::purchasing::create_purchase_order,
+            commands::purchasing::update_po_status,
+            commands::purchasing::receive_purchase_order,
+            commands::stock_transfers::create_stock_transfer,
+            commands::stock_transfers::get_stock_transfer,
+            commands::stock_transfers::list_stock_transfers,
+            commands::stock_transfers::get_stock_transfer_lines,
+            commands::stock_transfers::add_stock_transfer_line,
+            commands::stock_transfers::remove_stock_transfer_line,
+            commands::stock_transfers::send_stock_transfer,
+            commands::stock_transfers::receive_stock_transfer,
+            commands::stock_transfers::cancel_stock_transfer,
             commands::health::ping,
             commands::health::version,
             commands::pos::start_sale,
             commands::pos::add_line,
             commands::pos::complete_sale,
             commands::pos::set_cart_discount,
+            commands::pos::override_line_price,
+            commands::pos::list_active_carts,
+            commands::pos::get_active_cart,
             commands::pos::hold_cart,
             commands::pos::list_held_carts,
+            commands::pos::list_open_bills,
             commands::pos::get_held_cart,
+            commands::pos::compute_cart_tax,
             commands::pos::delete_held_cart,
+            commands::plugins::reload_plugins,
             commands::kds::list_kds_orders,
             commands::kds::get_kds_queue,
             commands::kds::update_kds_status,
@@ -129,8 +202,13 @@ pub fn run() {
             commands::settings::set_receipt_settings,
             commands::settings::get_store_settings,
             commands::settings::set_store_settings,
+            commands::settings::get_user_preferences,
+            commands::settings::set_user_preferences,
+            commands::settings::get_setting,
+            commands::settings::set_setting,
             commands::setup::get_enabled_features,
             commands::setup::complete_setup,
+            commands::setup::dismiss_setup_wizard,
             commands::products::list_products,
             commands::products::create_product,
             commands::products::update_product,
@@ -138,6 +216,7 @@ pub fn run() {
             commands::products::lookup_by_barcode,
             commands::products::lookup_product_by_sku,
             commands::products::adjust_stock,
+            commands::products::get_product_track_serial,
             commands::promotions::list_promotions,
             commands::promotions::get_promotion,
             commands::promotions::create_promotion,
@@ -150,6 +229,7 @@ pub fn run() {
             commands::product_variants::create_product_variant,
             commands::product_variants::update_product_variant,
             commands::product_variants::delete_product_variant,
+            commands::setup::seed_default_roles,
             commands::setup::get_setup_status,
             commands::tax::list_tax_rates,
             commands::tax::create_tax_rate,
@@ -166,6 +246,10 @@ pub fn run() {
             commands::terminals::list_terminal_overrides,
             commands::terminals::set_terminal_override,
             commands::terminals::delete_terminal_override,
+            commands::terminals::get_terminal_profile,
+            commands::terminals::set_terminal_profile,
+            commands::terminals::list_terminal_profiles,
+            commands::terminals::delete_terminal_profile,
             commands::offline::enqueue_offline,
             commands::offline::list_pending_offline,
             commands::offline::list_all_offline,
@@ -174,10 +258,14 @@ pub fn run() {
             commands::offline::delete_offline_item,
             commands::sync::get_sync_settings,
             commands::sync::update_sync_settings,
-            commands::sync::trigger_sync,
+            commands::sync::sync_run,
+            commands::sync::sync_pull,
+            commands::sync::sync_pull,
             commands::sync::pending_sync_count,
             commands::refunds::process_refund,
             commands::refunds::list_refunds,
+            commands::refunds::lookup_sale_by_receipt_barcode,
+            commands::reports::get_menu_engineering,
             commands::reports::get_daily_revenue,
             commands::reports::get_weekly_revenue,
             commands::reports::get_monthly_revenue,
@@ -195,6 +283,7 @@ pub fn run() {
             commands::hardware::list_displays,
             commands::hardware::display_show,
             commands::hardware::display_clear,
+            commands::scale::read_scale_weight,
             commands::store_profiles::list_store_profiles,
             commands::store_profiles::get_store_profile,
             commands::store_profiles::get_primary_store,
@@ -211,13 +300,17 @@ pub fn run() {
             commands::tables::assign_table_order,
             commands::tables::release_table,
             commands::tables::list_sections,
+            commands::workspaces::list_workspaces,
+            commands::workspaces::list_all_workspaces,
+            commands::workspaces::set_user_workspaces,
+            commands::workspaces::get_user_workspaces,
+            commands::workspaces::list_workspace_screens,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);
 
     tracing::info!("application shutting down");
-    // TODO(phase-2.3): graceful kernel stop via `state.kernel.lock().await.stop_all()`
-    // when modules have resources to release. Currently blocked by Tauri lifecycle API access.
+    // Kernel shutdown happens in AppState::drop() — see state.rs.
 
     if let Err(e) = result {
         tracing::error!(error = %e, "OZ-POS exited with error");

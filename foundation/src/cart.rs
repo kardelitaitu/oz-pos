@@ -44,6 +44,7 @@ pub struct CartLine {
     pub sku: Sku,
     pub qty: i64,
     pub unit_price: Money,
+    pub overridden_price: Option<Money>,
 }
 
 impl CartLine {
@@ -58,14 +59,22 @@ impl CartLine {
             sku,
             qty,
             unit_price,
+            overridden_price: None,
         }
     }
 
     /// Total for this line: `unit_price * qty`, in minor units.
+    /// If [`overridden_price`](Self::overridden_price) is set, uses that instead.
     /// Returns `None` on `i64` overflow.
     #[must_use]
     pub fn total(&self) -> Option<Money> {
-        self.unit_price.checked_mul(self.qty)
+        let price = self.overridden_price.unwrap_or(self.unit_price);
+        price.checked_mul(self.qty)
+    }
+
+    /// Override the unit price for this line.
+    pub fn set_overridden_price(&mut self, price: Money) {
+        self.overridden_price = Some(price);
     }
 }
 
@@ -115,6 +124,9 @@ impl Cart {
     #[must_use]
     pub fn lines(&self) -> &[CartLine] {
         &self.lines
+    }
+    pub fn lines_mut(&mut self) -> &mut [CartLine] {
+        &mut self.lines
     }
     #[must_use]
     pub fn line_count(&self) -> usize {

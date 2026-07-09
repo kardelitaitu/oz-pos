@@ -25,6 +25,11 @@ html {
   text-rendering: optimizeLegibility;
 }
 
+html[data-font-smoothing="subpixel"] {
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+}
+
 body {
   font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
   font-size: var(--text-base, 0.875rem);

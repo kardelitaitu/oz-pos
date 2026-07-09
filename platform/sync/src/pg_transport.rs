@@ -15,6 +15,12 @@ pub struct PgTransport {
     pool: Pool,
 }
 
+impl std::fmt::Debug for PgTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PgTransport").finish_non_exhaustive()
+    }
+}
+
 impl PgTransport {
     /// Create a new PostgreSQL transport from connection parameters.
     pub fn new(
@@ -153,10 +159,192 @@ impl PgTransport {
                     last_error: row.get("last_error"),
                     created_at: row.get::<_, String>("created_at"),
                     synced_at: Some(row.get::<_, String>("synced_at")),
+                    tenant_id: row.get("tenant_id"),
                 }
             })
             .collect();
 
         Ok(super::transport::PullResponse { items })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── PgTransport::new() ────────────────────────────────────────────
+
+    #[test]
+    fn new_succeeds_with_valid_params() {
+        let transport = PgTransport::new("localhost", 5432, "testdb", "user", "pass");
+        assert!(transport.is_ok(), "pool creation should succeed");
+    }
+
+    #[test]
+    fn new_succeeds_with_ip_address_host() {
+        let transport = PgTransport::new("192.168.1.100", 5432, "mydb", "admin", "s3cret");
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_succeeds_with_fqdn_host() {
+        let transport = PgTransport::new(
+            "db.internal.example.com",
+            5432,
+            "production",
+            "app_user",
+            "p@ssw0rd!",
+        );
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_succeeds_with_custom_port() {
+        let transport = PgTransport::new("localhost", 5433, "db", "u", "p");
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_succeeds_with_max_port() {
+        let transport = PgTransport::new("localhost", 65535, "db", "u", "p");
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_succeeds_with_min_port() {
+        let transport = PgTransport::new("localhost", 1, "db", "u", "p");
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_succeeds_with_special_chars_in_password() {
+        let transport = PgTransport::new(
+            "localhost",
+            5432,
+            "testdb",
+            "user",
+            "p@ss!w0rd#with%special&chars",
+        );
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_succeeds_with_long_strings() {
+        let long = "a".repeat(255);
+        let transport = PgTransport::new(&long, 5432, &long, &long, &long);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_succeeds_with_unicode_dbname() {
+        let transport = PgTransport::new("localhost", 5432, "café_db", "user", "pass");
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn new_handles_empty_string_params_gracefully() {
+        // deadpool-postgres may accept or reject empty params at pool
+        // creation time — either outcome is acceptable as long as it
+        // doesn't panic.
+        let result = PgTransport::new("", 5432, "", "", "");
+        match result {
+            Ok(_) => {} // pool created lazily, will fail on first use
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(
+                    msg.contains("pool") || msg.contains("transport"),
+                    "expected pool or transport error, got: {msg}"
+                );
+            }
+        }
+    }
+
+    // ── Debug ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn pg_transport_debug_output() {
+        let transport = PgTransport::new("localhost", 5432, "db", "u", "p")
+            .expect("pool creation should succeed");
+        let debug = format!("{transport:?}");
+        assert!(debug.contains("PgTransport"));
+        // Debug should not expose connection details.
+        assert!(!debug.contains("localhost"));
+        assert!(!debug.contains("5432"));
+    }
+
+    // ── Send + Sync ───────────────────────────────────────────────────
+
+    #[test]
+    fn pg_transport_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<PgTransport>();
+    }
+
+    // ── push_items edge cases ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn push_items_empty_list_handles_missing_server() {
+        // Even with an empty items list, push_items calls pool.get() for
+        // the CREATE TABLE IF NOT EXISTS statement. If PG is running
+        // locally, the empty list produces an empty outcomes vec; if not,
+        // we get a transport error. Either outcome is acceptable.
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let transport = PgTransport::new("localhost", 5432, "nonexistent", "u", "p")?;
+            transport.push_items(&[]).await
+        })
+        .await;
+        match result {
+            Ok(Ok(outcomes)) => assert!(outcomes.is_empty()),
+            Ok(Err(e)) => {
+                let msg = e.to_string();
+                assert!(
+                    msg.contains("transport") || msg.contains("connection"),
+                    "expected transport or connection error, got: {msg}"
+                );
+            }
+            Err(_elapsed) => {
+                // Timed out — no PG server reachable, which is expected.
+            }
+        }
+    }
+
+    // ── pull_updates edge cases ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn pull_updates_both_with_and_without_since() {
+        let transport = PgTransport::new("localhost", 5432, "nonexistent", "u", "p")
+            .expect("pool creation should succeed");
+
+        // pull_updates with since = None
+        let result1 = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            transport.pull_updates(None),
+        )
+        .await;
+        match result1 {
+            Ok(Ok(_resp)) => {} // PG running locally
+            Ok(Err(e)) => {
+                assert!(
+                    e.to_string().contains("transport") || e.to_string().contains("connection")
+                );
+            }
+            Err(_elapsed) => {} // timed out — expected without PG
+        }
+
+        // pull_updates with since = Some
+        let result2 = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            transport.pull_updates(Some("2026-01-01T00:00:00Z")),
+        )
+        .await;
+        match result2 {
+            Ok(Ok(_resp)) => {}
+            Ok(Err(e)) => {
+                assert!(
+                    e.to_string().contains("transport") || e.to_string().contains("connection")
+                );
+            }
+            Err(_elapsed) => {}
+        }
     }
 }

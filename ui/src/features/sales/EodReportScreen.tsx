@@ -6,16 +6,11 @@ import {
 import { listShifts, type ShiftDto } from '@/api/shifts';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
+import { Localized } from '@/components/Localized';
+import { useLocalization } from '@fluent/react';
 import { printReceipt } from '@/api/hardware';
 import './EodReportScreen.css';
 
-/**
- * EOD (End-of-Day) Report screen.
- *
- * Displays a comprehensive summary of today's sales activity including
- * revenue KPIs, payment method breakdown, void/discount statistics,
- * and an hourly sales chart.
- */
 // ── Shift Summary Sub-component ──────────────────────────────────
 
 interface ShiftSummaryProps {
@@ -24,6 +19,7 @@ interface ShiftSummaryProps {
 }
 
 function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
+  const { l10n } = useLocalization();
   const today = new Date().toISOString().slice(0, 10);
   const todayClosed = shifts.filter(
     (s) => s.status === 'closed' && s.closedAt && s.closedAt.startsWith(today),
@@ -44,11 +40,13 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
     <Card shadow="sm" className="eod-report-section-card">
       {/* ── Section header ──────────────────────── */}
       <div className="eod-report-shift-header">
-        <h2 className="eod-report-section-title" style={{ margin: 0 }}>Cashier Shifts</h2>
+        <Localized id="eod-cashier-shifts">
+          <h2 className="eod-report-section-title" style={{ margin: 0 }}>Cashier Shifts</h2>
+        </Localized>
         {activeShift && (
           <span className="eod-report-shift-active-badge">
             <span className="eod-report-shift-active-dot" />
-            Shift in progress
+            <Localized id="eod-shift-active">Shift in progress</Localized>
           </span>
         )}
       </div>
@@ -57,7 +55,9 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
       {activeShift && (
         <div className="eod-report-active-shift">
           <div className="eod-report-active-shift-row">
-            <span className="eod-report-active-shift-label">Active shift since</span>
+            <Localized id="eod-shift-active-since">
+              <span className="eod-report-active-shift-label">Active shift since</span>
+            </Localized>
             <span className="eod-report-active-shift-value">
               {new Date(activeShift.openedAt).toLocaleTimeString([], {
                 hour: '2-digit',
@@ -66,13 +66,17 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
             </span>
           </div>
           <div className="eod-report-active-shift-row">
-            <span className="eod-report-active-shift-label">Opening balance</span>
+            <Localized id="eod-opening-balance">
+              <span className="eod-report-active-shift-label">Opening balance</span>
+            </Localized>
             <span className="eod-report-active-shift-value">
               {fmt(activeShift.openingBalanceMinor)}
             </span>
           </div>
           <div className="eod-report-active-shift-row">
-            <span className="eod-report-active-shift-label">Sales this shift</span>
+            <Localized id="eod-sales-this-shift">
+              <span className="eod-report-active-shift-label">Sales this shift</span>
+            </Localized>
             <span className="eod-report-active-shift-value">
               {fmt(activeShift.totalSalesMinor)}
             </span>
@@ -84,18 +88,20 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
       {todayClosed.length > 0 && (
         <>
           <div className="eod-report-shift-list-header">
-            <span>Closed Shifts Today</span>
+            <Localized id="eod-closed-shifts">
+              <span>Closed Shifts Today</span>
+            </Localized>
             <span className="eod-report-shift-count">{todayClosed.length}</span>
           </div>
 
           <div className="eod-report-shift-table">
             <div className="eod-report-shift-table-header">
-              <span>Opened</span>
-              <span>Closed</span>
-              <span>Opening</span>
-              <span>Counted</span>
-              <span>Expected</span>
-              <span>Diff</span>
+              <Localized id="eod-col-opened"><span>Opened</span></Localized>
+              <Localized id="eod-col-closed"><span>Closed</span></Localized>
+              <Localized id="eod-col-opening"><span>Opening</span></Localized>
+              <Localized id="eod-col-counted"><span>Counted</span></Localized>
+              <Localized id="eod-col-expected"><span>Expected</span></Localized>
+              <Localized id="eod-col-diff"><span>Diff</span></Localized>
             </div>
             {todayClosed.map((s) => {
               const diff = s.cashDifferenceMinor;
@@ -138,7 +144,7 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
                     {diff !== null ? fmt(diff) : '—'}
                     {diff !== null && diff !== 0 && (
                       <span className="eod-report-shift-tag">
-                        {diff > 0 ? 'Over' : 'Short'}
+                        {diff > 0 ? l10n.getString('eod-tag-over') : l10n.getString('eod-tag-short')}
                       </span>
                     )}
                   </span>
@@ -149,7 +155,9 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
             {/* ── Totals row ──────────────────────── */}
             <div className="eod-report-shift-row eod-report-shift-row--total">
               <span className="eod-report-shift-cell" />
-              <span className="eod-report-shift-cell">Total</span>
+              <Localized id="eod-total">
+                <span className="eod-report-shift-cell">Total</span>
+              </Localized>
               <span className="eod-report-shift-cell eod-report-shift-cell--mono">
                 {fmt(totalOpening)}
               </span>
@@ -169,7 +177,7 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
                 {fmt(totalCashDiff)}
                 {totalCashDiff !== 0 && (
                   <span className="eod-report-shift-tag">
-                    {totalCashDiff > 0 ? 'Over' : 'Short'}
+                    {totalCashDiff > 0 ? l10n.getString('eod-tag-over') : l10n.getString('eod-tag-short')}
                   </span>
                 )}
               </span>
@@ -181,22 +189,32 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
       {/* ── Combined cash summary ───────────────── */}
       {todayClosed.length > 1 && (
         <div className="eod-report-shift-cash-summary">
-          <span className="eod-report-shift-cash-summary-label">Cash Reconciliation</span>
+          <Localized id="eod-cash-reconciliation">
+            <span className="eod-report-shift-cash-summary-label">Cash Reconciliation</span>
+          </Localized>
           <div className="eod-report-shift-cash-grid">
             <div className="eod-report-shift-cash-item">
-              <span className="eod-report-shift-cash-label">Total opening</span>
+              <Localized id="eod-cash-total-opening">
+                <span className="eod-report-shift-cash-label">Total opening</span>
+              </Localized>
               <span className="eod-report-shift-cash-value">{fmt(totalOpening)}</span>
             </div>
             <div className="eod-report-shift-cash-item">
-              <span className="eod-report-shift-cash-label">Total counted</span>
+              <Localized id="eod-cash-total-counted">
+                <span className="eod-report-shift-cash-label">Total counted</span>
+              </Localized>
               <span className="eod-report-shift-cash-value">{fmt(totalClosing)}</span>
             </div>
             <div className="eod-report-shift-cash-item">
-              <span className="eod-report-shift-cash-label">Total expected</span>
+              <Localized id="eod-cash-total-expected">
+                <span className="eod-report-shift-cash-label">Total expected</span>
+              </Localized>
               <span className="eod-report-shift-cash-value">{fmt(totalExpected)}</span>
             </div>
             <div className="eod-report-shift-cash-item">
-              <span className="eod-report-shift-cash-label">Net difference</span>
+              <Localized id="eod-cash-net-diff">
+                <span className="eod-report-shift-cash-label">Net difference</span>
+              </Localized>
               <span
                 className={`eod-report-shift-cash-value ${
                   totalCashDiff < 0
@@ -217,6 +235,7 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
 }
 
 export default function EodReportScreen() {
+  const { l10n } = useLocalization();
   const [report, setReport] = useState<EodReport | null>(null);
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -331,11 +350,11 @@ export default function EodReportScreen() {
       setShifts(shiftData);
       setLastRefresh(new Date());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load report');
+      setError(err instanceof Error ? err.message : l10n.getString('eod-error-fallback'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -350,7 +369,9 @@ export default function EodReportScreen() {
   return (
     <div className="eod-report">
       <div className="eod-report-header">
-        <h1 className="eod-report-title">End-of-Day Report</h1>
+        <Localized id="eod-title">
+          <h1 className="eod-report-title">End-of-Day Report</h1>
+        </Localized>
         <div className="eod-report-header-right">
           <span className="eod-report-date">
             {lastRefresh.toLocaleDateString('en-US', {
@@ -362,27 +383,27 @@ export default function EodReportScreen() {
             className="eod-report-refresh-btn"
             onClick={load}
             disabled={loading}
-            aria-label="Refresh report"
+            aria-label={l10n.getString('eod-refresh-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
               <polyline points="23 4 23 10 17 10" />
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
             </svg>
-            Refresh
+            <Localized id="eod-refresh">Refresh</Localized>
           </button>
           <button
             type="button"
             className="eod-report-refresh-btn eod-report-print-btn"
             onClick={handlePrint}
             disabled={printing || !report}
-            aria-label="Print EOD report"
+            aria-label={l10n.getString('eod-print-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
               <polyline points="6 9 6 2 18 2 18 9" />
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
               <rect x="6" y="14" width="12" height="8" />
             </svg>
-            {printing ? 'Printing…' : 'Print'}
+            {printing ? <Localized id="eod-printing">Printing…</Localized> : <Localized id="eod-print">Print</Localized>}
           </button>
         </div>
       </div>
@@ -395,7 +416,9 @@ export default function EodReportScreen() {
       {loading && !report ? (
         <div className="eod-report-loading">
           <div className="eod-report-spinner" />
-          <span>Loading report…</span>
+          <Localized id="eod-loading">
+            <span>Loading report…</span>
+          </Localized>
         </div>
       ) : error ? (
         <Card shadow="sm">
@@ -405,8 +428,10 @@ export default function EodReportScreen() {
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            <p>{error}</p>
-            <button type="button" className="eod-report-retry-btn" onClick={load}>Retry</button>
+            <p><Localized id="eod-error" vars={{ error }} /></p>
+            <button type="button" className="eod-report-retry-btn" onClick={load}>
+              <Localized id="eod-retry">Retry</Localized>
+            </button>
           </div>
         </Card>
       ) : !report ? (
@@ -418,8 +443,12 @@ export default function EodReportScreen() {
               <line x1="12" y1="18" x2="12" y2="12" />
               <line x1="9" y1="15" x2="15" y2="15" />
             </svg>
-            <p>No sales data available for today.</p>
-            <p className="eod-report-empty-sub">Sales will appear here once transactions are completed.</p>
+            <Localized id="eod-empty-title">
+              <p>No sales data available for today.</p>
+            </Localized>
+            <Localized id="eod-empty-sub">
+              <p className="eod-report-empty-sub">Sales will appear here once transactions are completed.</p>
+            </Localized>
           </div>
         </Card>
       ) : (
@@ -428,41 +457,61 @@ export default function EodReportScreen() {
           <div className="eod-report-kpi-row">
             <Card shadow="sm" className="eod-report-kpi-card">
               <div className="eod-report-kpi">
-                <span className="eod-report-kpi-label">Total Revenue</span>
+                <Localized id="eod-kpi-revenue">
+                  <span className="eod-report-kpi-label">Total Revenue</span>
+                </Localized>
                 <span className="eod-report-kpi-value eod-report-kpi-value--primary">
                   {money(report.total_revenue)}
                 </span>
-                <span className="eod-report-kpi-sub">{report.total_sales} completed sales</span>
+                <Localized id="eod-kpi-revenue-sub" vars={{ count: report.total_sales }}>
+                  <span className="eod-report-kpi-sub">{report.total_sales} completed sales</span>
+                </Localized>
               </div>
             </Card>
             <Card shadow="sm" className="eod-report-kpi-card">
               <div className="eod-report-kpi">
-                <span className="eod-report-kpi-label">Average Sale</span>
+                <Localized id="eod-kpi-average">
+                  <span className="eod-report-kpi-label">Average Sale</span>
+                </Localized>
                 <span className="eod-report-kpi-value">
                   {report.total_sales > 0
                     ? money(Math.round(report.total_revenue / report.total_sales))
                     : money(0)}
                 </span>
-                <span className="eod-report-kpi-sub">per transaction</span>
+                <Localized id="eod-kpi-average-sub">
+                  <span className="eod-report-kpi-sub">per transaction</span>
+                </Localized>
               </div>
             </Card>
             <Card shadow="sm" className="eod-report-kpi-card">
               <div className="eod-report-kpi">
-                <span className="eod-report-kpi-label">Voids</span>
+                <Localized id="eod-kpi-voids">
+                  <span className="eod-report-kpi-label">Voids</span>
+                </Localized>
                 <span className="eod-report-kpi-value eod-report-kpi-value--danger">
                   {report.void_count}
                 </span>
-                <span className="eod-report-kpi-sub">{money(report.void_total)} voided</span>
+                <Localized id="eod-kpi-voids-sub" vars={{ amount: money(report.void_total) }}>
+                  <span className="eod-report-kpi-sub">{money(report.void_total)} voided</span>
+                </Localized>
               </div>
             </Card>
             <Card shadow="sm" className="eod-report-kpi-card">
               <div className="eod-report-kpi">
-                <span className="eod-report-kpi-label">Discounts Applied</span>
+                <Localized id="eod-kpi-discounts">
+                  <span className="eod-report-kpi-label">Discounts Applied</span>
+                </Localized>
                 <span className="eod-report-kpi-value eod-report-kpi-value--warning">
                   {report.discount_count}
                 </span>
                 <span className="eod-report-kpi-sub">
-                  {report.discount_count > 0 ? `${report.discount_count} sales with discount` : 'No discounts applied'}
+                  {report.discount_count > 0
+                    ? <Localized id="eod-kpi-discounts-sub" vars={{ count: report.discount_count }}>
+                        <span>{report.discount_count} sales with discount</span>
+                      </Localized>
+                    : <Localized id="eod-kpi-discounts-none">
+                        <span>No discounts applied</span>
+                      </Localized>}
                 </span>
               </div>
             </Card>
@@ -472,9 +521,13 @@ export default function EodReportScreen() {
           <div className="eod-report-columns">
             {/* Left: Payment Breakdown */}
             <Card shadow="sm" className="eod-report-section-card">
-              <h2 className="eod-report-section-title">Payment Breakdown</h2>
+              <Localized id="eod-payment-breakdown">
+                <h2 className="eod-report-section-title">Payment Breakdown</h2>
+              </Localized>
               {report.payment_breakdown.length === 0 ? (
-                <p className="eod-report-no-data">No payment data</p>
+                <Localized id="eod-payment-empty">
+                  <p className="eod-report-no-data">No payment data</p>
+                </Localized>
               ) : (
                 <div className="eod-report-payment-list">
                   {report.payment_breakdown.map((pmt) => {
@@ -487,7 +540,9 @@ export default function EodReportScreen() {
                           <span className="eod-report-payment-method">
                             {pmt.method.charAt(0).toUpperCase() + pmt.method.slice(1)}
                           </span>
-                          <span className="eod-report-payment-count">{pmt.count} transactions</span>
+                          <Localized id="eod-payment-count" vars={{ count: pmt.count }}>
+                            <span className="eod-report-payment-count">{pmt.count} transactions</span>
+                          </Localized>
                         </div>
                         <div className="eod-report-payment-bar-wrap">
                           <div
@@ -497,7 +552,7 @@ export default function EodReportScreen() {
                             aria-valuenow={pct}
                             aria-valuemin={0}
                             aria-valuemax={100}
-                            aria-label={`${pmt.method}: ${pct}% of revenue`}
+                            aria-label={l10n.getString('eod-payment-bar-aria', { method: pmt.method, pct })}
                           />
                         </div>
                         <div className="eod-report-payment-amount">
@@ -513,16 +568,28 @@ export default function EodReportScreen() {
 
             {/* Right: Hourly Sales (bar chart) */}
             <Card shadow="sm" className="eod-report-section-card">
-              <h2 className="eod-report-section-title">Sales by Hour</h2>
+              <Localized id="eod-hourly-title">
+                <h2 className="eod-report-section-title">Sales by Hour</h2>
+              </Localized>
               {report.hourly_breakdown.length === 0 ? (
-                <p className="eod-report-no-data">No hourly data</p>
+                <Localized id="eod-hourly-empty">
+                  <p className="eod-report-no-data">No hourly data</p>
+                </Localized>
               ) : (
-                <div className="eod-report-hourly-chart" aria-label="Hourly sales bar chart">
+                <div className="eod-report-hourly-chart" aria-label={l10n.getString('eod-hourly-chart-aria')}>
                   {Array.from({ length: 24 }, (_, hour) => {
                     const h = report.hourly_breakdown.find((r) => r.hour === hour);
                     const barPct = h ? Math.round((h.total_minor / peakHourSales) * 100) : 0;
                     return (
-                      <div key={hour} className="eod-report-hour-bar-row" aria-label={`${String(hour).padStart(2, '0')}:00 — ${h ? `${h.sale_count} sales, ${money(h.total_minor)}` : 'No sales'}`}>
+                      <div key={hour} className="eod-report-hour-bar-row" aria-label={
+                        h
+                          ? l10n.getString('eod-hour-bar-aria-sales', {
+                              hour: String(hour).padStart(2, '0'),
+                              count: h.sale_count,
+                              amount: money(h.total_minor),
+                            })
+                          : l10n.getString('eod-hour-bar-aria-none', { hour: String(hour).padStart(2, '0') })
+                      }>
                         <span className="eod-report-hour-label">{String(hour).padStart(2, '0')}</span>
                         <div className="eod-report-hour-bar-track">
                           <div
@@ -544,30 +611,44 @@ export default function EodReportScreen() {
           {/* ── Summary table ─────────────────────────── */}
           {report.total_sales > 0 && (
             <Card shadow="sm" className="eod-report-section-card">
-              <h2 className="eod-report-section-title">Today&apos;s Summary</h2>
+              <Localized id="eod-summary-title">
+                <h2 className="eod-report-section-title">Today&apos;s Summary</h2>
+              </Localized>
               <div className="eod-report-summary-grid">
                 <div className="eod-report-summary-item">
-                  <span className="eod-report-summary-label">Completed Sales</span>
+                  <Localized id="eod-summary-completed">
+                    <span className="eod-report-summary-label">Completed Sales</span>
+                  </Localized>
                   <span className="eod-report-summary-value">{report.total_sales}</span>
                 </div>
                 <div className="eod-report-summary-item">
-                  <span className="eod-report-summary-label">Total Revenue</span>
+                  <Localized id="eod-summary-revenue">
+                    <span className="eod-report-summary-label">Total Revenue</span>
+                  </Localized>
                   <span className="eod-report-summary-value">{money(report.total_revenue)}</span>
                 </div>
                 <div className="eod-report-summary-item">
-                  <span className="eod-report-summary-label">Voided Sales</span>
+                  <Localized id="eod-summary-voided-sales">
+                    <span className="eod-report-summary-label">Voided Sales</span>
+                  </Localized>
                   <span className="eod-report-summary-value eod-report-summary-value--danger">{report.void_count}</span>
                 </div>
                 <div className="eod-report-summary-item">
-                  <span className="eod-report-summary-label">Voided Value</span>
+                  <Localized id="eod-summary-voided-value">
+                    <span className="eod-report-summary-label">Voided Value</span>
+                  </Localized>
                   <span className="eod-report-summary-value eod-report-summary-value--danger">{money(report.void_total)}</span>
                 </div>
                 <div className="eod-report-summary-item">
-                  <span className="eod-report-summary-label">Sales with Discounts</span>
+                  <Localized id="eod-summary-discounts">
+                    <span className="eod-report-summary-label">Sales with Discounts</span>
+                  </Localized>
                   <span className="eod-report-summary-value">{report.discount_count}</span>
                 </div>
                 <div className="eod-report-summary-item">
-                  <span className="eod-report-summary-label">Payment Methods Used</span>
+                  <Localized id="eod-summary-payment-methods">
+                    <span className="eod-report-summary-label">Payment Methods Used</span>
+                  </Localized>
                   <span className="eod-report-summary-value">{report.payment_breakdown.length}</span>
                 </div>
               </div>

@@ -2,29 +2,52 @@
 
 Domain models, SQLite persistence, and migrations for OZ-POS. Every other crate builds on types defined here.
 
-## Public modules (19)
+## Public modules (42)
 
 | Module | Key types |
 |--------|-----------|
 | `audit` | `AuditEntry` — structured audit log |
 | `auth` | `StaffSession`, token generation |
+| `cache` | In-memory cache helpers |
 | `cart` | `Cart`, `CartLine` — in-memory sale state machine |
+| `cash_payout` | Cash payout types |
 | `category` | `Category` — product categories |
 | `customer` | `Customer` — customer records |
 | `db` | `Store` — all CRUD methods (products, sales, customers, staff, tax_rates, audit, features, currencies, exchange_rates, held_carts, barcode lookup) |
 | `error` | `CoreError` — `thiserror`-based, `#[non_exhaustive]` |
+| `events` | Domain event types |
 | `exchange_rate` | `ExchangeRateRow` — currency conversion rates |
 | `features` | Feature flag types |
+| `gift_card` | Gift card types |
 | `inventory` | Stock adjustment types |
-| `migrations` | `run(&mut Connection)` — applies pending SQL from `migrations/` (001–013) |
+| `kds` | Kitchen Display System types |
+| `loyalty` | Loyalty points types |
+| `migrations` | `run(&mut Connection)` — applies pending SQL from `migrations/` (001–047) |
 | `money` | `Money(i64, Currency)`, `Currency` (ISO-4217 newtype) |
+| `offline` | Offline queue types |
 | `ozpkg` | Package metadata types |
+| `payment` | Payment transaction types |
 | `product` | `Product`, `ProductDto` — SKU, price, barcode, stock, tax links |
+| `product_bundle` | Product bundle types |
+| `product_variant` | Product variant types |
+| `promotion` | Promotion types |
+| `purchase_order` | Purchase order types |
+| `refund` | Refund types |
 | `sale` | `Sale`, `SaleLine`, `SaleStatus`, `SaleSummary` |
 | `settings` | Key-value settings accessors (receipt config, store info, currency) |
+| `shift` | Staff shift types |
 | `sku` | `Sku` newtype — validated stock-keeping unit |
+| `stock_count` | Stock count types |
+| `stock_transfer` | Stock transfer types |
+| `store_profile` | Store profile types |
+| `supplier` | Supplier types |
+| `sync_client` | Sync client types |
+| `table` | Restaurant table types |
 | `tax_rate` | `TaxRate` — name, rate in basis points, is_default |
+| `terminal` | POS terminal registration types |
+| `terminal_override` | Terminal feature override types |
 | `user` | `User`, `Role` — staff identity and permissions |
+| `user_preferences` | User preference types |
 
 ## Money
 
@@ -49,4 +72,4 @@ Key methods: `create_product`, `list_products`, `update_product`, `delete_produc
 - `#![deny(unsafe_code)]` and `#![warn(missing_docs)]`.
 - All public items have `///` docs.
 
-> last audited 28-06-26 by docs-auditor
+> last audited 07-07-26 by docs-auditor

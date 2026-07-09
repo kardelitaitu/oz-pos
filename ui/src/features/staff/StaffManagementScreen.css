@@ -287,3 +287,231 @@
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--color-border);
 }
+
+/* ── Workspace Access ──────────────────────────────────────────────── */
+
+.staff-mgmt-ws-section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-2) 0;
+  background: var(--color-bg-surface);
+}
+
+.staff-mgmt-ws-section legend {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+/* ── Custom radio buttons ─────────────────────────────────────────── */
+
+.staff-mgmt-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-150) var(--ease-out),
+              box-shadow var(--duration-150) var(--ease-out);
+  position: relative;
+  user-select: none;
+}
+
+.staff-mgmt-radio:hover {
+  background: var(--color-bg-elevated);
+}
+
+/* Hide native radio button */
+.staff-mgmt-radio input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Custom radio circle — outer ring via label::before */
+.staff-mgmt-radio::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: border-color var(--duration-150) var(--ease-out),
+              box-shadow var(--duration-150) var(--ease-out);
+}
+
+/* Custom radio dot — inner fill via label::after */
+.staff-mgmt-radio::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-3) + 4px);
+  top: 50%;
+  translate: 0 -50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  transform: scale(0);
+  transition: transform var(--duration-150) var(--ease-out);
+}
+
+/* Checked: accent ring */
+.staff-mgmt-radio:has(input[type="radio"]:checked)::before {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent-subtle);
+}
+
+/* Checked: dot scales in */
+.staff-mgmt-radio:has(input[type="radio"]:checked)::after {
+  transform: scale(1);
+}
+
+/* Focus-visible ring — matches form input focus style */
+.staff-mgmt-radio:has(input[type="radio"]:focus-visible) {
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+}
+
+/* Selected row highlight */
+.staff-mgmt-radio:has(input[type="radio"]:checked) {
+  background: var(--color-accent-subtle);
+}
+
+/* Active/pressed */
+.staff-mgmt-radio:active {
+  background: var(--color-accent-subtle);
+  transform: scale(0.99);
+}
+
+/* ── Custom checkboxes ──────────────────────────────────────────────── */
+
+.staff-mgmt-ws-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding-left: var(--space-1);
+}
+
+.staff-mgmt-ws-checkbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-150) var(--ease-out),
+              box-shadow var(--duration-150) var(--ease-out);
+  position: relative;
+  user-select: none;
+}
+
+.staff-mgmt-ws-checkbox:hover {
+  background: var(--color-bg-elevated);
+}
+
+/* Hide native checkbox */
+.staff-mgmt-ws-checkbox input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Custom checkbox box via label::before */
+.staff-mgmt-ws-checkbox::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  margin-top: 1px;
+  box-sizing: border-box;
+  background: var(--color-bg-elevated);
+  transition: border-color var(--duration-150) var(--ease-out),
+              background var(--duration-150) var(--ease-out),
+              box-shadow var(--duration-150) var(--ease-out);
+}
+
+/* Checked: filled accent box */
+.staff-mgmt-ws-checkbox:has(input[type="checkbox"]:checked)::before {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent-subtle);
+}
+
+/* Checkmark via label::after — SVG data URI as background */
+/* Always generated so CSS can animate the scale transition */
+.staff-mgmt-ws-checkbox::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-3) + 3px);
+  top: calc(var(--space-2) + 4px);
+  width: 12px;
+  height: 12px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center/contain no-repeat;
+  transform: scale(0);
+  transition: transform var(--duration-200) var(--ease-out);
+  pointer-events: none;
+}
+
+/* Scale checkmark in on checked */
+.staff-mgmt-ws-checkbox:has(input[type="checkbox"]:checked)::after {
+  transform: scale(1);
+}
+
+/* Focus-visible ring — matches form input focus style */
+.staff-mgmt-ws-checkbox:has(input[type="checkbox"]:focus-visible) {
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+}
+
+/* Selected row highlight */
+.staff-mgmt-ws-checkbox:has(input[type="checkbox"]:checked) {
+  background: var(--color-accent-subtle);
+}
+
+/* Active/pressed */
+.staff-mgmt-ws-checkbox:active {
+  background: var(--color-accent-subtle);
+  transform: scale(0.99);
+}
+
+/* ── Checkbox label content ─────────────────────────────────────────── */
+
+.staff-mgmt-ws-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+  line-height: 1.4;
+  flex: 1;
+  min-width: 0;
+}
+
+.staff-mgmt-ws-icon {
+  font-size: var(--text-lg);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Description sits on its own row under the label */
+.staff-mgmt-ws-desc {
+  flex-basis: 100%;
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  line-height: 1.3;
+  padding-left: calc(18px + var(--space-3));
+  /* 18px = box width, var(--space-3) = horizontal gap on .staff-mgmt-ws-checkbox */
+}

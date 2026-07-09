@@ -1,5 +1,6 @@
-import { useState, useMemo, useCallback } from 'react';
-import { useToast } from '@/components/Toast';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/components/Localized';
 import { formatMoney, type Product } from '@/types/domain';
 import { lookupProductBySku } from '@/api/products';
@@ -80,11 +81,29 @@ function PackageIcon() {
  * ```
  */
 export default function ProductLookupScreen({ onAddProduct }: ProductLookupScreenProps) {
+  const { l10n } = useLocalization();
   const { addToast } = useToast();
   const { products, categories, loading, usingFallback } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('All');
+  const [addedSku, setAddedSku] = useState<string | null>(null);
+  const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up add-to-cart animation timer on unmount
+  useEffect(() => {
+    return () => {
+      if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    };
+  }, []);
+
+  // Wrap onAddProduct to trigger the green flash animation
+  const handleAddProduct = useCallback((product: Product) => {
+    onAddProduct?.(product);
+    setAddedSku(product.sku);
+    if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    addedTimerRef.current = setTimeout(() => setAddedSku(null), 450);
+  }, [onAddProduct]);
 
   // All category options: "All" + each unique category
   const categoryOptions = useMemo<Category[]>(
@@ -121,7 +140,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
     const code = barcodeInput.trim();
     const found = products.find((p) => p.barcode === code);
     if (found && found.inStock) {
-      onAddProduct?.(found);
+      handleAddProduct(found);
       setBarcodeInput('');
       return;
     }
@@ -142,18 +161,26 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             onAddProduct?.(item.product);
           }
         }
+        setAddedSku(code);
+        addedTimerRef.current = setTimeout(() => setAddedSku(null), 450);
         addToast({
           type: 'success',
-          message: `Bundle "${bundle.bundle.name}" added — ${expanded.length} items`,
+          message: l10n.getString('product-lookup-bundle-added', {
+            name: bundle.bundle.name,
+            count: expanded.length,
+          }),
         });
       } else {
-        addToast({ type: 'warning', message: 'No product or bundle matches this barcode' });
+        addToast({
+          type: 'warning',
+          message: l10n.getString('product-lookup-no-match'),
+        });
       }
     } catch {
       // If bundle lookup fails, silently ignore.
     }
     setBarcodeInput('');
-  }, [barcodeInput, onAddProduct, products, addToast]);
+  }, [barcodeInput, handleAddProduct, products, addToast, l10n, onAddProduct]);
 
   // Handle Enter key in barcode input
   const handleBarcodeKeyDown = useCallback(
@@ -187,76 +214,86 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           <span className="product-search-icon">
             <SearchIcon />
           </span>
-          <input
-            type="search"
-            className="product-search-input"
-            placeholder="Search products…"
-            aria-label="Search products"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            autoComplete="off"
-          />
+          <Localized id="product-lookup-search-placeholder" attrs={{ placeholder: true }}>
+            <Localized id="product-lookup-search-aria" attrs={{ 'aria-label': true }}>
+              <input
+                type="search"
+                className="product-search-input"
+                placeholder="Search products…"
+                aria-label="Search products"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                autoComplete="off"
+              />
+            </Localized>
+          </Localized>
         </div>
 
         <div className="product-barcode-wrapper">
-          <input
-            id="barcode-input"
-            type="text"
-            className="product-barcode-input"
-            placeholder="Scan barcode…"
-            aria-label="Barcode input"
-            value={barcodeInput}
-            onChange={(e) => setBarcodeInput(e.target.value)}
-            onKeyDown={handleBarcodeKeyDown}
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            className="product-scan-btn"
-            onClick={handleBarcodeScan}
-            aria-label="Submit barcode"
-          >
-            <BarcodeIcon />
-            <Localized id="product-lookup-barcode-scan">
-              <span>Scan</span>
+          <Localized id="product-lookup-barcode-placeholder" attrs={{ placeholder: true }}>
+            <Localized id="product-lookup-barcode-aria" attrs={{ 'aria-label': true }}>
+              <input
+                id="barcode-input"
+                type="text"
+                className="product-barcode-input"
+                placeholder="Scan barcode…"
+                aria-label="Barcode input"
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyDown={handleBarcodeKeyDown}
+                autoComplete="off"
+              />
             </Localized>
-          </button>
+          </Localized>
+          <Localized id="product-lookup-scan-btn-aria" attrs={{ 'aria-label': true }}>
+            <button
+              type="button"
+              className="product-scan-btn"
+              onClick={handleBarcodeScan}
+              aria-label="Submit barcode"
+            >
+              <BarcodeIcon />
+              <Localized id="product-lookup-barcode-scan">
+                <span />
+              </Localized>
+            </button>
+          </Localized>
         </div>
       </div>
 
       {/* ── Category filters ───────────────────────── */}
-      <div className="product-categories" role="radiogroup" aria-label="Filter by category">
-        {categoryOptions.map((cat) => (
-          <button
-            key={cat}
-            type="button"
-            role="radio"
-            aria-checked={activeCategory === cat}
-            className={
-              activeCategory === cat
-                ? 'product-category-chip product-category-chip--active'
-                : 'product-category-chip'
-            }
-            onClick={() => setActiveCategory(cat)}
-          >
-            {cat === 'All' ? (
-              <Localized id="product-lookup-all-categories">
-                <span>All Categories</span>
-              </Localized>
-            ) : (
-              cat
-            )}
-          </button>
-        ))}
-      </div>
+      <div className="product-categories" role="radiogroup" aria-label={l10n.getString('product-lookup-categories-aria')}>
+          {categoryOptions.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              role="radio"
+              aria-checked={activeCategory === cat}
+              className={
+                activeCategory === cat
+                  ? 'product-category-chip product-category-chip--active'
+                  : 'product-category-chip'
+              }
+              onClick={() => setActiveCategory(cat)}
+            >
+              {cat === 'All' ? (
+                <Localized id="product-lookup-all-categories">
+                  <span />
+                </Localized>
+              ) : (
+                cat
+              )}
+            </button>
+          ))}
+        </div>
 
       {/* ── Loading state ────────────────────────────── */}
       {loading ? (
         <div className="product-empty">
           <span className="product-empty-text">
             <Localized id="product-lookup-loading">
-              <span>Loading products…</span>
+              <span />
             </Localized>
           </span>
         </div>
@@ -265,20 +302,21 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           <PackageIcon />
           <span className="product-empty-text">
             <Localized id="product-lookup-no-results">
-              <span>No products found</span>
+              <span />
             </Localized>
           </span>
         </div>
       ) : (
-        <div className="product-grid" role="list" aria-label="Products">
-          {filtered.map((product) => (
-            <ProductCard
-              key={product.sku}
-              product={product}
-              {...(onAddProduct ? { onAdd: onAddProduct } : {})}
-            />
-          ))}
-        </div>
+        <div className="product-grid" role="list" aria-label={l10n.getString('product-lookup-grid-aria')}>
+            {filtered.map((product) => (
+              <ProductCard
+                key={product.sku}
+                product={product}
+                onAdd={handleAddProduct}
+                added={product.sku === addedSku}
+              />
+            ))}
+          </div>
       )
       }
 
@@ -292,12 +330,21 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             padding: 'var(--space-2)',
           }}
         >
-          Using sample data (IPC unavailable)
+          <Localized id="product-lookup-dev-fallback">
+            <span />
+          </Localized>
         </div>
       )}
-      {/* TODO: localize the fallback notice — it's a dev-only banner not shown in production */}
     </div>
   );
+}
+
+const PRICE_VOLATILITY_MS = 24 * 60 * 60 * 1000;
+
+function isPriceRecent(p: Product): boolean {
+  if (!p.priceUpdatedAt) return false;
+  const elapsed = Date.now() - new Date(p.priceUpdatedAt).getTime();
+  return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
 }
 
 // ── ProductCard sub-component ──────────────────────────────────────
@@ -305,72 +352,94 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
 interface ProductCardProps {
   product: Product;
   onAdd?: (product: Product) => void;
+  added?: boolean;
 }
 
-function ProductCard({ product, onAdd }: ProductCardProps) {
+function ProductCard({ product, onAdd, added }: ProductCardProps) {
+  const { l10n } = useLocalization();
   const handleAdd = useCallback(() => {
     onAdd?.(product);
   }, [product, onAdd]);
 
+  const stockLabel = product.inStock
+    ? l10n.getString('product-lookup-in-stock')
+    : l10n.getString('product-lookup-out-of-stock');
+
+  let cardClass = 'product-card';
+  if (!product.inStock) cardClass += ' product-card--disabled';
+  if (added) cardClass += ' product-card--added';
+
   return (
     <div
-      className={`product-card${!product.inStock ? ' product-card--disabled' : ''}`}
+      className={cardClass}
       role="listitem"
     >
       {/* Clickable area wraps the entire card content */}
-      <button
-        type="button"
-        className="product-card-btn"
-        onClick={handleAdd}
-        disabled={!product.inStock}
-        aria-label={`${product.name} — ${formatMoney(product.price)}`}
+      <Localized
+        id="product-lookup-card-aria"
+        attrs={{ 'aria-label': true }}
+        vars={{
+          name: product.name,
+          price: formatMoney(product.price),
+          sku: product.sku,
+          stock: stockLabel,
+        }}
       >
-        {/* Row: name + category badge */}
-        <div className="product-card-header">
-          <h3 className="product-card-name" title={product.name}>
-            {product.name}
-          </h3>
-          <span className="product-card-category">{product.category}</span>
-        </div>
+        <button
+          type="button"
+          className="product-card-btn"
+          onClick={handleAdd}
+          disabled={!product.inStock}
+          aria-label={`${product.name} — ${formatMoney(product.price)}`}
+        >
+          {/* Row: name + category badge */}
+          {isPriceRecent(product) && <span className="product-card-price-volatility" title="Price changed recently" />}
+          <div className="product-card-header">
+            <h3 className="product-card-name" title={product.name}>
+              {product.name}
+            </h3>
+            <span className="product-card-category">{product.category}</span>
+          </div>
 
-        {/* Price */}
-        <span className="product-card-price">{formatMoney(product.price)}</span>
+          {/* Price */}
+          <span className="product-card-price">{formatMoney(product.price)}</span>
 
-        {/* SKU */}
-        <span className="product-card-sku">{product.sku}</span>
+          {/* SKU */}
+          <span className="product-card-sku">{product.sku}</span>
 
-        {/* Footer: stock indicator + add icon */}
-        <div className="product-card-footer">
-          <span
-            className={
-              product.inStock
-                ? 'product-card-stock product-card-stock--in'
-                : 'product-card-stock product-card-stock--out'
-            }
-          >
+          {/* Footer: stock indicator + add icon */}
+          <div className="product-card-footer">
             <span
               className={
                 product.inStock
-                  ? 'product-card-stock-dot product-card-stock-dot--in'
-                  : 'product-card-stock-dot product-card-stock-dot--out'
+                  ? 'product-card-stock product-card-stock--in'
+                  : 'product-card-stock product-card-stock--out'
               }
-            />
-            {product.inStock ? (
-              <Localized id="product-lookup-in-stock">
-                <span>In stock</span>
-              </Localized>
-            ) : (
-              <Localized id="product-lookup-out-of-stock">
-                <span>Out of stock</span>
-              </Localized>
-            )}
-          </span>
+            >
+              <span
+                className={
+                  product.inStock
+                    ? 'product-card-stock-dot product-card-stock-dot--in'
+                    : 'product-card-stock-dot product-card-stock-dot--out'
+                }
+              />
+              {product.inStock ? (
+                <Localized id="product-lookup-in-stock">
+                  <span />
+                </Localized>
+              ) : (
+                <Localized id="product-lookup-out-of-stock">
+                  <span />
+                </Localized>
+              )}
+            </span>
 
-          <span className="product-card-add-icon">
-            <AddIcon />
-          </span>
-        </div>
-      </button>
+            <span className="product-card-add-icon">
+              <AddIcon />
+            </span>
+          </div>
+        </button>
+      </Localized>
     </div>
   );
 }

@@ -194,4 +194,58 @@ mod tests {
         assert_eq!(customer.total_spent_minor, 2000);
         assert_eq!(customer.loyalty_points, 20);
     }
+
+    #[test]
+    fn handler_skips_when_customer_not_found() {
+        let db = fresh_db();
+        let handler = CrmHistoryHandler::new(db.clone());
+
+        let event = SaleCompleted {
+            sale_id: "sale-4".into(),
+            line_items: vec![],
+            total_minor: 500,
+            currency: "USD".into(),
+            customer_id: Some("nonexistent".into()),
+        };
+
+        let result = handler.handle(&event);
+        assert!(result.is_ok(), "should not crash for nonexistent customer");
+    }
+
+    #[test]
+    fn handler_accumulates_multiple_sales() {
+        let db = fresh_db();
+        {
+            let conn = db.lock().unwrap();
+            seed_customer(&conn, "cust-3", "Charlie");
+        }
+
+        let handler = CrmHistoryHandler::new(db.clone());
+
+        handler
+            .handle(&SaleCompleted {
+                sale_id: "sale-a".into(),
+                line_items: vec![],
+                total_minor: 1000,
+                currency: "USD".into(),
+                customer_id: Some("cust-3".into()),
+            })
+            .unwrap();
+
+        handler
+            .handle(&SaleCompleted {
+                sale_id: "sale-b".into(),
+                line_items: vec![],
+                total_minor: 700,
+                currency: "USD".into(),
+                customer_id: Some("cust-3".into()),
+            })
+            .unwrap();
+
+        let conn = db.lock().unwrap();
+        let store = Store::new(&conn);
+        let customer = store.get_customer("cust-3").unwrap().unwrap();
+        assert_eq!(customer.total_spent_minor, 1700);
+        assert_eq!(customer.loyalty_points, 17);
+    }
 }

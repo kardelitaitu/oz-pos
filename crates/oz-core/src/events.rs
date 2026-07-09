@@ -15,7 +15,8 @@ use foundation::contracts::DomainEvent;
 /// - **CRM** → update customer purchase history
 /// - **Audit** → log the completed transaction
 /// - **Reporting** → update dashboard metrics
-#[derive(Debug, Clone)]
+/// - **LAN Forwarder** → broadcast to KDS tablet peers
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SaleCompleted {
     /// Unique sale identifier (UUID v4).
     pub sale_id: String,
@@ -105,6 +106,39 @@ impl DomainEvent for StockAdjusted {
     }
 }
 
+/// Published when a course is fired from the Resto POS to the kitchen.
+///
+/// Handlers should forward this to the KDS screen so the kitchen
+/// knows which items to start preparing.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CourseFired {
+    /// Sale/order ID this course belongs to.
+    pub sale_id: String,
+    /// Course identifier (e.g. "appetizer", "main", "dessert", "drinks").
+    pub course_id: String,
+    /// Display number shown on the ticket.
+    pub display_number: Option<i64>,
+    /// Items in this course.
+    pub items: Vec<CourseItem>,
+}
+
+/// A single item within a fired course.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CourseItem {
+    /// Stock-keeping unit.
+    pub sku: String,
+    /// Quantity fired.
+    pub qty: i64,
+    /// Human-readable item name.
+    pub name: String,
+}
+
+impl DomainEvent for CourseFired {
+    fn event_name(&self) -> &'static str {
+        "order.course_fired"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,5 +210,75 @@ mod tests {
         fn assert_sync<T: Sync>() {}
         assert_send::<StockAdjusted>();
         assert_sync::<StockAdjusted>();
+    }
+
+    // ── CourseFired ──────────────────────────────────────────────
+
+    #[test]
+    fn course_fired_event_name() {
+        let event = CourseFired {
+            sale_id: "sale-1".into(),
+            course_id: "main".into(),
+            display_number: Some(42),
+            items: vec![CourseItem {
+                sku: "STEAK".into(),
+                qty: 2,
+                name: "Grilled Steak".into(),
+            }],
+        };
+        assert_eq!(event.event_name(), "order.course_fired");
+    }
+
+    #[test]
+    fn course_fired_is_send_sync() {
+        fn assert_send<T: Send>() {}
+        fn assert_sync<T: Sync>() {}
+        assert_send::<CourseFired>();
+        assert_sync::<CourseFired>();
+        assert_send::<CourseItem>();
+        assert_sync::<CourseItem>();
+    }
+
+    #[test]
+    fn course_fired_serde_roundtrip() {
+        let event = CourseFired {
+            sale_id: "sale-42".into(),
+            course_id: "appetizer".into(),
+            display_number: Some(101),
+            items: vec![
+                CourseItem {
+                    sku: "SPRING".into(),
+                    qty: 1,
+                    name: "Spring Rolls".into(),
+                },
+                CourseItem {
+                    sku: "SOUP".into(),
+                    qty: 2,
+                    name: "Tom Yum Soup".into(),
+                },
+            ],
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("sale-42"));
+        assert!(json.contains("appetizer"));
+        assert!(json.contains("101"));
+        assert!(json.contains("SPRING"));
+        assert!(json.contains("SOUP"));
+    }
+
+    #[test]
+    fn course_fired_no_display_number() {
+        let event = CourseFired {
+            sale_id: "sale-3".into(),
+            course_id: "drinks".into(),
+            display_number: None,
+            items: vec![CourseItem {
+                sku: "SODA".into(),
+                qty: 1,
+                name: "Cola".into(),
+            }],
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("null"));
     }
 }

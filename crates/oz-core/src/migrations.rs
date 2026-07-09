@@ -139,12 +139,155 @@ pub const ALL: &[Migration] = &[
         id: "033_tables.sql",
         sql: include_str!("../migrations/033_tables.sql"),
     },
+    Migration {
+        id: "035_workspaces.sql",
+        sql: include_str!("../migrations/035_workspaces.sql"),
+    },
+    Migration {
+        id: "036_open_bills.sql",
+        sql: include_str!("../migrations/036_open_bills.sql"),
+    },
+    Migration {
+        id: "037_active_carts.sql",
+        sql: include_str!("../migrations/037_active_carts.sql"),
+    },
+    Migration {
+        id: "038_user_preferences.sql",
+        sql: include_str!("../migrations/038_user_preferences.sql"),
+    },
+    Migration {
+        id: "039_category_icon.sql",
+        sql: include_str!("../migrations/039_category_icon.sql"),
+    },
+    Migration {
+        id: "040_user_workspaces.sql",
+        sql: include_str!("../migrations/040_user_workspaces.sql"),
+    },
+    Migration {
+        id: "041_credit_reminders.sql",
+        sql: include_str!("../migrations/041_credit_reminders.sql"),
+    },
+    Migration {
+        id: "042_customer_id_on_sales.sql",
+        sql: include_str!("../migrations/042_customer_id_on_sales.sql"),
+    },
+    Migration {
+        id: "043_price_updated_at.sql",
+        sql: include_str!("../migrations/043_price_updated_at.sql"),
+    },
+    Migration {
+        id: "045_serial_number.sql",
+        sql: include_str!("../migrations/045_serial_number.sql"),
+    },
+    Migration {
+        id: "046_gift_cards.sql",
+        sql: include_str!("../migrations/046_gift_cards.sql"),
+    },
+    Migration {
+        id: "046_suppliers.sql",
+        sql: include_str!("../migrations/046_suppliers.sql"),
+    },
+    Migration {
+        id: "046_stock_counts.sql",
+        sql: include_str!("../migrations/046_stock_counts.sql"),
+    },
+    Migration {
+        id: "047_purchase_orders.sql",
+        sql: include_str!("../migrations/047_purchase_orders.sql"),
+    },
+    Migration {
+        id: "047_stock_transfers.sql",
+        sql: include_str!("../migrations/047_stock_transfers.sql"),
+    },
+    Migration {
+        id: "046_track_serial.sql",
+        sql: include_str!("../migrations/046_track_serial.sql"),
+    },
+    Migration {
+        id: "047_receipt_barcodes.sql",
+        sql: include_str!("../migrations/047_receipt_barcodes.sql"),
+    },
+    Migration {
+        id: "048_kds_workspace.sql",
+        sql: include_str!("../migrations/048_kds_workspace.sql"),
+    },
+    Migration {
+        id: "049_product_type.sql",
+        sql: include_str!("../migrations/049_product_type.sql"),
+    },
+    Migration {
+        id: "050_terminal_profiles.sql",
+        sql: include_str!("../migrations/050_terminal_profiles.sql"),
+    },
+    Migration {
+        id: "051_product_recipes.sql",
+        sql: include_str!("../migrations/051_product_recipes.sql"),
+    },
+    Migration {
+        id: "052_order_modifiers.sql",
+        sql: include_str!("../migrations/052_order_modifiers.sql"),
+    },
+    Migration {
+        id: "053_kds_status_check.sql",
+        sql: include_str!("../migrations/053_kds_status_check.sql"),
+    },
+    Migration {
+        id: "054_product_cost.sql",
+        sql: include_str!("../migrations/054_product_cost.sql"),
+    },
+    Migration {
+        id: "055_offline_queue_tenant.sql",
+        sql: include_str!("../migrations/055_offline_queue_tenant.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
 /// [`platform_core::database::run`].
 pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
     Ok(platform_core::database::run(conn, ALL)?)
+}
+
+/// Create a fresh in-memory database with all migrations already applied.
+///
+/// Concatenates all 49 migration SQLs into a single batch the first time
+/// and caches the generated SQL in a `OnceLock<String>`. Subsequent calls
+/// just run `execute_batch` on the cached string — no per-test migration
+/// overhead.
+///
+/// # Panics
+///
+/// Panics if the database cannot be created.
+#[doc(hidden)]
+pub fn fresh_db() -> rusqlite::Connection {
+    use std::sync::OnceLock;
+
+    fn cached_sql() -> &'static str {
+        static SQL: OnceLock<String> = OnceLock::new();
+        SQL.get_or_init(|| {
+            let mut buf = String::with_capacity(48_000);
+            buf.push_str("PRAGMA foreign_keys = ON;\n");
+            buf.push_str(
+                "CREATE TABLE IF NOT EXISTS schema_migrations (\n\
+                 id         TEXT PRIMARY KEY,\n\
+                 applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n\
+                 );\n",
+            );
+            for mig in ALL {
+                buf.push_str("BEGIN;\n");
+                buf.push_str(mig.sql);
+                buf.push('\n');
+                buf.push_str("INSERT INTO schema_migrations (id) VALUES ('");
+                buf.push_str(mig.id);
+                buf.push_str("');\n");
+                buf.push_str("COMMIT;\n");
+            }
+            buf
+        })
+    }
+
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch(cached_sql()).unwrap();
+    conn
 }
 
 #[cfg(test)]
@@ -256,6 +399,10 @@ mod tests {
             "product_taxes",
             "held_carts",
             "product_variants",
+            "product_recipes",
+            "modifier_groups",
+            "modifiers",
+            "product_modifier_groups",
             "category_taxes",
             "payments",
             "cash_payouts",
@@ -266,7 +413,25 @@ mod tests {
             "loyalty_tiers",
             "loyalty_accounts",
             "loyalty_transactions",
+            "gift_cards",
+            "gift_card_transactions",
+            "suppliers",
+            "stock_counts",
+            "stock_count_lines",
+            "stock_adjustments",
+            "purchase_orders",
+            "purchase_order_lines",
+            "stock_transfers",
+            "stock_transfer_lines",
+            "terminal_profiles",
+            "kds_orders",
+            "kds_daily_counters",
+            "active_carts",
             "tables",
+            "workspaces",
+            "workspace_screens",
+            "role_workspaces",
+            "user_workspaces",
         ];
 
         for table in &expected_tables {

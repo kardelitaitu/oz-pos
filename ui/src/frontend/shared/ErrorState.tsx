@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useLocalization } from '@fluent/react';
 import { Button } from './Button';
 
 export interface ErrorStateProps {
@@ -21,9 +22,10 @@ export function ErrorState({
   title,
   message,
   onRetry,
-  retryLabel = 'Retry',
+  retryLabel,
   children,
 }: ErrorStateProps) {
+  const { l10n } = useLocalization();
   return (
     <div className="error-state" role="alert">
       {icon && (
@@ -36,7 +38,7 @@ export function ErrorState({
       {onRetry && (
         <div className="error-state__action">
           <Button variant="primary" onClick={onRetry}>
-            {retryLabel}
+            {retryLabel ?? l10n.getString('error-state-retry')}
           </Button>
         </div>
       )}

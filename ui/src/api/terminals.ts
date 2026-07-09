@@ -34,17 +34,17 @@ export const listTerminals = (): Promise<TerminalDto[]> =>
 export const getTerminal = (id: string): Promise<TerminalDto | null> =>
   invoke<TerminalDto | null>('get_terminal', { id });
 
-export const registerTerminal = (args: RegisterTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('register_terminal', { args });
+export const registerTerminal = (userId: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
+  invoke<{ id: string }>('register_terminal', { userId, args });
 
-export const updateTerminal = (args: UpdateTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('update_terminal', { args });
+export const updateTerminal = (userId: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
+  invoke<{ id: string }>('update_terminal', { userId, args });
 
 export const pingTerminal = (id: string): Promise<void> =>
   invoke<void>('ping_terminal', { id });
 
-export const deleteTerminal = (id: string): Promise<void> =>
-  invoke('delete_terminal', { id });
+export const deleteTerminal = (userId: string, id: string): Promise<void> =>
+  invoke('delete_terminal', { userId, id });
 
 // ── Feature Overrides ──────────────────────────────────────────────
 
@@ -60,14 +60,50 @@ export const listTerminalOverrides = (terminalId: string): Promise<TerminalFeatu
   invoke<TerminalFeatureOverride[]>('list_terminal_overrides', { terminalId });
 
 export const setTerminalOverride = (
+  userId: string,
   terminalId: string,
   feature: string,
   enabled: boolean,
 ): Promise<void> =>
-  invoke<void>('set_terminal_override', { terminalId, feature, enabled });
+  invoke<void>('set_terminal_override', { userId, terminalId, feature, enabled });
 
 export const deleteTerminalOverride = (
+  userId: string,
   terminalId: string,
   feature: string,
 ): Promise<void> =>
-  invoke<void>('delete_terminal_override', { terminalId, feature });
+  invoke<void>('delete_terminal_override', { userId, terminalId, feature });
+
+// ── Terminal Profiles ───────────────────────────────────────────────
+
+export interface TerminalProfileDto {
+  terminalId: string;
+  profileType: string;
+  lockedScreen: string | null;
+  updatedAt: string;
+}
+
+export const getTerminalProfile = (
+  terminalId: string,
+): Promise<TerminalProfileDto | null> =>
+  invoke<TerminalProfileDto | null>('get_terminal_profile', { terminalId });
+
+export const setTerminalProfile = (
+  userId: string,
+  terminalId: string,
+  profileType: string,
+  lockedScreen: string | null,
+): Promise<void> =>
+  invoke<void>('set_terminal_profile', {
+    userId,
+    args: { terminalId, profileType, lockedScreen },
+  });
+
+export const listTerminalProfiles = (): Promise<TerminalProfileDto[]> =>
+  invoke<TerminalProfileDto[]>('list_terminal_profiles');
+
+export const deleteTerminalProfile = (
+  userId: string,
+  terminalId: string,
+): Promise<void> =>
+  invoke<void>('delete_terminal_profile', { userId, terminalId });

@@ -187,22 +187,35 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
-    /// Complete a sale to a KDS order: creates a KDS ticket from a completed sale.
+    /// Complete a sale to a KDS order: creates a KDS ticket from a completed sale
+    /// for items whose product type is `restaurant` or `both`.
     ///
-    /// Builds items_summary from sale line data and creates the KDS order
-    /// with 'pending' status.
-    pub fn complete_sale_to_kds(&self, sale_id: &str) -> Result<KdsOrder, CoreError> {
+    /// Returns `Ok(None)` when the sale has no restaurant-eligible items.
+    pub fn complete_sale_to_kds(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
             id: sale_id.to_owned(),
         })?;
 
-        let items_summary = sale
+        // Keep only lines whose product is restaurant or both.
+        let kds_lines: Vec<_> = sale
             .lines
             .iter()
+            .filter(|l| {
+                self.product_type_by_sku(&l.sku)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|pt| pt == "restaurant" || pt == "both")
+            })
+            .collect();
+
+        if kds_lines.is_empty() {
+            return Ok(None);
+        }
+
+        let items_summary = kds_lines
+            .iter()
             .map(|l| {
-                // Strip the SKU prefix from the line for display.
-                // If we can find a product name, use that; otherwise fall back to SKU.
                 let name = self
                     .product_name_by_sku(&l.sku)
                     .ok()
@@ -217,7 +230,7 @@ impl Store<'_> {
             .collect::<Vec<_>>()
             .join(", ");
 
-        let item_count: i64 = sale.lines.iter().map(|l| l.qty).sum();
+        let item_count: i64 = kds_lines.iter().map(|l| l.qty).sum();
 
         let notes = String::new();
 
@@ -227,6 +240,19 @@ impl Store<'_> {
             item_count,
             notes,
         })
+        .map(Some)
+    }
+
+    fn product_type_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT product_type FROM products WHERE sku = ?1")?;
+        let result = stmt.query_row(params![sku], |row| row.get::<_, String>(0));
+        match result {
+            Ok(pt) => Ok(Some(pt)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn product_name_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
@@ -250,10 +276,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn store(conn: &Connection) -> Store<'_> {
@@ -273,7 +296,7 @@ mod tests {
 
     fn seed_product(conn: &Connection, sku: &str, name: &str) {
         let s = store(conn);
-        s.create_product(sku, name, price(500), None, None, 100)
+        s.create_product(sku, name, price(500), None, None, 100, Some("restaurant"))
             .unwrap();
     }
 
@@ -301,6 +324,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -357,6 +381,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -396,6 +421,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -447,6 +473,7 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
         s.create_sale(&test_sale).unwrap();
@@ -497,6 +524,7 @@ mod tests {
                 updated_at: now.clone(),
                 subtotal: price(0),
                 tax_total: price(0),
+                customer_id: None,
                 lines: vec![],
             };
             s.create_sale(&test_sale).unwrap();
@@ -554,6 +582,7 @@ mod tests {
                 updated_at: now.clone(),
                 subtotal: price(0),
                 tax_total: price(0),
+                customer_id: None,
                 lines: vec![],
             };
             s.create_sale(&test_sale).unwrap();
@@ -616,7 +645,7 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        let order = s.complete_sale_to_kds(&sale.id).unwrap();
+        let order = s.complete_sale_to_kds(&sale.id).unwrap().unwrap();
         assert_eq!(order.sale_id, sale.id);
         assert_eq!(order.status, "pending");
         assert!(order.items_summary.contains("Coffee"));
@@ -649,6 +678,7 @@ mod tests {
                 updated_at: now.clone(),
                 subtotal: price(0),
                 tax_total: price(0),
+                customer_id: None,
                 lines: vec![],
             };
             s.create_sale(&test_sale).unwrap();
@@ -674,5 +704,97 @@ mod tests {
 
         assert_eq!(o1.display_number, Some(1));
         assert_eq!(o2.display_number, Some(2));
+    }
+
+    // ── CHECK constraint tests ──────────────────────────────────────
+
+    #[test]
+    fn kds_status_check_rejects_invalid_status_on_insert() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let sale_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let test_sale = Sale {
+            id: sale_id.clone(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now,
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            lines: vec![],
+        };
+        s.create_sale(&test_sale).unwrap();
+
+        // Attempt a raw INSERT with an invalid status — should fail the CHECK constraint.
+        let id = uuid::Uuid::new_v4().to_string();
+        let result = s.conn.execute(
+            "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
+             VALUES (?1, ?2, 'bogus', 'Test', 1, '')",
+            params![id, sale_id],
+        );
+
+        assert!(
+            result.is_err(),
+            "expected CHECK constraint error for invalid status"
+        );
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("CHECK") || msg.contains("constraint") || msg.contains("abort"),
+            "expected constraint violation message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn kds_status_check_accepts_valid_statuses() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Insert orders with each valid status. Each needs its own sale_id
+        // because kds_orders.sale_id has a UNIQUE constraint.
+        for status in &["pending", "preparing", "ready", "served", "cancelled"] {
+            let sale_id = uuid::Uuid::new_v4().to_string();
+            let test_sale = Sale {
+                id: sale_id.clone(),
+                status: crate::SaleStatus::Completed,
+                total: price(0),
+                currency: usd(),
+                line_count: 0,
+                payment_method: None,
+                tendered_minor: None,
+                discount_percent: 0,
+                discount_label: None,
+                user_id: None,
+                created_at: now.clone(),
+                updated_at: now.clone(),
+                subtotal: price(0),
+                tax_total: price(0),
+                customer_id: None,
+                lines: vec![],
+            };
+            s.create_sale(&test_sale).unwrap();
+
+            let order_id = uuid::Uuid::new_v4().to_string();
+            s.conn
+                .execute(
+                    "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
+                 VALUES (?1, ?2, ?3, 'Test', 1, '')",
+                    params![order_id, sale_id, status],
+                )
+                .unwrap();
+            let fetched = s.get_kds_order(&order_id).unwrap().unwrap();
+            assert_eq!(fetched.status, *status);
+        }
     }
 }

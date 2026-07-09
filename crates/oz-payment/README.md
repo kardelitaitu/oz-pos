@@ -13,4 +13,4 @@ counters, one-shot decline/timeout simulation. 35 unit tests pass.
 
 Next: real adapters (Stripe, Square, EMV terminal).
 
-> last audited 30-06-26
+> last audited 30-06-26 by docs-auditor

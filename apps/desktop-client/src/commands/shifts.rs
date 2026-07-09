@@ -10,6 +10,9 @@ use oz_core::{CashPayout, Shift, Store};
 
 use foundation::validate_not_empty;
 
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -87,6 +90,9 @@ pub async fn open_shift(
 ) -> Result<ShiftDto, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::SHIFTS_OPEN)?;
+
     let shift = store.open_shift(
         &args.user_id,
         args.terminal_id.as_deref(),
@@ -98,19 +104,30 @@ pub async fn open_shift(
     Ok(ShiftDto::from(shift))
 }
 
+/// Arguments for closing a shift.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloseShiftArgs {
+    pub user_id: String,
+    pub id: String,
+    pub closing_balance_minor: i64,
+    pub notes: Option<String>,
+}
+
 /// Close an active shift with a counted closing balance.
 #[command]
 pub async fn close_shift(
-    id: String,
-    closing_balance_minor: i64,
-    notes: Option<String>,
+    args: CloseShiftArgs,
     state: State<'_, AppState>,
 ) -> Result<ShiftDto, AppError> {
-    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let shift = store.close_shift(&id, closing_balance_minor, notes.as_deref())?;
+
+    require_permission_for_user(&store, &args.user_id, permissions::SHIFTS_CLOSE)?;
+
+    let shift = store.close_shift(&args.id, args.closing_balance_minor, args.notes.as_deref())?;
     drop(db);
 
     tracing::info!(id = %shift.id, "shift closed");
@@ -299,11 +316,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn seed_user(conn: &Connection) {
@@ -416,5 +429,151 @@ mod tests {
         let store = Store::new(&conn);
         let active = store.get_active_shift("nobody").unwrap();
         assert!(active.is_none());
+    }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn shift_dto_debug() {
+        let dto = ShiftDto {
+            id: "s1".into(),
+            user_id: "u1".into(),
+            terminal_id: None,
+            opened_at: "2025-01-01".into(),
+            closed_at: None,
+            opening_balance_minor: 500,
+            closing_balance_minor: None,
+            expected_cash_minor: None,
+            cash_difference_minor: None,
+            total_sales_minor: 0,
+            total_cash_minor: 0,
+            total_card_minor: 0,
+            total_other_minor: 0,
+            total_voids_minor: 0,
+            total_refunds_minor: 0,
+            total_payouts_minor: 0,
+            notes: String::new(),
+            status: "open".into(),
+            created_at: "2025-01-01".into(),
+            updated_at: "2025-01-01".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("s1"));
+    }
+
+    #[test]
+    fn shift_dto_serialize() {
+        let dto = ShiftDto {
+            id: "s2".into(),
+            user_id: "u2".into(),
+            terminal_id: Some("t1".into()),
+            opened_at: "2025-02-01".into(),
+            closed_at: Some("2025-02-01".into()),
+            opening_balance_minor: 1000,
+            closing_balance_minor: Some(2000),
+            expected_cash_minor: Some(1500),
+            cash_difference_minor: Some(500),
+            total_sales_minor: 5000,
+            total_cash_minor: 3000,
+            total_card_minor: 2000,
+            total_other_minor: 0,
+            total_voids_minor: 0,
+            total_refunds_minor: 0,
+            total_payouts_minor: 0,
+            notes: "Good shift".into(),
+            status: "closed".into(),
+            created_at: "2025-02-01".into(),
+            updated_at: "2025-02-01".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["status"], "closed");
+        assert_eq!(json["totalSalesMinor"], 5000);
+    }
+
+    #[test]
+    fn open_shift_args_deserialize() {
+        let json = r##"{"userId":"u1","openingBalanceMinor":500}"##;
+        let args: OpenShiftArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.user_id, "u1");
+        assert_eq!(args.opening_balance_minor, 500);
+        assert_eq!(args.terminal_id, None);
+    }
+
+    #[test]
+    fn open_shift_args_debug() {
+        let args = OpenShiftArgs {
+            user_id: "u".into(),
+            terminal_id: None,
+            opening_balance_minor: 100,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("u"));
+    }
+
+    #[test]
+    fn close_shift_args_deserialize() {
+        let json = r##"{"userId":"u1","id":"s1","closingBalanceMinor":2000}"##;
+        let args: CloseShiftArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "s1");
+        assert_eq!(args.closing_balance_minor, 2000);
+        assert_eq!(args.notes, None);
+    }
+
+    #[test]
+    fn close_shift_args_debug() {
+        let args = CloseShiftArgs {
+            user_id: "u".into(),
+            id: "s".into(),
+            closing_balance_minor: 0,
+            notes: None,
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("s"));
+    }
+
+    #[test]
+    fn cash_payout_dto_serialize() {
+        let dto = CashPayoutDto {
+            id: "cp1".into(),
+            shift_id: "s1".into(),
+            amount_minor: 1000,
+            reason: "Safe drop".into(),
+            created_at: "2025-01-01".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["amountMinor"], 1000);
+        assert_eq!(json["reason"], "Safe drop");
+    }
+
+    #[test]
+    fn cash_payout_dto_debug() {
+        let dto = CashPayoutDto {
+            id: "cp2".into(),
+            shift_id: "s2".into(),
+            amount_minor: 500,
+            reason: "Test".into(),
+            created_at: "2025-01-01".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("cp2"));
+    }
+
+    #[test]
+    fn create_cash_payout_args_deserialize() {
+        let json = r##"{"shiftId":"s1","amountMinor":1000,"reason":"Safe drop"}"##;
+        let args: CreateCashPayoutArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.shift_id, "s1");
+        assert_eq!(args.amount_minor, 1000);
+    }
+
+    #[test]
+    fn create_cash_payout_args_debug() {
+        let args = CreateCashPayoutArgs {
+            shift_id: "s".into(),
+            amount_minor: 100,
+            reason: "R".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("R"));
     }
 }

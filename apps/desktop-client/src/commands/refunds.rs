@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::db::Store;
-use oz_core::{Money, Refund, RefundLine};
+use oz_core::permissions;
+use oz_core::{Money, Refund, RefundLine, Sale};
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -40,6 +42,8 @@ pub struct ProcessRefundResult {
 }
 
 /// Process a refund against a completed sale.
+///
+/// Requires `sales:refund` permission.
 #[command]
 pub async fn process_refund(
     args: ProcessRefundArgs,
@@ -47,6 +51,9 @@ pub async fn process_refund(
 ) -> Result<ProcessRefundResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    // Permission check: caller must have sales:refund (derived from user_id).
+    require_permission_for_user(&store, &args.user_id, permissions::SALES_REFUND)?;
 
     // Verify the sale exists and is completed.
     let sale = store
@@ -109,6 +116,19 @@ pub async fn process_refund(
     })
 }
 
+/// Look up a sale by its receipt barcode for quick return.
+#[command]
+pub async fn lookup_sale_by_receipt_barcode(
+    barcode: String,
+    state: State<'_, AppState>,
+) -> Result<Option<Sale>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
+    drop(db);
+    Ok(sale)
+}
+
 /// List all refunds for a sale.
 #[command]
 pub async fn list_refunds(
@@ -129,10 +149,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn seed_completed_sale(conn: &Connection) -> String {
@@ -233,5 +250,63 @@ mod tests {
         );
         let result = store.create_refund(&refund);
         assert!(result.is_err());
+    }
+
+    // ── DTO struct tests ─────────────────────────────────────────────
+
+    #[test]
+    fn refund_line_arg_fields() {
+        let arg = RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 2,
+            unit_price_minor: 350,
+            currency: "USD".into(),
+            line_total_minor: 700,
+        };
+        assert_eq!(arg.sale_line_id, "sl-1");
+        assert_eq!(arg.sku, "COFFEE");
+        assert_eq!(arg.qty, 2);
+        assert_eq!(arg.unit_price_minor, 350);
+        assert_eq!(arg.currency, "USD");
+        assert_eq!(arg.line_total_minor, 700);
+    }
+
+    #[test]
+    fn refund_line_arg_debug() {
+        let arg = RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 1,
+            unit_price_minor: 100,
+            currency: "USD".into(),
+            line_total_minor: 100,
+        };
+        let debug = format!("{arg:?}");
+        assert!(debug.contains("COFFEE"));
+    }
+
+    #[test]
+    fn process_refund_args_debug() {
+        let args = ProcessRefundArgs {
+            sale_id: "sale-1".into(),
+            reason: "Customer changed mind".into(),
+            note: Some("Returned item".into()),
+            user_id: "user-1".into(),
+            lines: vec![],
+        };
+        let debug = format!("{args:?}");
+        assert!(debug.contains("sale-1"));
+        assert!(debug.contains("changed mind"));
+    }
+
+    #[test]
+    fn process_refund_result_fields() {
+        let result = ProcessRefundResult {
+            refund_id: "ref-1".into(),
+            total_minor: 700,
+        };
+        assert_eq!(result.refund_id, "ref-1");
+        assert_eq!(result.total_minor, 700);
     }
 }

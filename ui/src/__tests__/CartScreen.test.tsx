@@ -26,7 +26,8 @@ describe('CartScreen', () => {
     };
     render(wrap(<CartScreen lines={[line]} total={usd} />));
     expect(screen.getByText(/COFFEE/)).toBeInTheDocument();
-    expect(screen.getAllByText(/\$3\.50/)).toHaveLength(2);
+    // formatMoney uses id-ID locale by default → $ 3,50
+    expect(screen.getAllByText(/\$ 3,50/)).toHaveLength(2);
   });
 
   it('invokes the onAddSample callback', async () => {

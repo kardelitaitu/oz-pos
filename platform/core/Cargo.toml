@@ -7,11 +7,12 @@ license.workspace = true
 description = "OZ-POS platform core: database migrations, connection pool, auth, RBAC, settings."
 
 [dependencies]
+chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 rusqlite = { workspace = true }
 tracing = { workspace = true }
 argon2 = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }

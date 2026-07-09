@@ -140,4 +140,31 @@ mod tests {
         let back: Customer = serde_json::from_str(&json).unwrap();
         assert_eq!(back, c);
     }
+
+    #[test]
+    fn serde_with_phone() {
+        let c = Customer::new("Carol").with_phone(Phone::new("+6281234567890").unwrap());
+        let json = serde_json::to_string(&c).unwrap();
+        let back: Customer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, c);
+        assert_eq!(back.phone, Some(Phone::new("+6281234567890").unwrap()));
+    }
+
+    #[test]
+    fn debug_output() {
+        let c = Customer::new("Dave");
+        let debug = format!("{c:?}");
+        assert!(debug.contains("Dave"));
+        assert!(debug.contains("USD"));
+    }
+
+    #[test]
+    fn serde_deserialize_minimal() {
+        let json = r#"{"id":"c1","name":"Minimal","email":null,"phone":null,"loyalty_points":0,"total_spent_minor":0,"currency":"IDR","notes":"","created_at":"","updated_at":""}"#;
+        let c: Customer = serde_json::from_str(json).unwrap();
+        assert_eq!(c.name, "Minimal");
+        assert_eq!(c.currency, "IDR");
+        assert!(c.email.is_none());
+        assert!(c.phone.is_none());
+    }
 }

@@ -8,12 +8,17 @@
   align-items: center;
   justify-content: center;
   background: var(--color-bg);
-  animation: staff-login-fade-in 0.3s ease-out;
 }
 
-@keyframes staff-login-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .staff-login-screen {
+    animation: staff-login-fade-in 0.3s ease-out;
+  }
+
+  @keyframes staff-login-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 /* ── Login card ──────────────────────────────────────────────────── */
@@ -26,12 +31,25 @@
   padding: var(--space-8) var(--space-6);
   max-width: 360px;
   width: 100%;
-  animation: staff-login-slide-up 0.35s ease-out;
 }
 
-@keyframes staff-login-slide-up {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: no-preference) {
+  .staff-login-card {
+    animation: staff-login-slide-up 0.35s ease-out;
+  }
+
+  @keyframes staff-login-slide-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .staff-login-spinner {
+    animation: staff-login-spin 0.6s linear infinite;
+  }
+
+  @keyframes staff-login-spin {
+    to { transform: rotate(360deg); }
+  }
 }
 
 .staff-login-logo {
@@ -151,7 +169,7 @@
   border: none;
   border-radius: var(--radius-lg);
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-fg, #fff);
   cursor: pointer;
   transition: opacity 0.15s, transform 0.1s;
 }
@@ -178,6 +196,12 @@
   align-items: center;
   gap: var(--space-4);
   margin-top: var(--space-2);
+  outline: none;
+}
+
+.staff-login-pin-section:focus,
+.staff-login-pin-section:focus-visible {
+  outline: none;
 }
 
 .staff-login-pin-dots {
@@ -264,13 +288,6 @@
 
 /* ── Verify hint ─────────────────────────────────────────────────── */
 
-.staff-login-verify-hint {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
-  text-align: center;
-}
-
 /* ── Error ────────────────────────────────────────────────────────── */
 
 .staff-login-error {
@@ -309,11 +326,6 @@
   border: 2px solid var(--color-border);
   border-top-color: var(--color-accent);
   border-radius: var(--radius-full);
-  animation: staff-login-spin 0.6s linear infinite;
-}
-
-@keyframes staff-login-spin {
-  to { transform: rotate(360deg); }
 }
 
 /* ── PIN submit button ──────────────────────────────────────────── */

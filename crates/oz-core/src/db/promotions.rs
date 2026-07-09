@@ -216,10 +216,7 @@ mod tests {
     use crate::migrations;
 
     fn setup() -> Store<'static> {
-        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        // Leak the connection to get a 'static ref for tests.
+        let conn = migrations::fresh_db();
         let conn = Box::leak(Box::new(conn));
         Store::new(conn)
     }
@@ -253,6 +250,13 @@ mod tests {
         let list = store.list_promotions().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "Promo p1");
+    }
+
+    #[test]
+    fn list_promotions_empty() {
+        let store = setup();
+        let list = store.list_promotions().unwrap();
+        assert!(list.is_empty());
     }
 
     #[test]

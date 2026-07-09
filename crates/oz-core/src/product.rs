@@ -4,13 +4,51 @@
 //! SKU (unique identifier), display name, price with currency,
 //! optional category and barcode, and timestamps. The struct lives
 //! in `oz-core` so every downstream crate (`oz-api`, `oz-cli`,
-//! `src-tauri`) uses the same definition.
+//! `apps/desktop-client`) uses the same definition.
 
 use serde::{Deserialize, Serialize};
 
 use foundation::Barcode;
 
 use crate::{Money, Sku};
+
+/// Product type classification that determines which workspace(s)
+/// a product appears in.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProductType {
+    /// Appears in Retail POS only (track_serial, weight scale, etc.).
+    #[serde(rename = "retail")]
+    #[default]
+    Retail,
+    /// Appears in Restaurant Menu only (prep time, modifiers, KDS).
+    #[serde(rename = "restaurant")]
+    Restaurant,
+    /// Appears in both workspaces.
+    #[serde(rename = "both")]
+    Both,
+}
+
+impl ProductType {
+    /// Parse a string into a [`ProductType`]. Returns `None` for
+    /// unrecognised values so callers can fall back to a default.
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s {
+            "retail" => Some(Self::Retail),
+            "restaurant" => Some(Self::Restaurant),
+            "both" => Some(Self::Both),
+            _ => None,
+        }
+    }
+
+    /// Return the canonical string representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Retail => "retail",
+            Self::Restaurant => "restaurant",
+            Self::Both => "both",
+        }
+    }
+}
 
 /// A product in the store's inventory.
 ///
@@ -47,6 +85,18 @@ pub struct Product {
 
     /// ISO-8601 last-update timestamp.
     pub updated_at: String,
+
+    /// ISO-8601 timestamp of the last price change.
+    /// Used by the front-end to show a price-volatility hint.
+    pub price_updated_at: String,
+
+    /// Whether this product requires serial number capture at checkout.
+    #[serde(default)]
+    pub track_serial: bool,
+
+    /// Product type classification (retail, restaurant, or both).
+    #[serde(default)]
+    pub product_type: ProductType,
 }
 
 impl Product {
@@ -72,6 +122,9 @@ impl Product {
             barcode: None,
             created_at: String::new(),
             updated_at: String::new(),
+            price_updated_at: String::new(),
+            track_serial: false,
+            product_type: ProductType::Retail,
         }
     }
 
@@ -86,6 +139,13 @@ impl Product {
     #[must_use]
     pub fn with_barcode(mut self, barcode: Barcode) -> Self {
         self.barcode = Some(barcode);
+        self
+    }
+
+    /// Set the product type (builder-style).
+    #[must_use]
+    pub fn with_product_type(mut self, product_type: ProductType) -> Self {
+        self.product_type = product_type;
         self
     }
 }
@@ -189,13 +249,16 @@ mod tests {
             "category_id": null,
             "barcode": null,
             "created_at": "",
-            "updated_at": ""
+            "updated_at": "",
+            "price_updated_at": ""
         }"#;
         let p: Product = serde_json::from_str(json).unwrap();
         assert_eq!(p.sku.as_str(), "COFFEE");
         assert_eq!(p.name, "Espresso");
         assert_eq!(p.price.minor_units, 350);
         assert_eq!(p.price.currency, usd());
+        // Missing product_type defaults to Retail for backward compat.
+        assert_eq!(p.product_type, ProductType::Retail);
     }
 
     #[test]
@@ -212,6 +275,51 @@ mod tests {
         }"#;
         let result: Result<Product, _> = serde_json::from_str(json);
         assert!(result.is_err(), "empty SKU should fail deserialization");
+    }
+
+    #[test]
+    fn new_product_defaults_to_retail() {
+        let p = Product::new("P", "Test", test_price());
+        assert_eq!(p.product_type, ProductType::Retail);
+    }
+
+    #[test]
+    fn builder_sets_product_type() {
+        let p = Product::new("P", "Test", test_price()).with_product_type(ProductType::Restaurant);
+        assert_eq!(p.product_type, ProductType::Restaurant);
+    }
+
+    #[test]
+    fn builder_sets_product_type_both() {
+        let p = Product::new("P", "Test", test_price()).with_product_type(ProductType::Both);
+        assert_eq!(p.product_type, ProductType::Both);
+    }
+
+    #[test]
+    fn product_type_roundtrip_serde() {
+        for &(s, expected) in &[
+            ("retail", ProductType::Retail),
+            ("restaurant", ProductType::Restaurant),
+            ("both", ProductType::Both),
+        ] {
+            assert_eq!(ProductType::parse_str(s), Some(expected));
+            assert_eq!(expected.as_str(), s);
+            let json = serde_json::to_value(expected).unwrap();
+            assert_eq!(json, serde_json::json!(s));
+            let back: ProductType = serde_json::from_value(json).unwrap();
+            assert_eq!(back, expected);
+        }
+    }
+
+    #[test]
+    fn product_type_from_str_unknown_returns_none() {
+        assert_eq!(ProductType::parse_str("unknown"), None);
+        assert_eq!(ProductType::parse_str(""), None);
+    }
+
+    #[test]
+    fn product_type_default_is_retail() {
+        assert_eq!(ProductType::default(), ProductType::Retail);
     }
 
     #[test]

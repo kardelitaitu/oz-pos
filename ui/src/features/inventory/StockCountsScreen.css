@@ -1,0 +1,126 @@
+.sc-screen {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.sc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.sc-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.sc-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.sc-filter-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  background: var(--bg-card, #fff);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.sc-filter-btn--active {
+  background: var(--accent, #2563eb);
+  color: var(--color-accent-fg, #fff);
+  border-color: var(--accent, #2563eb);
+}
+
+.sc-loading,
+.sc-empty {
+  text-align: center;
+  color: var(--text-muted, #666);
+  padding: 40px 0;
+}
+
+.sc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sc-card {
+  padding: 16px;
+}
+
+.sc-card-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.sc-card-number {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.sc-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sc-badge--draft { background: var(--color-bg-tertiary, #e5e7eb); color: var(--color-fg, #374151); }
+.sc-badge--in_progress { background: var(--color-accent-dim, #dbeafe); color: var(--color-accent, #1d4ed8); }
+.sc-badge--completed { background: var(--color-success-bg, #d1fae5); color: var(--color-success, #065f46); }
+.sc-badge--cancelled { background: var(--color-danger-bg, #fee2e2); color: var(--color-danger, #991b1b); }
+
+.sc-card-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--text-muted, #666);
+  margin-bottom: 4px;
+}
+
+.sc-card-notes {
+  font-size: 0.85rem;
+  color: var(--text-muted, #666);
+  margin: 4px 0;
+}
+
+.sc-card-type {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--accent, #2563eb);
+}
+
+.sc-card-date {
+  font-size: 0.75rem;
+  color: var(--text-muted, #666);
+}
+
+.sc-card-actions {
+  margin-top: 10px;
+}
+
+.sc-card-action {
+  background: none;
+  border: none;
+  color: var(--accent, #2563eb);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 4px 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-filter-btn {
+    transition: all 0.15s;
+  }
+}

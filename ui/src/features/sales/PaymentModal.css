@@ -8,6 +8,29 @@
   background: rgba(0, 0, 0, 0.4);
 }
 
+/* ── Entrance/exit animations ────────────────────────── */
+
+.payment-overlay--enter {
+  animation: payment-overlay-in var(--duration-200, 200ms) var(--ease-out, ease-out);
+}
+
+.payment-overlay--exit {
+  animation: payment-overlay-out var(--duration-200, 200ms) var(--ease-in, ease-in);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes payment-overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes payment-overlay-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+}
+
 .payment-modal {
   width: 420px;
   max-width: 92vw;
@@ -15,6 +38,33 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl, 0 8px 32px rgba(0, 0, 0, 0.2));
   overflow: hidden;
+}
+
+.payment-modal--enter {
+  animation: payment-modal-slide-up var(--duration-200, 200ms) var(--ease-out, ease-out);
+}
+
+.payment-modal--exit {
+  animation: payment-modal-out var(--duration-200, 200ms) var(--ease-in, ease-in);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Cohesive with cousin-pos polish (translateY 12 px / scale 0.98) —
+   * used by --enter (replacing the older payment-modal-in that
+   * used a tighter scale 0.95 to avoid an entry/exit jolt) and
+   * by the inner customer-search modal so every overlay in the
+   * sales surface shares visual identity. */
+  @keyframes payment-modal-slide-up {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Exit mirrors slide-up so the modal pops out at the same scale
+   * factor it popped in at — no perceptible jolt on reopen. */
+  @keyframes payment-modal-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(12px) scale(0.98); }
+  }
 }
 
 .payment-header {
@@ -128,6 +178,35 @@
 
 .payment-cash-section {
   padding: 0 var(--space-5) var(--space-4);
+}
+
+.payment-open-bill-section {
+  padding: 0 var(--space-5) var(--space-4);
+}
+
+.payment-customer-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+}
+
+.payment-customer-input {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.payment-customer-input:focus {
+  border-color: var(--color-accent);
 }
 
 .payment-tendered-label {
@@ -552,4 +631,316 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Done state celebration ───────────────────── */
+
+.payment-done-checkmark {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--space-4);
+  display: block;
+}
+
+.payment-done-checkmark-circle {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  fill: none;
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+}
+
+.payment-done-checkmark-path {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .payment-done-checkmark-circle {
+    animation: payment-checkmark-draw 500ms var(--ease-out) 100ms forwards;
+  }
+
+  .payment-done-checkmark-path {
+    animation: payment-checkmark-draw 350ms var(--ease-out) 400ms forwards;
+  }
+
+  .payment-done-title {
+    animation: payment-done-fade-in 400ms var(--ease-out) 250ms both;
+  }
+
+  .payment-change {
+    animation: payment-done-fade-in 400ms var(--ease-out) 350ms both;
+  }
+
+  .payment-done-note {
+    animation: payment-done-fade-in 400ms var(--ease-out) 450ms both;
+  }
+
+  @keyframes payment-checkmark-draw {
+    to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes payment-done-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* ── Customer selection ────────────────────────────── */
+
+.payment-customer-section {
+  padding: 8px 24px;
+}
+
+.payment-customer-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--color-bg-surface, #f0f4f8);
+  border: 1px dashed var(--color-border-3, #aaa);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-3, #555);
+  transition: background 0.15s;
+}
+.payment-customer-select-btn:hover {
+  background: var(--color-bg-elevated, #e2e8f0);
+}
+
+.payment-customer-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--color-success-2, #e8f5e9);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-success-7, #2e7d32);
+}
+.payment-customer-name {
+  font-weight: 600;
+  flex: 1;
+}
+.payment-customer-change {
+  background: none;
+  border: none;
+  color: var(--color-link, #1565c0);
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: underline;
+}
+.payment-customer-remove {
+  background: none;
+  border: none;
+  color: var(--color-text-4, #999);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* ── Customer search modal (payment) ─────────────── */
+
+.payment-customer-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  animation: payment-overlay-in var(--duration-200, 200ms) var(--ease-out, ease-out);
+}
+.payment-customer-search-modal {
+  background: var(--color-bg-elevated, #fff);
+  border-radius: var(--radius-xl, 12px);
+  width: 380px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.2));
+  animation: payment-modal-slide-up var(--duration-200, 200ms) var(--ease-out, ease-out);
+}
+.payment-customer-search-heading {
+  margin: 0;
+  padding: 16px 20px 0;
+  font-size: 16px;
+}
+.payment-customer-search-input {
+  margin: 12px 20px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 6px;
+  font-size: 14px;
+}
+.payment-customer-search-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 12px;
+}
+.payment-customer-search-loading,
+.payment-customer-search-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--color-text-4, #888);
+  font-size: 13px;
+}
+.payment-customer-search-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.payment-customer-search-item:hover {
+  background: var(--color-bg-surface, #f0f4f8);
+}
+.payment-customer-search-item-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text-1, #222);
+}
+.payment-customer-search-item-detail {
+  font-size: 12px;
+  color: var(--color-text-4, #888);
+}
+.payment-customer-search-close {
+  margin: 0 20px 16px;
+  padding: 8px;
+  background: var(--color-bg-surface, #f0f4f8);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: center;
+}
+.payment-customer-search-close:hover {
+  background: var(--color-bg-elevated, #e2e8f0);
+}
+
+.payment-loyalty-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: var(--color-warning-1, #fef9e7);
+  border: 1px solid var(--color-warning-3, #f9e79f);
+  border-radius: 6px;
+}
+
+.payment-loyalty-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-loyalty-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-warning-8, #7d6608);
+}
+
+.payment-loyalty-value {
+  font-size: 13px;
+  color: var(--color-warning-8, #7d6608);
+}
+
+.payment-loyalty-redeem-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  background: var(--color-warning-5, #f39c12);
+  color: var(--color-bg-primary, #fff);
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.payment-loyalty-redeem-btn:hover {
+  background: var(--color-warning-6, #e67e22);
+}
+
+.payment-loyalty-active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.payment-loyalty-discount-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-success-6, #27ae60);
+}
+
+.payment-loyalty-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--color-danger-6, #e74c3c);
+  border: 1px solid var(--color-danger-6, #e74c3c);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.payment-loyalty-cancel-btn:hover {
+  background: var(--color-danger-1, #fdf2f2);
+}
+
+.payment-loyalty-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.payment-loyalty-input-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-warning-8, #7d6608);
+  white-space: nowrap;
+}
+
+.payment-loyalty-input {
+  width: 80px;
+  padding: 3px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-warning-3, #f9e79f);
+  border-radius: 4px;
+  text-align: center;
+  background: var(--color-bg-primary, #fff);
+  color: var(--color-text-1, #333);
+  outline: none;
+}
+
+.payment-loyalty-input:focus {
+  border-color: var(--color-warning-5, #f39c12);
+}
+
+.payment-loyalty-input-hint {
+  font-size: 11px;
+  color: var(--color-text-4, #999);
 }

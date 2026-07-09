@@ -80,7 +80,7 @@ describe('InventoryAdjustmentScreen', () => {
     });
     await userEvent.click(screen.getByRole('option', { name: /caffè latte/i }));
     expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
-    expect(screen.getByText('$4.50')).toBeInTheDocument();
+    expect(screen.getByText('$ 4,50')).toBeInTheDocument();
     expect(screen.getByText((c) => c.includes('20') && c.includes('in stock'))).toBeInTheDocument();
   });
 

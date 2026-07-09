@@ -13,6 +13,9 @@ use oz_core::events::{ProductCreated, StockAdjusted};
 
 use foundation::validate_not_empty;
 
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -92,6 +95,12 @@ pub struct ProductDto {
     pub stock_qty: Option<i64>,
     /// Tax rate IDs assigned to this product.
     pub tax_rate_ids: Vec<String>,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+    /// ISO-8601 timestamp of the last price change.
+    pub price_updated_at: String,
+    /// Product type: "retail", "restaurant", or "both".
+    pub product_type: String,
 }
 
 /// Money DTO matching the front-end `Money` type (snake_case keys).
@@ -134,6 +143,9 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
                 barcode: pwd.product.barcode.as_ref().map(|b| b.to_string()),
                 in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
                 stock_qty: pwd.stock_qty,
+                created_at: pwd.product.created_at,
+                price_updated_at: pwd.product.price_updated_at,
+                product_type: pwd.product.product_type.as_str().to_owned(),
                 tax_rate_ids: store
                     .get_product_tax_rates(pwd.product.sku.as_str())
                     .unwrap_or_default(),
@@ -226,6 +238,9 @@ fn map_pwd_to_dto(
             in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
             stock_qty: pwd.stock_qty,
             tax_rate_ids,
+            product_type: pwd.product.product_type.as_str().to_owned(),
+            created_at: pwd.product.created_at,
+            price_updated_at: pwd.product.price_updated_at,
         }
     }))
 }
@@ -234,6 +249,7 @@ fn map_pwd_to_dto(
 
 #[derive(Debug, Deserialize)]
 pub struct CreateProductArgs {
+    pub user_id: String,
     pub sku: String,
     pub name: String,
     pub price_minor: i64,
@@ -242,6 +258,12 @@ pub struct CreateProductArgs {
     pub barcode: Option<String>,
     pub initial_stock: i64,
     pub tax_rate_ids: Vec<String>,
+    #[serde(default = "default_product_type")]
+    pub product_type: String,
+}
+
+fn default_product_type() -> String {
+    "retail".to_owned()
 }
 
 #[derive(Debug, Serialize)]
@@ -260,6 +282,8 @@ pub async fn create_product(
         let db = state.db.lock().await;
         let store = Store::new(&db);
 
+        require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_CREATE)?;
+
         let currency: oz_core::Currency = args
             .currency
             .parse()
@@ -277,6 +301,7 @@ pub async fn create_product(
             args.category_id.as_deref(),
             args.barcode.as_deref(),
             args.initial_stock,
+            Some(&args.product_type),
         )?;
 
         store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
@@ -314,6 +339,7 @@ pub async fn create_product(
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProductArgs {
+    pub user_id: String,
     pub sku: String,
     pub name: String,
     pub price_minor: i64,
@@ -321,6 +347,7 @@ pub struct UpdateProductArgs {
     pub category_id: Option<String>,
     pub barcode: Option<String>,
     pub tax_rate_ids: Vec<String>,
+    pub product_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -335,6 +362,8 @@ pub async fn update_product(
 ) -> Result<UpdateProductResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_UPDATE)?;
 
     let currency: oz_core::Currency = args
         .currency
@@ -352,6 +381,7 @@ pub async fn update_product(
         price,
         args.category_id.as_deref(),
         args.barcode.as_deref(),
+        args.product_type.as_deref(),
     )?;
 
     store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
@@ -359,10 +389,24 @@ pub async fn update_product(
     Ok(UpdateProductResult { sku: args.sku })
 }
 
+/// Check whether a product tracks serial numbers.
+#[command]
+pub async fn get_product_track_serial(
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let product = store.get_product(&sku)?;
+    drop(db);
+    Ok(product.map(|p| p.product.track_serial).unwrap_or(false))
+}
+
 // ── Delete product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 pub struct DeleteProductArgs {
+    pub user_id: String,
     pub sku: String,
 }
 
@@ -373,6 +417,7 @@ pub async fn delete_product(
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_DELETE)?;
     store.delete_product(&args.sku)?;
     Ok(())
 }
@@ -384,11 +429,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     #[test]
@@ -404,9 +445,9 @@ mod tests {
 
         // Seed some products directly via SQL.
         conn.execute_batch(
-            "INSERT INTO categories (id, name, colour) VALUES
-                ('cat-drinks', 'Drinks', '#06b6d4'),
-                ('cat-food',   'Food',   '#f97316');
+            "INSERT INTO categories (id, name, colour, icon) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4', ''),
+                ('cat-food',   'Food',   '#f97316', '');
              INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
                 ('p1', 'LATTE',  'Caffè Latte',  450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
                 ('p2', 'BAGEL',  'Plain Bagel',   250, 'USD', 'cat-food',   NULL,           '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
@@ -439,8 +480,8 @@ mod tests {
     fn lookup_by_barcode_found() {
         let conn = fresh_conn();
         conn.execute_batch(
-            "INSERT INTO categories (id, name, colour) VALUES
-                ('cat-drinks', 'Drinks', '#06b6d4');
+            "INSERT INTO categories (id, name, colour, icon) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4', '');
              INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
                 ('p1', 'LATTE', 'Caffè Latte', 450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO inventory (product_id, qty) VALUES ('p1', 50);",
@@ -486,8 +527,8 @@ mod tests {
     fn lookup_product_by_sku_found() {
         let conn = fresh_conn();
         conn.execute_batch(
-            "INSERT INTO categories (id, name, colour) VALUES
-                ('cat-drinks', 'Drinks', '#06b6d4');
+            "INSERT INTO categories (id, name, colour, icon) VALUES
+                ('cat-drinks', 'Drinks', '#06b6d4', '');
              INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at) VALUES
                 ('p1', 'LATTE', 'Caffè Latte', 450, 'USD', 'cat-drinks', '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO inventory (product_id, qty) VALUES ('p1', 50);",
@@ -528,5 +569,133 @@ mod tests {
         assert_eq!(dto.price.minor_units, 199);
         assert!(!dto.in_stock);
         assert_eq!(dto.stock_qty, None);
+    }
+
+    // ── DTO struct tests ──────────────────────────────────────────
+
+    #[test]
+    fn product_dto_debug() {
+        let dto = ProductDto {
+            sku: "LATTE".into(),
+            name: "Caffè Latte".into(),
+            category: Some("Drinks".into()),
+            price: MoneyDto {
+                minor_units: 450,
+                currency: "USD".into(),
+            },
+            barcode: Some("4901234567890".into()),
+            in_stock: true,
+            stock_qty: Some(50),
+            tax_rate_ids: vec![],
+            created_at: "2025-01-01T00:00:00Z".into(),
+            price_updated_at: "2025-01-01T00:00:00Z".into(),
+            product_type: "retail".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("LATTE"));
+        assert!(d.contains("Drinks"));
+    }
+
+    #[test]
+    fn money_dto_serialize() {
+        let dto = MoneyDto {
+            minor_units: 1000,
+            currency: "IDR".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["minor_units"], 1000);
+        assert_eq!(json["currency"], "IDR");
+    }
+
+    #[test]
+    fn adjust_stock_args_deserialize() {
+        let json = r#"{"sku":"LATTE","delta":5,"reason":"restock"}"#;
+        let args: AdjustStockArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku, "LATTE");
+        assert_eq!(args.delta, 5);
+        assert_eq!(args.reason, "restock");
+    }
+
+    #[test]
+    fn adjust_stock_args_debug() {
+        let args = AdjustStockArgs {
+            sku: "TEA".into(),
+            delta: -2,
+            reason: "damaged".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("TEA"));
+        assert!(d.contains("damaged"));
+    }
+
+    #[test]
+    fn create_product_args_deserialize() {
+        let json = r#"{"user_id":"u1","sku":"LATTE","name":"Latte","price_minor":450,"currency":"USD","category_id":null,"barcode":null,"initial_stock":10,"tax_rate_ids":[]}"#;
+        let args: CreateProductArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku, "LATTE");
+        assert_eq!(args.price_minor, 450);
+        assert_eq!(args.initial_stock, 10);
+    }
+
+    #[test]
+    fn create_product_args_debug() {
+        let args = CreateProductArgs {
+            user_id: "u1".into(),
+            sku: "TEA".into(),
+            name: "Green Tea".into(),
+            price_minor: 275,
+            currency: "USD".into(),
+            category_id: None,
+            barcode: None,
+            initial_stock: 0,
+            tax_rate_ids: vec![],
+            product_type: "retail".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("Green Tea"));
+    }
+
+    #[test]
+    fn create_product_result_serialize() {
+        let result = CreateProductResult {
+            sku: "LATTE".into(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["sku"], "LATTE");
+    }
+
+    #[test]
+    fn update_product_args_deserialize() {
+        let json = r#"{"user_id":"u1","sku":"LATTE","name":"Latte XL","price_minor":500,"currency":"USD","category_id":null,"barcode":null,"tax_rate_ids":[]}"#;
+        let args: UpdateProductArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Latte XL");
+        assert_eq!(args.price_minor, 500);
+    }
+
+    #[test]
+    fn update_product_result_serialize() {
+        let result = UpdateProductResult {
+            sku: "LATTE".into(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["sku"], "LATTE");
+    }
+
+    #[test]
+    fn delete_product_args_deserialize() {
+        let json = r#"{"user_id":"u1","sku":"OLD-SKU"}"#;
+        let args: DeleteProductArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.user_id, "u1");
+        assert_eq!(args.sku, "OLD-SKU");
+    }
+
+    #[test]
+    fn delete_product_args_debug() {
+        let args = DeleteProductArgs {
+            user_id: "u1".into(),
+            sku: "OLD".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("OLD"));
     }
 }

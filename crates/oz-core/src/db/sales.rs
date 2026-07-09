@@ -4,9 +4,21 @@ use rusqlite::params;
 
 use crate::error::CoreError;
 use crate::money::Currency;
+use crate::tax_rate::TaxRate;
 use crate::{AuditEntry, Money, Sale, SaleLine, SaleStatus};
 
 use super::Store;
+
+/// Input for cart-level tax computation (used by IPC command).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CartLineTaxInput {
+    /// Product SKU for rate lookup.
+    pub sku: String,
+    /// Quantity in this line.
+    pub qty: i64,
+    /// Unit price in minor units.
+    pub unit_price_minor: i64,
+}
 
 // ── Export types ─────────────────────────────────────────────────────
 
@@ -53,6 +65,10 @@ pub struct HeldCartRow {
     pub currency: String,
     /// RFC-3339 timestamp of when the cart was parked.
     pub created_at: String,
+    /// Type of cart: 'hold' or 'open_bill'.
+    pub bill_type: String,
+    /// Customer name (set when bill_type = 'open_bill').
+    pub customer_name: Option<String>,
 }
 
 /// Full held cart data including the JSON cart_data blob.
@@ -72,6 +88,10 @@ pub struct HeldCartFull {
     pub currency: String,
     /// RFC-3339 timestamp of when the cart was parked.
     pub created_at: String,
+    /// Type of cart: 'hold' or 'open_bill'.
+    pub bill_type: String,
+    /// Customer name (set when bill_type = 'open_bill').
+    pub customer_name: Option<String>,
 }
 
 // ── Sale CRUD ────────────────────────────────────────────────────
@@ -99,6 +119,7 @@ impl Store<'_> {
                 currency,
             },
             tax_rate_id: row.get("tax_rate_id")?,
+            serial_number: row.get("serial_number")?,
         })
     }
 
@@ -113,14 +134,15 @@ impl Store<'_> {
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                                 discount_percent, discount_label, user_id, created_at, updated_at,
-                                subtotal_minor, tax_total_minor)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                                subtotal_minor, tax_total_minor, customer_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 status_str, sale.payment_method, sale.tendered_minor,
                 sale.discount_percent, sale.discount_label, sale.user_id,
                 sale.created_at, sale.updated_at,
                 sale.subtotal.minor_units, sale.tax_total.minor_units,
+                sale.customer_id,
             ],
         )?;
 
@@ -129,13 +151,14 @@ impl Store<'_> {
                 .expect("currency bytes are valid UTF-8");
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                                        tax_minor, tax_rate_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                                        tax_minor, tax_rate_id, serial_number)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     line.id, line.sale_id, line.sku, line.qty,
                     line.unit_price.minor_units, line.line_total.minor_units,
                     unit_cur, line.line_position,
                     line.tax_amount.minor_units, line.tax_rate_id,
+                    line.serial_number,
                 ],
             )?;
         }
@@ -150,7 +173,7 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor
+                    subtotal_minor, tax_total_minor, customer_id
              FROM sales ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -186,6 +209,7 @@ impl Store<'_> {
                     minor_units: row.get("tax_total_minor")?,
                     currency,
                 },
+                customer_id: row.get("customer_id")?,
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -197,7 +221,7 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor
+                    subtotal_minor, tax_total_minor, customer_id
              FROM sales WHERE id = ?1",
         )?;
 
@@ -234,6 +258,7 @@ impl Store<'_> {
                     minor_units: row.get("tax_total_minor")?,
                     currency,
                 },
+                customer_id: row.get("customer_id")?,
             })
         });
 
@@ -245,7 +270,7 @@ impl Store<'_> {
 
         let mut line_stmt = self.conn.prepare(
             "SELECT id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                    tax_minor, tax_rate_id
+                    tax_minor, tax_rate_id, serial_number
              FROM sale_lines WHERE sale_id = ?1 ORDER BY line_position",
         )?;
         let line_rows = line_stmt.query_map(params![id], Self::row_to_sale_line)?;
@@ -346,7 +371,11 @@ impl Store<'_> {
 // ── Held Carts ──────────────────────────────────────────────────────
 
 impl Store<'_> {
-    /// Persist a cart as a held (parked) order.
+    /// Persist a cart as a held (parked) order or open bill.
+    ///
+    /// `bill_type` should be `"hold"` or `"open_bill"`. When `customer_name`
+    /// is set, it is stored alongside the cart for open-bill listing.
+    #[allow(clippy::too_many_arguments)]
     pub fn hold_cart(
         &self,
         label: &str,
@@ -354,18 +383,22 @@ impl Store<'_> {
         item_count: i64,
         total_minor: i64,
         currency: &str,
+        bill_type: &str,
+        customer_name: Option<&str>,
     ) -> Result<String, CoreError> {
         let id = uuid::Uuid::new_v4().to_string();
         self.conn.execute(
-            "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency, bill_type, customer_name)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 id,
                 label.trim(),
                 cart_data,
                 item_count,
                 total_minor,
-                currency
+                currency,
+                bill_type,
+                customer_name,
             ],
         )?;
         Ok(id)
@@ -374,7 +407,7 @@ impl Store<'_> {
     /// List all held (parked) orders, most recent first.
     pub fn list_held_carts(&self) -> Result<Vec<HeldCartRow>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, label, item_count, total_minor, currency, created_at
+            "SELECT id, label, item_count, total_minor, currency, created_at, bill_type, customer_name
              FROM held_carts ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -385,6 +418,29 @@ impl Store<'_> {
                 total_minor: row.get("total_minor")?,
                 currency: row.get("currency")?,
                 created_at: row.get("created_at")?,
+                bill_type: row.get("bill_type")?,
+                customer_name: row.get("customer_name")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List only open bills (bill_type = 'open_bill'), most recent first.
+    pub fn list_open_bills(&self) -> Result<Vec<HeldCartRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, item_count, total_minor, currency, created_at, bill_type, customer_name
+             FROM held_carts WHERE bill_type = 'open_bill' ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(HeldCartRow {
+                id: row.get("id")?,
+                label: row.get("label")?,
+                item_count: row.get("item_count")?,
+                total_minor: row.get("total_minor")?,
+                currency: row.get("currency")?,
+                created_at: row.get("created_at")?,
+                bill_type: row.get("bill_type")?,
+                customer_name: row.get("customer_name")?,
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -393,7 +449,7 @@ impl Store<'_> {
     /// Look up a held cart by id.
     pub fn get_held_cart(&self, id: &str) -> Result<Option<HeldCartFull>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, label, cart_data, item_count, total_minor, currency, created_at
+            "SELECT id, label, cart_data, item_count, total_minor, currency, created_at, bill_type, customer_name
              FROM held_carts WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], |row| {
@@ -405,6 +461,8 @@ impl Store<'_> {
                 total_minor: row.get("total_minor")?,
                 currency: row.get("currency")?,
                 created_at: row.get("created_at")?,
+                bill_type: row.get("bill_type")?,
+                customer_name: row.get("customer_name")?,
             })
         });
         match result {
@@ -426,6 +484,37 @@ impl Store<'_> {
             });
         }
         Ok(())
+    }
+}
+
+// ── Receipt Barcodes ──────────────────────────────────────────────────
+
+impl Store<'_> {
+    /// Store a receipt barcode mapping for a sale.
+    pub fn save_receipt_barcode(&self, sale_id: &str, barcode: &str) -> Result<(), CoreError> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO receipt_barcodes (id, sale_id, barcode) VALUES (?1, ?2, ?3)",
+            params![id, sale_id, barcode],
+        )?;
+        Ok(())
+    }
+
+    /// Look up a sale by its receipt barcode.
+    pub fn lookup_sale_by_receipt_barcode(&self, barcode: &str) -> Result<Option<Sale>, CoreError> {
+        let sale_id: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT sale_id FROM receipt_barcodes WHERE barcode = ?1",
+                params![barcode],
+                |row| row.get(0),
+            )
+            .ok();
+
+        match sale_id {
+            Some(id) => self.get_sale(&id),
+            None => Ok(None),
+        }
     }
 }
 
@@ -508,48 +597,91 @@ impl Store<'_> {
 impl Store<'_> {
     /// Compute tax breakdown for a sale in-place.
     ///
-    /// For each line resolves the applicable tax rate via:
+    /// For each line resolves ALL applicable tax rates via the chain:
     /// 1. Product-level tax rates (`get_product_tax_rates`)
     /// 2. Category-level tax rates (via the product's `category_id`)
     /// 3. Default store-wide tax rate (where `is_default = true`)
     ///
-    /// Updates each line's `tax_amount` and `tax_rate_id`, then sets
-    /// `sale.subtotal` and `sale.tax_total`.
-    pub fn compute_sale_tax(&self, sale: &mut Sale) -> Result<(), CoreError> {
+    /// `lua_overrides` — per-SKU tax rate overrides from plugins.
+    /// When a SKU is present in `lua_overrides` its `(rate_bps, is_inclusive)`
+    /// values are used instead of the DB-resolved rates for that line.
+    ///
+    /// All rates for a line contribute to its total tax. Stores the
+    /// first rate's id in `tax_rate_id` for backward compatibility.
+    /// Updates each line's `tax_amount`, then sets `sale.subtotal`
+    /// and `sale.tax_total`.
+    pub fn compute_sale_tax(
+        &self,
+        sale: &mut Sale,
+        lua_overrides: &[(String, i64, bool)],
+    ) -> Result<(), CoreError> {
         let currency = sale.currency;
         let mut total_tax: Option<Money> = None;
         let mut subtotal: Option<Money> = None;
 
         for line in &mut sale.lines {
-            let rate = self.resolve_best_tax_rate_for_sku(&line.sku)?;
+            let line_subtotal = line.line_total;
+            let mut line_tax = Money::zero(currency);
 
-            if let Some(rate) = rate {
-                let line_subtotal = line.line_total;
-                let tax = if rate.is_inclusive {
-                    // Inclusive: decompose tax from the displayed price.
-                    // tax = price * rate / (1 + rate)
-                    let divisor = 10_000 + rate.rate_bps;
-                    let tax_minor = line_subtotal.minor_units * rate.rate_bps / divisor;
+            // Check for a Lua plugin override first.
+            let override_idx = lua_overrides
+                .iter()
+                .position(|(sku, _, _)| sku == &line.sku);
+
+            if let Some(idx) = override_idx {
+                let (_, rate_bps, is_inclusive) = &lua_overrides[idx];
+                let rbps = *rate_bps;
+                let tax = if *is_inclusive {
+                    let divisor = 10_000 + rbps;
+                    let tax_minor = line_subtotal.minor_units * rbps / divisor;
                     Money {
                         minor_units: tax_minor,
                         currency: line_subtotal.currency,
                     }
                 } else {
-                    // Exclusive: tax is added on top of the price.
-                    // tax = price * rate / 10000
-                    let tax_minor = line_subtotal.minor_units * rate.rate_bps / 10_000;
+                    let tax_minor = line_subtotal.minor_units * rbps / 10_000;
                     Money {
                         minor_units: tax_minor,
                         currency: line_subtotal.currency,
                     }
                 };
-                line.tax_amount = tax;
-                line.tax_rate_id = Some(rate.id.clone());
-                total_tax = match total_tax {
-                    None => Some(tax),
-                    Some(acc) => acc.checked_add(tax),
-                };
+                line_tax = line_tax
+                    .checked_add(tax)
+                    .unwrap_or_else(|| Money::zero(currency));
+                // No DB tax_rate_id for override lines.
+                line.tax_rate_id = None;
+            } else {
+                let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
+
+                for rate in &rates {
+                    let tax = if rate.is_inclusive {
+                        let divisor = 10_000 + rate.rate_bps;
+                        let tax_minor = line_subtotal.minor_units * rate.rate_bps / divisor;
+                        Money {
+                            minor_units: tax_minor,
+                            currency: line_subtotal.currency,
+                        }
+                    } else {
+                        let tax_minor = line_subtotal.minor_units * rate.rate_bps / 10_000;
+                        Money {
+                            minor_units: tax_minor,
+                            currency: line_subtotal.currency,
+                        }
+                    };
+                    line_tax = line_tax
+                        .checked_add(tax)
+                        .unwrap_or_else(|| Money::zero(currency));
+                }
+
+                line.tax_rate_id = rates.first().map(|r| r.id.clone());
             }
+
+            line.tax_amount = line_tax;
+
+            total_tax = match total_tax {
+                None => Some(line_tax),
+                Some(acc) => acc.checked_add(line_tax),
+            };
 
             subtotal = match subtotal {
                 None => Some(line.line_total),
@@ -562,16 +694,60 @@ impl Store<'_> {
         Ok(())
     }
 
-    /// Resolve the best tax rate for a SKU using the chain:
-    /// product rates → category rates → default rate.
-    fn resolve_best_tax_rate_for_sku(
+    /// Compute the total tax for a set of cart lines (live preview).
+    ///
+    /// For each cart line resolves ALL applicable tax rates and sums
+    /// their contributions. Returns the total tax amount.
+    pub fn compute_cart_tax(
         &self,
-        sku: &str,
-    ) -> Result<Option<crate::tax_rate::TaxRate>, CoreError> {
-        // 1. Product-level tax rates.
+        lines: &[CartLineTaxInput],
+        currency: Currency,
+    ) -> Result<Money, CoreError> {
+        let mut total_tax: Option<Money> = None;
+
+        for line in lines {
+            let line_total_minor = line.qty * line.unit_price_minor;
+            let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
+
+            for rate in &rates {
+                let tax_minor = if rate.is_inclusive {
+                    let divisor = 10_000 + rate.rate_bps;
+                    line_total_minor * rate.rate_bps / divisor
+                } else {
+                    line_total_minor * rate.rate_bps / 10_000
+                };
+                let tax = Money {
+                    minor_units: tax_minor,
+                    currency,
+                };
+                total_tax = match total_tax {
+                    None => Some(tax),
+                    Some(acc) => acc.checked_add(tax),
+                };
+            }
+        }
+
+        Ok(total_tax.unwrap_or_else(|| Money::zero(currency)))
+    }
+
+    /// Resolve all applicable tax rates for a SKU using the chain:
+    /// product rates → category rates → default rate.
+    ///
+    /// Returns ALL rates at the first matching level (e.g. all product-
+    /// level rates). Returns an empty vec when no rate is configured.
+    pub fn resolve_best_tax_rates_for_sku(&self, sku: &str) -> Result<Vec<TaxRate>, CoreError> {
+        // 1. Product-level tax rates — return ALL assigned rates.
         let product_rate_ids = self.get_product_tax_rates(sku)?;
         if !product_rate_ids.is_empty() {
-            return self.get_tax_rate(&product_rate_ids[0]);
+            let mut rates = Vec::with_capacity(product_rate_ids.len());
+            for id in &product_rate_ids {
+                if let Some(rate) = self.get_tax_rate(id)? {
+                    rates.push(rate);
+                }
+            }
+            if !rates.is_empty() {
+                return Ok(rates);
+            }
         }
 
         // 2. Category-level tax rates (via product.category_id).
@@ -590,7 +766,15 @@ impl Store<'_> {
             if let Some(cid) = category_id {
                 let cat_rate_ids = self.get_category_tax_rates(&cid)?;
                 if !cat_rate_ids.is_empty() {
-                    return self.get_tax_rate(&cat_rate_ids[0]);
+                    let mut rates = Vec::with_capacity(cat_rate_ids.len());
+                    for id in &cat_rate_ids {
+                        if let Some(rate) = self.get_tax_rate(id)? {
+                            rates.push(rate);
+                        }
+                    }
+                    if !rates.is_empty() {
+                        return Ok(rates);
+                    }
                 }
             }
         }
@@ -598,10 +782,10 @@ impl Store<'_> {
         // 3. Default store-wide tax rate.
         let all_rates = self.list_tax_rates()?;
         if let Some(default) = all_rates.into_iter().find(|r| r.is_default) {
-            return Ok(Some(default));
+            return Ok(vec![default]);
         }
 
-        Ok(None)
+        Ok(Vec::new())
     }
 }
 
@@ -615,10 +799,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn store(conn: &Connection) -> Store<'_> {
@@ -814,7 +995,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let id = s
-            .hold_cart("Cart 1", r#"{"items":[]}"#, 0, 0, "USD")
+            .hold_cart("Cart 1", r#"{"items":[]}"#, 0, 0, "USD", "hold", None)
             .unwrap();
         assert!(!id.is_empty());
 
@@ -834,6 +1015,8 @@ mod tests {
             2,
             700,
             "USD",
+            "hold",
+            None,
         )
         .unwrap();
 
@@ -849,7 +1032,15 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let id = s
-            .hold_cart("Test Cart", "{\"data\":\"value\"}", 3, 1500, "EUR")
+            .hold_cart(
+                "Test Cart",
+                "{\"data\":\"value\"}",
+                3,
+                1500,
+                "EUR",
+                "hold",
+                None,
+            )
             .unwrap();
 
         let full = s.get_held_cart(&id).unwrap().unwrap();
@@ -881,7 +1072,9 @@ mod tests {
     fn delete_held_cart_removes() {
         let conn = fresh();
         let s = store(&conn);
-        let id = s.hold_cart("Delete Me", "{}", 0, 0, "USD").unwrap();
+        let id = s
+            .hold_cart("Delete Me", "{}", 0, 0, "USD", "hold", None)
+            .unwrap();
         s.delete_held_cart(&id).unwrap();
         let result = s.get_held_cart(&id).unwrap();
         assert!(result.is_none());
@@ -899,9 +1092,107 @@ mod tests {
     fn hold_cart_strips_label_whitespace() {
         let conn = fresh();
         let s = store(&conn);
-        let id = s.hold_cart("  My Cart  ", "{}", 0, 0, "USD").unwrap();
+        let id = s
+            .hold_cart("  My Cart  ", "{}", 0, 0, "USD", "hold", None)
+            .unwrap();
         let full = s.get_held_cart(&id).unwrap().unwrap();
         assert_eq!(full.label, "My Cart", "label should be trimmed");
+    }
+
+    // ── Open Bills ───────────────────────────────────────────────
+
+    #[test]
+    fn open_bill_persists_across_shifts() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Seed two users and a terminal.
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+               ('role-cashier', 'cashier', 'Cashier', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at) VALUES
+               ('user-morning', 'alice', 'hash', 'Alice', 'role-cashier', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+               ('user-evening', 'bob', 'hash', 'Bob', 'role-cashier', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        ).unwrap();
+
+        // ── Morning shift ──
+        let shift_morning = s.open_shift("user-morning", None, 200).unwrap();
+
+        // Create an open bill.
+        let _bill_id = s
+            .hold_cart(
+                "Table 4 — John",
+                r#"{"lines":[{"sku":"STEAK","qty":1,"unit_price":1500}]}"#,
+                1,
+                1500,
+                "USD",
+                "open_bill",
+                Some("John"),
+            )
+            .unwrap();
+
+        // Open bill shows up immediately.
+        let open = s.list_open_bills().unwrap();
+        assert_eq!(open.len(), 1, "open bill visible in same shift");
+        assert_eq!(open[0].customer_name.as_deref(), Some("John"));
+
+        // Close morning shift.
+        s.close_shift(&shift_morning.id, 1700, None).unwrap();
+
+        // ── Evening shift (different user) ──
+        let _shift_evening = s.open_shift("user-evening", None, 500).unwrap();
+
+        // The open bill is still listed — it is NOT scoped to a shift.
+        let open = s.list_open_bills().unwrap();
+        assert_eq!(open.len(), 1, "open bill visible across shifts");
+        assert_eq!(open[0].customer_name.as_deref(), Some("John"));
+        assert_eq!(open[0].total_minor, 1500);
+        assert_eq!(open[0].currency, "USD");
+    }
+
+    #[test]
+    fn open_bill_list_excludes_hold_carts() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.hold_cart("Hold 1", "{}", 0, 0, "USD", "hold", None)
+            .unwrap();
+        s.hold_cart("Hold 2", "{}", 0, 0, "USD", "hold", None)
+            .unwrap();
+        s.hold_cart(
+            "Table 7 — Mary",
+            r#"{"lines":[]}"#,
+            2,
+            850,
+            "USD",
+            "open_bill",
+            Some("Mary"),
+        )
+        .unwrap();
+
+        let open = s.list_open_bills().unwrap();
+        assert_eq!(open.len(), 1, "only open bills, not hold carts");
+        assert_eq!(open[0].customer_name.as_deref(), Some("Mary"));
+    }
+
+    #[test]
+    fn open_bill_created_without_customer_name() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let id = s
+            .hold_cart("Walk-in", "{}", 0, 0, "USD", "open_bill", None)
+            .unwrap();
+
+        let open = s.list_open_bills().unwrap();
+        assert_eq!(open.len(), 1);
+        assert!(open[0].customer_name.is_none());
+        assert_eq!(open[0].label, "Walk-in");
+
+        // Verify full record.
+        let full = s.get_held_cart(&id).unwrap().unwrap();
+        assert_eq!(full.bill_type, "open_bill");
+        assert!(full.customer_name.is_none());
     }
 
     // ── Void Sale ────────────────────────────────────────────────
@@ -917,7 +1208,7 @@ mod tests {
             minor_units: 500,
             currency,
         };
-        s.create_product("VOID-SKU", "Voidable", money, None, None, 10)
+        s.create_product("VOID-SKU", "Voidable", money, None, None, 10, None)
             .unwrap();
 
         // Create an active sale with the product.
@@ -939,6 +1230,7 @@ mod tests {
             updated_at: sale.updated_at.clone(),
             subtotal: sale.total,
             tax_total: price(0),
+            customer_id: None,
             lines: vec![SaleLine {
                 id: uuid::Uuid::new_v4().to_string(),
                 sale_id: sale.id.clone(),
@@ -949,6 +1241,7 @@ mod tests {
                 line_position: 1,
                 tax_amount: price(0),
                 tax_rate_id: None,
+                serial_number: None,
             }],
         };
 
@@ -1046,6 +1339,7 @@ mod tests {
         // Add user_id to the sale.
         let sale_with_user = Sale {
             user_id: Some("cashier-1".into()),
+            customer_id: None,
             ..sale
         };
         s.create_sale(&sale_with_user).unwrap();
@@ -1151,7 +1445,7 @@ mod tests {
             minor_units: 1000,
             currency,
         };
-        s.create_product(sku, sku, money, category_id, None, 100)
+        s.create_product(sku, sku, money, category_id, None, 100, None)
             .unwrap();
     }
 
@@ -1174,6 +1468,7 @@ mod tests {
             updated_at: now,
             subtotal: price(unit_minor * qty),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![SaleLine {
                 id: line_id,
                 sale_id,
@@ -1184,6 +1479,7 @@ mod tests {
                 line_position: 1,
                 tax_amount: price(0),
                 tax_rate_id: None,
+                serial_number: None,
             }],
         }
     }
@@ -1193,7 +1489,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         assert_eq!(sale.subtotal.minor_units, 700);
         assert_eq!(sale.tax_total.minor_units, 0);
         assert_eq!(sale.lines[0].tax_amount.minor_units, 0);
@@ -1207,7 +1503,7 @@ mod tests {
         seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
 
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         // exclusive: tax = 700 * 1000 / 10000 = 70
         assert_eq!(sale.subtotal.minor_units, 700);
         assert_eq!(sale.tax_total.minor_units, 70);
@@ -1222,7 +1518,7 @@ mod tests {
         seed_tax_rate(&conn, "GST 10%", 1000, true, true);
 
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         // inclusive: tax = 700 * 1000 / (10000 + 1000) = 700000 / 11000 = 63
         assert_eq!(sale.subtotal.minor_units, 700);
         assert_eq!(sale.tax_total.minor_units, 63);
@@ -1240,7 +1536,7 @@ mod tests {
             .unwrap();
 
         let mut sale = make_single_line_sale("COFFEE", 1, 1000);
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         // product rate (10%) wins over default (5%): tax = 1000 * 1000 / 10000 = 100
         assert_eq!(sale.tax_total.minor_units, 100);
         assert_eq!(
@@ -1255,13 +1551,13 @@ mod tests {
         let s = store(&conn);
         let _default_id = seed_tax_rate(&conn, "Default 5%", 500, true, false);
         let cat_id = seed_tax_rate(&conn, "Category 8%", 800, false, false);
-        s.create_category("cat-1", "Beverages", "#fff").unwrap();
+        s.create_category("cat-1", "Beverages", "#fff", "").unwrap();
         s.set_category_tax_rates("cat-1", std::slice::from_ref(&cat_id))
             .unwrap();
         seed_product_with_category(&conn, "COFFEE", Some("cat-1"));
 
         let mut sale = make_single_line_sale("COFFEE", 1, 1000);
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         // category rate (8%) wins over default (5%): tax = 1000 * 800 / 10000 = 80
         assert_eq!(sale.tax_total.minor_units, 80);
         assert_eq!(sale.lines[0].tax_rate_id.as_deref(), Some(cat_id.as_str()));
@@ -1283,6 +1579,7 @@ mod tests {
             line_position: 1,
             tax_amount: price(0),
             tax_rate_id: None,
+            serial_number: None,
         };
         let line2 = SaleLine {
             id: uuid::Uuid::new_v4().to_string(),
@@ -1294,6 +1591,7 @@ mod tests {
             line_position: 2,
             tax_amount: price(0),
             tax_rate_id: None,
+            serial_number: None,
         };
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mut sale = Sale {
@@ -1311,10 +1609,11 @@ mod tests {
             updated_at: now,
             subtotal: price(1150),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![line1, line2],
         };
 
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         // line1: 700 * 1000 / 10000 = 70
         // line2: 450 * 1000 / 10000 = 45
         // total tax = 115
@@ -1331,7 +1630,7 @@ mod tests {
         seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
 
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         s.create_sale(&sale).unwrap();
 
         let loaded = s.get_sale(&sale.id).unwrap().unwrap();
@@ -1361,9 +1660,10 @@ mod tests {
             updated_at: now,
             subtotal: price(0),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![],
         };
-        s.compute_sale_tax(&mut sale).unwrap();
+        s.compute_sale_tax(&mut sale, &[]).unwrap();
         assert_eq!(sale.subtotal.minor_units, 0);
         assert_eq!(sale.tax_total.minor_units, 0);
     }
@@ -1385,6 +1685,7 @@ mod tests {
             None,
             None,
             i64::MAX - 1,
+            None,
         )
         .unwrap();
 
@@ -1406,6 +1707,7 @@ mod tests {
             updated_at: now.clone(),
             subtotal: price(5000),
             tax_total: price(0),
+            customer_id: None,
             lines: vec![SaleLine {
                 id: line_id,
                 sale_id: sale_id.clone(),
@@ -1416,6 +1718,7 @@ mod tests {
                 line_position: 1,
                 tax_amount: price(0),
                 tax_rate_id: None,
+                serial_number: None,
             }],
         };
         s.create_sale(&sale).unwrap();

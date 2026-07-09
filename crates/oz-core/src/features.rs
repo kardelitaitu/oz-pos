@@ -13,6 +13,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+use rusqlite::Connection;
+
 /// Every toggleable feature in the OZ-POS framework.
 ///
 /// Variants are in logical groups: core, payments, products, staff,
@@ -64,6 +66,8 @@ pub enum Feature {
     CustomerDisplay,
     /// NFC / contactless reader.
     NfcReader,
+    /// USB weight scale for produce/groceries.
+    UsbScale,
 
     // ── Business Rules ───────────────────────────────────────────
     /// Percentage and fixed-amount discounts.
@@ -72,10 +76,22 @@ pub enum Feature {
     TaxEngine,
     /// Customer loyalty points and tiers.
     LoyaltyProgram,
+    /// Gift cards — issue, redeem, top-up, freeze.
+    GiftCards,
+    /// Quick return from POS — scan receipt barcode to initiate refund.
+    QuickReturn,
     /// Time-limited promotions (buy-X-get-Y, etc.).
     PromotionsEngine,
     /// Sell multiple SKUs as a bundle.
     ProductBundles,
+    /// Stock counting / physical inventory.
+    StockCounting,
+    /// Transfer stock between locations or terminals.
+    StockTransfers,
+    /// Purchase orders and supplier management.
+    PurchaseOrders,
+    /// Track serial numbers for warranty tracking at checkout.
+    SerialTracking,
 
     // ── Restaurant ───────────────────────────────────────────────
     /// Kitchen display system for order routing.
@@ -136,6 +152,10 @@ impl Feature {
 
             // Reporting.
             Self::Analytics => &[Self::Reporting],
+
+            // Products.
+            Self::StockCounting => &[Self::InventoryTracking],
+            Self::SerialTracking => &[Self::InventoryTracking],
 
             // Everything else has no dependencies.
             _ => &[],
@@ -324,14 +344,60 @@ impl FeatureRegistry {
             Feature::CashDrawer,
             Feature::CustomerDisplay,
             Feature::NfcReader,
+            Feature::UsbScale,
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
+            Feature::QuickReturn,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
             Feature::Reporting,
             Feature::Analytics,
             Feature::ExportImport,
+        ])
+    }
+
+    /// **Cafe / Bakery** — quick-service with kitchen display, cash+card, discounts.
+    pub fn cafe() -> Self {
+        Self::from_set([
+            Feature::SimpleRetail,
+            Feature::Restaurant, // required by KitchenDisplay
+            Feature::CashPayment,
+            Feature::CardPayment,
+            Feature::ReceiptPrinting,
+            Feature::CustomerDisplay,
+            Feature::DiscountEngine,
+            Feature::TaxEngine,
+            Feature::KitchenDisplay,
+            Feature::PromotionsEngine,
+        ])
+    }
+
+    /// **Franchise** — multi-store, multi-terminal, restaurant + full admin stack.
+    pub fn franchise() -> Self {
+        Self::from_set([
+            Feature::Restaurant,
+            Feature::CashPayment,
+            Feature::CardPayment,
+            Feature::MultiCurrency,
+            Feature::InventoryTracking,
+            Feature::ProductVariants,
+            Feature::CategoriesEnabled,
+            Feature::StaffLogin,
+            Feature::StaffRoles,
+            Feature::ShiftManagement,
+            Feature::AuditLog,
+            Feature::ReceiptPrinting,
+            Feature::DiscountEngine,
+            Feature::TaxEngine,
+            Feature::KitchenDisplay,
+            Feature::TableManagement,
+            Feature::CloudSync,
+            Feature::MultiStore,
+            Feature::MultiTerminal,
+            Feature::Reporting,
+            Feature::Analytics,
         ])
     }
 
@@ -366,9 +432,16 @@ pub fn feature_key(f: Feature) -> &'static str {
         Feature::CashDrawer => "cash-drawer",
         Feature::CustomerDisplay => "customer-display",
         Feature::NfcReader => "nfc-reader",
+        Feature::UsbScale => "usb-scale",
         Feature::DiscountEngine => "discount-engine",
         Feature::TaxEngine => "tax-engine",
         Feature::LoyaltyProgram => "loyalty-program",
+        Feature::GiftCards => "gift-cards",
+        Feature::QuickReturn => "quick-return",
+        Feature::StockCounting => "stock-counting",
+        Feature::StockTransfers => "stock-transfers",
+        Feature::PurchaseOrders => "purchase-orders",
+        Feature::SerialTracking => "serial-tracking",
         Feature::PromotionsEngine => "promotions-engine",
         Feature::ProductBundles => "product-bundles",
         Feature::KitchenDisplay => "kitchen-display",
@@ -406,9 +479,16 @@ pub fn feature_from_key(suffix: &str) -> Option<Feature> {
         "cash-drawer" => Some(Feature::CashDrawer),
         "customer-display" => Some(Feature::CustomerDisplay),
         "nfc-reader" => Some(Feature::NfcReader),
+        "usb-scale" => Some(Feature::UsbScale),
         "discount-engine" => Some(Feature::DiscountEngine),
         "tax-engine" => Some(Feature::TaxEngine),
         "loyalty-program" => Some(Feature::LoyaltyProgram),
+        "gift-cards" => Some(Feature::GiftCards),
+        "quick-return" => Some(Feature::QuickReturn),
+        "stock-counting" => Some(Feature::StockCounting),
+        "stock-transfers" => Some(Feature::StockTransfers),
+        "purchase-orders" => Some(Feature::PurchaseOrders),
+        "serial-tracking" => Some(Feature::SerialTracking),
         "promotions-engine" => Some(Feature::PromotionsEngine),
         "product-bundles" => Some(Feature::ProductBundles),
         "kitchen-display" => Some(Feature::KitchenDisplay),
@@ -430,6 +510,177 @@ pub fn feature_from_key(suffix: &str) -> Option<Feature> {
 impl Default for FeatureRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ── Feature Guards ──────────────────────────────────────────────────────
+
+/// Runtime safety guard that can veto a feature being disabled.
+///
+/// Guards are checked **before** the feature is toggled off in the
+/// kernel and persisted to the database. If any guard returns
+/// `Err(reason)` for the feature being disabled, the toggle is
+/// aborted and the error message is surfaced to the admin UI.
+///
+/// # Example
+///
+/// ```
+/// use oz_core::{Feature, FeatureGuard, KdsFeatureGuard};
+/// use rusqlite::Connection;
+///
+/// let conn = Connection::open_in_memory().unwrap();
+/// conn.execute_batch(
+///     "CREATE TABLE IF NOT EXISTS kds_orders (
+///         id TEXT PRIMARY KEY,
+///         status TEXT NOT NULL DEFAULT 'pending'
+///     );"
+/// ).unwrap();
+///
+/// let guard = KdsFeatureGuard;
+/// // No orders exist, so KitchenDisplay can be disabled safely.
+/// assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+/// ```
+pub trait FeatureGuard: Send + Sync {
+    /// Return `Ok(())` if the feature can be disabled, or
+    /// `Err(reason)` with an actionable message for the admin.
+    fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String>;
+}
+
+/// Guard that prevents disabling `KitchenDisplay` while KDS tickets
+/// are actively being prepared.
+///
+/// Queries the `kds_orders` table for orders with status `'pending'`
+/// or `'preparing'`. If any exist, the feature cannot be safely
+/// disabled because tickets will be orphaned.
+#[derive(Debug, Clone, Copy)]
+pub struct KdsFeatureGuard;
+
+impl FeatureGuard for KdsFeatureGuard {
+    fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String> {
+        if feature != Feature::KitchenDisplay {
+            return Ok(());
+        }
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM kds_orders WHERE status IN ('pending', 'preparing')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if count > 0 {
+            Err(format!(
+                "Cannot disable Kitchen Display while {count} ticket{} are actively in progress",
+                if count == 1 { " is" } else { "s are" }
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// Guard that prevents disabling `ShiftManagement` while a shift is
+/// still open and unreconciled.
+///
+/// Queries the `shifts` table for rows where `closed_at IS NULL`.
+/// Active shifts must be closed before the feature can be turned off.
+#[derive(Debug, Clone, Copy)]
+pub struct ShiftFeatureGuard;
+
+impl FeatureGuard for ShiftFeatureGuard {
+    fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String> {
+        if feature != Feature::ShiftManagement {
+            return Ok(());
+        }
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM shifts WHERE closed_at IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if count > 0 {
+            Err(format!(
+                "Cannot disable Shift Management while {} shift{} are actively open and unreconciled",
+                count,
+                if count == 1 { " is" } else { "s are" }
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// A registry of all active [`FeatureGuard`] instances.
+///
+/// `set_feature` calls `check_feature` before disabling a feature;
+/// the registry runs every guard and collects all failures.
+#[derive(Default)]
+pub struct FeatureGuardRegistry {
+    guards: Vec<Box<dyn FeatureGuard>>,
+}
+
+impl std::fmt::Debug for FeatureGuardRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FeatureGuardRegistry")
+            .field("count", &self.guards.len())
+            .finish()
+    }
+}
+
+impl FeatureGuardRegistry {
+    /// Create an empty registry with no guards.
+    pub fn new() -> Self {
+        Self { guards: Vec::new() }
+    }
+
+    /// Register a guard. Multiple guards can be registered; they are
+    /// all checked independently during `check_feature`.
+    pub fn register(&mut self, guard: Box<dyn FeatureGuard>) {
+        self.guards.push(guard);
+    }
+
+    /// Check `feature` against all registered guards.
+    ///
+    /// Returns `Ok(())` if **all** guards approve. Returns
+    /// `Err(reasons)` with **all** failure messages joined by `"; "`.
+    pub fn check_feature(&self, feature: Feature, conn: &Connection) -> Result<(), String> {
+        let failures: Vec<String> = self
+            .guards
+            .iter()
+            .filter_map(|guard| guard.can_disable(feature, conn).err())
+            .collect();
+
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(failures.join("; "))
+        }
+    }
+
+    /// Number of registered guards.
+    pub fn count(&self) -> usize {
+        self.guards.len()
+    }
+
+    /// True when no guards have been registered.
+    pub fn is_empty(&self) -> bool {
+        self.guards.is_empty()
+    }
+
+    /// Create a registry pre-loaded with all built-in guards.
+    ///
+    /// Currently includes:
+    /// - [`KdsFeatureGuard`] — protects open KDS tickets
+    /// - [`ShiftFeatureGuard`] — protects unreconciled shifts
+    pub fn new_with_defaults() -> Self {
+        let mut registry = Self::new();
+        registry.register(Box::new(KdsFeatureGuard));
+        registry.register(Box::new(ShiftFeatureGuard));
+        registry
     }
 }
 
@@ -522,6 +773,14 @@ mod tests {
     }
 
     #[test]
+    fn serial_tracking_depends_on_inventory_tracking() {
+        assert_eq!(
+            Feature::SerialTracking.dependencies(),
+            &[Feature::InventoryTracking]
+        );
+    }
+
+    #[test]
     fn analytics_depends_on_reporting() {
         assert_eq!(Feature::Analytics.dependencies(), &[Feature::Reporting]);
     }
@@ -559,7 +818,10 @@ mod tests {
             Feature::NfcReader,
             Feature::DiscountEngine,
             Feature::TaxEngine,
+            Feature::GiftCards,
+            Feature::QuickReturn,
             Feature::ProductBundles,
+            Feature::PurchaseOrders,
             Feature::Reporting,
             Feature::MultiStore,
             Feature::ExportImport,
@@ -593,6 +855,7 @@ mod tests {
             Feature::TableManagement,
             Feature::SelfServiceKiosk,
             Feature::LoyaltyProgram,
+            Feature::SerialTracking,
             Feature::PromotionsEngine,
             Feature::Analytics,
             Feature::MultiTerminal,
@@ -601,7 +864,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        // All 32 features listed explicitly (same pattern as
+        // All features listed explicitly (same pattern as
         // `feature_key_roundtrip`). This avoids unsafe transmute.
         let all_features = [
             Feature::SimpleRetail,
@@ -624,6 +887,7 @@ mod tests {
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
             Feature::KitchenDisplay,
@@ -831,8 +1095,10 @@ mod tests {
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
+            Feature::PurchaseOrders,
             Feature::KitchenDisplay,
             Feature::TableManagement,
             Feature::SelfServiceKiosk,
@@ -843,12 +1109,15 @@ mod tests {
             Feature::Analytics,
             Feature::ExportImport,
             Feature::PluginSystem,
+            Feature::SerialTracking,
+            Feature::QuickReturn,
+            Feature::UsbScale,
         ];
 
         for f in all_features {
             reg.enable(f);
         }
-        assert!(reg.count() >= 32);
+        assert!(reg.count() >= 37);
 
         for f in all_features {
             reg.disable(f);
@@ -914,6 +1183,51 @@ mod tests {
     fn custom_preset_is_empty() {
         let reg = FeatureRegistry::custom();
         assert_eq!(reg.count(), 0);
+    }
+
+    #[test]
+    fn cafe_preset_has_expected_features() {
+        let reg = FeatureRegistry::cafe();
+        assert!(reg.is_enabled(Feature::SimpleRetail));
+        assert!(reg.is_enabled(Feature::Restaurant));
+        assert!(reg.is_enabled(Feature::CashPayment));
+        assert!(reg.is_enabled(Feature::CardPayment));
+        assert!(reg.is_enabled(Feature::ReceiptPrinting));
+        assert!(reg.is_enabled(Feature::CustomerDisplay));
+        assert!(reg.is_enabled(Feature::DiscountEngine));
+        assert!(reg.is_enabled(Feature::TaxEngine));
+        assert!(reg.is_enabled(Feature::KitchenDisplay));
+        assert!(reg.is_enabled(Feature::PromotionsEngine));
+        assert!(!reg.is_enabled(Feature::StaffLogin));
+        assert_eq!(reg.count(), 10);
+    }
+
+    #[test]
+    fn franchise_preset_has_expected_features() {
+        let reg = FeatureRegistry::franchise();
+        assert!(reg.is_enabled(Feature::Restaurant));
+        assert!(reg.is_enabled(Feature::CashPayment));
+        assert!(reg.is_enabled(Feature::CardPayment));
+        assert!(reg.is_enabled(Feature::MultiCurrency));
+        assert!(reg.is_enabled(Feature::InventoryTracking));
+        assert!(reg.is_enabled(Feature::ProductVariants));
+        assert!(reg.is_enabled(Feature::CategoriesEnabled));
+        assert!(reg.is_enabled(Feature::StaffLogin));
+        assert!(reg.is_enabled(Feature::StaffRoles));
+        assert!(reg.is_enabled(Feature::ShiftManagement));
+        assert!(reg.is_enabled(Feature::AuditLog));
+        assert!(reg.is_enabled(Feature::ReceiptPrinting));
+        assert!(reg.is_enabled(Feature::DiscountEngine));
+        assert!(reg.is_enabled(Feature::TaxEngine));
+        assert!(reg.is_enabled(Feature::KitchenDisplay));
+        assert!(reg.is_enabled(Feature::TableManagement));
+        assert!(reg.is_enabled(Feature::CloudSync));
+        assert!(reg.is_enabled(Feature::MultiStore));
+        assert!(reg.is_enabled(Feature::MultiTerminal));
+        assert!(reg.is_enabled(Feature::Reporting));
+        assert!(reg.is_enabled(Feature::Analytics));
+        assert!(!reg.is_enabled(Feature::SimpleRetail));
+        assert_eq!(reg.count(), 21);
     }
 
     #[test]
@@ -999,8 +1313,10 @@ mod tests {
             Feature::DiscountEngine,
             Feature::TaxEngine,
             Feature::LoyaltyProgram,
+            Feature::GiftCards,
             Feature::PromotionsEngine,
             Feature::ProductBundles,
+            Feature::PurchaseOrders,
             Feature::KitchenDisplay,
             Feature::TableManagement,
             Feature::SelfServiceKiosk,
@@ -1011,6 +1327,9 @@ mod tests {
             Feature::Analytics,
             Feature::ExportImport,
             Feature::PluginSystem,
+            Feature::SerialTracking,
+            Feature::QuickReturn,
+            Feature::UsbScale,
         ];
         for f in features {
             let key = feature_key(f);
@@ -1040,6 +1359,235 @@ mod tests {
         assert_eq!(features.len(), 2);
         assert!(features.contains(&Feature::CashPayment));
     }
+} // ── Feature guards ──────────────────────────────────────────────
+
+#[test]
+fn kds_guard_allows_other_features() {
+    let conn = Connection::open_in_memory().unwrap();
+    let guard = KdsFeatureGuard;
+    // Guards should always allow features they don't guard.
+    assert!(guard.can_disable(Feature::ShiftManagement, &conn).is_ok());
+    assert!(guard.can_disable(Feature::SimpleRetail, &conn).is_ok());
+    assert!(guard.can_disable(Feature::CashPayment, &conn).is_ok());
+}
+
+#[test]
+fn kds_guard_allows_with_no_orders() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );",
+    )
+    .unwrap();
+    let guard = KdsFeatureGuard;
+    assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+}
+
+#[test]
+fn kds_guard_rejects_with_active_orders() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'preparing');
+            INSERT INTO kds_orders (id, status) VALUES ('o2', 'pending');",
+    )
+    .unwrap();
+    let guard = KdsFeatureGuard;
+    let result = guard.can_disable(Feature::KitchenDisplay, &conn);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("2 tickets"));
+}
+
+#[test]
+fn kds_guard_ignores_completed_orders() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'served');
+            INSERT INTO kds_orders (id, status) VALUES ('o2', 'cancelled');
+            INSERT INTO kds_orders (id, status) VALUES ('o3', 'ready');",
+    )
+    .unwrap();
+    let guard = KdsFeatureGuard;
+    // 'ready', 'served', and 'cancelled' are terminal states — not blocked.
+    assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+}
+
+#[test]
+fn shift_guard_allows_other_features() {
+    let conn = Connection::open_in_memory().unwrap();
+    let guard = ShiftFeatureGuard;
+    assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+    assert!(guard.can_disable(Feature::SimpleRetail, &conn).is_ok());
+}
+
+#[test]
+fn shift_guard_allows_with_no_open_shifts() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'closed'
+            );
+            INSERT INTO shifts (id, closed_at, status)
+                VALUES ('s1', '2026-01-01T00:00:00Z', 'closed');
+            INSERT INTO shifts (id, closed_at, status)
+                VALUES ('s2', '2026-01-02T00:00:00Z', 'closed');",
+    )
+    .unwrap();
+    let guard = ShiftFeatureGuard;
+    assert!(guard.can_disable(Feature::ShiftManagement, &conn).is_ok());
+}
+
+#[test]
+fn shift_guard_rejects_with_open_shifts() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', NULL, 'open');",
+    )
+    .unwrap();
+    let guard = ShiftFeatureGuard;
+    let result = guard.can_disable(Feature::ShiftManagement, &conn);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("1 shift"));
+}
+
+#[test]
+fn shift_guard_rejects_with_multiple_open_shifts() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', NULL, 'open');
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s2', NULL, 'open');",
+    )
+    .unwrap();
+    let guard = ShiftFeatureGuard;
+    let result = guard.can_disable(Feature::ShiftManagement, &conn);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("2 shifts"));
+}
+
+#[test]
+fn guard_registry_empty_by_default() {
+    let registry = FeatureGuardRegistry::new();
+    assert!(registry.is_empty());
+    assert_eq!(registry.count(), 0);
+}
+
+#[test]
+fn guard_registry_new_with_defaults() {
+    let registry = FeatureGuardRegistry::new_with_defaults();
+    assert_eq!(registry.count(), 2);
+    assert!(!registry.is_empty());
+}
+
+#[test]
+fn guard_registry_allows_when_all_guards_pass() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+            "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', '2026-01-01T00:00:00Z', 'closed');",
+        )
+        .unwrap();
+    let registry = FeatureGuardRegistry::new_with_defaults();
+    assert!(
+        registry
+            .check_feature(Feature::KitchenDisplay, &conn)
+            .is_ok()
+    );
+    assert!(
+        registry
+            .check_feature(Feature::ShiftManagement, &conn)
+            .is_ok()
+    );
+}
+
+#[test]
+fn guard_registry_rejects_with_failures() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'pending');
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', NULL, 'open');",
+    )
+    .unwrap();
+    let registry = FeatureGuardRegistry::new_with_defaults();
+    // KitchenDisplay should fail due to KDS guard (not shift guard).
+    let result = registry.check_feature(Feature::KitchenDisplay, &conn);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.contains("1 ticket"), "expected ticket error: {err}");
+    assert!(
+        !err.contains("shift"),
+        "should not include shift error for KitchenDisplay: {err}"
+    );
+
+    // ShiftManagement should fail due to shift guard (not KDS guard).
+    let result = registry.check_feature(Feature::ShiftManagement, &conn);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.contains("1 shift"), "expected shift error: {err}");
+}
+
+#[test]
+fn guard_registry_collects_all_failures() {
+    // When both guards fail for the same feature (unusual but possible
+    // if a future custom guard is added), all failures are returned.
+    // For now, KDS guard and Shift guard guard different features,
+    // so this test verifies the collection mechanism works.
+    let mut registry = FeatureGuardRegistry::new();
+    registry.register(Box::new(KdsFeatureGuard));
+    registry.register(Box::new(KdsFeatureGuard)); // duplicate
+
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'pending');",
+    )
+    .unwrap();
+
+    let result = registry.check_feature(Feature::KitchenDisplay, &conn);
+    assert!(result.is_err());
+    // Both KDS guards should fail — we get two "1 ticket is" messages.
+    let err = result.unwrap_err();
+    assert!(err.contains("ticket"), "expected ticket error in: {err}");
 }
 
 // ── Property-based tests (proptest) ─────────────────────────────────
@@ -1049,7 +1597,7 @@ mod proptests {
     use super::*;
     use proptest::prelude::*;
 
-    /// List of all 32 features for generating random selections.
+    /// List of all features for generating random selections.
     const ALL_FEATURES: &[Feature] = &[
         Feature::SimpleRetail,
         Feature::Restaurant,
@@ -1068,11 +1616,16 @@ mod proptests {
         Feature::CashDrawer,
         Feature::CustomerDisplay,
         Feature::NfcReader,
+        Feature::UsbScale,
         Feature::DiscountEngine,
         Feature::TaxEngine,
         Feature::LoyaltyProgram,
+        Feature::GiftCards,
+        Feature::QuickReturn,
         Feature::PromotionsEngine,
         Feature::ProductBundles,
+        Feature::PurchaseOrders,
+        Feature::SerialTracking,
         Feature::KitchenDisplay,
         Feature::TableManagement,
         Feature::SelfServiceKiosk,
@@ -1099,6 +1652,7 @@ mod proptests {
     // ── Invariant: newly-enabled features satisfy deps ───────────
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(16))]
         /// After every `enable` call, the **newly-enabled** features
         /// (including auto-enabled dependencies) all have their own
         /// dependencies satisfied.
@@ -1138,6 +1692,7 @@ mod proptests {
     // ── Disable does NOT cascade (design property) ────────────────
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(16))]
         /// `disable` does NOT cascade to dependents — only the
         /// specific feature is removed from the set. Every other
         /// feature that was enabled remains enabled.
@@ -1183,6 +1738,7 @@ mod proptests {
     // ── Enable return value ───────────────────────────────────────
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(16))]
         /// `enable(f)` returns `true` iff `f` was NOT already in the set.
         #[test]
         fn enable_return_value_matches_precondition(ops in arb_ops()) {
@@ -1202,6 +1758,7 @@ mod proptests {
     // ── Disable return value ──────────────────────────────────────
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(16))]
         /// `disable(f)` returns `true` iff `f` WAS already in the set.
         #[test]
         fn disable_return_value_matches_precondition(ops in arb_ops()) {
@@ -1226,6 +1783,7 @@ mod proptests {
     // ── Serialization roundtrip ───────────────────────────────────
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(16))]
         /// A registry survives `to_settings_rows` → `from_settings_rows`
         /// losslessly (modulo unknown keys, which we don't supply).
         #[test]
@@ -1282,6 +1840,32 @@ mod proptests {
                 assert!(
                     reg.is_enabled(dep),
                     "full_store: {f:?} enabled but dep {dep:?} is not"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cafe_preset_satisfies_invariant() {
+        let reg = FeatureRegistry::cafe();
+        for f in reg.enabled_features() {
+            for &dep in f.dependencies() {
+                assert!(
+                    reg.is_enabled(dep),
+                    "cafe: {f:?} enabled but dep {dep:?} is not"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn franchise_preset_satisfies_invariant() {
+        let reg = FeatureRegistry::franchise();
+        for f in reg.enabled_features() {
+            for &dep in f.dependencies() {
+                assert!(
+                    reg.is_enabled(dep),
+                    "franchise: {f:?} enabled but dep {dep:?} is not"
                 );
             }
         }

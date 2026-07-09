@@ -18,7 +18,7 @@ The CRM module owns the customer relationship management vertical. It handles cu
 ## Currently Owns
 
 - **Backend** — Customer CRUD (`crates/oz-core/src/db/customers.rs`)
-- **Commands** — Customer Tauri commands (`src-tauri/src/commands/customers.rs`)
+- **Commands** — Customer Tauri commands (`apps/desktop-client/src/commands/customers.rs`)
 - **Frontend** — Customer management screen (`ui/src/features/customers/`)
 - **API** — TypeScript API client (`ui/src/api/customers.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/*/customers.ftl`)
@@ -58,3 +58,5 @@ kernel.start_all()?;
   "permissions": ["crm:view", "crm:edit"]
 }
 ```
+
+> last audited 07-07-26 by docs-auditor

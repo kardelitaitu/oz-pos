@@ -285,9 +285,7 @@ mod tests {
 
     #[tokio::test]
     async fn daemon_start_and_stop() {
-        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
+        let conn = oz_core::migrations::fresh_db();
         let db = Arc::new(std::sync::Mutex::new(conn));
         let daemon = RateSyncDaemon::new();
         daemon.start(db).await;
@@ -329,9 +327,7 @@ mod tests {
 
     #[tokio::test]
     async fn daemon_double_start_is_noop() {
-        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
+        let conn = oz_core::migrations::fresh_db();
         let db = Arc::new(std::sync::Mutex::new(conn));
         let daemon = RateSyncDaemon::new();
         daemon.start(db.clone()).await;

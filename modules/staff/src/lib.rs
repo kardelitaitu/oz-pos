@@ -11,7 +11,7 @@
 //! Fluent locale) still live in their original locations:
 //!
 //! - Backend: `crates/oz-core/src/user.rs` + `crates/oz-core/src/db/staff.rs`
-//! - Commands: `src-tauri/src/commands/staff.rs` + `src-tauri/src/commands/auth.rs`
+//! - Commands: `apps/desktop-client/src/commands/staff.rs` + `apps/desktop-client/src/commands/auth.rs`
 //! - Frontend: `ui/src/features/staff/` + `ui/src/features/auth/`
 //! - API: `ui/src/api/staff.ts`
 //! - Locale: `ui/src/locales/*/staff.ftl`

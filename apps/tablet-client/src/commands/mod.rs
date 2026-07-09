@@ -7,6 +7,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod authz;
 pub mod branding;
 pub mod bundles;
 pub mod categories;
@@ -14,6 +15,7 @@ pub mod currencies;
 pub mod customers;
 pub mod exchange_rates;
 pub mod features;
+pub mod gift_cards;
 pub mod hardware;
 pub mod health;
 pub mod history;
@@ -27,6 +29,7 @@ pub mod promotions;
 pub mod refunds;
 pub mod reports;
 pub mod sales;
+pub mod scale;
 pub mod settings;
 pub mod setup;
 pub mod staff;

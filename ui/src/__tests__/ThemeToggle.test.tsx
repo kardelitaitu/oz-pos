@@ -2,16 +2,18 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
-import sharedFtl from '@/locales/shared.ftl?raw';
-import { ThemeProvider } from '@/components/ThemeProvider';
-import ThemeToggle from '@/components/ThemeToggle';
+
+import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
+import { BrandProvider } from '@/contexts/BrandContext';
+import ThemeToggle from '@/frontend/shell/ThemeToggle';
 
 // ── Wrapper ──────────────────────────────────────────────────────────
 
 function wrap(children: React.ReactNode) {
   return withFluent(
-    <ThemeProvider>{children}</ThemeProvider>,
-    sharedFtl,
+    <BrandProvider>
+      <ThemeProvider>{children}</ThemeProvider>
+    </BrandProvider>,
   );
 }
 
@@ -73,18 +75,30 @@ describe('ThemeToggle', () => {
   it('has an aria-label that reflects current theme', () => {
     render(wrap(<ThemeToggle />));
     const button = screen.getByTestId('theme-toggle');
-    // Initially light → aria-label says "Switch to dark mode".
-    expect(button).toHaveAttribute('aria-label', 'Switch to dark mode');
+    // Asserts on the user-visible substring (and SR-announced string),
+    // not on Fluent's internal bidi-isolating marks U+2068/U+2069.
+    // Production's `getBundle()` passes `useIsolating: false`, so the
+    // aria-label is the literal plain string — no markers.
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Switch to dark mode'),
+    );
   });
 
   it('aria-label updates after toggling theme', async () => {
     render(wrap(<ThemeToggle />));
     const button = screen.getByTestId('theme-toggle');
-    expect(button).toHaveAttribute('aria-label', 'Switch to dark mode');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Switch to dark mode'),
+    );
 
     await userEvent.click(button);
 
-    expect(button).toHaveAttribute('aria-label', 'Switch to light mode');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Switch to light mode'),
+    );
   });
 
   // ── Interaction ────────────────────────────────────────────────

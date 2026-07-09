@@ -5,7 +5,7 @@ REST API server for OZ-POS. Runs an axum HTTP server alongside the Tauri front-e
 ## Quick start
 
 ```rust
-// Background task in src-tauri/src/main.rs
+// Background task in apps/desktop-client/src/main.rs
 oz_api::serve().await?;
 ```
 

@@ -210,6 +210,23 @@
   --z-modal:     400;
   --z-toast:     500;
   --z-tooltip:   600;
+
+  /* ── POS-domain palette (retail-POS-only) ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
+   * Preserved from the legacy RetailPosScreen :root so retail
+   * checkouts keep the classic navy + brassy identity distinct
+   * from the global emerald accent. Used by RetailPosScreen.css
+   * and any other retail-POS surface. */
+  --color-primary-pos:        #1a3a5c;
+  --color-primary-pos-dark:   #0f2a40;
+  --color-primary-pos-light:  #d8e4f0;
+  --color-success-pos:        #1a7a2a;
+  --color-success-pos-darker: #146022;
+  --color-warning-pos:        #e8a317;
+  --color-warning-pos-darker: #b8860b;
+  --color-fn-key-pos:         #ffcc00;
+  --color-dark-bg-pos:        #2a2a2a;
+  --color-dark-border-pos:    #444;
+  --color-bg-pos:             #e8e8e8;
 }
 
 
@@ -264,6 +281,19 @@
     --color-danger-fg:       var(--neutral-950);
     --color-info:            #60a5fa;
     --color-info-bg:         #172554;
+
+    /* ── POS-domain dark variants (mirror light :root) ─ ─ ─ ─ ─ ─ ─ */
+    --color-primary-pos:        #4a90d9;
+    --color-primary-pos-dark:   #357abd;
+    --color-primary-pos-light:  #1a2740;
+    --color-success-pos:        #22c55e;
+    --color-success-pos-darker: #16a34a;
+    --color-warning-pos:        #f59e0b;
+    --color-warning-pos-darker: #d97706;
+    --color-fn-key-pos:         #fbbf24;
+    --color-dark-bg-pos:        #111;
+    --color-dark-border-pos:    #333;
+    --color-bg-pos:             #1a1a1a;
 
     --color-link:            var(--primary-400);
     --color-link-hover:      var(--primary-300);
@@ -331,6 +361,19 @@
   --color-danger-fg:       var(--neutral-950);
   --color-info:            #60a5fa;
   --color-info-bg:         #172554;
+
+  /* ── POS-domain dark variants (mirror light :root) ─ ─ ─ ─ ─ ─ ─ */
+  --color-primary-pos:        #4a90d9;
+  --color-primary-pos-dark:   #357abd;
+  --color-primary-pos-light:  #1a2740;
+  --color-success-pos:        #22c55e;
+  --color-success-pos-darker: #16a34a;
+  --color-warning-pos:        #f59e0b;
+  --color-warning-pos-darker: #d97706;
+  --color-fn-key-pos:         #fbbf24;
+  --color-dark-bg-pos:        #111;
+  --color-dark-border-pos:    #333;
+  --color-bg-pos:             #1a1a1a;
 
   --color-link:            var(--primary-400);
   --color-link-hover:      var(--primary-300);

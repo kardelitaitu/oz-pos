@@ -1,4 +1,6 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useCallback } from 'react';
+
 import type { ReactNode } from 'react';
 import type { FluentBundle } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
@@ -13,9 +15,9 @@ export interface LocaleContextValue {
 }
 
 export const LocaleContext = createContext<LocaleContextValue>({
-  locale: 'en',
+  locale: 'id',
   setLocale: () => {},
-  availableLocales: ['en'],
+  availableLocales: ['id'],
   getLocaleLabel: () => '',
 });
 
@@ -29,7 +31,7 @@ export function LocaleProvider({ children }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState<LocaleCode>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'en' || stored === 'id') return stored;
-    return 'en';
+    return 'id';
   });
 
   const [bundle, setBundle] = useState<FluentBundle>(() => getBundle(locale));

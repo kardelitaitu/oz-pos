@@ -12,10 +12,7 @@ use rusqlite::Connection;
 // ── Helpers ───────────────────────────────────────────────────────────
 
 fn setup() -> Connection {
-    let mut conn = Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn).unwrap();
-    conn
+    migrations::fresh_db()
 }
 
 fn store(conn: &Connection) -> Store<'_> {
@@ -36,7 +33,7 @@ fn price(minor: i64) -> Money {
 /// Seed a product with initial stock.
 fn seed_product(conn: &Connection, _id: &str, sku: &str, name: &str, initial_stock: i64) {
     store(conn)
-        .create_product(sku, name, price(1000), None, None, initial_stock)
+        .create_product(sku, name, price(1000), None, None, initial_stock, None)
         .unwrap();
 }
 
@@ -81,7 +78,15 @@ fn stock_first_adjustment_creates_inventory_row() {
     // Create a product without initial stock.
     let s = store(&conn);
     let p = s
-        .create_product("FIRST-ADJ", "First Adjustment", price(500), None, None, 0)
+        .create_product(
+            "FIRST-ADJ",
+            "First Adjustment",
+            price(500),
+            None,
+            None,
+            0,
+            None,
+        )
         .unwrap();
 
     // No inventory row yet — get_stock returns 0.
@@ -144,7 +149,15 @@ fn stock_adjust_overflow_rejected() {
     let conn = setup();
     let s = store(&conn);
     let _p = s
-        .create_product("OVERFLOW", "Overflow", price(100), None, None, i64::MAX)
+        .create_product(
+            "OVERFLOW",
+            "Overflow",
+            price(100),
+            None,
+            None,
+            i64::MAX,
+            None,
+        )
         .unwrap();
 
     let err = s.adjust_stock("OVERFLOW", 1).unwrap_err();
@@ -453,7 +466,15 @@ fn get_stock_zero_for_product_without_inventory_row() {
     let conn = setup();
     let s = store(&conn);
     let p = s
-        .create_product("NO-INV", "No Inventory Row", price(100), None, None, 0)
+        .create_product(
+            "NO-INV",
+            "No Inventory Row",
+            price(100),
+            None,
+            None,
+            0,
+            None,
+        )
         .unwrap();
 
     // Product exists but has no inventory row → get_stock returns 0.
@@ -467,7 +488,7 @@ fn products_without_stock_show_none_in_list() {
     let conn = setup();
     let s = store(&conn);
     let p = s
-        .create_product("NO-STOCK-LIST", "No Stock", price(100), None, None, 0)
+        .create_product("NO-STOCK-LIST", "No Stock", price(100), None, None, 0, None)
         .unwrap();
 
     let products = s.list_products().unwrap();

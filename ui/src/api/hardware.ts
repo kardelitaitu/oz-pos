@@ -108,3 +108,14 @@ export const displayShow = (args: DisplayShowArgs): Promise<void> =>
 /** Clear a customer-facing pole display. */
 export const displayClear = (displayId: string): Promise<void> =>
   invoke('display_clear', { displayId });
+
+// ── Weight Scale ────────────────────────────────────────────────────
+
+export interface WeightReading {
+  weightGrams: number;
+  stable: boolean;
+}
+
+/** Read the current weight from the registered scale, or null if none is registered. */
+export const readScaleWeight = (): Promise<WeightReading | null> =>
+  invoke<WeightReading | null>('read_scale_weight');

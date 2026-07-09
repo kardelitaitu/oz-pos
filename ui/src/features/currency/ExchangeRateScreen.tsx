@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listExchangeRates,
   createExchangeRate,
@@ -36,6 +36,7 @@ const EMPTY_FORM: FormData = {
 };
 
 export default function ExchangeRateScreen() {
+  const { l10n } = useLocalization();
   const [rates, setRates] = useState<ExchangeRateDto[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,11 +57,11 @@ export default function ExchangeRateScreen() {
       setRates(items);
       setCurrencies(currs);
     } catch {
-      setError('Failed to load exchange rates');
+      setError(l10n.getString('currency-load-error'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -154,7 +155,7 @@ export default function ExchangeRateScreen() {
         </Card>
       ) : (
         <div className="exchange-rate-table-wrap">
-          <table className="exchange-rate-table" aria-label="Exchange rates">
+          <table className="exchange-rate-table" aria-label={l10n.getString('currency-table-label')}>
             <thead>
               <tr>
                 <Localized id="currency-col-from"><th>From</th></Localized>
@@ -162,7 +163,7 @@ export default function ExchangeRateScreen() {
                 <Localized id="currency-col-rate"><th>Rate</th></Localized>
                 <Localized id="currency-col-source"><th>Source</th></Localized>
                 <Localized id="currency-col-effective"><th>Effective Date</th></Localized>
-                <th aria-label="Actions"> </th>
+                <th aria-label={l10n.getString('currency-table-actions')}> </th>
               </tr>
             </thead>
             <tbody>
@@ -179,7 +180,7 @@ export default function ExchangeRateScreen() {
                       className="exchange-rate-action-btn exchange-rate-action-btn--danger"
                       onClick={() => confirmDelete(r.id)}
                       disabled={deleting === r.id}
-                      aria-label={`Delete ${r.from_currency}-${r.to_currency}`}
+                      aria-label={l10n.getString('currency-delete-label', { from: r.from_currency, to: r.to_currency })}
                     >
                       <Localized id="currency-delete">
                         <span>Delete</span>
@@ -194,7 +195,7 @@ export default function ExchangeRateScreen() {
       )}
 
       {showModal && (
-        <div className="exchange-rate-overlay" role="dialog" aria-modal="true" aria-label="Add exchange rate">
+        <div className="exchange-rate-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('currency-modal-add-label')}>
           <div className="exchange-rate-modal">
             <div className="exchange-rate-modal-header">
               <Localized id="currency-modal-title">
@@ -204,14 +205,14 @@ export default function ExchangeRateScreen() {
                 type="button"
                 className="exchange-rate-modal-close"
                 onClick={() => setShowModal(false)}
-                aria-label="Close"
+                aria-label={l10n.getString('close')}
               >
                 &times;
               </button>
             </div>
 
             <div className="exchange-rate-modal-body">
-              <label className="exchange-rate-field" htmlFor="er-field-from" aria-label="From currency">
+              <label className="exchange-rate-field" htmlFor="er-field-from" aria-label={l10n.getString('currency-field-from')}>
                 <Localized id="currency-field-from">
                   <span className="exchange-rate-label">From Currency</span>
                 </Localized>
@@ -221,12 +222,14 @@ export default function ExchangeRateScreen() {
                   value={form.fromCurrency}
                   onChange={(e) => setForm({ ...form, fromCurrency: e.target.value })}
                 >
-                  <option value="">Select currency&hellip;</option>
+                  <Localized id="currency-select-placeholder">
+                    <option value="">Select currency&hellip;</option>
+                  </Localized>
                   {currencyOptions}
                 </select>
               </label>
 
-              <label className="exchange-rate-field" htmlFor="er-field-to" aria-label="To currency">
+              <label className="exchange-rate-field" htmlFor="er-field-to" aria-label={l10n.getString('currency-field-to')}>
                 <Localized id="currency-field-to">
                   <span className="exchange-rate-label">To Currency</span>
                 </Localized>
@@ -236,42 +239,48 @@ export default function ExchangeRateScreen() {
                   value={form.toCurrency}
                   onChange={(e) => setForm({ ...form, toCurrency: e.target.value })}
                 >
-                  <option value="">Select currency&hellip;</option>
+                  <Localized id="currency-select-placeholder">
+                    <option value="">Select currency&hellip;</option>
+                  </Localized>
                   {currencyOptions}
                 </select>
               </label>
 
-              <label className="exchange-rate-field" htmlFor="er-field-rate" aria-label="Rate">
+              <label className="exchange-rate-field" htmlFor="er-field-rate" aria-label={l10n.getString('currency-field-rate')}>
                 <Localized id="currency-field-rate">
                   <span className="exchange-rate-label">Rate</span>
                 </Localized>
-                <input
-                  className="exchange-rate-input"
-                  type="number"
-                  id="er-field-rate"
-                  min="0"
-                  step="any"
-                  value={form.rate}
-                  onChange={(e) => setForm({ ...form, rate: e.target.value })}
-                  placeholder="1.25"
-                />
+                <Localized id="currency-rate-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="exchange-rate-input"
+                    type="number"
+                    id="er-field-rate"
+                    min="0"
+                    step="any"
+                    value={form.rate}
+                    onChange={(e) => setForm({ ...form, rate: e.target.value })}
+                    placeholder="1.25"
+                  />
+                </Localized>
               </label>
 
-              <label className="exchange-rate-field" htmlFor="er-field-source" aria-label="Source">
+              <label className="exchange-rate-field" htmlFor="er-field-source" aria-label={l10n.getString('currency-field-source')}>
                 <Localized id="currency-field-source">
                   <span className="exchange-rate-label">Source (optional)</span>
                 </Localized>
-                <input
-                  className="exchange-rate-input"
-                  type="text"
-                  id="er-field-source"
-                  value={form.source}
-                  onChange={(e) => setForm({ ...form, source: e.target.value })}
-                  placeholder="e.g. ECB"
-                />
+                <Localized id="currency-source-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="exchange-rate-input"
+                    type="text"
+                    id="er-field-source"
+                    value={form.source}
+                    onChange={(e) => setForm({ ...form, source: e.target.value })}
+                    placeholder="e.g. ECB"
+                  />
+                </Localized>
               </label>
 
-              <label className="exchange-rate-field" htmlFor="er-field-date" aria-label="Effective date">
+              <label className="exchange-rate-field" htmlFor="er-field-date" aria-label={l10n.getString('currency-field-date')}>
                 <Localized id="currency-field-date">
                   <span className="exchange-rate-label">Effective Date</span>
                 </Localized>

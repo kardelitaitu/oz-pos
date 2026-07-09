@@ -41,10 +41,7 @@ pub async fn open_cash_drawer(
         .cash_drawer(id)
         .await
         .ok_or_else(|| AppError::Invalid(format!("no cash drawer registered as '{id}'")))?;
-    drawer
-        .open()
-        .await
-        .map_err(|e| AppError::Hardware(e.to_string()))?;
+    drawer.open().await?;
     Ok(OpenCashDrawerResult { opened: true })
 }
 
@@ -75,10 +72,7 @@ pub async fn print_receipt(
         .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
     let lines: Vec<&str> = args.body.lines().collect();
     let n = lines.len();
-    printer
-        .print_receipt(&args.body)
-        .await
-        .map_err(|e| AppError::Hardware(e.to_string()))?;
+    printer.print_receipt(&args.body).await?;
     // Emit a completion event so the front-end can show a toast.
     if let Some(ref app) = state.app {
         let _ = app.emit("receipt:printed", serde_json::json!({ "lines": n }));
@@ -97,6 +91,8 @@ pub struct PrintSalesReceiptArgs {
     pub tax: Option<MoneyDto>,
     pub total: MoneyDto,
     pub payments: Vec<PaymentDto>,
+    #[serde(default)]
+    pub table_number: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,6 +173,7 @@ pub async fn print_sales_receipt(
             let f = Settings::get_receipt_footer(&conn)?;
             if f.is_empty() { None } else { Some(f) }
         },
+        show_table_number: Settings::get_receipt_show_table_number(&conn)?,
     };
     drop(conn); // release lock before printing
 
@@ -188,6 +185,7 @@ pub async fn print_sales_receipt(
         },
         date: args.date,
         receipt_number: args.receipt_number,
+        table_number: args.table_number,
         items: args
             .items
             .into_iter()
@@ -220,10 +218,7 @@ pub async fn print_sales_receipt(
     let data = receipt::format_sales_receipt(&receipt, &config);
     let line_count = receipt.items.len() + 6;
 
-    printer
-        .print_raw(&data)
-        .await
-        .map_err(|e| AppError::Hardware(e.to_string()))?;
+    printer.print_raw(&data).await?;
 
     if let Some(ref app) = state.app {
         let _ = app.emit(
@@ -397,5 +392,93 @@ mod tests {
         assert_eq!(args.date, "01 Jan 2026");
         assert_eq!(args.items.len(), 1);
         assert_eq!(args.payments.len(), 1);
+    }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn open_cash_drawer_args_default_device() {
+        let json = r#"{}"#;
+        let args: OpenCashDrawerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.device_id, None);
+    }
+
+    #[test]
+    fn open_cash_drawer_args_with_device() {
+        let json = r#"{"device_id":"drawer-1"}"#;
+        let args: OpenCashDrawerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.device_id.as_deref(), Some("drawer-1"));
+    }
+
+    #[test]
+    fn open_cash_drawer_args_debug() {
+        let args = OpenCashDrawerArgs {
+            device_id: Some("d".into()),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("d"));
+    }
+
+    #[test]
+    fn open_cash_drawer_result_serialize() {
+        let result = OpenCashDrawerResult { opened: true };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["opened"], true);
+    }
+
+    #[test]
+    fn print_receipt_result_serialize() {
+        let result = PrintReceiptResult { printed_lines: 42 };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["printed_lines"], 42);
+    }
+
+    #[test]
+    fn scanner_info_serialize() {
+        let info = ScannerInfo {
+            id: "scanner-1".into(),
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["id"], "scanner-1");
+    }
+
+    #[test]
+    fn scanner_info_debug() {
+        let info = ScannerInfo { id: "s".into() };
+        let d = format!("{info:?}");
+        assert!(d.contains("s"));
+    }
+
+    #[test]
+    fn print_receipt_args_deserialize() {
+        let json = r#"{"body":"Hello\nWorld"}"#;
+        let args: PrintReceiptArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.body.lines().count(), 2);
+    }
+
+    #[test]
+    fn print_receipt_args_debug() {
+        let args = PrintReceiptArgs {
+            body: "test".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("test"));
+    }
+
+    #[test]
+    fn line_item_dto_deserialize() {
+        let json = r#"{"name":"Coffee","quantity":2,"unit_price":{"minor_units":350,"currency":"USD"},"total_price":{"minor_units":700,"currency":"USD"}}"#;
+        let item: LineItemDto = serde_json::from_str(json).unwrap();
+        assert_eq!(item.name, "Coffee");
+        assert_eq!(item.quantity, 2);
+        assert!(item.tax_amount.is_none());
+    }
+
+    #[test]
+    fn payment_dto_deserialize() {
+        let json = r#"{"method":"CASH","amount":{"minor_units":500,"currency":"USD"},"change":{"minor_units":150,"currency":"USD"}}"#;
+        let p: PaymentDto = serde_json::from_str(json).unwrap();
+        assert_eq!(p.method, "CASH");
+        assert!(p.change.is_some());
     }
 }

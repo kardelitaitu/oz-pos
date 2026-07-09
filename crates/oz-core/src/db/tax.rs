@@ -240,10 +240,7 @@ mod tests {
     use std::str::FromStr;
 
     fn fresh() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn store(conn: &Connection) -> Store<'_> {
@@ -414,7 +411,7 @@ mod tests {
             minor_units: 1000,
             currency,
         };
-        s.create_product("SKU-TAX", "Taxed Product", money, None, None, 0)
+        s.create_product("SKU-TAX", "Taxed Product", money, None, None, 0, None)
             .unwrap();
 
         let rate = s.create_tax_rate("VAT", 1000, true, false).unwrap();
@@ -434,7 +431,7 @@ mod tests {
             minor_units: 1000,
             currency,
         };
-        s.create_product("SKU-TAX2", "Item", money, None, None, 0)
+        s.create_product("SKU-TAX2", "Item", money, None, None, 0, None)
             .unwrap();
 
         let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();
@@ -453,7 +450,8 @@ mod tests {
     fn set_and_get_category_tax_rates() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_category("cat-tax", "Taxed Cat", "#fff").unwrap();
+        s.create_category("cat-tax", "Taxed Cat", "#fff", "")
+            .unwrap();
 
         let rate = s.create_tax_rate("CT", 800, false, false).unwrap();
         s.set_category_tax_rates("cat-tax", std::slice::from_ref(&rate.id))

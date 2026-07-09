@@ -53,6 +53,10 @@ const { invokeMock } = vi.hoisted(() => ({
   }),
 }));
 
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ session: { user_id: 'test-user' }, logout: vi.fn() }),
+}));
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
@@ -115,8 +119,8 @@ describe('ProductManagementScreen', () => {
   it('shows formatted prices', async () => {
     render(wrap(<ProductManagementScreen />));
     await waitForTable();
-    expect(screen.getByText('$4.50')).toBeInTheDocument();
-    expect(screen.getByText('$2.50')).toBeInTheDocument();
+    expect(screen.getByText('$ 4,50')).toBeInTheDocument();
+    expect(screen.getByText('$ 2,50')).toBeInTheDocument();
   });
 
   it('shows barcode or dash', async () => {
@@ -188,7 +192,7 @@ describe('ProductManagementScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /delete caffè latte/i }));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('delete_product', expect.objectContaining({
-        args: { sku: 'LATTE' },
+        args: { userId: 'test-user', sku: 'LATTE' },
       }));
     });
   });

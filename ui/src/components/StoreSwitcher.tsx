@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocalization } from '@fluent/react';
 import { listStores, setPrimaryStore, type StoreProfile } from '@/api/stores';
 import './StoreSwitcher.css';
 
 export default function StoreSwitcher() {
+  const { l10n } = useLocalization();
   const [stores, setStores] = useState<StoreProfile[]>([]);
   const [primary, setPrimary] = useState<StoreProfile | null>(null);
   const [open, setOpen] = useState(false);
@@ -53,7 +55,7 @@ export default function StoreSwitcher() {
 
   if (loading || stores.length <= 1) return null;
 
-  const currentName = primary?.name ?? 'Select Store';
+  const currentName = primary?.name ?? l10n.getString('store-switcher-select');
 
   return (
     <div className="store-switcher" ref={ref}>
@@ -63,7 +65,7 @@ export default function StoreSwitcher() {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Current store: ${currentName}. Click to switch.`}
+        aria-label={l10n.getString('store-switcher-current-aria', { name: currentName })}
       >
         <svg
           width="16"
@@ -97,7 +99,7 @@ export default function StoreSwitcher() {
       </button>
 
       {open && (
-        <ul className="store-switcher-dropdown" role="listbox" aria-label="Stores">
+        <ul className="store-switcher-dropdown" role="listbox" aria-label={l10n.getString('store-switcher-list-aria')}>
           {stores.map((store) => (
             <li key={store.id} role="none">
               <button
@@ -110,7 +112,7 @@ export default function StoreSwitcher() {
                 <span className="store-switcher-option-name">{store.name}</span>
                 <span className="store-switcher-option-meta">
                   {store.currency}
-                  {store.is_primary ? ' · Primary' : ''}
+                  {store.is_primary ? l10n.getString('store-switcher-primary') : ''}
                 </span>
               </button>
             </li>

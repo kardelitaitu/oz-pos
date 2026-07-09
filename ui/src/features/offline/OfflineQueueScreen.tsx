@@ -77,11 +77,11 @@ export default function OfflineQueueScreen() {
       setItems(data);
       setPendingCount(count);
     } catch {
-      setError('Failed to load queue');
+      setError(l10n.getString('offline-queue-error'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -110,11 +110,11 @@ export default function OfflineQueueScreen() {
       setSyncResult(result);
       await load();
     } catch {
-      setError('Sync failed');
+      setError(l10n.getString('offline-queue-sync-error'));
     } finally {
       setSyncing(false);
     }
-  }, [load]);
+  }, [load, l10n]);
 
   // ── Delete item ────────────────────────────────────────────────
 
@@ -124,9 +124,9 @@ export default function OfflineQueueScreen() {
       await deleteOfflineItem(id);
       await load();
     } catch {
-      setDeleteError('Failed to delete item');
+      setDeleteError(l10n.getString('offline-queue-delete-error'));
     }
-  }, [load]);
+  }, [load, l10n]);
 
   // ── Render ─────────────────────────────────────────────────────
 
@@ -150,7 +150,7 @@ export default function OfflineQueueScreen() {
           loading={syncing}
           disabled={pendingCount === 0 || syncing}
           onClick={handleSyncAll}
-          aria-label="Sync all pending offline items"
+          aria-label={l10n.getString('offline-queue-sync-all-label')}
         >
           <Localized id={syncing ? 'offline-queue-syncing' : 'offline-queue-sync-all'}>
             <span>{syncing ? 'Syncing…' : 'Sync All'}</span>
@@ -211,7 +211,7 @@ export default function OfflineQueueScreen() {
                 <Localized id="offline-queue-last-error"><th>Last Error</th></Localized>
                 <Localized id="offline-queue-created"><th>Created</th></Localized>
                 <Localized id="offline-queue-synced-at"><th>Synced At</th></Localized>
-                <th aria-label="Actions"> </th>
+                <th aria-label={l10n.getString('offline-queue-table-actions')}> </th>
               </tr>
             </thead>
             <tbody>

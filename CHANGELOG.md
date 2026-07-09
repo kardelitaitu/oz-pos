@@ -7,7 +7,62 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- *(none yet)*
+- **StatusBar component**: Full-width VS Code-style status bar at the bottom of the app — connection status dot, version label, gateway status pill, license type, Switch Workspace button, Theme Toggle. Tooltips on all action buttons.
+- **KDS integration**: SLA alerts with green/yellow/red aging thresholds, course firing engine (appetizer/main/dessert/drinks), mDNS LAN peer discovery, TCP/WebSocket event forwarding, offline buffer with reconnection.
+- **Menu Engineering analytics**: Scatter plot quadrant matrix (Star/Plowhorse/Puzzle/Dog), volume & contribution margin aggregation, actionable recommendations UI.
+- **Feature Toggle screen**: Search with keyword filtering, bulk enable/disable per group, live sidebar/workspace preview.
+- **FeatureGuard trait**: Runtime safety validation when disabling features (active KDS tickets, open shifts) — prevents unsafe toggles with actionable error messages toasts.
+- **Recipe/BOM stock deduction**: `product_recipes` SQLite schema, `RecipeRepository`, upgraded `InventoryStockHandler` to deduct raw ingredients on sale completion.
+- **Modifier groups & coursing**: `modifier_groups`, `modifiers`, `product_modifier_groups` schema, `ItemModifierModal` with selection limits, course firing state engine.
+- **Cloud server binary**: Headless `oz-cloud-server` crate with JWT auth, multi-tenant store isolation, PostgreSQL database pool, and `/api/sync/push` + `/api/sync/pull` endpoints.
+- **Docker infrastructure**: `Dockerfile.server` multi-stage build (final image <50MB), `docker-compose.yml` with `pos-cloud-server` + optional PostgreSQL service.
+- **.ozpkg plugin scaffold**: Archive reader, isolated database namespace (`plugin_<id>_*`), Lua Event Bus bridge for custom hardware drivers and accounting hooks.
+- **Manifest JSON schema**: `docs/specs/module-manifest.schema.json` with mandatory properties (id, name, version, author, dependencies, permissions, database_namespace), validated during `kernel.register()`.
+- **Workspace picker redesign**: Role/permission-aware cards, greeting by time of day (Good morning/afternoon/evening/night), Ctrl+Shift+Escape global shortcut, idle auto-return.
+- **Retail POS terminal**: Store POS workspace with dedicated settings and terminal profile locking (`kds_kiosk`, `counter_pos`, `customer_display`).
+- **Indonesian i18n**: Full translations across settings, inventory, products, stock transfers, tax, terminals, tables, and more.
+- **Keyboard shortcuts**: Ctrl+Shift+Escape → workspace picker, F11 → fullscreen toggle.
+- **Animations & polish**: Page transition animations, undo-pill pattern with CSS animation-driven dismissal, indeterminate spinner, exit-animation skill.
+- **Automated matrix testing**: Rust preset integration tests (`feature_matrix_tests.rs`), frontend registry parity CI gate (`verify-feature-registry.py`).
+
+### Changed
+- **AppLayout restructured**: Body + StatusBar flex-column layout; sidebar footer (version, copyright, workspace btn, theme toggle) moved to StatusBar.
+- **Sidebar refactored**: Removed old footer, gateway badge, collapsed footer styles; added collapsible accordion with localStorage persistence.
+- **ToastProvider unified**: All toast messages standardised across success/error/info/warning variants.
+- **Palette tokens migrated**: Accent palette generation extracted to `deriveAccentPalette` + `applyAccentPalette`.
+- **Hooks extracted**: `useWorkspaceNav`, `useFullscreen`, `useAnimatedUndoStack`, `useTerminalProfile`.
+- **Performance**: Throttled mousemove handler with `requestAnimationFrame` to prevent layout thrashing.
+
+### Fixed
+- **Docker build**: Added workspace stubs for `apps/desktop-client` and `apps/tablet-client` (excluded via `.dockerignore` but required by workspace) — resolves "failed to load manifest for workspace member" errors.
+- **skill-drift-guard bats tests**: Corrected `PROJECT_ROOT` depth from `../../..` to `../../../..` (test files are 4 levels deep from project root).
+- **Test Fluent warnings**: Added missing `staff-login-*` keys, `categories-*` keys (in `products.ftl`), and provided `LocaleContext.Provider` to prevent empty-string ID errors from `LanguageSelector`.
+- **ThemeToggle tooltip**: Added native HTML `title` attribute with localized "Toggle theme" string.
+- **StatusBar workspace button tooltip**: Added `title` attribute with localized "Switch Workspace" label.
+- **Dead CSS cleanup**: Removed orphaned `.app-sidebar-footer`, `.app-sidebar-gateway` selectors, unused `useWorkspaceNav` import.
+- **CONTRIBUTING.md date**: Fixed invalid `30-02-26` → `09-07-26` (caught by skill-drift-guard).
+- **Various Clippy warnings**: Fixed across `oz-lua`, `oz-plugin`, and other crates.
+- **Feature key parity**: All `feature:` strings in `registerPage` and `registerNavItem` now verified against `FEATURES` set.
+- **CI pipeline repairs**: Resolved all Clippy `-D warnings` across `oz-pos-app`, `oz-pos-tablet`, and `oz-cloud-server` (unused variables, items-after-test-module, bool-assert-comparison, hold-Mutex-across-await).
+- **Test race conditions**: Fixed `tokio::time::interval` first-tick-immediate behavior in LAN server heartbeat tests; serialized `std::env::set_var` tests in `oz-cloud-server` with `tokio::sync::Mutex`; switched `std::sync::Mutex` → `tokio::sync::Mutex` to stop clippy `await-holding-lock`.
+- **UI lint errors**: Fixed all 17 ESLint errors (no-explicit-any, label-has-associated-control, no-noninteractive-element-interactions, click-events-have-key-events, no-autofocus) across `App.tsx`, 3 test files, `StaffLoginScreen`, `ProductManagementScreen`, `PaymentModal`, `SettingsPage`, `WorkspaceHome`.
+- **UI typecheck errors**: Removed stale `UseTerminalProfileResult` import; fixed `usePosState` scope reference in `RetailPosScreen.test.tsx`.
+
+## [0.0.3] — 2026-06-30
+
+
+### Added
+- Pre-commit hook (auto `cargo fmt --all`)
+- CI fixes for cross-platform compilation (macOS keychain, Linux libudev+zbus, Windows Tauri)
+
+- **UI test & lint quality**: Resolved Vitest `exit code 1` on Node 24 CI by fixing invalid DOM nesting (`<span>` inside `<option>` across `PromotionManagementScreen`) and filtering React/Node 24 console warnings (`validateDOMNesting`, `punycode` deprecation, `act()`/`flushSync` warnings, and `@fluent/react` missing-key noise in `test-setup.ts` and `vite.config.ts`); fixed subshell pathing for `tee ui/vitest-output.log` in `.github/workflows/ci.yml` and `release.yml`; resolved all 15 React Hook `exhaustive-deps` warnings and all 5 fast-refresh/import type annotations in `ui/` (`vite.config.d.ts`, `LocaleContext`, `useToast`, `ThemeProvider`, `Toast`), achieving 0 ESLint errors and 0 warnings.
+
+### Changed
+- **Node.js 24 migration**: Migrated UI build and CI test environments (`ci.yml`, `release.yml`, and `ui/package.json` engines) to **Node.js 24**, aligning with local environments (`check.ps1`) and targeting Active LTS for the 2027 Q2 release window.
+
+
+
+
 
 ## [0.0.2] — 2026-06-30
 
@@ -85,6 +140,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.3
 [0.0.2]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.2
 [0.0.1]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.1

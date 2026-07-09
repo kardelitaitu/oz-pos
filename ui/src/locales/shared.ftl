@@ -5,6 +5,11 @@
 # Design system showcase
 ds-title = Design System
 theme-toggle-label = Toggle theme
+theme-toggle-aria =
+    .aria-label = Switch to { $mode ->
+        [dark] dark
+       *[light] light
+    } mode
 
 # Badge
 badge-default = Badge
@@ -28,6 +33,9 @@ empty-state-title = Nothing here yet
 empty-state-desc = Get started by adding your first item
 empty-state-cta = Add Product
 
+# Error boundary
+error-boundary-title = Something went wrong
+
 # Error state
 error-state-title = Something went wrong
 error-state-desc = An unexpected error occurred. Please try again.
@@ -35,6 +43,20 @@ error-state-retry = Retry
 
 # Navigation
 nav-inventory = Inventory
+
+# Common / Global
+cancel = Cancel
+save = Save
+delete = Delete
+edit = Edit
+close = Close
+loading = Loading…
+print = Print
+back = Back
+retry = Retry
+search = Search
+no-results = No results found
+error-occurred = An error occurred
 
 # Audit Log
 audit-log-title = Audit Log
@@ -59,6 +81,143 @@ audit-log-count = { $count } entr{ $count ->
   *[other] ies
 }
 
+# Update Banner
+update-banner-title = Update available
+update-banner-new-version = New version
+update-banner-install = Install
+update-banner-installing = Installing…
+update-banner-install-aria = Download and install update
+update-banner-installing-aria = Installing update…
+update-banner-dismiss-aria = Dismiss update notification
+
+# Toast
+toast-dismiss-aria = Dismiss notification
+toast-notifications-aria = Notifications
+
+# Modal
+modal-close-aria = Close dialog
+
+# Permission Denied
+permission-denied-title = Access Denied
+permission-denied-desc = { $action } requires a { $requiredRole } role.
+permission-denied-current = You are logged in as { $displayName } ({ $roleName }).
+permission-denied-go-back = Go back
+
+# Store Switcher
+store-switcher-select = Select Store
+store-switcher-current-aria = Current store: { $name }. Click to switch.
+store-switcher-list-aria = Stores
+store-switcher-primary = · Primary
+
+# Gateway Status
+gateway-status-online-aria = { $name } online
+gateway-status-offline-aria = { $name } offline
+
+# Role Badge
+role-badge-logged-in-aria = Logged in as { $displayName }, { $roleName }
+role-badge-logout-aria = Log out { $displayName }
+role-badge-logout-title = Log out
+
+# Language Selector
+language-selector-label = Language
+language-selector-select-aria = Select language
+
+# Locale labels
+locale-en = English
+locale-id = Bahasa Indonesia
+
+# Navigation section labels
+nav-section-operations = Operations
+nav-section-sales = Sales
+nav-section-products = Products
+nav-section-finance = Finance
+nav-section-customers = Customers
+nav-section-reports = Reports
+nav-section-management = Management
+nav-section-inventory = Inventory
+nav-section-settings = Settings
+nav-section-dev = Dev
+
+nav-pos-terminal = POS Terminal
+nav-kds = KDS
+nav-products = Products
+nav-stock-adjust = Stock Adjust
+nav-sales-history = Sales History
+nav-dashboard = Dashboard
+nav-eod-report = EOD Report
+nav-orders = Orders
+nav-tax-rates = Tax Rates
+nav-exchange-rates = Exchange Rates
+nav-categories = Categories
+nav-customers = Customers
+nav-loyalty = Loyalty
+nav-staff = Staff
+nav-terminals = Terminals
+nav-stores = Stores
+nav-features = Features
+nav-data = Data
+nav-audit-log = Audit Log
+nav-offline-queue = Offline Queue
+nav-shifts = Shifts
+nav-bundles = Bundles
+nav-settings = Settings
+nav-general = General
+nav-dashboard-report = Dashboard
+nav-sales-report = Sales Report
+nav-inventory-report = Inventory Report
+nav-design-system = Design System
+nav-kiosk = Kiosk
+nav-tables = Tables
+nav-promotions = Promotions
+nav-suppliers = Suppliers
+nav-purchase-orders = Purchase Orders
+nav-stock-transfers = Stock Transfers
+nav-pos = POS
+nav-stock = Stock
+nav-history = History
+nav-reports = Reports
+nav-section-app = App
+nav-sidebar-collapse = Collapse sidebar
+nav-sidebar-expand = Expand sidebar
+nav-main-aria = Main navigation
+nav-tablist-aria = Navigation tabs
+nav-switch-workspace = Switch Workspace
+
+# Workspace home
+workspace-home-fullscreen-aria = Toggle fullscreen
+workspace-home-loading = Loading workspaces…
+workspace-home-subtitle = Select a workspace to start
+workspace-home-empty = No workspaces available
+workspace-home-empty-desc = You don't have access to any workspaces yet. Contact an administrator.
+workspace-card-open-aria = Open { $name }
+workspace-card-no-access-aria = { $name } — not available for your role
+workspace-card-no-access-title = Your role ({ $role }) cannot access this workspace
+workspace-card-no-access-badge = Not available
+workspace-home-logout = Logout
+workspace-home-logout-confirm-title = Logout?
+workspace-home-logout-confirm-desc = You will be returned to the login screen. Any unsaved work will be lost.
+workspace-home-logout-confirm-cancel = Cancel
+workspace-home-logout-confirm-confirm = Logout
+workspace-home-greeting-morning = Good morning, { $name }
+workspace-home-greeting-afternoon = Good afternoon, { $name }
+workspace-home-greeting-evening = Good evening, { $name }
+workspace-home-greeting-night = Good night, { $name }
+workspace-home-shortcut-hint = Press { $key } to open
+workspace-home-user-aria = Logged in as { $name }
+workspace-home-error-title = Connection Error
+workspace-home-error-desc = Could not load your workspaces. Check your connection and try again.
+workspace-home-retry = Try Again
+workspace-home-retry-btn = Retry
+
+# Shell
+shell-loading = Loading…
+
+# Status Bar
+status-bar-connected = Backend connected
+status-bar-disconnected = Backend disconnected
+status-bar-checking = Checking backend connection
+status-bar-authenticating = Authenticating...
+
 # Audit Action Labels
 audit-action-sale-void = Void Sale
 audit-action-sale-complete = Complete Sale
@@ -76,3 +235,7 @@ audit-action-system-backup = Backup Created
 audit-action-system-restore = Restore
 audit-action-system-export = Data Export
 audit-action-system-import = Data Import
+audit-log-table-label = Audit log entries
+audit-log-search-placeholder = Search actions, targets, or users…
+audit-log-search-label = Search audit log
+audit-log-filter-label = Filter by outcome

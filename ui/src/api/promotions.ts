@@ -49,17 +49,17 @@ export const listPromotions = (): Promise<Promotion[]> =>
 export const getPromotion = (id: string): Promise<Promotion | null> =>
   invoke<Promotion | null>('get_promotion', { id });
 
-export const createPromotion = (args: CreatePromotionArgs): Promise<Promotion> =>
-  invoke<Promotion>('create_promotion', { args });
+export const createPromotion = (userId: string, args: CreatePromotionArgs): Promise<Promotion> =>
+  invoke<Promotion>('create_promotion', { userId, args });
 
-export const updatePromotion = (promotion: Promotion): Promise<Promotion> =>
-  invoke<Promotion>('update_promotion', { promotion });
+export const updatePromotion = (userId: string, promotion: Promotion): Promise<Promotion> =>
+  invoke<Promotion>('update_promotion', { userId, promotion });
 
-export const deletePromotion = (id: string): Promise<void> =>
-  invoke<void>('delete_promotion', { id });
+export const deletePromotion = (userId: string, id: string): Promise<void> =>
+  invoke<void>('delete_promotion', { userId, id });
 
-export const applyPromotion = (saleId: string, promotionId: string): Promise<PromotionApplication> =>
-  invoke<PromotionApplication>('apply_promotion', { saleId, promotionId });
+export const applyPromotion = (userId: string, saleId: string, promotionId: string): Promise<PromotionApplication> =>
+  invoke<PromotionApplication>('apply_promotion', { userId, saleId, promotionId });
 
 export const getSalePromotions = (saleId: string): Promise<PromotionApplication[]> =>
   invoke<PromotionApplication[]>('get_sale_promotions', { saleId });

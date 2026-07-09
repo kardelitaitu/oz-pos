@@ -10,10 +10,7 @@ use rusqlite::Connection;
 // ── Helpers ───────────────────────────────────────────────────────────
 
 fn setup() -> Connection {
-    let mut conn = Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn).unwrap();
-    conn
+    migrations::fresh_db()
 }
 
 fn store(conn: &Connection) -> Store<'_> {
@@ -384,8 +381,6 @@ fn updated_at_increases_on_update() {
     let c = s
         .create_customer("Update Tracker", None, None, None)
         .unwrap();
-
-    std::thread::sleep(std::time::Duration::from_millis(10));
 
     let updated = s
         .update_customer(&c.id, "Update Tracker", None, None, None)

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listTaxRates,
   createTaxRate,
@@ -31,6 +31,7 @@ const EMPTY_TAX_FORM: TaxFormData = {
 };
 
 export default function TaxConfigurationScreen() {
+  const { l10n } = useLocalization();
   // ── Tax rates state ─────────────────────────────────────────────
   const [rates, setRates] = useState<TaxRateDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -206,14 +207,16 @@ export default function TaxConfigurationScreen() {
             </Card>
           ) : (
             <div className="tax-config-table-wrap">
-              <table className="tax-config-table" aria-label="Tax rates">
+              <table className="tax-config-table" aria-label={l10n.getString('tax-config-table-aria')}>
                 <thead>
                   <tr>
                     <Localized id="tax-config-col-name"><th>Name</th></Localized>
                     <Localized id="tax-config-col-rate"><th>Rate (%)</th></Localized>
                     <Localized id="tax-config-col-type"><th>Type</th></Localized>
-                    <th>Default</th>
-                    <th aria-label="Actions"> </th>
+                    <Localized id="tax-config-col-default"><th>Default</th></Localized>
+                    <Localized id="tax-config-col-actions" attrs={{ "aria-label": true }}>
+                      <th aria-label="Actions"> </th>
+                    </Localized>
                   </tr>
                 </thead>
                 <tbody>
@@ -223,39 +226,45 @@ export default function TaxConfigurationScreen() {
                         {r.name}
                         {r.is_default && (
                           <Badge variant="info" size="sm" style={{ marginLeft: 'var(--space-2)' }}>
-                            Default
+                            <Localized id="tax-config-default-badge">
+                              <span>Default</span>
+                            </Localized>
                           </Badge>
                         )}
                       </td>
                       <td>{r.display_rate}</td>
                       <td>
                         <span className={`tax-config-type-badge ${r.is_inclusive ? 'tax-config-type--inclusive' : 'tax-config-type--exclusive'}`}>
-                          {r.is_inclusive ? 'Inclusive' : 'Exclusive'}
+                          <Localized id={r.is_inclusive ? 'tax-config-type-inclusive' : 'tax-config-type-exclusive'}>
+                            <span>{r.is_inclusive ? 'Inclusive' : 'Exclusive'}</span>
+                          </Localized>
                         </span>
                       </td>
-                      <td>{r.is_default ? 'Yes' : '\u2014'}</td>
+                      <td>{r.is_default ? l10n.getString('tax-config-yes') : '\u2014'}</td>
                       <td className="tax-config-cell-actions">
+                        <Localized id="tax-config-edit-aria" attrs={{ "aria-label": true }} vars={{ name: r.name }}>
                         <button
                           type="button"
                           className="tax-config-action-btn"
                           onClick={() => openEdit(r)}
-                          aria-label={`Edit ${r.name}`}
                         >
                           <Localized id="tax-config-edit">
                             <span>Edit</span>
                           </Localized>
                         </button>
+                        </Localized>
+                        <Localized id="tax-config-delete-aria" attrs={{ "aria-label": true }} vars={{ name: r.name }}>
                         <button
                           type="button"
                           className="tax-config-action-btn tax-config-action-btn--danger"
                           onClick={() => confirmDelete(r.id)}
                           disabled={deleting === r.id}
-                          aria-label={`Delete ${r.name}`}
                         >
                           <Localized id="tax-config-btn-delete">
                             <span>Delete</span>
                           </Localized>
                         </button>
+                        </Localized>
                       </td>
                     </tr>
                   ))}
@@ -266,22 +275,30 @@ export default function TaxConfigurationScreen() {
 
           {/* ── Category Tax Rates Section ──────────────────────────── */}
           <div className="tax-config-section">
-            <h2 className="tax-config-section-title">Category Tax Rates</h2>
-            <p className="tax-config-section-desc">
-              Assign default tax rates to product categories. Products inherit their
-              category&rsquo;s tax rates unless overridden at the product level.
-            </p>
+            <Localized id="tax-config-cat-title">
+              <h2 className="tax-config-section-title">Category Tax Rates</h2>
+            </Localized>
+            <Localized id="tax-config-cat-desc">
+              <p className="tax-config-section-desc">
+                Assign default tax rates to product categories. Products inherit their
+                category&rsquo;s tax rates unless overridden at the product level.
+              </p>
+            </Localized>
 
             {categories.length === 0 ? (
-              <p className="tax-config-loading">No categories available.</p>
+              <Localized id="tax-config-no-categories">
+                <p className="tax-config-loading">No categories available.</p>
+              </Localized>
             ) : (
               <div className="tax-config-table-wrap">
-                <table className="tax-config-table" aria-label="Category tax rates">
+              <table className="tax-config-table" aria-label={l10n.getString('tax-config-cat-table-aria')}>
                   <thead>
                     <tr>
-                      <th>Category</th>
-                      <th>Assigned Tax Rates</th>
-                      <th aria-label="Actions"> </th>
+                      <Localized id="tax-config-col-category"><th>Category</th></Localized>
+                      <Localized id="tax-config-col-assigned"><th>Assigned Tax Rates</th></Localized>
+                      <Localized id="tax-config-col-actions" attrs={{ "aria-label": true }}>
+                        <th aria-label="Actions"> </th>
+                      </Localized>
                     </tr>
                   </thead>
                   <tbody>
@@ -311,26 +328,28 @@ export default function TaxConfigurationScreen() {
                                 ))}
                               </span>
                             ) : (
-                              <span className="tax-config-muted">No rates assigned</span>
+                              <Localized id="tax-config-no-rates-assigned">
+                                <span className="tax-config-muted">No rates assigned</span>
+                              </Localized>
                             )}
                           </td>
                           <td className="tax-config-cell-actions">
+                            <Localized id="tax-config-cat-edit-aria" attrs={{ "aria-label": true }} vars={{ name: cat.name }}>
                             <button
                               type="button"
                               className="tax-config-action-btn"
                               onClick={() => openCatEdit(cat)}
-                              aria-label={`Edit tax rates for ${cat.name}`}
                             >
                               <Localized id="tax-config-edit">
                                 <span>Edit</span>
                               </Localized>
                             </button>
+                            </Localized>
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
+                    })}                </tbody>
+              </table>
               </div>
             )}
           </div>
@@ -339,24 +358,26 @@ export default function TaxConfigurationScreen() {
 
       {/* ── Tax Rate Form Modal ──────────────────────────────────── */}
       {showModal && (
-        <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit tax rate' : 'Add tax rate'}>
+        <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('tax-config-modal-aria', { editing: editingId !== null ? 'true' : 'false' })}>
           <div className="tax-config-modal">
             <div className="tax-config-modal-header">
               <Localized id="tax-config-modal-title" vars={{ editing: editingId !== null ? 'true' : 'false' }}>
                 <h2>{editingId ? 'Edit Tax Rate' : 'Add Tax Rate'}</h2>
               </Localized>
-              <button
-                type="button"
-                className="tax-config-modal-close"
-                onClick={() => setShowModal(false)}
-                aria-label="Close"
-              >
-                &times;
-              </button>
+                <Localized id="tax-config-modal-close" attrs={{ "aria-label": true }}>
+                  <button
+                    type="button"
+                    className="tax-config-modal-close"
+                    onClick={() => setShowModal(false)}
+                    aria-label="Close"
+                  >
+                    &times;
+                  </button>
+                </Localized>
             </div>
 
             <div className="tax-config-modal-body">
-              <label className="tax-config-field" htmlFor="tax-field-name" aria-label="Tax Name">
+              <label className="tax-config-field" htmlFor="tax-field-name" aria-label={l10n.getString('tax-config-field-name-aria')}>
                 <Localized id="tax-config-field-name">
                   <span className="tax-config-label">Tax Name</span>
                 </Localized>
@@ -366,15 +387,13 @@ export default function TaxConfigurationScreen() {
                   id="tax-field-name"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Sales Tax"
+                  placeholder={l10n.getString('tax-config-field-name-placeholder')}
                   ref={taxNameInputRef}
                 />
               </label>
 
               <label className="tax-config-field" htmlFor="tax-field-rate">
-                <Localized id="tax-config-field-rate">
-                  <span className="tax-config-label">Rate (%)</span>
-                </Localized>
+                {l10n.getString('tax-config-field-rate')}
                 <input
                   className="tax-config-input"
                   type="number"
@@ -382,15 +401,19 @@ export default function TaxConfigurationScreen() {
                   min="0"
                   value={form.rateBps}
                   onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
-                  placeholder="825"
+                  placeholder={l10n.getString('tax-config-field-rate-placeholder')}
                 />
-                <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
+                <Localized id="tax-config-rate-hint">
+                  <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
+                </Localized>
               </label>
 
               {/* Inclusive / Exclusive toggle */}
               <div className="tax-config-field">
-                <span className="tax-config-label">Tax Type</span>
-                <div className="tax-config-toggle-group" role="radiogroup" aria-label="Tax type">
+                <Localized id="tax-config-tax-type">
+                  <span className="tax-config-label">Tax Type</span>
+                </Localized>
+                <div className="tax-config-toggle-group" role="radiogroup" aria-label={l10n.getString('tax-config-tax-type-aria')}>
                   <button
                     type="button"
                     role="radio"
@@ -398,8 +421,12 @@ export default function TaxConfigurationScreen() {
                     className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
                     onClick={() => setForm({ ...form, isInclusive: false })}
                   >
-                    Exclusive
-                    <span className="tax-config-toggle-desc">Added at checkout</span>
+                    <Localized id="tax-config-type-exclusive-label">
+                      <span>Exclusive</span>
+                    </Localized>
+                    <Localized id="tax-config-type-exclusive-desc">
+                      <span className="tax-config-toggle-desc">Added at checkout</span>
+                    </Localized>
                   </button>
                   <button
                     type="button"
@@ -408,8 +435,12 @@ export default function TaxConfigurationScreen() {
                     className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
                     onClick={() => setForm({ ...form, isInclusive: true })}
                   >
-                    Inclusive
-                    <span className="tax-config-toggle-desc">Included in price</span>
+                    <Localized id="tax-config-type-inclusive-label">
+                      <span>Inclusive</span>
+                    </Localized>
+                    <Localized id="tax-config-type-inclusive-desc">
+                      <span className="tax-config-toggle-desc">Included in price</span>
+                    </Localized>
                   </button>
                 </div>
               </div>
@@ -420,7 +451,7 @@ export default function TaxConfigurationScreen() {
                   checked={form.isDefault}
                   onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
                 />
-                Set as default tax rate
+                {l10n.getString('tax-config-set-default')}
               </label>
             </div>
 
@@ -445,29 +476,37 @@ export default function TaxConfigurationScreen() {
 
       {/* ── Category Tax Rates Modal ─────────────────────────────── */}
       {showCatModal && (
-        <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={`Tax rates for ${editingCatName}`}>
+        <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('tax-config-cat-modal-aria', { name: editingCatName })}>
           <div className="tax-config-modal">
             <div className="tax-config-modal-header">
-              <h2>Tax Rates &mdash; {editingCatName}</h2>
-              <button
-                type="button"
-                className="tax-config-modal-close"
-                onClick={() => setShowCatModal(false)}
-                aria-label="Close"
-              >
-                &times;
-              </button>
+              <Localized id="tax-config-cat-modal-title" vars={{ name: editingCatName }}>
+                <h2>Tax Rates &mdash; {editingCatName}</h2>
+              </Localized>
+              <Localized id="tax-config-modal-close" attrs={{ "aria-label": true }}>
+                <button
+                  type="button"
+                  className="tax-config-modal-close"
+                  onClick={() => setShowCatModal(false)}
+                  aria-label="Close"
+                >
+                  &times;
+                </button>
+              </Localized>
             </div>
 
             <div className="tax-config-modal-body">
-              <p className="tax-config-section-desc">
-                Select the tax rates that apply to all products in this category.
-              </p>
+              <Localized id="tax-config-cat-modal-desc">
+                <p className="tax-config-section-desc">
+                  Select the tax rates that apply to all products in this category.
+                </p>
+              </Localized>
 
               {rates.length === 0 ? (
-                <p className="tax-config-loading">
-                  No tax rates available. Create one first.
-                </p>
+                <Localized id="tax-config-no-rates">
+                  <p className="tax-config-loading">
+                    No tax rates available. Create one first.
+                  </p>
+                </Localized>
               ) : (
                 <div className="tax-config-cat-rate-list">
                   {rates.map((r) => {
@@ -490,7 +529,7 @@ export default function TaxConfigurationScreen() {
                           <span className="tax-config-cat-rate-meta">
                             {r.display_rate}
                             {' \u00b7 '}
-                            {r.is_inclusive ? 'Inclusive' : 'Exclusive'}
+                            {l10n.getString(r.is_inclusive ? 'tax-config-type-inclusive' : 'tax-config-type-exclusive')}
                           </span>
                         </div>
                       </label>

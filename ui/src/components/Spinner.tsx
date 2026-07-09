@@ -1,4 +1,5 @@
 import { type HTMLAttributes } from 'react';
+import { useLocalization } from '@fluent/react';
 
 export type SpinnerSize = 'sm' | 'md' | 'lg';
 
@@ -15,6 +16,7 @@ export function Spinner({
   className,
   ...rest
 }: SpinnerProps) {
+  const { l10n } = useLocalization();
   const classNames = [
     'spinner',
     `spinner--${size}`,
@@ -27,7 +29,7 @@ export function Spinner({
     <span
       role="status"
       className={classNames}
-      aria-label={label ?? 'Loading'}
+      aria-label={label ?? l10n.getString('spinner-label')}
       {...rest}
     >
       {label && <span className="spinner__label">{label}</span>}

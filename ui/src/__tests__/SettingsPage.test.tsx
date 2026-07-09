@@ -1,10 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { withToastProviders } from '@/__tests__/test-utils/providers';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { BrandProvider } from '@/contexts/BrandContext';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { getAvailableLocales, getLocaleLabel } from '@/i18n';
 
 const SAMPLE_CURRENCIES = [
   { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
@@ -25,6 +29,13 @@ const { invokeMock } = vi.hoisted(() => {
     if (cmd === 'set_default_currency') {
       return Promise.resolve(undefined);
     }
+    if (cmd === 'get_brand_settings') {
+      return Promise.resolve({
+        primary_colour: '#4f46e5',
+        logo_path: null,
+        store_name: '',
+      });
+    }
     return Promise.resolve({
       showCurrency: false,
       decimalSeparator: 'dot',
@@ -44,14 +55,33 @@ beforeEach(() => {
   invokeMock.mockClear();
 });
 
-const wrap = (children: React.ReactNode) => withFluent(children, settingsFtl, sharedFtl);
+function TestWrapper({ children }: { children: React.ReactNode }) {
+  return withToastProviders(
+    <LocaleContext.Provider
+      value={{
+        locale: 'en',
+        setLocale: () => {},
+        availableLocales: getAvailableLocales(),
+        getLocaleLabel,
+      }}
+    >
+      <BrandProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </BrandProvider>
+    </LocaleContext.Provider>,
+    settingsFtl,
+    sharedFtl,
+  );
+}
+
+const wrap = (children: React.ReactNode) => <TestWrapper>{children}</TestWrapper>;
 
 describe('SettingsPage', () => {
   it('renders the settings title and receipt section', async () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /general/i })).toBeInTheDocument();
     });
     expect(screen.getByRole('heading', { name: /receipt/i })).toBeInTheDocument();
   });

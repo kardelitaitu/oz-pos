@@ -143,4 +143,24 @@ mod tests {
         let b = ProductVariant::new("P1", "B", "P1-B");
         assert_ne!(a.id, b.id);
     }
+
+    #[test]
+    fn debug_output() {
+        let v = ProductVariant::new("TEA", "Green", "TEA-GREEN")
+            .with_price(test_price())
+            .with_sort_order(1);
+        let debug = format!("{v:?}");
+        assert!(debug.contains("TEA-GREEN"));
+        assert!(debug.contains("Green"));
+    }
+
+    #[test]
+    fn serde_deserialize_minimal() {
+        let json = r#"{"id":"v1","parent_sku":"TEA","name":"Oolong","sku":"T-O","price":null,"barcode":null,"sort_order":0,"is_active":true,"created_at":"","updated_at":""}"#;
+        let v: ProductVariant = serde_json::from_str(json).unwrap();
+        assert_eq!(v.sku, "T-O");
+        assert_eq!(v.name, "Oolong");
+        assert!(v.price.is_none());
+        assert!(v.is_active);
+    }
 }

@@ -85,3 +85,114 @@ pub async fn staff_login(
         },
     })
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── StaffLoginArgs ──────────────────────────────────────────────────
+
+    #[test]
+    fn staff_login_args_deserialize() {
+        let json = r##"{"username":"jdoe","pin":"1234"}"##;
+        let args: StaffLoginArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.username, "jdoe");
+        assert_eq!(args.pin, "1234");
+    }
+
+    #[test]
+    fn staff_login_args_debug() {
+        let args = StaffLoginArgs {
+            username: "u".into(),
+            pin: "0000".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("u"));
+    }
+
+    // ── StaffLoginArgs edge cases ────────────────────────────────────────
+
+    #[test]
+    fn staff_login_args_whitespace_username() {
+        let json = r##"{"username":"   ","pin":"1234"}"##;
+        let args: StaffLoginArgs = serde_json::from_str(json).unwrap();
+        // After trimming in staff_login, this becomes empty
+        assert_eq!(args.username, "   ");
+        assert_eq!(args.pin, "1234");
+    }
+
+    #[test]
+    fn staff_login_args_empty_pin() {
+        let json = r##"{"username":"jdoe","pin":""}"##;
+        let args: StaffLoginArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.username, "jdoe");
+        assert_eq!(args.pin, "");
+    }
+
+    #[test]
+    fn staff_login_args_long_pin() {
+        let json = r##"{"username":"jdoe","pin":"12345678901234567890"}"##;
+        let args: StaffLoginArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.pin.len(), 20);
+    }
+
+    // ── StaffLoginResult ────────────────────────────────────────────────
+
+    #[test]
+    fn staff_login_result_serialize() {
+        let session = LoginSession {
+            user_id: "u1".into(),
+            display_name: "John".into(),
+            role_name: "Manager".into(),
+            role_id: "r1".into(),
+        };
+        let result = StaffLoginResult { session };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["session"]["user_id"], "u1");
+        assert_eq!(json["session"]["role_name"], "Manager");
+    }
+
+    #[test]
+    fn staff_login_result_debug() {
+        let session = LoginSession {
+            user_id: "u2".into(),
+            display_name: "Alice".into(),
+            role_name: "Cashier".into(),
+            role_id: "r2".into(),
+        };
+        let result = StaffLoginResult { session };
+        let d = format!("{result:?}");
+        assert!(d.contains("Alice"));
+    }
+
+    // ── Error mapping edge cases ────────────────────────────────────────
+
+    #[test]
+    fn staff_login_result_empty_display_name() {
+        let session = LoginSession {
+            user_id: "u3".into(),
+            display_name: "".into(),
+            role_name: "Cashier".into(),
+            role_id: "r3".into(),
+        };
+        let result = StaffLoginResult { session };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["session"]["display_name"], "");
+    }
+
+    #[test]
+    fn staff_login_result_null_role_id() {
+        let session = LoginSession {
+            user_id: "u4".into(),
+            display_name: "Bob".into(),
+            role_name: "".into(),
+            role_id: "".into(),
+        };
+        let result = StaffLoginResult { session };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["session"]["role_name"], "");
+        assert_eq!(json["session"]["role_id"], "");
+    }
+}

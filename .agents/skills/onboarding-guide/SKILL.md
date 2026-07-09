@@ -11,6 +11,19 @@ OZ-POS is a Rust + Tauri v2 POS framework. The codebase is organized into clear 
 >
 > The OZ-POS philosophy: keep the **merchant's** experience effortless by hiding complexity behind a lean Rust engine. Skills are how we keep the engine clean.
 
+## First-time setup
+
+Before you read the skill router below, enable the project's pre-commit hook so the 4 i18n + format gates fire on every commit. Without this setup, the hooks are silently bypassed at commit time. CI's `scripts/lint-i18n.sh` runs the bundle-parity check too, but only as an informational stderr surface — it never fails-closed in CI. **Pre-commit is currently the only fail-closed path for bundle-parity regressions.**
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit
+```
+
+Once enabled, verify with `git config --get core.hooksPath` (output should be the path you set; empty result means the commands above didn't take). `.githooks/pre-commit` then runs four gates before every commit (~1s): cargo fmt + i18n lint (`scripts/lint-i18n.sh`) + bundle parity: staged files only (`scripts/verify-bundle-parity.py --staged-only …`) + FTL dedupe dry-run (`scripts/dedupe-ftl.py --dry-run`).
+
+For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), run `bash scripts/check.sh`. For the rationale, see [`AGENTS.md`](../../AGENTS.md) Quick Setup.
+
 ---
 
 ## 30-second tour
@@ -19,7 +32,7 @@ OZ-POS is a Rust + Tauri v2 POS framework. The codebase is organized into clear 
 - **Database**: SQLite via `rusqlite`, all writes in transactions.
 - **Hardware**: `oz-hal` (drivers behind `async` traits, mandatory mocks).
 - **UI**: Tauri v2 + React 18 + TypeScript, strict, accessible, localized.
-- **IPC**: Rust commands in `src-tauri/src/commands/`, front-end wrapper in `ui/src/api/pos.ts`.
+- **IPC**: Rust commands in `apps/desktop-client/src/commands/`, front-end wrappers in `ui/src/api/` (per-domain files).
 - **Scripting**: `rlua` runtime in `oz-lua` for runtime business rules.
 - **Payment**: PCI-aware, swappable processors in `oz-payment`.
 - **CI**: GitHub Actions matrix (Linux, Windows, macOS), blocking fmt/clippy/test/UI lint.
@@ -36,7 +49,8 @@ What do you want to do?
 |---|---|
 | Add or change Rust code in any `oz-*` crate, work with the `Money` struct, write SQL transactions, define error types, or add a `#[cfg(test)]` block | **`rust-backend`** |
 | Add a new Tauri command on the backend, register it, and call it from the front-end via `pos.ts` | **`tauri-ipc`** |
-| Add or change a React component, screen, hook, or any user-visible string; review accessibility, i18n, or strict TypeScript | **`ui-components`** |
+| Add or change React component, screen, hook, or any user-visible string; review accessibility, i18n, or strict TypeScript | **`ui-components`** |
+| Add a symmetric CSS entry/exit animation (mirror keyframe + class toggle + useRef cleanup + ID-set-compare race guard) on a pill, badge, banner, modal, or any dismissable UI element | **`exit-animation-pattern`** |
 | Add a new device category or vendor driver (barcode, printer, NFC, payment terminal, cash drawer); write the **mandatory mock** | **`hal-drivers`** |
 | Scaffold the workspace, add a new crate, configure CI, write commit messages, set up the GitHub Actions matrix | **`project-scaffold`** |
 | Detect or patch drift between a skill and the code (broken paths, renamed crates, stale `last audited` dates, outdated dependency versions) | **`skill-drift-guard`** |
@@ -115,7 +129,7 @@ If any of those describe the task, the right move is to ask the user which codeb
 |---|---|
 | "What does this Rust trait do?" | Read the `///` docs on the trait itself. The skills are guides, not the source of truth — the code is. |
 | "How should this work in OZ-POS?" | Read the matching skill. If the skill doesn't cover it, ask Buffy (the AI agent) to extend the skill. |
-| "How should this work in general?" | The relevant upstream docs (`embedded-hal`, `rusqlite`, `tauri`, React, Fluent). The skills assume familiarity with these. |
+| "How should this work in general?" | The relevant upstream docs (`embedded-hal`, `rusqlite`, Tauri, React, Fluent). The skills assume familiarity with these. |
 | "Is this a security concern?" | Read `AGENTS.md` first. If still unclear, spawn a security review — OZ-POS handles money and (eventually) card data. |
 
 ---
@@ -141,4 +155,4 @@ If this passes locally, the PR is ready.
 
 ---
 
-> last audited 28-06-26 by docs-auditor
+> last audited 08-07-26 by docs-auditor

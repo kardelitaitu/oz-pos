@@ -8,17 +8,27 @@ use crate::offline::{OfflineQueueItem, OfflineQueueStatus};
 use super::Store;
 
 impl Store<'_> {
-    /// Enqueue a transaction for later sync.
+    /// Enqueue a transaction for later sync (default tenant).
     pub fn enqueue_offline(
         &self,
         action: &str,
         payload: &str,
     ) -> Result<OfflineQueueItem, CoreError> {
-        let item = OfflineQueueItem::new(action, payload);
+        self.enqueue_offline_with_tenant(action, payload, "default")
+    }
+
+    /// Enqueue a transaction for later sync, scoped to the given tenant.
+    pub fn enqueue_offline_with_tenant(
+        &self,
+        action: &str,
+        payload: &str,
+        tenant_id: &str,
+    ) -> Result<OfflineQueueItem, CoreError> {
+        let item = OfflineQueueItem::with_tenant(action, payload, tenant_id);
         self.conn.execute(
-            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![item.id, item.action, item.payload, item.status.as_stored_str(), item.retry_count, item.last_error, item.created_at, item.synced_at],
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![item.id, item.action, item.payload, item.status.as_stored_str(), item.retry_count, item.last_error, item.created_at, item.synced_at, item.tenant_id],
         )?;
         Ok(item)
     }
@@ -26,7 +36,7 @@ impl Store<'_> {
     /// List all pending (unsynced) offline queue items, oldest first.
     pub fn list_pending_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
              FROM offline_queue WHERE status = 'pending' ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
@@ -36,10 +46,23 @@ impl Store<'_> {
     /// List all offline queue items.
     pub fn list_all_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
              FROM offline_queue ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List pending offline items scoped to a tenant.
+    pub fn list_pending_offline_for_tenant(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Vec<OfflineQueueItem>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
+             FROM offline_queue WHERE status = 'pending' AND tenant_id = ?1 ORDER BY created_at ASC",
+        )?;
+        let rows = stmt.query_map(params![tenant_id], Self::row_to_offline_queue_item)?;
         rows.map(|r| Ok(r?)).collect()
     }
 
@@ -97,6 +120,7 @@ impl Store<'_> {
             last_error: row.get("last_error")?,
             created_at: row.get("created_at")?,
             synced_at: row.get("synced_at")?,
+            tenant_id: row.get("tenant_id")?,
         })
     }
 }
@@ -110,10 +134,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn store(conn: &Connection) -> Store<'_> {

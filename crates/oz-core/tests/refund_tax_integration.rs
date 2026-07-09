@@ -9,10 +9,7 @@ use rusqlite::Connection;
 // ── Shared helpers ────────────────────────────────────────────────────
 
 fn setup() -> Connection {
-    let mut conn = Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    migrations::run(&mut conn).unwrap();
-    conn
+    migrations::fresh_db()
 }
 
 fn store(conn: &Connection) -> Store<'_> {
@@ -438,7 +435,7 @@ fn multiple_tax_rates_assigned_to_product() {
 fn multiple_tax_rates_assigned_to_category() {
     let conn = setup();
     let s = store(&conn);
-    s.create_category("cat-compound", "Compound Cat", "#fff")
+    s.create_category("cat-compound", "Compound Cat", "#fff", "")
         .unwrap();
 
     let r1 = s.create_tax_rate("Rate A", 800, false, false).unwrap();
@@ -472,7 +469,8 @@ fn clearing_product_tax_rates_removes_all() {
 fn clearing_category_tax_rates_removes_all() {
     let conn = setup();
     let s = store(&conn);
-    s.create_category("cat-clear", "Clear Cat", "#fff").unwrap();
+    s.create_category("cat-clear", "Clear Cat", "#fff", "")
+        .unwrap();
 
     let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();
     s.set_category_tax_rates("cat-clear", std::slice::from_ref(&r1.id))
@@ -489,7 +487,8 @@ fn product_and_category_tax_assignments_are_independent() {
     let conn = setup();
     seed_product(&conn, "INDEP");
     let s = store(&conn);
-    s.create_category("cat-indep", "Indep Cat", "#fff").unwrap();
+    s.create_category("cat-indep", "Indep Cat", "#fff", "")
+        .unwrap();
 
     let prod_rate = s
         .create_tax_rate("Product Rate", 1000, false, false)

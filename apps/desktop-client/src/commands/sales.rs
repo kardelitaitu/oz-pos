@@ -10,7 +10,8 @@
 pub use super::pos::{
     AddLineArgs, AddLineResult, CompleteSaleArgs, CompleteSaleResult, HoldCartArgs, HoldCartResult,
     SetCartDiscountArgs, StartSaleArgs, StartSaleResult, add_line, complete_sale, delete_held_cart,
-    get_held_cart, hold_cart, list_held_carts, set_cart_discount, start_sale,
+    get_active_cart, get_held_cart, hold_cart, list_active_carts, list_held_carts,
+    set_cart_discount, start_sale,
 };
 
 pub use super::history::{

@@ -193,27 +193,19 @@
   font-size: var(--text-sm);
 }
 
-/* ── Progress bar ────────────────────────────────────────────────── */
+/* ── Progress indicator ──────────────────────────────────────────── */
 
-.data-mgmt-progress-bar {
-  width: 100%;
-  height: 8px;
-  background: var(--color-bg-tertiary, rgba(128, 128, 128, 0.1));
-  border-radius: 4px;
-  overflow: hidden;
+.data-mgmt-progress {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-md) 0;
 }
 
-.data-mgmt-progress-fill {
-  height: 100%;
-  background: var(--color-accent, #6366f1);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-.data-mgmt-progress-text {
-  font-size: var(--text-xs);
-  color: var(--color-fg-tertiary);
-  text-align: right;
+.data-mgmt-progress-done {
+  font-size: 2rem;
+  color: var(--color-success, #10b981);
+  line-height: 1;
 }
 
 /* ── Done state ──────────────────────────────────────────────────── */
@@ -289,6 +281,16 @@
   font-weight: 500;
 }
 
+.data-mgmt-meta-value {
+  color: var(--color-fg-primary);
+  font-size: var(--text-sm);
+  text-align: right;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Dry-run ─────────────────────────────────────────────────────── */
 
 .data-mgmt-dry-run {
@@ -342,41 +344,3 @@
   font-size: var(--text-sm);
 }
 
-/* ── Toast ───────────────────────────────────────────────────────── */
-
-.data-mgmt-toast {
-  position: fixed;
-  bottom: var(--space-lg);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  border: none;
-  cursor: pointer;
-  z-index: 1000;
-  animation: data-mgmt-toast-in 0.3s ease-out;
-  box-shadow: var(--shadow-lg);
-}
-
-.data-mgmt-toast--success {
-  background: var(--color-success, #10b981);
-  color: white;
-}
-
-.data-mgmt-toast--error {
-  background: var(--color-danger, #ef4444);
-  color: white;
-}
-
-@keyframes data-mgmt-toast-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}

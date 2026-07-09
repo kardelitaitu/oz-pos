@@ -13,6 +13,7 @@
 #![warn(missing_docs)]
 
 pub mod error;
+pub mod menu_engineering;
 #[cfg(feature = "metrics")]
 pub mod metrics;
 

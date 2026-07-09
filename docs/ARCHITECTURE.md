@@ -93,7 +93,7 @@ oz-pos/
 │       ├─ Cargo.toml
 │       └─ src/
 │           └─ main.rs       # clap entry-point: migrate, backup, export
-├─ src-tauri/                # Tauri v2 application shell
+├─ apps/desktop-client/      # Tauri v2 application shell
 │   ├─ Cargo.toml
 │   ├─ tauri.conf.json       # Window config, bundle targets, updater
 │   ├─ capabilities/
@@ -201,7 +201,7 @@ oz-pos/
 
 ### oz-logging
 - `tracing` + `tracing-subscriber` with env-filter.
-- Single `oz_logging::init()` call wires up log sinks. Used by `src-tauri` and `oz-api`.
+- Single `oz_logging::init()` call wires up log sinks. Used by `apps/desktop-client` and `oz-api`.
 - JSON formatter, syslog, and Windows Event Log outputs planned for Phase 2.
 
 ### apps/desktop-client & apps/tablet-client (Tauri v2 Shells)
@@ -246,11 +246,13 @@ Each app crate has an identical command surface, wired through `platform-startup
 - Additional business logic can be scripted in Lua files placed in a `scripts/` directory (Phase 3).
 - Payment gateway integrations can be introduced as separate crates linked to `oz-core`.
 - New REST endpoints go in `crates/oz-api/src/routes/` and are registered in `lib.rs`.
+- See [MODULAR_APP_PLAN.md](./MODULAR_APP_PLAN.md) for detailed execution roadmaps covering dynamic module lifecycle hot-reloading (`platform/kernel`), LAN peer-to-peer KDS sync, and Docker containerized cloud server deployments (`apps/cloud-server`).
 
 ---
-## License & Contributions
-- Open‑source MIT license.
-- Contributions welcome via pull‑requests; follow the project's coding standards (Rust fmt, Clippy, TypeScript lint).
+## License & Commercial Governance
+- **Proprietary & Confidential (`All Rights Reserved`)**: See [`LICENSE`](../LICENSE) for terms.
+- No commercial deployment, redistribution, or modification is permitted without an executed commercial license agreement from OZ-POS Contributors.
+- Internal developer contributions are governed under proprietary contributor agreements; all code strictly adheres to pre-commit quality gates (`cargo fmt + clippy + i18n lint + bundle parity`).
 
 ---
 *Document generated on 2026‑06‑29.*

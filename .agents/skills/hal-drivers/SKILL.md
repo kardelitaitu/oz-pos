@@ -26,7 +26,7 @@ The HAL is implemented in Rust on top of `embedded-hal` traits. The rest of the 
 | # | Rule | Why |
 |---|------|-----|
 | 1 | **Every device implements a trait.** Business code never imports a specific driver. | Swap hardware without changing features. |
-| 2 | **A mock implementation lives in `hal/src/drivers/mock.rs` for every new trait.** | Tests must run without physical hardware. |
+| 2 | **A mock implementation lives in `crates/oz-hal/src/drivers/mock.rs` for every new trait.** | Tests must run without physical hardware. |
 | 3 | **Traits are `async` and return `Result<T, HalError>`.** | Hardware fails in surprising ways. Make it explicit. |
 | 4 | **No `unwrap()` in driver code.** A flaky USB device must not panic the cashier's flow. | |
 | 5 | **Drivers register through `DriverRegistry`**, not via `static`s. | Hot-plug, multiple devices, plug-and-play. |
@@ -324,7 +324,7 @@ async fn sale_completes_after_scan() {
 **Rules:**
 - Tests use `MockBarcodeScanner`, `MockReceiptPrinter`, etc. — never a real driver.
 - For driver-internal tests (e.g., parsing a USB packet), use synthetic byte buffers.
-- Mocks live in `hal/src/drivers/mock.rs` and are gated by a `mock` feature: `cargo test --features mock`.
+- Mocks live in `crates/oz-hal/src/drivers/mock.rs` and are gated by a `mock` feature: `cargo test --features mock`.
 
 ---
 
@@ -335,10 +335,10 @@ async fn sale_completes_after_scan() {
 - [ ] Add the `HalError` variant(s) if needed.
 - [ ] Implement the driver in `hal/src/drivers/<vendor>_<device>.rs`.
 - [ ] Re-export the driver from `hal/src/drivers/mod.rs`.
-- [ ] **Add the mock to `hal/src/drivers/mock.rs`.** (Mandatory — CI will fail otherwise.)
+- [ ] **Add the mock to `crates/oz-hal/src/drivers/mock.rs`.** (Mandatory — CI will fail otherwise.)
 - [ ] Register the driver in `DriverRegistry::discover()`.
-- [ ] Add a Tauri command in `src-tauri/src/commands/hardware.rs` that takes the registry from `State` and returns a `Result`.
-- [ ] Add a TS wrapper in `ui/src/api/pos.ts` and a hook in `ui/src/features/<feature>/`.
+- [ ] Add a Tauri command in `apps/desktop-client/src/commands/hardware.rs` that takes the registry from `State` and returns a `Result`.
+- [ ] Add a TS wrapper in `ui/src/api/<feature>.ts` and a hook in `ui/src/features/<feature>/`.
 - [ ] Tests: a unit test in the driver, a feature test using the mock, and a UI test with the hook.
 
 ---
@@ -358,7 +358,7 @@ async fn sale_completes_after_scan() {
 
 ## See also
 
-- **[`tauri-ipc`](../tauri-ipc/SKILL.md)** — the Tauri command layer that reaches into `DriverRegistry`. Hardware commands (e.g. `subscribe_barcode_scans`, `open_cash_drawer`, `print_receipt`) live in `src-tauri/src/commands/hardware.rs` and follow the IPC patterns in `tauri-ipc`. The mock in `hal/src/drivers/mock.rs` is what makes those commands testable.
+- **[`tauri-ipc`](../tauri-ipc/SKILL.md)** — the Tauri command layer that reaches into `DriverRegistry`. Hardware commands (e.g. `subscribe_barcode_scans`, `open_cash_drawer`, `print_receipt`) live in `apps/desktop-client/src/commands/hardware.rs` and follow the IPC patterns in `tauri-ipc`. The mock in `crates/oz-hal/src/drivers/mock.rs` is what makes those commands testable.
 - **[`rust-backend`](../rust-backend/SKILL.md)** — defines the error and money patterns (`HalError`, `Money`, currency codes) that the HAL's traits and drivers must respect.
 - **[`project-scaffold`](../project-scaffold/SKILL.md)** — the workspace layout (the `hal` crate's `Cargo.toml` follows the conventions there) and CI rules that gate the HAL into release.
 

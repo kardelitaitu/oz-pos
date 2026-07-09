@@ -286,7 +286,7 @@
   width: 18px;
   height: 18px;
   border-radius: var(--radius-full);
-  background: #ffffff;
+  background: var(--color-bg, #ffffff);
   box-shadow: var(--shadow-sm);
   transition: transform var(--duration-150) var(--ease-out);
 }
@@ -302,11 +302,6 @@
 .toggle-switch input:focus-visible + .toggle-track {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
-}
-
-.toggle-switch--disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 /* ── Navigation ──────────────────────────────────────── */
@@ -409,6 +404,19 @@
 
 .setup-preset-summary strong {
   color: var(--color-accent);
+}
+
+.setup-step-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.setup-complete-features {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  text-align: center;
+  margin: 0 0 var(--space-4);
 }
 
 /* ── Completion screen ──────────────────────────────── */

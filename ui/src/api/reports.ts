@@ -72,3 +72,32 @@ export const getLowStockAlerts = (threshold: number): Promise<LowStockAlert[]> =
 
 export const getCategoryBreakdown = (startDate: string, endDate: string): Promise<CategoryBreakdownRow[]> =>
   invoke<CategoryBreakdownRow[]>('get_category_breakdown', { startDate, endDate });
+
+export interface MenuEngineeringRow {
+  product_id: string;
+  sku: string;
+  name: string;
+  total_volume: number;
+  unit_price_minor: number;
+  unit_cost_minor: number;
+  margin_per_unit: number;
+  total_margin_minor: number;
+  total_revenue_minor: number;
+}
+
+export type MenuQuadrant = 'Star' | 'Plowhorse' | 'Puzzle' | 'Dog';
+
+export interface MenuEngineeringResult {
+  rows: MenuEngineeringRow[];
+  median_volume: number;
+  median_margin: number;
+}
+
+export const getMenuEngineering = (
+  startDate: string,
+  endDate: string,
+): Promise<MenuEngineeringResult> =>
+  invoke<MenuEngineeringResult>('get_menu_engineering', {
+    startDate,
+    endDate,
+  });

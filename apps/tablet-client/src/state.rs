@@ -18,7 +18,6 @@
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,7 +26,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
 
-use oz_core::{Cart, CartId, migrations};
+use oz_core::migrations;
 use oz_hal::DriverRegistry;
 use platform_kernel::Kernel;
 
@@ -48,11 +47,6 @@ pub struct AppState {
 
     /// Path to the SQLite database file (for diagnostics + `oz-cli` reuse).
     pub db_path: PathBuf,
-
-    /// In-memory cart store shared across sales commands.
-    /// TODO(oz-core): replace with a SQLite-backed `CartStore` so
-    /// carts survive a restart.
-    pub carts: Mutex<HashMap<CartId, Cart>>,
 
     /// Cancel-sender for the active barcode scanner background task.
     /// When `Some`, the scanner polling loop is running; dropping
@@ -93,7 +87,6 @@ impl AppState {
             registry,
             app: Some(app.clone()),
             db_path,
-            carts: Mutex::new(HashMap::new()),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
         })
@@ -108,6 +101,17 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
     Ok(dir.join("oz-pos.db"))
 }
 
+impl Drop for AppState {
+    fn drop(&mut self) {
+        tracing::info!("stopping kernel modules");
+        if let Ok(mut kernel) = self.kernel.try_lock() {
+            let _ = kernel.stop_all();
+        } else {
+            tracing::warn!("kernel lock contended, skipping stop_all");
+        }
+    }
+}
+
 #[cfg(test)]
 impl AppState {
     /// Construct an `AppState` suitable for unit tests.
@@ -118,7 +122,6 @@ impl AppState {
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
-            carts: Mutex::new(HashMap::new()),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
         }
@@ -132,7 +135,6 @@ impl AppState {
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
-            carts: Mutex::new(HashMap::new()),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
         }

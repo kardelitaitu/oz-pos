@@ -14,6 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::drivers::drawer::PrinterKickCashDrawer;
+use crate::drivers::scale::WeightScale;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::customer_display::CustomerDisplay;
@@ -27,6 +28,7 @@ pub struct DriverRegistry {
     printers: RwLock<HashMap<String, Arc<dyn ReceiptPrinter>>>,
     drawers: RwLock<HashMap<String, Arc<dyn CashDrawer>>>,
     displays: RwLock<HashMap<String, Arc<dyn CustomerDisplay>>>,
+    scales: RwLock<HashMap<String, Arc<dyn WeightScale>>>,
 }
 
 impl DriverRegistry {
@@ -99,6 +101,32 @@ impl DriverRegistry {
     /// Snapshot of registered customer display ids.
     pub async fn display_ids(&self) -> Vec<String> {
         self.displays.read().await.keys().cloned().collect()
+    }
+
+    /// Register a weight scale under `id`. Overwrites any previous
+    /// entry with the same id.
+    pub async fn register_scale(&self, id: &str, driver: Arc<dyn WeightScale>) {
+        self.scales.write().await.insert(id.to_owned(), driver);
+    }
+
+    /// Look up a weight scale by id. Returns `None` if no scale is registered.
+    pub async fn scale(&self, id: &str) -> Option<Arc<dyn WeightScale>> {
+        self.scales.read().await.get(id).cloned()
+    }
+
+    /// Snapshot of registered scale ids.
+    pub async fn scale_ids(&self) -> Vec<String> {
+        self.scales.read().await.keys().cloned().collect()
+    }
+
+    /// Register a mock weight scale under `id` for testing.
+    pub fn register_mock_scale(&self, id: &str) {
+        let mock = Arc::new(crate::drivers::mock::MockWeightScale::new());
+        // Synchronous insert — only used at startup/test time.
+        self.scales
+            .try_write()
+            .expect("register_mock_scale called concurrently")
+            .insert(id.to_owned(), mock);
     }
 
     /// Discover and register available hardware. Failure of one driver

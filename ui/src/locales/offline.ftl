@@ -21,3 +21,7 @@ offline-queue-none = —
 offline-queue-status-pending = Pending
 offline-queue-status-synced = Synced
 offline-queue-status-failed = Failed
+offline-queue-table-actions = Actions
+offline-queue-sync-all-label = Sync all pending offline items
+offline-queue-delete-error = Failed to delete item
+offline-queue-sync-error = Sync failed

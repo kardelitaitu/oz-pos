@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   listProducts,
   createProduct,
@@ -25,6 +26,7 @@ interface FormData {
   categoryId: string;
   barcode: string;
   initialStock: string;
+  productType: string;
   taxRateIds: string[];
 }
 
@@ -36,6 +38,7 @@ const EMPTY_FORM: FormData = {
   categoryId: '',
   barcode: '',
   initialStock: '0',
+  productType: 'retail',
   taxRateIds: [],
 };
 
@@ -48,10 +51,14 @@ function dtoToProduct(dto: ProductDto): Product {
     barcode: dto.barcode,
     inStock: dto.in_stock,
     stockQty: dto.stock_qty,
+    priceUpdatedAt: dto.price_updated_at,
+    productType: dto.product_type as Product['productType'],
   };
 }
 
 export default function ProductManagementScreen() {
+  const { session } = useAuth();
+  const userId = session?.user_id ?? '';
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRateDto[]>([]);
@@ -65,6 +72,8 @@ export default function ProductManagementScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [variantProductSku, setVariantProductSku] = useState<string | null>(null);
   const [variantProductName, setVariantProductName] = useState<string>('');
+
+  const { l10n } = useLocalization();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +109,7 @@ export default function ProductManagementScreen() {
       categoryId: p.category === 'Uncategorised' ? '' : p.category,
       barcode: p.barcode ?? '',
       initialStock: '0',
+      productType: p.productType,
       taxRateIds: dto?.tax_rate_ids ?? [],
     });
     setEditingSku(p.sku);
@@ -114,16 +124,19 @@ export default function ProductManagementScreen() {
 
       if (editingSku) {
         await updateProduct({
+          userId,
           sku: editingSku,
           name: form.name,
           priceMinor,
           currency: form.currency,
           categoryId: form.categoryId || undefined,
           barcode: form.barcode || undefined,
+          productType: form.productType,
           taxRateIds: form.taxRateIds,
         });
       } else {
         await createProduct({
+          userId,
           sku: form.sku,
           name: form.name,
           priceMinor,
@@ -131,6 +144,7 @@ export default function ProductManagementScreen() {
           categoryId: form.categoryId || undefined,
           barcode: form.barcode || undefined,
           initialStock: parseInt(form.initialStock, 10) || 0,
+          productType: form.productType,
           taxRateIds: form.taxRateIds,
         });
       }
@@ -141,18 +155,18 @@ export default function ProductManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingSku, load]);
+  }, [form, editingSku, load, userId]);
 
   const confirmDelete = useCallback(async (sku: string) => {
     setDeleting(sku);
     try {
-      await deleteProduct(sku);
+      await deleteProduct({ userId, sku });
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
     }
-  }, [load]);
+  }, [load, userId]);
 
   return (
     <div className="product-mgmt">
@@ -182,7 +196,7 @@ export default function ProductManagementScreen() {
         </Card>
       ) : (
         <div className="product-mgmt-table-wrap">
-          <table className="product-mgmt-table" aria-label="Product catalog">
+          <table className="product-mgmt-table" aria-label={l10n.getString('product-mgmt-table-aria')}>
             <thead>
               <tr>
                 <Localized id="product-mgmt-col-sku"><th>SKU</th></Localized>
@@ -190,8 +204,11 @@ export default function ProductManagementScreen() {
                 <Localized id="product-mgmt-col-category"><th>Category</th></Localized>
                 <Localized id="product-mgmt-col-price"><th>Price</th></Localized>
                 <Localized id="product-mgmt-col-barcode"><th>Barcode</th></Localized>
+                <Localized id="product-mgmt-col-type"><th>Type</th></Localized>
                 <Localized id="product-mgmt-col-stock"><th>Stock</th></Localized>
-                <th aria-label="Actions"> </th>
+                <Localized id="product-mgmt-actions-aria" attrs={{ 'aria-label': true }}>
+                  <th aria-label="Actions"> </th>
+                </Localized>
               </tr>
             </thead>
             <tbody>
@@ -202,6 +219,11 @@ export default function ProductManagementScreen() {
                   <td>{p.category}</td>
                   <td className="product-mgmt-cell-price">{formatMoney(p.price)}</td>
                   <td className="product-mgmt-cell-barcode">{p.barcode ?? '\u2014'}</td>
+                  <td>
+                    <span className={`product-mgmt-type-badge product-mgmt-type--${p.productType}`}>
+                      {p.productType}
+                    </span>
+                  </td>
                   <td>
                     {p.stockQty != null && p.stockQty < 10 ? (
                       <span className="product-mgmt-stock-low" style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
@@ -220,38 +242,46 @@ export default function ProductManagementScreen() {
                     )}
                   </td>
                   <td className="product-mgmt-cell-actions">
-                    <button
-                      type="button"
-                      className="product-mgmt-action-btn"
-                      onClick={() => {
-                        setVariantProductSku(p.sku);
-                        setVariantProductName(p.name);
-                      }}
-                      aria-label={`Variants for ${p.name}`}
-                    >
-                      {'Variants'}
-                    </button>
-                    <button
-                      type="button"
-                      className="product-mgmt-action-btn"
-                      onClick={() => openEdit(p)}
-                      aria-label={`Edit ${p.name}`}
-                    >
-                      <Localized id="product-mgmt-edit">
-                        <span>Edit</span>
-                      </Localized>
-                    </button>
-                    <button
-                      type="button"
-                      className="product-mgmt-action-btn product-mgmt-action-btn--danger"
-                      onClick={() => confirmDelete(p.sku)}
-                      disabled={deleting === p.sku}
-                      aria-label={`Delete ${p.name}`}
-                    >
-                      <Localized id="product-mgmt-delete">
-                        <span>Delete</span>
-                      </Localized>
-                    </button>
+                    <Localized id="product-mgmt-variants-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
+                      <button
+                        type="button"
+                        className="product-mgmt-action-btn"
+                        onClick={() => {
+                          setVariantProductSku(p.sku);
+                          setVariantProductName(p.name);
+                        }}
+                        aria-label={`Variants for ${p.name}`}
+                      >
+                        <Localized id="product-mgmt-variants">
+                          <span>Variants</span>
+                        </Localized>
+                      </button>
+                    </Localized>
+                    <Localized id="product-mgmt-edit-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
+                      <button
+                        type="button"
+                        className="product-mgmt-action-btn"
+                        onClick={() => openEdit(p)}
+                        aria-label={`Edit ${p.name}`}
+                      >
+                        <Localized id="product-mgmt-edit">
+                          <span>Edit</span>
+                        </Localized>
+                      </button>
+                    </Localized>
+                    <Localized id="product-mgmt-delete-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
+                      <button
+                        type="button"
+                        className="product-mgmt-action-btn product-mgmt-action-btn--danger"
+                        onClick={() => confirmDelete(p.sku)}
+                        disabled={deleting === p.sku}
+                        aria-label={`Delete ${p.name}`}
+                      >
+                        <Localized id="product-mgmt-delete">
+                          <span>Delete</span>
+                        </Localized>
+                      </button>
+                    </Localized>
                   </td>
                 </tr>
               ))}
@@ -261,13 +291,13 @@ export default function ProductManagementScreen() {
       )}
 
       {showModal && (
-        <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingSku ? 'Edit product' : 'Add product'}>
+        <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
           <div className="product-mgmt-modal">
             <div className="product-mgmt-modal-header">
               <Localized id={editingSku ? 'product-mgmt-modal-edit-title' : 'product-mgmt-modal-add-title'}>
                 <h2>{editingSku ? 'Edit Product' : 'Add Product'}</h2>
               </Localized>
-              <Localized id="product-mgmt-modal-close">
+              <Localized id="product-mgmt-modal-close-aria" attrs={{ 'aria-label': true }}>
                 <button
                   type="button"
                   className="product-mgmt-modal-close"
@@ -280,52 +310,52 @@ export default function ProductManagementScreen() {
             </div>
 
             <div className="product-mgmt-modal-body">
-              <label className="product-mgmt-field" htmlFor="product-field-sku" aria-label="SKU *">
-                <Localized id="product-mgmt-field-sku-required">
-                  <span className="product-mgmt-label">SKU *</span>
+              <label className="product-mgmt-field" htmlFor="product-field-sku">
+                {l10n.getString('product-mgmt-field-sku-required')}
+                <Localized id="product-mgmt-sku-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="product-mgmt-input"
+                    type="text"
+                    id="product-field-sku"
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    disabled={!!editingSku}
+                    placeholder="e.g. LATTE"
+                  />
                 </Localized>
-                <input
-                  className="product-mgmt-input"
-                  type="text"
-                  id="product-field-sku"
-                  value={form.sku}
-                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                  disabled={!!editingSku}
-                  placeholder="e.g. LATTE"
-                />
               </label>
 
-              <label className="product-mgmt-field" htmlFor="product-field-name" aria-label="Name *">
-                <Localized id="product-mgmt-field-name-required">
-                  <span className="product-mgmt-label">Name *</span>
+              <label className="product-mgmt-field" htmlFor="product-field-name">
+                {l10n.getString('product-mgmt-field-name-required')}
+                <Localized id="product-mgmt-name-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="product-mgmt-input"
+                    type="text"
+                    id="product-field-name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Caffè Latte"
+                  />
                 </Localized>
-                <input
-                  className="product-mgmt-input"
-                  type="text"
-                  id="product-field-name"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Caffè Latte"
-                />
               </label>
 
               <div className="product-mgmt-row">
-                <label className="product-mgmt-field" htmlFor="product-field-price" aria-label="Price (minor units)">
-                  <Localized id="product-mgmt-field-price">
-                    <span className="product-mgmt-label">Price (minor units)</span>
+                <label className="product-mgmt-field" htmlFor="product-field-price">
+                  {l10n.getString('product-mgmt-field-price')}
+                  <Localized id="product-mgmt-price-placeholder" attrs={{ placeholder: true }}>
+                    <input
+                      className="product-mgmt-input"
+                      type="number"
+                      id="product-field-price"
+                      min="0"
+                      value={form.priceMinor}
+                      onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
+                      placeholder="450"
+                    />
                   </Localized>
-                  <input
-                    className="product-mgmt-input"
-                    type="number"
-                    id="product-field-price"
-                    min="0"
-                    value={form.priceMinor}
-                    onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
-                    placeholder="450"
-                  />
                 </label>
 
-                <label className="product-mgmt-field" htmlFor="product-field-currency" aria-label="Currency">
+                <label className="product-mgmt-field" htmlFor="product-field-currency">
                   <Localized id="product-mgmt-field-currency">
                     <span className="product-mgmt-label">Currency</span>
                   </Localized>
@@ -342,7 +372,7 @@ export default function ProductManagementScreen() {
                 </label>
               </div>
 
-              <label className="product-mgmt-field" htmlFor="product-field-category" aria-label="Category">
+              <label className="product-mgmt-field" htmlFor="product-field-category">
                 <Localized id="product-mgmt-field-category">
                   <span className="product-mgmt-label">Category</span>
                 </Localized>
@@ -352,25 +382,44 @@ export default function ProductManagementScreen() {
                   value={form.categoryId}
                   onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
                 >
-                  <option value="">— No category —</option>
+                  <Localized id="product-mgmt-no-category">
+                    <option value="">— No category —</option>
+                  </Localized>
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
                 </select>
               </label>
 
-              <label className="product-mgmt-field" htmlFor="product-field-barcode" aria-label="Barcode">
-                <Localized id="product-mgmt-field-barcode">
-                  <span className="product-mgmt-label">Barcode</span>
+              <label className="product-mgmt-field" htmlFor="product-field-barcode">
+                {l10n.getString('product-mgmt-field-barcode')}
+                <Localized id="product-mgmt-barcode-placeholder" attrs={{ placeholder: true }}>
+                  <input
+                    className="product-mgmt-input"
+                    type="text"
+                    id="product-field-barcode"
+                    value={form.barcode}
+                    onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                    placeholder="4901234567890"
+                  />
                 </Localized>
-                <input
-                  className="product-mgmt-input"
-                  type="text"
-                  id="product-field-barcode"
-                  value={form.barcode}
-                  onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                  placeholder="4901234567890"
-                />
+              </label>
+
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+              <label className="product-mgmt-field" htmlFor="product-field-type">
+                <Localized id="product-mgmt-field-type">
+                  <span className="product-mgmt-label">Product Type</span>
+                </Localized>
+                <select
+                  className="product-mgmt-input product-mgmt-select"
+                  id="product-field-type"
+                  value={form.productType}
+                  onChange={(e) => setForm({ ...form, productType: e.target.value })}
+                >
+                  <option value="retail">Retail</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="both">Both</option>
+                </select>
               </label>
 
               {taxRates.length > 0 && (
@@ -404,19 +453,19 @@ export default function ProductManagementScreen() {
               )}
 
               {!editingSku && (
-                <label className="product-mgmt-field" htmlFor="product-field-stock" aria-label="Initial stock">
-                  <Localized id="product-mgmt-field-stock">
-                    <span className="product-mgmt-label">Initial stock</span>
+                <label className="product-mgmt-field" htmlFor="product-field-stock">
+                  {l10n.getString('product-mgmt-field-stock')}
+                  <Localized id="product-mgmt-stock-placeholder" attrs={{ placeholder: true }}>
+                    <input
+                      className="product-mgmt-input"
+                      type="number"
+                      id="product-field-stock"
+                      min="0"
+                      value={form.initialStock}
+                      onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
+                      placeholder="0"
+                    />
                   </Localized>
-                  <input
-                    className="product-mgmt-input"
-                    type="number"
-                    id="product-field-stock"
-                    min="0"
-                    value={form.initialStock}
-                    onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
-                    placeholder="0"
-                  />
                 </label>
               )}
             </div>

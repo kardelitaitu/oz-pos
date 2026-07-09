@@ -186,11 +186,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     #[test]
@@ -296,5 +292,83 @@ mod tests {
 
         let remaining = store.list_pending_offline().unwrap();
         assert!(remaining.is_empty());
+    }
+
+    // -- DTO struct tests --
+
+    #[test]
+    fn offline_queue_item_dto_debug() {
+        let dto = OfflineQueueItemDto {
+            id: "q1".into(),
+            action: "complete_sale".into(),
+            payload: "{}".into(),
+            status: "pending".into(),
+            retry_count: 0,
+            last_error: None,
+            created_at: "2025-01-01".into(),
+            synced_at: None,
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("complete_sale"));
+    }
+
+    #[test]
+    fn offline_queue_item_dto_serialize() {
+        let dto = OfflineQueueItemDto {
+            id: "q2".into(),
+            action: "void_sale".into(),
+            payload: "{}".into(),
+            status: "synced".into(),
+            retry_count: 1,
+            last_error: Some("timeout".into()),
+            created_at: "2025-02-01".into(),
+            synced_at: Some("2025-02-02".into()),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["action"], "void_sale");
+        assert_eq!(json["retryCount"], 1);
+        assert!(json["lastError"].is_string());
+    }
+
+    #[test]
+    fn sync_result_debug() {
+        let sr = SyncResult {
+            synced_count: 5,
+            failed_count: 2,
+            total_count: 7,
+        };
+        let d = format!("{sr:?}");
+        assert!(d.contains("5"));
+        assert!(d.contains("7"));
+    }
+
+    #[test]
+    fn sync_result_serialize() {
+        let sr = SyncResult {
+            synced_count: 10,
+            failed_count: 0,
+            total_count: 10,
+        };
+        let json = serde_json::to_value(&sr).unwrap();
+        assert_eq!(json["syncedCount"], 10);
+        assert_eq!(json["failedCount"], 0);
+    }
+
+    #[test]
+    fn enqueue_offline_args_deserialize() {
+        let json = r#"{"action":"complete_sale","payload":"{}"}"#;
+        let args: EnqueueOfflineArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.action, "complete_sale");
+        assert_eq!(args.payload, "{}");
+    }
+
+    #[test]
+    fn enqueue_offline_args_debug() {
+        let args = EnqueueOfflineArgs {
+            action: "test".into(),
+            payload: "{}".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("test"));
     }
 }

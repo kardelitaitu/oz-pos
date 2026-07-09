@@ -1,13 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   getReceiptSettings,
   setReceiptSettings,
   getStoreSettings,
   setStoreSettings,
+  getUserPreferences,
+  setUserPreferences,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
 } from '@/api/settings';
+import { setDecimalSep } from '@/utils/storage';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   listCurrencies,
   getDefaultCurrency,
@@ -17,13 +21,21 @@ import {
 import {
   getSyncSettings,
   updateSyncSettings,
-  triggerSync,
+  syncRun,
   type SyncSettingsDto,
   type SyncAttemptResult,
 } from '@/api/offline';
+import {
+  getBrandSettings,
+  setBrandPrimaryColour,
+  setBrandStoreName as setBrandStoreNameApi,
+} from '@/api/branding';
+import { useBrand } from '@/contexts/BrandContext';
+import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
+import { useToast } from '@/frontend/shared/Toast';
 import { AppearanceSettings } from './AppearanceSettings';
 import './SettingsPage.css';
 
@@ -42,18 +54,30 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const { l10n } = useLocalization();
+  const { addToast } = useToast();
+  const { refreshBrandSettings } = useBrand();
+
   const [receipt, setReceipt] = useState<ReceiptSettingsDto>({
     showCurrency: false,
     decimalSeparator: 'dot',
     showTax: true,
     footer: '',
     paperWidth: 'standard',
+    showTableNumber: false,
+    marginTop: 0,
+    marginBottom: 0,
+    marginLeft: 0,
+    marginRight: 0,
   });
 
   const [store, setStore] = useState<StoreSettingsDto>({
     name: '',
     address: '',
     taxId: '',
+    currency: 'IDR',
+    branch: '',
+    logo: '',
   });
 
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
@@ -68,25 +92,49 @@ export default function SettingsPage() {
   const [syncApiKey, setSyncApiKey] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
+  const { session } = useAuth();
+  const userId = session?.user_id ?? 'default';
+  const [displayCardSize, setDisplayCardSize] = useState(0);
+  const [displayFontSize, setDisplayFontSize] = useState(0);
+  const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
+  const [brandColour, setBrandColour] = useState('#10b981');
+  const [brandStoreName, setBrandStoreName] = useState('');
+
+  // Sync font-smoothing to <html> whenever it changes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-font-smoothing', displayFontSmoothing);
+  }, [displayFontSmoothing]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [r, s, currenciesData, defaultCurrencyData, syncData] = await Promise.all([
+        const [r, s, currenciesData, defaultCurrencyData, syncData, prefs, brand] = await Promise.all([
           getReceiptSettings(),
           getStoreSettings(),
           listCurrencies(),
           getDefaultCurrency(),
           getSyncSettings(),
+          getUserPreferences(userId),
+          getBrandSettings(),
         ]);
         if (!cancelled) {
           setReceipt(r);
           setStore(s);
+          setDecimalSep(r.decimalSeparator);
           setCurrencies(currenciesData);
           setDefaultCurrencyState(defaultCurrencyData ?? 'USD');
           setSync(syncData);
           setSyncServerUrl(syncData.serverUrl ?? '');
+          const cs = prefs['cardsize'];
+          if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
+          const fs = prefs['fontsize'];
+          if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
+          if (prefs['font-smoothing'] !== undefined) setDisplayFontSmoothing(prefs['font-smoothing']);
+          setBrandColour(brand.primary_colour);
+          setBrandStoreName(brand.store_name);
+          const palette = deriveAccentPalette(brand.primary_colour);
+          applyAccentPalette(palette);
         }
       } catch {
         // IPC unavailable — use defaults.
@@ -95,31 +143,40 @@ export default function SettingsPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [userId]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaved(false);
     try {
       await Promise.all([
-        setReceiptSettings(receipt),
-        setStoreSettings(store),
+        setReceiptSettings(receipt, session?.user_id ?? ''),
+        setStoreSettings(store, session?.user_id ?? ''),
         setDefaultCurrency({ code: defaultCurrency }),
+        setUserPreferences(userId, [
+          { key: 'cardsize', value: String(displayCardSize) },
+          { key: 'fontsize', value: String(displayFontSize) },
+          { key: 'font-smoothing', value: displayFontSmoothing },
+        ]),
         updateSyncSettings({
           serverUrl: syncServerUrl || null,
           apiKey: syncApiKey || null,
           enabled: sync.enabled,
         }),
+        setBrandPrimaryColour(brandColour),
+        setBrandStoreNameApi(brandStoreName),
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       setSyncApiKey('');
+      refreshBrandSettings();
     } catch {
-      // Toast or error state could go here.
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [receipt, store, defaultCurrency]);
+  }, [receipt, store, defaultCurrency, userId, session?.user_id, sync.enabled, syncServerUrl, syncApiKey, displayCardSize, displayFontSize, displayFontSmoothing, brandColour, brandStoreName, addToast, l10n, refreshBrandSettings]);
+
 
   if (loading) {
     return <div className="settings-page"><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;
@@ -127,8 +184,8 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-page">
-      <Localized id="settings-page-title">
-        <h1 className="settings-title">Settings</h1>
+      <Localized id="nav-general">
+        <h1 className="settings-title">General</h1>
       </Localized>
 
       {/* ── Store section ────────────────────────── */}
@@ -138,51 +195,48 @@ export default function SettingsPage() {
       >
         <div className="settings-form">
           <label className="settings-field" htmlFor="settings-field-store-name">
-            <Localized id="settings-field-store-name">
-              <span className="settings-label">Store name</span>
+            {l10n.getString('settings-field-store-name')}
+            <Localized id="settings-store-name-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="settings-input"
+                type="text"
+                id="settings-field-store-name"
+                placeholder="OZ-POS Store"
+                value={store.name}
+                onChange={(e) => setStore({ ...store, name: e.target.value })}
+              />
             </Localized>
-            <input
-              className="settings-input"
-              type="text"
-              id="settings-field-store-name"
-              placeholder="OZ-POS Store"
-              value={store.name}
-              onChange={(e) => setStore({ ...store, name: e.target.value })}
-              aria-label="Store name"
-            />
           </label>
 
           <label className="settings-field" htmlFor="settings-field-address">
-            <Localized id="settings-field-address">
-              <span className="settings-label">Address</span>
+            {l10n.getString('settings-field-address')}
+            <Localized id="settings-address-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="settings-input"
+                type="text"
+                id="settings-field-address"
+                placeholder="123 Main Street"
+                value={store.address}
+                onChange={(e) => setStore({ ...store, address: e.target.value })}
+              />
             </Localized>
-            <input
-              className="settings-input"
-              type="text"
-              id="settings-field-address"
-              placeholder="123 Main Street"
-              value={store.address}
-              onChange={(e) => setStore({ ...store, address: e.target.value })}
-              aria-label="Address"
-            />
           </label>
 
           <label className="settings-field" htmlFor="settings-field-tax-id">
-            <Localized id="settings-field-tax-id">
-              <span className="settings-label">Tax / VAT ID</span>
+            {l10n.getString('settings-field-tax-id')}
+            <Localized id="settings-tax-id-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="settings-input"
+                type="text"
+                id="settings-field-tax-id"
+                placeholder="12-3456789"
+                value={store.taxId}
+                onChange={(e) => setStore({ ...store, taxId: e.target.value })}
+              />
             </Localized>
-            <input
-              className="settings-input"
-              type="text"
-              id="settings-field-tax-id"
-              placeholder="12-3456789"
-              value={store.taxId}
-              onChange={(e) => setStore({ ...store, taxId: e.target.value })}
-              aria-label="Tax / VAT ID"
-            />
           </label>
 
-          <div className="settings-field" aria-label="Language">
+          <div className="settings-field">
             <Localized id="settings-field-language">
               <span className="settings-label"><span>Language</span></span>
             </Localized>
@@ -217,8 +271,112 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {/* ── Display section ──────────────────────── */}
+      <Card
+        shadow="sm"
+        header={
+          <Localized id="settings-section-display">
+            <h2 className="settings-section-title">Display</h2>
+          </Localized>
+        }
+      >
+        <div className="settings-form">
+          <div className="settings-field">
+            <Localized id="settings-field-card-size">
+              <span className="settings-label">Menu Card Size</span>
+            </Localized>
+            <div className="settings-size-controls">
+              <Localized id="settings-card-size-decrease-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayCardSize <= 0}
+                  onClick={() => setDisplayCardSize((s) => Math.max(0, s - 1))}
+                  aria-label="Decrease card size"
+                >
+                  &minus;
+                </button>
+              </Localized>
+              <span className="settings-size-value">{displayCardSize}</span>
+              <Localized id="settings-card-size-increase-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayCardSize >= 4}
+                  onClick={() => setDisplayCardSize((s) => Math.min(4, s + 1))}
+                  aria-label="Increase card size"
+                >
+                  +
+                </button>
+              </Localized>
+            </div>
+          </div>
+
+          <div className="settings-field">
+            <Localized id="settings-field-font-size">
+              <span className="settings-label">Font Size</span>
+            </Localized>
+            <div className="settings-size-controls">
+              <Localized id="settings-font-size-decrease-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayFontSize <= 0}
+                  onClick={() => setDisplayFontSize((s) => Math.max(0, s - 1))}
+                  aria-label="Decrease font size"
+                >
+                  &minus;
+                </button>
+              </Localized>
+              <span className="settings-size-value">{displayFontSize}</span>
+              <Localized id="settings-font-size-increase-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayFontSize >= 4}
+                  onClick={() => setDisplayFontSize((s) => Math.min(4, s + 1))}
+                  aria-label="Increase font size"
+                >
+                  +
+                </button>
+              </Localized>
+            </div>
+          </div>
+
+          <div className="settings-field">
+            <Localized id="settings-field-font-smoothing">
+              <span className="settings-label">Font Smoothing</span>
+            </Localized>
+            <select
+              className="settings-select"
+              id="settings-field-font-smoothing"
+              value={displayFontSmoothing}
+              onChange={(e) => setDisplayFontSmoothing(e.target.value)}
+              aria-label={l10n.getString('settings-field-font-smoothing')}
+            >
+              <Localized id="settings-font-smoothing-antialiased">
+                <option value="antialiased">Antialiased (crisp)</option>
+              </Localized>
+              <Localized id="settings-font-smoothing-subpixel">
+                <option value="subpixel">Subpixel (smooth)</option>
+              </Localized>
+            </select>
+          </div>
+        </div>
+      </Card>
+
       {/* ── Appearance section ──────────────────── */}
-      <AppearanceSettings />
+      <AppearanceSettings
+        embedded
+        colour={brandColour}
+        storeName={brandStoreName}
+        onColourChange={(c) => {
+          setBrandColour(c);
+          const palette = deriveAccentPalette(c);
+          applyAccentPalette(palette);
+        }}
+        onStoreNameChange={setBrandStoreName}
+      />
 
       {/* ── Receipt section ───────────────────────── */}
       <Card
@@ -228,13 +386,15 @@ export default function SettingsPage() {
         <div className="settings-form">
           {/* Show currency */}
           <label className="settings-toggle" htmlFor="settings-toggle-show-currency">
-            <input
-              type="checkbox"
-              id="settings-toggle-show-currency"
-              checked={receipt.showCurrency}
-              onChange={(e) => setReceipt({ ...receipt, showCurrency: e.target.checked })}
-              aria-label="Show currency symbol on amounts"
-            />
+            <Localized id="settings-toggle-show-currency-aria" attrs={{ 'aria-label': true }}>
+              <input
+                type="checkbox"
+                id="settings-toggle-show-currency"
+                checked={receipt.showCurrency}
+                onChange={(e) => setReceipt({ ...receipt, showCurrency: e.target.checked })}
+                aria-label="Show currency symbol on amounts"
+              />
+            </Localized>
             <Localized id="settings-toggle-show-currency">
               <span>Show currency symbol on amounts</span>
             </Localized>
@@ -242,31 +402,39 @@ export default function SettingsPage() {
 
           {/* Decimal separator */}
           <label className="settings-field" htmlFor="settings-field-decimal-separator">
-            <Localized id="settings-field-decimal-separator">
-              <span className="settings-label">Decimal separator</span>
-            </Localized>
+            {l10n.getString('settings-field-decimal-separator')}
             <select
               className="settings-select"
               id="settings-field-decimal-separator"
               value={receipt.decimalSeparator}
-              onChange={(e) => setReceipt({ ...receipt, decimalSeparator: e.target.value })}
-              aria-label="Decimal separator"
+              onChange={(e) => {
+                setReceipt({ ...receipt, decimalSeparator: e.target.value });
+                setDecimalSep(e.target.value);
+              }}
             >
-              <option value="dot">1.00 (dot)</option>
-              <option value="comma">1,00 (comma)</option>
-              <option value="none">1 (none)</option>
+              <Localized id="settings-decimal-separator-dot">
+                <option value="dot">1.00 (dot)</option>
+              </Localized>
+              <Localized id="settings-decimal-separator-comma">
+                <option value="comma">1,00 (comma)</option>
+              </Localized>
+              <Localized id="settings-decimal-separator-none">
+                <option value="none">1 (none)</option>
+              </Localized>
             </select>
           </label>
 
           {/* Show tax */}
           <label className="settings-toggle" htmlFor="settings-toggle-show-tax">
-            <input
-              type="checkbox"
-              id="settings-toggle-show-tax"
-              checked={receipt.showTax}
-              onChange={(e) => setReceipt({ ...receipt, showTax: e.target.checked })}
-              aria-label="Show tax line on receipts"
-            />
+            <Localized id="settings-toggle-show-tax-aria" attrs={{ 'aria-label': true }}>
+              <input
+                type="checkbox"
+                id="settings-toggle-show-tax"
+                checked={receipt.showTax}
+                onChange={(e) => setReceipt({ ...receipt, showTax: e.target.checked })}
+                aria-label="Show tax line on receipts"
+              />
+            </Localized>
             <Localized id="settings-toggle-show-tax">
               <span>Show tax line on receipts</span>
             </Localized>
@@ -274,50 +442,53 @@ export default function SettingsPage() {
 
           {/* Paper width */}
           <label className="settings-field" htmlFor="settings-field-paper-width">
-            <Localized id="settings-field-paper-width">
-              <span className="settings-label">Paper width</span>
-            </Localized>
+            {l10n.getString('settings-field-paper-width')}
             <select
               className="settings-select"
               id="settings-field-paper-width"
               value={receipt.paperWidth}
               onChange={(e) => setReceipt({ ...receipt, paperWidth: e.target.value })}
-              aria-label="Paper width"
             >
-              <option value="standard">80 mm (standard)</option>
-              <option value="narrow">58 mm (narrow)</option>
+              <Localized id="settings-paper-width-standard">
+                <option value="standard">80 mm (standard)</option>
+              </Localized>
+              <Localized id="settings-paper-width-narrow">
+                <option value="narrow">58 mm (narrow)</option>
+              </Localized>
             </select>
           </label>
 
           {/* Footer */}
           <label className="settings-field" htmlFor="settings-field-receipt-footer">
-            <Localized id="settings-field-footer">
-              <span className="settings-label">Receipt footer</span>
+            {l10n.getString('settings-field-footer')}
+            <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="settings-input"
+                type="text"
+                id="settings-field-receipt-footer"
+                placeholder="Thank you for shopping!"
+                value={receipt.footer}
+                onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })}
+              />
             </Localized>
-            <input
-              className="settings-input"
-              type="text"
-              id="settings-field-receipt-footer"
-              placeholder="Thank you for shopping!"
-              value={receipt.footer}
-              onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })}
-              aria-label="Receipt footer"
-            />
           </label>
 
-          {/* Save */}
-          <div className="settings-actions">
-            <Button
-              variant="primary"
-              loading={saving}
-              onClick={handleSave}
-              aria-label={saved ? 'Saved!' : 'Save settings'}
-            >
-              <Localized id={saved ? 'settings-saved' : 'settings-btn-save'}>
-                <span>{saved ? 'Saved!' : 'Save'}</span>
-              </Localized>
-            </Button>
-          </div>
+          {/* Show table number */}
+          <label className="settings-toggle" htmlFor="settings-toggle-show-table-number">
+            <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
+              <input
+                type="checkbox"
+                id="settings-toggle-show-table-number"
+                checked={receipt.showTableNumber}
+                onChange={(e) => setReceipt({ ...receipt, showTableNumber: e.target.checked })}
+                aria-label="Show table number on cart and receipts"
+              />
+            </Localized>
+            <Localized id="settings-toggle-show-table-number">
+              <span>Show table number on cart and receipts</span>
+            </Localized>
+          </label>
+
         </div>
       </Card>
 
@@ -326,17 +497,18 @@ export default function SettingsPage() {
         shadow="sm"
         header={<Localized id="settings-section-sync"><h2 className="settings-section-title">Cloud Sync</h2></Localized>}
       >
-        {sync.serverUrl === null && !sync.enabled ? (
-          <div className="settings-form">
-              <p className="settings-hint">
-                <Localized id="settings-sync-not-configured">
-                  <span>Sync is not configured. Enter a server URL and enable sync.</span>
-                </Localized>
-              </p>
-            <label className="settings-field" htmlFor="settings-field-server-url">
-              <Localized id="settings-sync-server-url">
-                <span className="settings-label">Server URL</span>
+        <div className="settings-form">
+          {sync.serverUrl === null && !sync.enabled && (
+            <p className="settings-hint">
+              <Localized id="settings-sync-not-configured">
+                <span>Sync is not configured. Enter a server URL and enable sync.</span>
               </Localized>
+            </p>
+          )}
+
+          <label className="settings-field" htmlFor="settings-field-server-url">
+            {l10n.getString('settings-sync-server-url')}
+            <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
               <input
                 className="settings-input"
                 type="url"
@@ -344,59 +516,13 @@ export default function SettingsPage() {
                 placeholder="https://api.example.com"
                 value={syncServerUrl}
                 onChange={(e) => setSyncServerUrl(e.target.value)}
-                aria-label="Server URL"
               />
-            </label>
+            </Localized>
+          </label>
 
-            <label className="settings-field" htmlFor="settings-field-api-key">
-              <Localized id="settings-sync-api-key">
-                <span className="settings-label">API Key</span>
-              </Localized>
-              <input
-                className="settings-input"
-                type="password"
-                id="settings-field-api-key"
-                placeholder="Enter API key"
-                value={syncApiKey}
-                onChange={(e) => setSyncApiKey(e.target.value)}
-                aria-label="API Key"
-              />
-            </label>
-
-            <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled">
-              <input
-                type="checkbox"
-                id="settings-toggle-sync-enabled"
-                checked={sync.enabled}
-                onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
-                aria-label="Enable Cloud Sync"
-              />
-              <Localized id="settings-sync-enabled">
-                <span>Enable Cloud Sync</span>
-              </Localized>
-            </label>
-          </div>
-        ) : (
-          <div className="settings-form">
-            <label className="settings-field" htmlFor="settings-field-server-url">
-              <Localized id="settings-sync-server-url">
-                <span className="settings-label">Server URL</span>
-              </Localized>
-              <input
-                className="settings-input"
-                type="url"
-                id="settings-field-server-url"
-                placeholder="https://api.example.com"
-                value={syncServerUrl}
-                onChange={(e) => setSyncServerUrl(e.target.value)}
-                aria-label="Server URL"
-              />
-            </label>
-
-            <label className="settings-field" htmlFor="settings-field-api-key">
-              <Localized id="settings-sync-api-key">
-                <span className="settings-label">API Key</span>
-              </Localized>
+          <label className="settings-field" htmlFor="settings-field-api-key">
+            {l10n.getString('settings-sync-api-key')}
+            <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
               <input
                 className="settings-input"
                 type="password"
@@ -404,11 +530,12 @@ export default function SettingsPage() {
                 placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
                 value={syncApiKey}
                 onChange={(e) => setSyncApiKey(e.target.value)}
-                aria-label="API Key"
               />
-            </label>
+            </Localized>
+          </label>
 
-            <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled">
+          <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled">
+            <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
               <input
                 type="checkbox"
                 id="settings-toggle-sync-enabled"
@@ -416,46 +543,91 @@ export default function SettingsPage() {
                 onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
                 aria-label="Enable Cloud Sync"
               />
-              <Localized id="settings-sync-enabled">
-                <span>Enable Cloud Sync</span>
-              </Localized>
-            </label>
+            </Localized>
+            <Localized id="settings-sync-enabled">
+              <span>Enable Cloud Sync</span>
+            </Localized>
+          </label>
 
-            <div className="settings-actions">
-              <Button
-                variant="secondary"
-                loading={syncing}
-                onClick={async () => {
-                  setSyncing(true);
-                  try {
-                    const result = await triggerSync();
-                    setSyncResult(result);
-                  } catch {
-                    setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });
-                  } finally {
-                    setSyncing(false);
-                  }
-                }}
-              >
-                <Localized id={syncing ? 'settings-sync-syncing' : 'settings-sync-sync-now'}>
-                  <span>{syncing ? 'Syncing…' : 'Sync Now'}</span>
-                </Localized>
-              </Button>
-            </div>
-
-            {syncResult && (
-              <p className="settings-hint">
-                <Localized
-                  id="settings-sync-result"
-                  vars={{ synced: syncResult.synced, failed: syncResult.failed }}
+          {(sync.serverUrl !== null || sync.enabled) && (
+            <>
+              <div className="settings-actions">
+                <Button
+                  variant="secondary"
+                  loading={syncing}
+                  onClick={async () => {
+                    setSyncing(true);
+                    try {
+                      const result = await syncRun();
+                      setSyncResult(result);
+                    } catch {
+                      setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });
+                    } finally {
+                      setSyncing(false);
+                    }
+                  }}
                 >
-                  <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
-                </Localized>
-              </p>
-            )}
-          </div>
-        )}
+                  <Localized id={syncing ? 'settings-sync-syncing' : 'settings-sync-sync-now'}>
+                    <span>{syncing ? 'Syncing…' : 'Sync Now'}</span>
+                  </Localized>
+                </Button>
+              </div>
+
+              {syncResult && (
+                <p className="settings-hint">
+                  <Localized
+                    id="settings-sync-result"
+                    vars={{ synced: syncResult.synced, failed: syncResult.failed }}
+                  >
+                    <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
+                  </Localized>
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </Card>
+
+      {/* ── System & License Ownership ───────────────────────── */}
+      <Card
+        shadow="sm"
+        header={<h2 className="settings-section-title">System & License Ownership</h2>}
+      >
+        <div className="settings-form" style={{ gap: '0.65rem', fontSize: 'var(--text-sm)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
+            <span style={{ color: 'var(--color-fg-tertiary)' }}>Software Edition</span>
+            <span style={{ fontWeight: 600 }}>OZ-POS Enterprise v0.0.3</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
+            <span style={{ color: 'var(--color-fg-tertiary)' }}>License Type</span>
+            <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>Proprietary Commercial License</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
+            <span style={{ color: 'var(--color-fg-tertiary)' }}>Copyright Notice</span>
+            <span style={{ fontWeight: 500 }}>© 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--color-fg-tertiary)' }}>Commercial Contact</span>
+            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>adikaradwiatmaja@gmail.com</span>
+          </div>
+        </div>
+      </Card>
+
+      {/* ── Page-level Save ───────────────────────── */}
+      <div className="settings-page-actions">
+        <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
+          <Button
+            variant="primary"
+            loading={saving}
+            onClick={handleSave}
+            aria-label={saved ? 'Saved!' : 'Save settings'}
+          >
+            <Localized id={saved ? 'settings-saved' : 'settings-btn-save'}>
+              <span>{saved ? 'Saved!' : 'Save'}</span>
+            </Localized>
+          </Button>
+        </Localized>
+      </div>
     </div>
   );
 }

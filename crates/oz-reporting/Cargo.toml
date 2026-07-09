@@ -11,6 +11,8 @@ oz-core = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
 prometheus = { version = "0.13", optional = true, features = ["process"] }
 
 [features]

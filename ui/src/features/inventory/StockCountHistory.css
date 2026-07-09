@@ -1,0 +1,123 @@
+.sc-hist-screen {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Shared with parent screens */
+.sc-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.sc-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sc-diff-neg { color: var(--color-danger, #dc2626); }
+.sc-diff-pos { color: var(--color-success, #16a34a); }
+
+.sc-hist-header {
+  margin-bottom: 20px;
+}
+
+.sc-hist-loading,
+.sc-hist-empty {
+  text-align: center;
+  color: var(--text-muted, #666);
+  padding: 40px 0;
+}
+
+.sc-hist-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+}
+
+.sc-hist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sc-hist-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  background: var(--bg-card, #fff);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.sc-hist-item--sel {
+  border-color: var(--accent, #2563eb);
+  background: var(--color-accent-dim, #eff6ff);
+}
+
+.sc-hist-item-number {
+  font-weight: 600;
+}
+
+.sc-hist-item-date {
+  font-size: 0.8rem;
+  color: var(--text-muted, #666);
+}
+
+.sc-hist-detail {
+  padding: 16px;
+}
+
+.sc-hist-detail h2 {
+  margin: 0 0 16px;
+  font-size: 1.2rem;
+}
+
+.sc-hist-lines,
+.sc-hist-adjustments {
+  margin-bottom: 24px;
+}
+
+.sc-hist-lines h3,
+.sc-hist-adjustments h3 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+}
+
+.sc-hist-table {
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sc-hist-tr {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr 1fr 1.5fr;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  gap: 8px;
+}
+
+.sc-hist-th {
+  background: var(--bg-muted, #f3f4f6);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.sc-hist-adjustments .sc-hist-tr {
+  grid-template-columns: 1fr 2fr 1fr 1fr 2fr;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-hist-item {
+    transition: all 0.15s;
+  }
+}

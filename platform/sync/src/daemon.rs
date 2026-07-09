@@ -11,6 +11,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use rand::Rng;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
@@ -19,7 +20,7 @@ use oz_core::sync_client::SyncConfig;
 use crate::queue::SyncQueue;
 use crate::transport::{PushOutcome, SyncTransport};
 
-/// Default interval between sync cycles (30 seconds).
+/// Base interval; actual per-cycle sleep is randomized 60–120s.
 const DEFAULT_SYNC_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Snapshot of the daemon's current state, observable via [`SyncDaemon::status`].
@@ -107,11 +108,20 @@ impl SyncDaemon {
             // it mutably through the `select!` macro below.
             let mut rx = rx;
 
-            tracing::info!(interval_ms = interval.as_millis(), "sync daemon started");
+            if interval == DEFAULT_SYNC_INTERVAL {
+                tracing::info!("sync daemon started interval_range_secs=60..=120");
+            } else {
+                tracing::info!(interval_ms = interval.as_millis(), "sync daemon started");
+            }
 
             loop {
+                let sleep_dur = if interval == DEFAULT_SYNC_INTERVAL {
+                    Duration::from_secs(rand::thread_rng().gen_range(60..=120))
+                } else {
+                    interval
+                };
                 tokio::select! {
-                    _ = tokio::time::sleep(interval) => {
+                    _ = tokio::time::sleep(sleep_dur) => {
                         Self::run_tick(&db, &daemon_status).await;
                     }
                     res = rx.changed() => {
@@ -304,13 +314,9 @@ mod tests {
     use super::*;
     use oz_core::migrations;
     use oz_core::settings::Settings;
-    use rusqlite::Connection;
 
     fn setup_db() -> DbConnection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        Arc::new(Mutex::new(conn))
+        Arc::new(Mutex::new(migrations::fresh_db()))
     }
 
     #[tokio::test]

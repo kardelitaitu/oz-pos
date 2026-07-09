@@ -22,6 +22,17 @@ import tablesFtl from './tables.ftl?raw';
 import terminalsFtl from './terminals.ftl?raw';
 import offlineFtl from './offline.ftl?raw';
 import bundlesFtl from './bundles.ftl?raw';
+import promotionsFtl from './promotions.ftl?raw';
+import kdsFtl from './kds.ftl?raw';
+import kioskFtl from './kiosk.ftl?raw';
+import loyaltyFtl from './loyalty.ftl?raw';
+import shiftsFtl from './shifts.ftl?raw';
+import reportsFtl from './reports.ftl?raw';
+import multiStoreFtl from './multi-store.ftl?raw';
+import stockTransfersFtl from './stock-transfers.ftl?raw';
+import stockCountingFtl from './stock-counting.ftl?raw';
+import purchasingFtl from './purchasing.ftl?raw';
+import giftCardsFtl from './gift-cards.ftl?raw';
 
 const ALL_FTL = [
   sharedFtl,
@@ -37,6 +48,17 @@ const ALL_FTL = [
   terminalsFtl,
   offlineFtl,
   bundlesFtl,
+  promotionsFtl,
+  kdsFtl,
+  kioskFtl,
+  loyaltyFtl,
+  shiftsFtl,
+  reportsFtl,
+  multiStoreFtl,
+  stockTransfersFtl,
+  stockCountingFtl,
+  purchasingFtl,
+  giftCardsFtl,
 ].join('\n');
 
 let _bundle: ReactLocalization | null = null;

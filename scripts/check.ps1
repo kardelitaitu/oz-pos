@@ -17,7 +17,8 @@ function Step {
         [string]$RetryCommand,
         [scriptblock]$ScriptBlock
     )
-    Write-Host "$script:stepCounter. checking $Name... " -NoNewline
+    $stepStr = "{0:D2}" -f $script:stepCounter
+    Write-Host "$stepStr. checking $Name... " -NoNewline
     $script:stepCounter++
 
     $start = Get-Date

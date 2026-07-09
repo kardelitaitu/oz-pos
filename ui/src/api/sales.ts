@@ -26,6 +26,11 @@ export interface AddLineResult {
   lineTotal: Money | null;
 }
 
+export interface SerialNumberArg {
+  sku: string;
+  serial: string;
+}
+
 export interface PaymentSplitArg {
   method: string;
   amountMinor: number;
@@ -41,8 +46,12 @@ export interface CompleteSaleArgs {
   userId?: string;
   /** Optional customer id to link this sale for loyalty tracking. */
   customerId?: string;
+  /** Optional customer name (for credit sales). */
+  customerName?: string;
   /** Optional payment splits for multi-method payments. */
   paymentSplits?: PaymentSplitArg[];
+  /** Optional serial numbers captured at checkout for track_serial products. */
+  serialNumbers?: SerialNumberArg[];
 }
 
 export interface CompleteSaleResult {
@@ -55,6 +64,7 @@ export interface SetCartDiscountArgs {
   cartId: string;
   percent: number;
   label?: string;
+  userId: string;
 }
 
 export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
@@ -66,8 +76,21 @@ export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
 export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale', { args });
 
+export const getProductTrackSerial = (sku: string): Promise<boolean> =>
+  invoke<boolean>('get_product_track_serial', { sku });
+
 export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
   invoke<void>('set_cart_discount', { args });
+
+export interface OverrideLinePriceArgs {
+  cartId: string;
+  lineId: string;
+  newPriceMinor: number;
+  userId: string;
+}
+
+export const overrideLinePrice = (args: OverrideLinePriceArgs): Promise<void> =>
+  invoke<void>('override_line_price', { args });
 
 // ── Sales History ─────────────────────────────────────────────────
 
@@ -139,6 +162,8 @@ export interface HoldCartArgs {
   item_count: number;
   total_minor: number;
   currency: string;
+  bill_type?: string;
+  customer_name?: string;
 }
 
 export interface HeldCartRow {
@@ -148,6 +173,8 @@ export interface HeldCartRow {
   total_minor: number;
   currency: string;
   created_at: string;
+  bill_type: string;
+  customer_name: string | null;
 }
 
 export interface HeldCartFull {
@@ -158,6 +185,8 @@ export interface HeldCartFull {
   total_minor: number;
   currency: string;
   created_at: string;
+  bill_type: string;
+  customer_name: string | null;
 }
 
 export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
@@ -165,6 +194,9 @@ export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
 
 export const listHeldCarts = (): Promise<HeldCartRow[]> =>
   invoke<HeldCartRow[]>('list_held_carts');
+
+export const listOpenBills = (): Promise<HeldCartRow[]> =>
+  invoke<HeldCartRow[]>('list_open_bills');
 
 export const getHeldCart = (id: string): Promise<HeldCartFull | null> =>
   invoke<HeldCartFull | null>('get_held_cart', { id });
@@ -216,6 +248,9 @@ export interface RefundLineDto {
   unitPrice: Money;
   lineTotal: Money;
 }
+
+export const lookupSaleByReceiptBarcode = (barcode: string): Promise<SaleDetail | null> =>
+  invoke<SaleDetail | null>('lookup_sale_by_receipt_barcode', { barcode });
 
 export const processRefund = (args: ProcessRefundArgs): Promise<ProcessRefundResult> =>
   invoke<ProcessRefundResult>('process_refund', { args });
@@ -296,6 +331,7 @@ export interface PrintSalesReceiptArgs {
   tax?: MoneyDto;
   total: MoneyDto;
   payments: PaymentDto[];
+  tableNumber?: string;
 }
 
 export interface PrintSalesReceiptResult {

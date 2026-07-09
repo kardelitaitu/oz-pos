@@ -11,7 +11,7 @@
 //! and frontend still live in their original locations:
 //!
 //! - Backend: `crates/oz-core/src/exchange_rate.rs` + `crates/oz-core/src/db/settings.rs` (exchange rate methods)
-//! - Commands: `src-tauri/src/commands/currencies.rs` + `src-tauri/src/commands/exchange_rates.rs`
+//! - Commands: `apps/desktop-client/src/commands/currencies.rs` + `apps/desktop-client/src/commands/exchange_rates.rs`
 //! - Frontend: `ui/src/features/currency/`
 //! - API: `ui/src/api/currency.ts`
 //!

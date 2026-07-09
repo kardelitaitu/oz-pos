@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
+use crate::drivers::scale::{WeightReading, WeightScale};
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
@@ -309,6 +310,50 @@ impl CashDrawer for MockCashDrawer {
     }
 }
 
+// --- Weight scale mock ---------------------------------------------------
+
+/// Programmable mock for `WeightScale`. Always returns a stable zero reading.
+#[derive(Clone)]
+pub struct MockWeightScale {
+    pub read_calls: Arc<AtomicUsize>,
+    pub info: DeviceInfo,
+}
+
+impl MockWeightScale {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_info(DeviceInfo::new("mock", "MockScale", "0000"))
+    }
+
+    #[must_use]
+    pub fn with_info(info: DeviceInfo) -> Self {
+        Self {
+            read_calls: Arc::new(AtomicUsize::new(0)),
+            info,
+        }
+    }
+}
+
+impl Default for MockWeightScale {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WeightScale for MockWeightScale {
+    fn read_weight(&self) -> Result<WeightReading, HalError> {
+        self.read_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(WeightReading {
+            weight_grams: 0.0,
+            stable: true,
+        })
+    }
+
+    fn device_info(&self) -> DeviceInfo {
+        self.info.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -414,5 +459,48 @@ mod tests {
         let p = MockReceiptPrinter::new();
         p.cut().await.unwrap();
         assert_eq!(p.cut_calls.load(Ordering::SeqCst), 1);
+    }
+
+    // ── Weight scale mock tests ──────────────────────────────────
+
+    #[test]
+    fn scale_mock_read_weight_returns_stable_zero() {
+        let s = MockWeightScale::new();
+        let reading = s.read_weight().unwrap();
+        assert_eq!(reading.weight_grams, 0.0);
+        assert!(reading.stable);
+    }
+
+    #[test]
+    fn scale_mock_counts_read_calls() {
+        let s = MockWeightScale::new();
+        s.read_weight().unwrap();
+        s.read_weight().unwrap();
+        s.read_weight().unwrap();
+        assert_eq!(s.read_calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn scale_mock_device_info_is_accessible() {
+        let s = MockWeightScale::new();
+        let info = s.device_info();
+        assert!(!info.vendor.is_empty());
+        assert!(!info.model.is_empty());
+    }
+
+    #[test]
+    fn scale_mock_custom_device_info() {
+        let info = DeviceInfo::new("acme", "ACME-SCALE", "usb-001");
+        let s = MockWeightScale::with_info(info.clone());
+        assert_eq!(s.device_info().vendor, info.vendor);
+        assert_eq!(s.device_info().model, info.model);
+    }
+
+    #[test]
+    fn scale_mock_default_implements_weight_scale_trait() {
+        // Verify the mock can be used as a trait object through the trait.
+        fn accept_scale(_s: &dyn WeightScale) {}
+        let s = MockWeightScale::new();
+        accept_scale(&s);
     }
 }

@@ -99,6 +99,9 @@ pub async fn complete_setup(
 
         // 4. Mark setup as complete.
         Settings::set(&tx, oz_core::settings::keys::SETUP_COMPLETE, "1")?;
+
+        // 5. Dismiss the wizard so it doesn't show on next launch.
+        Settings::set(&tx, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false")?;
     }
     tx.commit()?;
 
@@ -111,6 +114,18 @@ pub async fn complete_setup(
     Ok(())
 }
 
+/// Dismiss the setup wizard without enabling any features.
+///
+/// Called when the user clicks "Skip setup". Only writes the
+/// `show_setup_wizard = false` flag — no preset or features are saved.
+#[command]
+pub async fn dismiss_setup_wizard(state: State<'_, AppState>) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    Settings::set(&db, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false")?;
+    tracing::info!("setup wizard dismissed (skip)");
+    Ok(())
+}
+
 /// Returns whether the setup wizard has been completed.
 ///
 /// The front-end calls this on mount to decide whether to render
@@ -119,8 +134,8 @@ pub async fn complete_setup(
 pub async fn get_setup_status(state: State<'_, AppState>) -> Result<SetupStatus, AppError> {
     let db = state.db.lock().await;
 
-    let completed = Settings::get(&db, oz_core::settings::keys::SETUP_COMPLETE)?
-        .map(|v| v == "1")
+    let completed = Settings::get(&db, oz_core::settings::keys::SHOW_SETUP_WIZARD)?
+        .map(|v| v == "false")
         .unwrap_or(false);
 
     let preset = Settings::get(&db, oz_core::settings::keys::STORE_PRESET)?;
@@ -136,10 +151,7 @@ mod tests {
 
     /// Create a fresh in-memory connection with migrations applied.
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     /// Run the same logic as `complete_setup` but with a plain
@@ -166,6 +178,7 @@ mod tests {
         Settings::prune_stale_features(conn, &registry)?;
         Settings::set(conn, oz_core::settings::keys::STORE_PRESET, preset)?;
         Settings::set(conn, oz_core::settings::keys::SETUP_COMPLETE, "1")?;
+        Settings::set(conn, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false")?;
         Ok(())
     }
 
@@ -483,5 +496,129 @@ mod tests {
         assert!(loaded.is_enabled(oz_core::Feature::KitchenDisplay));
         assert!(!loaded.is_enabled(oz_core::Feature::BarcodeScanning));
         assert!(!loaded.is_enabled(oz_core::Feature::SimpleRetail));
+    }
+
+    // ── show_setup_wizard tests ─────────────────────────────────────
+
+    #[test]
+    fn show_setup_wizard_defaults_to_true() {
+        let conn = fresh_conn();
+        let val = Settings::get(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD).unwrap();
+        assert_eq!(val, None, "absent means show wizard");
+    }
+
+    #[test]
+    fn show_setup_wizard_is_false_after_complete_setup() {
+        let conn = fresh_conn();
+        run_complete_setup(&conn, "restaurant", &["cash-payment"]).unwrap();
+        let val = Settings::get(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD)
+            .unwrap()
+            .unwrap();
+        assert_eq!(val, "false");
+    }
+
+    #[test]
+    fn show_setup_wizard_is_false_after_dismiss() {
+        let conn = fresh_conn();
+        Settings::set(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false").unwrap();
+        let val = Settings::get(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD)
+            .unwrap()
+            .unwrap();
+        assert_eq!(val, "false");
+    }
+
+    #[test]
+    fn get_setup_status_returns_completed_when_wizard_dismissed() {
+        let conn = fresh_conn();
+        Settings::set(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false").unwrap();
+        let completed = Settings::get(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD)
+            .unwrap()
+            .map(|v| v == "false")
+            .unwrap_or(false);
+        assert!(completed);
+    }
+
+    #[test]
+    fn get_setup_status_returns_not_completed_when_key_absent() {
+        let conn = fresh_conn();
+        let completed = Settings::get(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD)
+            .unwrap()
+            .map(|v| v == "false")
+            .unwrap_or(false);
+        assert!(!completed, "absent key means not completed");
+    }
+
+    // ── DTO struct tests ──────────────────────────────────────────
+
+    #[test]
+    fn complete_setup_args_deserialize() {
+        let json = r#"{"preset":"simple-retail","features":["cash-payment","receipt-printing"]}"#;
+        let args: CompleteSetupArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.preset, "simple-retail");
+        assert_eq!(args.features.len(), 2);
+        assert_eq!(args.features[0], "cash-payment");
+    }
+
+    #[test]
+    fn complete_setup_args_debug() {
+        let args = CompleteSetupArgs {
+            preset: "restaurant".into(),
+            features: vec!["cash-payment".into()],
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("restaurant"));
+        assert!(d.contains("cash-payment"));
+    }
+
+    #[test]
+    fn setup_status_debug() {
+        let status = SetupStatus {
+            completed: true,
+            preset: Some("simple-retail".into()),
+        };
+        let d = format!("{status:?}");
+        assert!(d.contains("simple-retail"));
+    }
+
+    #[test]
+    fn setup_status_serialize() {
+        let status = SetupStatus {
+            completed: false,
+            preset: None,
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert!(!json["completed"].as_bool().unwrap());
+        assert!(json["preset"].is_null());
+    }
+
+    #[test]
+    fn setup_status_serialize_with_preset() {
+        let status = SetupStatus {
+            completed: true,
+            preset: Some("restaurant".into()),
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert!(json["completed"].as_bool().unwrap());
+        assert_eq!(json["preset"], "restaurant");
+    }
+
+    #[test]
+    fn enabled_features_result_debug() {
+        let result = EnabledFeaturesResult {
+            features: vec!["cash-payment".into(), "tax-engine".into()],
+        };
+        let d = format!("{result:?}");
+        assert!(d.contains("cash-payment"));
+        assert!(d.contains("tax-engine"));
+    }
+
+    #[test]
+    fn enabled_features_result_serialize() {
+        let result = EnabledFeaturesResult {
+            features: vec!["barcode-scanning".into()],
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["features"][0], "barcode-scanning");
+        assert_eq!(json["features"].as_array().unwrap().len(), 1);
     }
 }

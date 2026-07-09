@@ -3,6 +3,7 @@ use tauri::{State, command};
 use oz_core::Table;
 use oz_core::db::Store;
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -28,27 +29,42 @@ pub async fn get_table(id: String, state: State<'_, AppState>) -> Result<Option<
 }
 
 #[command]
-pub async fn create_table(args: Table, state: State<'_, AppState>) -> Result<Table, AppError> {
+pub async fn create_table(
+    user_id: String,
+    args: Table,
+    state: State<'_, AppState>,
+) -> Result<Table, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TABLES_CREATE)?;
     let table = store.create_table(&args)?;
     drop(db);
     Ok(table)
 }
 
 #[command]
-pub async fn update_table(table: Table, state: State<'_, AppState>) -> Result<Table, AppError> {
+pub async fn update_table(
+    user_id: String,
+    table: Table,
+    state: State<'_, AppState>,
+) -> Result<Table, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TABLES_EDIT)?;
     let result = store.update_table(&table)?;
     drop(db);
     Ok(result)
 }
 
 #[command]
-pub async fn delete_table(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn delete_table(
+    user_id: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TABLES_DELETE)?;
     store.delete_table(&id)?;
     drop(db);
     Ok(())
@@ -56,12 +72,14 @@ pub async fn delete_table(id: String, state: State<'_, AppState>) -> Result<(), 
 
 #[command]
 pub async fn update_table_status(
+    user_id: String,
     id: String,
     status: String,
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TABLES_CLOSE)?;
     let table = store.update_table_status(&id, &status)?;
     drop(db);
     Ok(table)
@@ -69,12 +87,14 @@ pub async fn update_table_status(
 
 #[command]
 pub async fn assign_table_order(
+    user_id: String,
     table_id: String,
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TABLES_ASSIGN)?;
     let table = store.assign_table_order(&table_id, &sale_id)?;
     drop(db);
     Ok(table)
@@ -82,11 +102,13 @@ pub async fn assign_table_order(
 
 #[command]
 pub async fn release_table(
+    user_id: String,
     table_id: String,
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TABLES_CLOSE)?;
     let table = store.release_table(&table_id)?;
     drop(db);
     Ok(table)

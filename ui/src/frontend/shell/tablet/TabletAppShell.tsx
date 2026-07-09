@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import TabletAppLayout from './TabletAppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
-import { completeSetup, getSetupStatus } from '@/api/settings';
+import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
@@ -61,20 +62,17 @@ export default function TabletAppShell() {
   }, [userRole]);
 
   const handleComplete = useCallback(async (state: WizardState) => {
-    try {
-      await completeSetup({
-        preset: state.preset ?? 'custom',
-        features: Object.keys(state.features).filter(
-          (k) => state.features[k],
-        ),
-      });
-    } catch (err) {
-      console.error('Failed to persist setup:', err);
-    }
+    await completeSetup({
+      preset: state.preset ?? 'custom',
+      features: Object.keys(state.features).filter(
+        (k) => state.features[k],
+      ),
+    });
     setHasCompletedSetup(true);
   }, []);
 
   const handleSkip = useCallback(() => {
+    dismissSetupWizard().catch(console.error);
     setHasCompletedSetup(true);
   }, []);
 
@@ -91,17 +89,17 @@ export default function TabletAppShell() {
           fontSize: 'var(--text-base)',
         }}
       >
-        Loading&hellip;
+        <Localized id="shared-loading">Loading&hellip;</Localized>
       </div>
     );
   }
 
-  if (!hasCompletedSetup) {
-    return <SetupWizard onComplete={handleComplete} onSkip={handleSkip} />;
-  }
-
   if (!session) {
     return <StaffLoginScreen />;
+  }
+
+  if (!hasCompletedSetup) {
+    return <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />;
   }
 
   // Render the current page from the registry, or null if not found.

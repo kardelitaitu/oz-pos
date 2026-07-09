@@ -104,13 +104,13 @@ export default function InventoryAdjustmentScreen() {
 
     const qty = parseInt(quantity, 10);
     if (Number.isNaN(qty) || qty <= 0) {
-      setError('Quantity must be a positive number');
+      setError(l10n.getString('inv-error-qty-positive'));
       return;
     }
 
     const reasonText = reason === 'other' ? customReason.trim() : reason;
     if (!reasonText) {
-      setError('Please select or enter a reason');
+      setError(l10n.getString('inv-error-reason-required'));
       return;
     }
 
@@ -118,7 +118,7 @@ export default function InventoryAdjustmentScreen() {
 
     // Check for negative stock when removing.
     if (adjustmentType === 'remove' && selectedProduct.stock_qty != null && selectedProduct.stock_qty < qty) {
-      setError(`Cannot remove ${qty} units — only ${selectedProduct.stock_qty} in stock`);
+      setError(l10n.getString('inv-error-stock-insufficient', { qty, stock: selectedProduct.stock_qty }));
       return;
     }
 
@@ -139,11 +139,11 @@ export default function InventoryAdjustmentScreen() {
       // Reload to get fresh stock data.
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to adjust stock');
+      setError(err instanceof Error ? err.message : l10n.getString('inv-error-generic'));
     } finally {
       setSaving(false);
     }
-  }, [selectedProduct, quantity, adjustmentType, reason, customReason, load]);
+  }, [selectedProduct, quantity, adjustmentType, reason, customReason, load, l10n]);
 
   // ── Stock status helpers ──────────────────────────────────────
 
@@ -201,7 +201,7 @@ export default function InventoryAdjustmentScreen() {
               type="button"
               className="inv-adjust-clear-btn"
               onClick={handleClearSelection}
-              aria-label="Change product"
+              aria-label={l10n.getString('inv-change-aria')}
             >
               <Localized id="inv-change">
                 <span>Change</span>
@@ -222,7 +222,7 @@ export default function InventoryAdjustmentScreen() {
                   placeholder="Search by SKU, name, or barcode…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  aria-label="Search products"
+                  aria-label={l10n.getString('inv-search-aria')}
                 />
               </Localized>
             </div>
@@ -240,7 +240,7 @@ export default function InventoryAdjustmentScreen() {
                 </Localized>
               </p>
             ) : searchQuery ? (
-              <div className="inv-adjust-product-list" role="listbox" aria-label="Search results">
+              <div className="inv-adjust-product-list" role="listbox" aria-label={l10n.getString('inv-search-results-aria')}>
                 {filteredProducts.slice(0, 10).map((product) => (
                   <button
                     key={product.sku}
@@ -292,14 +292,14 @@ export default function InventoryAdjustmentScreen() {
           </h2>
 
           {/* Type toggle */}
-          <div className="inv-adjust-type-toggle" role="radiogroup" aria-label="Adjustment type">
+          <div className="inv-adjust-type-toggle" role="radiogroup" aria-label={l10n.getString('inv-type-aria')}>
             <button
               type="button"
               className={`inv-adjust-type-btn ${adjustmentType === 'add' ? 'inv-adjust-type-btn--active inv-adjust-type-btn--add' : ''}`}
               onClick={() => setAdjustmentType('add')}
               role="radio"
               aria-checked={adjustmentType === 'add'}
-              aria-label="Stock In"
+              aria-label={l10n.getString('inv-type-add-aria')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19" />
@@ -315,7 +315,7 @@ export default function InventoryAdjustmentScreen() {
               onClick={() => setAdjustmentType('remove')}
               role="radio"
               aria-checked={adjustmentType === 'remove'}
-              aria-label="Stock Out"
+              aria-label={l10n.getString('inv-type-remove-aria')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -327,7 +327,7 @@ export default function InventoryAdjustmentScreen() {
           </div>
 
           {/* Quantity */}
-          <label className="inv-adjust-field" htmlFor="inv-field-qty" aria-label="Quantity">
+          <label className="inv-adjust-field" htmlFor="inv-field-qty" aria-label={l10n.getString('inv-qty-field-aria')}>
             <span className="inv-adjust-label">
               <Localized id="inv-qty-label">
                 <span>Quantity</span>
@@ -380,7 +380,7 @@ export default function InventoryAdjustmentScreen() {
           </label>
 
           {reason === 'other' && (
-            <label className="inv-adjust-field" htmlFor="inv-field-custom-reason" aria-label="Describe the reason">
+            <label className="inv-adjust-field" htmlFor="inv-field-custom-reason" aria-label={l10n.getString('inv-reason-custom-field-aria')}>
               <span className="inv-adjust-label">
                 <Localized id="inv-reason-custom-label">
                   <span>Describe the reason</span>

@@ -41,9 +41,10 @@ impl Store<'_> {
     pub fn list_products(&self) -> Result<Vec<ProductWithDetails>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -66,9 +67,10 @@ impl Store<'_> {
 
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -98,9 +100,10 @@ impl Store<'_> {
         }
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                    p.category_id, p.barcode, p.created_at, p.updated_at,
-                    c.name AS category_name,
-                    i.qty AS stock_qty
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -115,6 +118,8 @@ impl Store<'_> {
     }
 
     /// Insert a new product and optionally an inventory row.
+    /// `product_type` defaults to `"retail"` when `None`.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_product(
         &self,
         sku: &str,
@@ -123,6 +128,7 @@ impl Store<'_> {
         category_id: Option<&str>,
         barcode: Option<&str>,
         initial_stock: i64,
+        product_type: Option<&str>,
     ) -> Result<Product, CoreError> {
         if sku.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -149,6 +155,7 @@ impl Store<'_> {
             });
         }
 
+        let product_type = product_type.unwrap_or("retail");
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let cur_str = std::str::from_utf8(&price.currency.0)
@@ -158,8 +165,8 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         let result = tx.execute(
-            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 id,
                 sku.trim(),
@@ -170,6 +177,9 @@ impl Store<'_> {
                 barcode,
                 now,
                 now,
+                now,
+                0i32,
+                product_type,
             ],
         );
 
@@ -199,6 +209,7 @@ impl Store<'_> {
             cache.invalidate_product(sku.trim());
         }
 
+        let parsed_pt = crate::ProductType::parse_str(product_type).unwrap_or_default();
         Ok(Product {
             id,
             sku: Sku::new(sku.trim()),
@@ -207,7 +218,10 @@ impl Store<'_> {
             category_id: category_id.map(|s| s.to_owned()),
             barcode: barcode.and_then(|s| foundation::Barcode::new(s).ok()),
             created_at: now.clone(),
-            updated_at: now,
+            updated_at: now.clone(),
+            price_updated_at: now,
+            track_serial: false,
+            product_type: parsed_pt,
         })
     }
 
@@ -219,6 +233,7 @@ impl Store<'_> {
         price: Money,
         category_id: Option<&str>,
         barcode: Option<&str>,
+        product_type: Option<&str>,
     ) -> Result<Product, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -241,8 +256,10 @@ impl Store<'_> {
         let rows = self.conn.execute(
             "UPDATE products
              SET name = ?1, price_minor = ?2, currency = ?3,
-                 category_id = ?4, barcode = ?5, updated_at = ?6
-             WHERE sku = ?7",
+                 category_id = ?4, barcode = ?5, updated_at = ?6,
+                 product_type = COALESCE(?7, product_type),
+                 price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END
+             WHERE sku = ?8",
             params![
                 name.trim(),
                 price.minor_units,
@@ -250,6 +267,7 @@ impl Store<'_> {
                 category_id,
                 barcode,
                 now,
+                product_type,
                 sku,
             ],
         )?;
@@ -266,7 +284,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -279,7 +297,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);
@@ -288,6 +306,24 @@ impl Store<'_> {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Set the `track_serial` flag for a product identified by SKU.
+    pub fn set_product_track_serial(&self, sku: &str, track_serial: bool) -> Result<(), CoreError> {
+        let rows = self.conn.execute(
+            "UPDATE products SET track_serial = ?1 WHERE sku = ?2",
+            params![track_serial as i64, sku],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "product",
+                id: sku.to_owned(),
+            });
+        }
+        if let Some(cache) = &self.cache {
+            cache.invalidate_product(sku);
+        }
+        Ok(())
     }
 
     /// Delete a product by SKU.
@@ -317,12 +353,13 @@ impl Store<'_> {
     pub fn list_categories(&self) -> Result<Vec<Category>, CoreError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name, colour FROM categories ORDER BY name")?;
+            .prepare("SELECT id, name, colour, icon FROM categories ORDER BY name")?;
         let rows = stmt.query_map([], |row| {
             Ok(Category {
                 id: row.get("id")?,
                 name: row.get("name")?,
                 colour: row.get("colour")?,
+                icon: row.get("icon")?,
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -334,6 +371,7 @@ impl Store<'_> {
         id: &str,
         name: &str,
         colour: &str,
+        icon: &str,
     ) -> Result<Category, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -343,8 +381,8 @@ impl Store<'_> {
         }
 
         let result = self.conn.execute(
-            "INSERT INTO categories (id, name, colour) VALUES (?1, ?2, ?3)",
-            params![id, name.trim(), colour],
+            "INSERT INTO categories (id, name, colour, icon) VALUES (?1, ?2, ?3, ?4)",
+            params![id, name.trim(), colour, icon],
         );
 
         match result {
@@ -360,7 +398,39 @@ impl Store<'_> {
             Ok(_) => {}
         }
 
-        Ok(Category::new(id, name, colour))
+        Ok(Category::new(id, name, colour, icon))
+    }
+
+    /// Update an existing category's name, colour, and icon.
+    ///
+    /// Returns [`CoreError::NotFound`] if no category with `id` exists.
+    pub fn update_category(
+        &self,
+        id: &str,
+        name: &str,
+        colour: &str,
+        icon: &str,
+    ) -> Result<Category, CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "category name must not be empty".into(),
+            });
+        }
+
+        let rows = self.conn.execute(
+            "UPDATE categories SET name = ?1, colour = ?2, icon = ?3 WHERE id = ?4",
+            params![name.trim(), colour, icon, id],
+        )?;
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "category",
+                id: id.to_owned(),
+            });
+        }
+
+        Ok(Category::new(id, name, colour, icon))
     }
 
     /// Delete a category by id.
@@ -381,12 +451,13 @@ impl Store<'_> {
     pub fn get_category(&self, id: &str) -> Result<Option<Category>, CoreError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name, colour FROM categories WHERE id = ?1")?;
+            .prepare("SELECT id, name, colour, icon FROM categories WHERE id = ?1")?;
         let result = stmt.query_row(params![id], |row| {
             Ok(Category {
                 id: row.get("id")?,
                 name: row.get("name")?,
                 colour: row.get("colour")?,
+                icon: row.get("icon")?,
             })
         });
         match result {
@@ -438,6 +509,20 @@ impl Store<'_> {
         );
         match result {
             Ok(id) => Ok(Some(id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Look up a product SKU by product ID.
+    pub fn product_sku_by_id(&self, product_id: &str) -> Result<Option<String>, CoreError> {
+        let result = self.conn.query_row(
+            "SELECT sku FROM products WHERE id = ?1",
+            params![product_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(sku) => Ok(Some(sku)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
@@ -638,10 +723,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn seed_everything(conn: &Connection) {
@@ -745,7 +827,7 @@ mod tests {
     fn create_product_minimal() {
         let conn = fresh();
         let p = store(&conn)
-            .create_product("NEW-001", "Widget", price(199), None, None, 0)
+            .create_product("NEW-001", "Widget", price(199), None, None, 0, None)
             .unwrap();
         assert_eq!(p.sku.as_str(), "NEW-001");
         assert_eq!(p.name, "Widget");
@@ -767,6 +849,7 @@ mod tests {
                 Some("cat-drinks"),
                 Some("1234567890123"),
                 5,
+                None,
             )
             .unwrap();
         assert_eq!(p.category_id.as_deref(), Some("cat-drinks"));
@@ -782,7 +865,7 @@ mod tests {
     fn create_product_without_stock() {
         let conn = fresh();
         let p = store(&conn)
-            .create_product("NOSTOCK", "No Stock", price(100), None, None, 0)
+            .create_product("NOSTOCK", "No Stock", price(100), None, None, 0, None)
             .unwrap();
         let qty = store(&conn).get_stock(&p.id).unwrap();
         assert_eq!(qty, 0);
@@ -792,10 +875,10 @@ mod tests {
     fn create_product_duplicate_sku() {
         let conn = fresh();
         store(&conn)
-            .create_product("DUP", "First", price(100), None, None, 0)
+            .create_product("DUP", "First", price(100), None, None, 0, None)
             .unwrap();
         let err = store(&conn)
-            .create_product("DUP", "Second", price(200), None, None, 0)
+            .create_product("DUP", "Second", price(200), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { .. }));
     }
@@ -805,19 +888,19 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let err = s
-            .create_product("  ", "X", price(1), None, None, 0)
+            .create_product("  ", "X", price(1), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "sku"));
         let err = s
-            .create_product("SKU", "", price(1), None, None, 0)
+            .create_product("SKU", "", price(1), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
         let err = s
-            .create_product("SKU", "X", price(-1), None, None, 0)
+            .create_product("SKU", "X", price(-1), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
         let err = s
-            .create_product("SKU", "X", price(1), None, None, -5)
+            .create_product("SKU", "X", price(1), None, None, -5, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "initial_stock"));
     }
@@ -829,7 +912,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let updated = store(&conn)
-            .update_product("DRINK-001", "Latte", price(400), None, None)
+            .update_product("DRINK-001", "Latte", price(400), None, None, None)
             .unwrap();
         assert_eq!(updated.name, "Latte");
         assert_eq!(updated.price.minor_units, 400);
@@ -840,7 +923,7 @@ mod tests {
     fn update_product_not_found() {
         let conn = fresh();
         let err = store(&conn)
-            .update_product("NOPE", "X", price(1), None, None)
+            .update_product("NOPE", "X", price(1), None, None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
@@ -850,7 +933,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "", price(1), None, None)
+            .update_product("DRINK-001", "", price(1), None, None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
@@ -860,7 +943,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "X", price(-1), None, None)
+            .update_product("DRINK-001", "X", price(-1), None, None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
     }
@@ -870,7 +953,14 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let updated = store(&conn)
-            .update_product("DRINK-001", "Latte", price(400), Some("cat-food"), None)
+            .update_product(
+                "DRINK-001",
+                "Latte",
+                price(400),
+                Some("cat-food"),
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(updated.category_id.as_deref(), Some("cat-food"));
     }
@@ -914,21 +1004,22 @@ mod tests {
     fn create_category() {
         let conn = fresh();
         let cat = store(&conn)
-            .create_category("cat-tools", "Tools", "#10b981")
+            .create_category("cat-tools", "Tools", "#10b981", "dots-1")
             .unwrap();
         assert_eq!(cat.id, "cat-tools");
         assert_eq!(cat.name, "Tools");
         assert_eq!(cat.colour, "#10b981");
+        assert_eq!(cat.icon, "dots-1");
     }
 
     #[test]
     fn create_category_duplicate_name() {
         let conn = fresh();
         store(&conn)
-            .create_category("cat-1", "Drinks", "#000")
+            .create_category("cat-1", "Drinks", "#000", "")
             .unwrap();
         let err = store(&conn)
-            .create_category("cat-2", "Drinks", "#fff")
+            .create_category("cat-2", "Drinks", "#fff", "")
             .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { .. }));
     }
@@ -937,7 +1028,7 @@ mod tests {
     fn create_category_empty_name() {
         let conn = fresh();
         let err = store(&conn)
-            .create_category("cat-1", "   ", "#000")
+            .create_category("cat-1", "   ", "#000", "")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
@@ -946,7 +1037,7 @@ mod tests {
     fn delete_category_removes_row() {
         let conn = fresh();
         store(&conn)
-            .create_category("cat-orphan", "Orphan", "#000")
+            .create_category("cat-orphan", "Orphan", "#000", "")
             .unwrap();
         store(&conn).delete_category("cat-orphan").unwrap();
         let cat = store(&conn).get_category("cat-orphan").unwrap();

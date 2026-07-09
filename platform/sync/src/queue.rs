@@ -175,7 +175,16 @@ impl SyncQueue {
                     let category_id = payload["category_id"].as_str();
                     let barcode = payload["barcode"].as_str();
                     let initial_stock = payload["initial_stock"].as_i64().unwrap_or(0);
-                    store.create_product(sku, name, price, category_id, barcode, initial_stock)?;
+                    let product_type = payload["product_type"].as_str().unwrap_or("retail");
+                    store.create_product(
+                        sku,
+                        name,
+                        price,
+                        category_id,
+                        barcode,
+                        initial_stock,
+                        Some(product_type),
+                    )?;
                 }
                 Ok(())
             }
@@ -201,10 +210,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn setup_store() -> Store<'static> {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        let conn: &'static Connection = Box::leak(Box::new(conn));
+        let conn: &'static Connection = Box::leak(Box::new(migrations::fresh_db()));
         Store::new(conn)
     }
 
@@ -361,6 +367,7 @@ mod tests {
             last_error: None,
             created_at: "2025-01-01T00:00:00.000Z".into(),
             synced_at: None,
+            tenant_id: "default".into(),
         };
 
         let resolved = ResolvedItem {
@@ -392,6 +399,7 @@ mod tests {
             last_error: None,
             created_at: "2025-06-01T12:00:00.000Z".into(),
             synced_at: None,
+            tenant_id: "default".into(),
         };
 
         let resolved = ResolvedItem {

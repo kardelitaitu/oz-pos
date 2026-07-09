@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   BarChart,
   Bar,
@@ -67,6 +67,7 @@ function monthAgo(): string {
 }
 
 export default function SalesReportScreen() {
+  const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('daily');
@@ -298,7 +299,7 @@ export default function SalesReportScreen() {
               dataKey="total_minor"
               fill="var(--color-accent, #4f46e5)"
               radius={[4, 4, 0, 0]}
-              aria-label="Revenue"
+              aria-label={l10n.getString('sales-report-revenue-label')}
             />
           </BarChart>
         </ResponsiveContainer>
@@ -368,7 +369,7 @@ export default function SalesReportScreen() {
           ) : (
             <div className="sales-report-top-table">
               <div className="sales-report-top-header">
-                <span>#</span>
+                <span><Localized id="sales-report-rank">#</Localized></span>
                 <span>
                   <Localized id="top-products-name">Name</Localized>
                 </span>

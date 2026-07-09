@@ -29,8 +29,10 @@
 
 use std::path::Path;
 
+pub mod bridge;
 pub mod error;
 
+pub use bridge::LuaEventBridge;
 pub use error::LuaError;
 
 /// A line item passed into Lua business-rule hooks.
@@ -142,6 +144,12 @@ impl LuaRuntime {
             .exec()
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(())
+    }
+
+    /// Access the inner `rlua::Lua` state for advanced operations
+    /// (registry keys, custom bindings, etc.).
+    pub fn inner(&self) -> &rlua::Lua {
+        &self.lua
     }
 
     /// Load all `.lua` files from a directory (non-recursive).

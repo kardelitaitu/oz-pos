@@ -213,4 +213,12 @@ mod tests {
         let d = SerialCustomerDisplay::new("COM5", 9600, info.clone());
         assert_eq!(d.device_info(), info);
     }
+
+    #[tokio::test]
+    async fn set_brightness_returns_not_supported() {
+        let info = DeviceInfo::new("Test", "PoleDisplay", "COM6");
+        let d = SerialCustomerDisplay::new("COM6", 9600, info);
+        let err = d.set_brightness(0.5).await.unwrap_err();
+        assert!(matches!(err, HalError::Protocol(_)));
+    }
 }

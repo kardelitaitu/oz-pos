@@ -333,6 +333,16 @@ mod tests {
         assert_eq!(err.field, "price");
     }
 
+    #[test]
+    fn range_with_min_equals_max_accepts_exact_value() {
+        // When min == max, only the exact value is accepted.
+        assert!(validate_range("flag", 42, 42, 42).is_ok());
+        let err = validate_range("flag", 41, 42, 42).unwrap_err();
+        assert!(err.message.contains("must be between"));
+        let err = validate_range("flag", 43, 42, 42).unwrap_err();
+        assert!(err.message.contains("must be between"));
+    }
+
     // ── validate_min_length ──────────────────────────────────────
 
     #[test]
@@ -381,6 +391,14 @@ mod tests {
         // validate_max_length uses the original length, not trimmed.
         let err = validate_max_length("sku", "    ", 2).unwrap_err();
         assert_eq!(err.field, "sku");
+    }
+
+    #[test]
+    fn max_length_with_zero_max_rejects_non_empty() {
+        // max=0 means only empty strings are valid.
+        assert!(validate_max_length("x", "", 0).is_ok());
+        let err = validate_max_length("x", "a", 0).unwrap_err();
+        assert!(err.message.contains("at most 0"));
     }
 
     // ── validate_alphanumeric ───────────────────────────────────
@@ -566,6 +584,25 @@ mod tests {
     fn bounded_with_zero_min_accepts_one_char() {
         // When min = 0, a single character is valid (after trimming).
         assert!(validate_non_empty_bounded("flag", "X", 0, 10).is_ok());
+    }
+
+    #[test]
+    fn bounded_with_min_equals_max_accepts_exact_length() {
+        // When min == max, only the exact length is accepted.
+        assert!(validate_non_empty_bounded("pin", "1234", 4, 4).is_ok());
+        let err = validate_non_empty_bounded("pin", "123", 4, 4).unwrap_err();
+        assert!(err.message.contains("at least 4"));
+        let err = validate_non_empty_bounded("pin", "12345", 4, 4).unwrap_err();
+        assert!(err.message.contains("at most 4"));
+    }
+
+    #[test]
+    fn bounded_with_max_zero_rejects_all_non_empty() {
+        // When max = 0 and min = 0, only empty strings are valid...
+        // but empty strings are rejected first by the non-empty check.
+        // So all inputs should be rejected.
+        assert!(validate_non_empty_bounded("x", "", 0, 0).is_err());
+        assert!(validate_non_empty_bounded("x", "a", 0, 0).is_err());
     }
 
     // ── Error traits ─────────────────────────────────────────────

@@ -137,4 +137,12 @@ mod tests {
         let _ = inv.adjust_qty(-5);
         assert_eq!(inv.qty, 10, "original should be unchanged");
     }
+
+    #[test]
+    fn debug_output() {
+        let inv = Inventory::new("prod-1", 25);
+        let debug = format!("{inv:?}");
+        assert!(debug.contains("prod-1"));
+        assert!(debug.contains("25"));
+    }
 }

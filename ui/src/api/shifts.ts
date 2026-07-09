@@ -35,13 +35,17 @@ export const openShift = (userId: string, openingBalanceMinor: number): Promise<
     args: { userId, terminalId: null as string | null, openingBalanceMinor },
   });
 
+/** Arguments for closing a shift. */
+export interface CloseShiftArgs {
+  userId: string;
+  id: string;
+  closingBalanceMinor: number;
+  notes?: string | null;
+}
+
 /** Close an active shift with a counted closing balance. */
-export const closeShift = (
-  id: string,
-  closingBalanceMinor: number,
-  notes?: string | null,
-): Promise<ShiftDto> =>
-  invoke<ShiftDto>('close_shift', { id, closingBalanceMinor, notes });
+export const closeShift = (args: CloseShiftArgs): Promise<ShiftDto> =>
+  invoke<ShiftDto>('close_shift', { args });
 
 /** Get the currently open shift for a user, if any. */
 export const getActiveShift = (userId: string): Promise<ShiftDto | null> =>

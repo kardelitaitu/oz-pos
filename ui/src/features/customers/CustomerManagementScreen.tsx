@@ -1,11 +1,14 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   listCustomers,
   createCustomer,
   updateCustomer,
   deleteCustomer,
   type CustomerDto,
+  type UpdateCustomerArgs,
+  type CreateCustomerArgs,
 } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -31,6 +34,8 @@ const EMPTY_FORM: FormData = {
 
 export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
+  const { session } = useAuth();
+  const userId = session?.user_id ?? '';
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -110,13 +115,13 @@ export default function CustomerManagementScreen() {
       const name = form.name.trim();
 
       if (editingId) {
-        const args: import('@/api/customers').UpdateCustomerArgs = { id: editingId, name };
+        const args: UpdateCustomerArgs = { userId, id: editingId, name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
         await updateCustomer(args);
       } else {
-        const args: import('@/api/customers').CreateCustomerArgs = { name };
+        const args: CreateCustomerArgs = { userId, name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
@@ -129,20 +134,20 @@ export default function CustomerManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load]);
+  }, [form, editingId, closeModal, load, userId, l10n]);
 
   // ── Delete ─────────────────────────────────────────────────────
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
     try {
-      await deleteCustomer(id);
+      await deleteCustomer({ userId, id });
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
     }
-  }, [load]);
+  }, [load, userId]);
 
   // ── Render ─────────────────────────────────────────────────────
 
@@ -216,7 +221,7 @@ export default function CustomerManagementScreen() {
         </Card>
       ) : (
         <div className="customer-mgmt-table-wrap">
-          <table className="customer-mgmt-table" aria-label="Customers">
+          <table className="customer-mgmt-table" aria-label={l10n.getString('customer-mgmt-table-aria')}>
             <thead>
               <tr>
                 <Localized id="customer-mgmt-col-name"><th>Name</th></Localized>
@@ -275,13 +280,12 @@ export default function CustomerManagementScreen() {
               ))}
             </tbody>
           </table>
-        </div>
+              </div>
       )}
 
       {/* ── Add/Edit Modal ──────────────────────────────────────── */}
       {showModal && (
-        <Localized id={editingId ? 'customer-mgmt-modal-edit-aria' : 'customer-mgmt-modal-add-aria'} attrs={{ 'aria-label': true }}>
-          <div className="customer-mgmt-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit customer' : 'Add customer'}>
+        <div className="customer-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(editingId ? 'customer-mgmt-modal-edit-aria' : 'customer-mgmt-modal-add-aria')}>
             <div className="customer-mgmt-modal">
               <div className="customer-mgmt-modal-header">
                 <Localized id={editingId ? 'customer-mgmt-modal-edit-title' : 'customer-mgmt-modal-add-title'}>
@@ -300,76 +304,80 @@ export default function CustomerManagementScreen() {
               </div>
 
               <div className="customer-mgmt-modal-body">
-                <label className="customer-mgmt-field" htmlFor="customer-field-name">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-name">
                     <span className="customer-mgmt-label">Name *</span>
-                  </Localized>
-                  <Localized id="customer-mgmt-name-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="customer-mgmt-input"
-                      type="text"
-                      id="customer-field-name"
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g. Jane Smith"
-                      autoComplete="name"
-                      aria-label="Name"
-                    />
-                  </Localized>
-                </label>
+                  </Localized>                    <Localized id="customer-mgmt-name-aria" attrs={{ 'aria-label': true }}>
+                    <Localized id="customer-mgmt-name-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className="customer-mgmt-input"
+                        type="text"
+                        id="customer-field-name"
+                        aria-label="Name"
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        placeholder="e.g. Jane Smith"
+                        autoComplete="name"
+                      />
+                    </Localized>
+                    </Localized>
+                </div>
 
-                <label className="customer-mgmt-field" htmlFor="customer-field-email">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-email">
                     <span className="customer-mgmt-label">Email</span>
-                  </Localized>
-                  <Localized id="customer-mgmt-email-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="customer-mgmt-input"
-                      type="email"
-                      id="customer-field-email"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      placeholder="jane@example.com"
-                      autoComplete="email"
-                      aria-label="Email"
-                    />
-                  </Localized>
-                </label>
+                  </Localized>                    <Localized id="customer-mgmt-email-aria" attrs={{ 'aria-label': true }}>
+                    <Localized id="customer-mgmt-email-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className="customer-mgmt-input"
+                        type="email"
+                        id="customer-field-email"
+                        aria-label="Email"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        placeholder="jane@example.com"
+                        autoComplete="email"
+                      />
+                    </Localized>
+                    </Localized>
+                </div>
 
-                <label className="customer-mgmt-field" htmlFor="customer-field-phone">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-phone">
                     <span className="customer-mgmt-label">Phone</span>
-                  </Localized>
-                  <Localized id="customer-mgmt-phone-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="customer-mgmt-input"
-                      type="tel"
-                      id="customer-field-phone"
-                      value={form.phone}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      placeholder="+1-555-0100"
-                      autoComplete="tel"
-                      aria-label="Phone"
-                    />
-                  </Localized>
-                </label>
+                  </Localized>                    <Localized id="customer-mgmt-phone-aria" attrs={{ 'aria-label': true }}>
+                    <Localized id="customer-mgmt-phone-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className="customer-mgmt-input"
+                        type="tel"
+                        id="customer-field-phone"
+                        aria-label="Phone"
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        placeholder="+1-555-0100"
+                        autoComplete="tel"
+                      />
+                    </Localized>
+                    </Localized>
+                </div>
 
-                <label className="customer-mgmt-field" htmlFor="customer-field-notes">
+                <div className="customer-mgmt-field">
                   <Localized id="customer-mgmt-field-notes">
                     <span className="customer-mgmt-label">Notes</span>
-                  </Localized>
-                  <Localized id="customer-mgmt-notes-placeholder" attrs={{ placeholder: true }}>
-                    <textarea
-                      className="customer-mgmt-input customer-mgmt-textarea"
-                      id="customer-field-notes"
-                      value={form.notes}
-                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                      placeholder="Preferences, special notes…"
-                      aria-label="Notes"
-                      rows={3}
-                    />
-                  </Localized>
-                </label>
+                  </Localized>                    <Localized id="customer-mgmt-notes-aria" attrs={{ 'aria-label': true }}>
+                    <Localized id="customer-mgmt-notes-placeholder" attrs={{ placeholder: true }}>
+                      <textarea
+                        className="customer-mgmt-input customer-mgmt-textarea"
+                        id="customer-field-notes"
+                        aria-label="Notes"
+                        value={form.notes}
+                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                        placeholder="Preferences, special notes…"
+                        rows={3}
+                      />
+                    </Localized>
+                    </Localized>
+                </div>
 
                 {error && (
                   <div className="customer-mgmt-error" role="alert">
@@ -402,7 +410,6 @@ export default function CustomerManagementScreen() {
               </div>
             </div>
           </div>
-        </Localized>
       )}
     </div>
   );

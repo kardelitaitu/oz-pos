@@ -310,10 +310,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn store(conn: &Connection) -> Store<'_> {
@@ -337,7 +334,8 @@ mod tests {
             minor_units: unit_minor,
             currency: usd(),
         };
-        s.create_product(sku, sku, money, None, None, 100).unwrap();
+        s.create_product(sku, sku, money, None, None, 100, None)
+            .unwrap();
 
         let mut cart = Cart::new(usd());
         cart.add_line(CartLine::new(Sku::new(sku), qty, price(unit_minor)))
@@ -500,9 +498,9 @@ mod tests {
             minor_units: 100,
             currency: usd(),
         };
-        s.create_product("LOW", "Low Stock Item", money, None, None, 2)
+        s.create_product("LOW", "Low Stock Item", money, None, None, 2, None)
             .unwrap();
-        s.create_product("OK", "OK Stock Item", money, None, None, 100)
+        s.create_product("OK", "OK Stock Item", money, None, None, 100, None)
             .unwrap();
         let rows = s.low_stock_alerts(5).unwrap();
         assert_eq!(rows.len(), 1);
@@ -520,7 +518,7 @@ mod tests {
             currency: usd(),
         };
         // Create a product without inventory record — qty defaults to 0.
-        s.create_product("NO-INV", "No Inventory", money, None, None, 0)
+        s.create_product("NO-INV", "No Inventory", money, None, None, 0, None)
             .unwrap();
         let rows = s.low_stock_alerts(0).unwrap();
         assert!(!rows.is_empty());
@@ -542,13 +540,13 @@ mod tests {
     fn category_breakdown_with_sales() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_category("cat-1", "Beverages", "#fff").unwrap();
+        s.create_category("cat-1", "Beverages", "#fff", "").unwrap();
 
         let money = Money {
             minor_units: 350,
             currency: usd(),
         };
-        s.create_product("COFFEE", "Coffee", money, Some("cat-1"), None, 100)
+        s.create_product("COFFEE", "Coffee", money, Some("cat-1"), None, 100, None)
             .unwrap();
 
         let mut cart = Cart::new(usd());
@@ -579,7 +577,7 @@ mod tests {
             minor_units: 200,
             currency: usd(),
         };
-        s.create_product("GENERIC", "Generic Item", money, None, None, 100)
+        s.create_product("GENERIC", "Generic Item", money, None, None, 100, None)
             .unwrap();
 
         let mut cart = Cart::new(usd());

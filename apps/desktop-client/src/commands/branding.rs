@@ -79,3 +79,54 @@ pub async fn pick_logo_file(app_handle: tauri::AppHandle) -> Result<Option<Strin
     let file = rx.await.unwrap_or(None);
     Ok(file.map(|f| f.to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brand_settings_debug() {
+        let s = BrandSettingsDto {
+            primary_colour: "#10b981".into(),
+            logo_path: Some("/assets/logo.png".into()),
+            store_name: "My Shop".into(),
+        };
+        let debug = format!("{s:?}");
+        assert!(debug.contains("#10b981"));
+        assert!(debug.contains("logo.png"));
+        assert!(debug.contains("My Shop"));
+    }
+
+    #[test]
+    fn brand_settings_serialize() {
+        let s = BrandSettingsDto {
+            primary_colour: "#ff0000".into(),
+            logo_path: Some("/logo.svg".into()),
+            store_name: "OZ MART".into(),
+        };
+        let json = serde_json::to_value(&s).unwrap();
+        assert_eq!(json["primary_colour"], "#ff0000");
+        assert_eq!(json["logo_path"], "/logo.svg");
+        assert_eq!(json["store_name"], "OZ MART");
+    }
+
+    #[test]
+    fn brand_settings_no_logo_path() {
+        let s = BrandSettingsDto {
+            primary_colour: "#000000".into(),
+            logo_path: None,
+            store_name: "Store".into(),
+        };
+        let json = serde_json::to_value(&s).unwrap();
+        assert!(json["logo_path"].is_null());
+    }
+
+    #[test]
+    fn brand_settings_deserialize_no_logo() {
+        let json = r##"{"primary_colour":"#abcdef","logo_path":null,"store_name":"Test"}"##;
+        let s: BrandSettingsDto = serde_json::from_str(json).unwrap();
+        assert_eq!(s.primary_colour, "#abcdef");
+        assert!(s.logo_path.is_none());
+        assert_eq!(s.store_name, "Test");
+    }
+}

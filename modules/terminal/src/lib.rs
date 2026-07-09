@@ -10,7 +10,7 @@
 //! and frontend still live in their original locations:
 //!
 //! - Backend: `crates/oz-core/src/terminal.rs` + `crates/oz-core/src/db/terminals.rs`
-//! - Commands: `src-tauri/src/commands/terminals.rs`
+//! - Commands: `apps/desktop-client/src/commands/terminals.rs`
 //! - Frontend: `ui/src/features/terminals/`
 //! - API: `ui/src/api/terminals.ts`
 //!

@@ -13,6 +13,7 @@ export interface CustomerDto {
 }
 
 export interface CreateCustomerArgs {
+  userId: string;
   name: string;
   email?: string;
   phone?: string;
@@ -20,6 +21,7 @@ export interface CreateCustomerArgs {
 }
 
 export interface UpdateCustomerArgs {
+  userId: string;
   id: string;
   name: string;
   email?: string;
@@ -39,5 +41,5 @@ export const createCustomer = (args: CreateCustomerArgs): Promise<CustomerDto> =
 export const updateCustomer = (args: UpdateCustomerArgs): Promise<CustomerDto> =>
   invoke<CustomerDto>('update_customer', { args });
 
-export const deleteCustomer = (id: string): Promise<void> =>
-  invoke('delete_customer', { id });
+export const deleteCustomer = (args: { userId: string; id: string }): Promise<void> =>
+  invoke('delete_customer', { args });

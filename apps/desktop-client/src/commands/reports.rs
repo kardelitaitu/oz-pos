@@ -15,6 +15,19 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[command]
+pub async fn get_menu_engineering(
+    state: State<'_, AppState>,
+    start_date: String,
+    end_date: String,
+) -> Result<oz_reporting::menu_engineering::MenuEngineeringResult, AppError> {
+    let db = state.db.lock().await;
+    let result =
+        oz_reporting::menu_engineering::query_menu_engineering(&db, &start_date, &end_date)?;
+    drop(db);
+    Ok(result)
+}
+
+#[command]
 pub async fn get_daily_revenue(
     state: State<'_, AppState>,
     start_date: String,

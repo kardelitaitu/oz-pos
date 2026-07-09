@@ -132,8 +132,12 @@ pub fn init_module_system(
         bus.subscribe::<oz_core::events::SaleCompleted>(
             "sale.completed",
             Box::new(modules_reporting::handlers::SaleCompletedReporter::new(
-                handler_conn,
+                handler_conn.clone(),
             )),
+        );
+        bus.subscribe::<oz_core::events::SaleCompleted>(
+            "sale.completed",
+            Box::new(crate::event_handlers::LoyaltyEarnHandler::new(handler_conn)),
         );
     }
 
@@ -248,10 +252,10 @@ mod tests {
             bus.has_handlers("stock.adjusted"),
             "stock.adjusted should have handlers"
         );
-        // 4 handlers on sale.completed, 2 on product.created, 2 on stock.adjusted
+        // 5 handlers on sale.completed, 2 on product.created, 2 on stock.adjusted
         assert!(
-            bus.handler_count() >= 4,
-            "expected at least 4 handlers total"
+            bus.handler_count() >= 5,
+            "expected at least 5 handlers total"
         );
     }
 

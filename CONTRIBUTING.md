@@ -121,6 +121,16 @@ For UI changes:
 cd ui && npm run lint && npm run typecheck && npm run test && npm run build
 ```
 
+For coverage spot-checks (optional, not part of the PR gate yet):
+
+```bash
+bash scripts/coverage.sh         # rust + ui
+bash scripts/coverage.sh rust    # just rust
+bash scripts/coverage.sh ui      # just ui
+```
+
+Reports land in `coverage/{rust,ui}/index.html`. The CI `coverage` job uploads the same artifacts on every push to `main`. Use them to spot under-tested modules after refactors.
+
 If your change touches something a skill describes (a path, a type, a trait, a dependency version, a golden rule), run the drift guard before opening the PR:
 
 ```bash
@@ -188,3 +198,4 @@ By contributing, you agree that your contributions will be licensed under the MI
 ---
 
 > last audited 28-06-26 by project-scaffold
+> last audited 09-07-26 by docs-auditor

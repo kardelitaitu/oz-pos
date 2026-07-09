@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './QrisQrDisplay.css';
 
 interface QrisQrDisplayProps {
@@ -72,20 +73,29 @@ export default function QrisQrDisplay({
     return cells;
   }, [reference]);
 
-  if (!isOpen) return null;
+  // Layered exit to mirror the entry (added in this PR). Mirrors
+  // the PosScreen cousin-modals pattern (commit 1408992): the
+  // overlay and container each get their own `--exiting` class so
+  // two mirrored keyframes play in parallel.
+  const exit = useExitAnimation(isOpen, onClose);
+
+  if (!exit.shouldRender) return null;
 
   return (
     <div
-      className="qris-overlay"
+      className={`qris-overlay${exit.exiting ? ' qris-overlay--exiting' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label="QRIS QR payment"
     >
-      <div className="qris-container">
+      <div
+        className={`qris-container${exit.exiting ? ' qris-container--exiting' : ''}`}
+      >
         <button
           type="button"
           className="qris-close"
-          onClick={onClose}
+          onClick={() => exit.requestClose()}
+          disabled={exit.exiting}
           aria-label="Close QR payment"
         >
           &times;

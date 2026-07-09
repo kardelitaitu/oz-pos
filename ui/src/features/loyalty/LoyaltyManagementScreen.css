@@ -34,6 +34,10 @@
   color: var(--color-fg-secondary);
 }
 
+.loyalty-accounts-section {
+  padding: var(--space-2) 0;
+}
+
 /* ── Table ────────────────────────────────────────────────────────── */
 
 .loyalty-table-wrap {
@@ -63,7 +67,6 @@
 
 .loyalty-table-row {
   cursor: pointer;
-  transition: background var(--duration-150) var(--ease-out);
 }
 
 .loyalty-table-row:hover {
@@ -250,7 +253,6 @@
   font-size: var(--text-xs);
   cursor: pointer;
   color: var(--color-fg-secondary);
-  transition: all var(--duration-150) var(--ease-out);
   width: 100%;
 }
 
@@ -321,4 +323,13 @@
   color: var(--color-danger);
   font-size: var(--text-sm);
   font-weight: 500;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .loyalty-table-row {
+    transition: background var(--duration-150) var(--ease-out);
+  }
+  .loyalty-tier-edit-btn {
+    transition: all var(--duration-150) var(--ease-out);
+  }
 }

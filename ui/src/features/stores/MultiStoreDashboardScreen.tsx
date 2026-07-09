@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { listStores, setPrimaryStore, deleteStore, type StoreProfile } from '@/api/stores';
 import { listTerminals, type TerminalDto } from '@/api/terminals';
 import { Button } from '@/components/Button';
@@ -15,6 +15,7 @@ function isOnline(lastSeenAt: string | null): boolean {
 }
 
 export default function MultiStoreDashboardScreen() {
+  const { l10n } = useLocalization();
   const [stores, setStores] = useState<StoreProfile[]>([]);
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,12 +83,12 @@ export default function MultiStoreDashboardScreen() {
       </div>
 
       {loading ? (
-        <p className="multi-store-dashboard-loading">Loading dashboard…</p>
+        <p className="multi-store-dashboard-loading"><Localized id="multi-store-dashboard-loading">Loading dashboard…</Localized></p>
       ) : error ? (
         <Card shadow="sm">
           <div className="multi-store-dashboard-error">
             <p>{error}</p>
-            <Button variant="secondary" onClick={load}>Retry</Button>
+            <Button variant="secondary" onClick={load}><Localized id="retry">Retry</Localized></Button>
           </div>
         </Card>
       ) : (
@@ -96,25 +97,25 @@ export default function MultiStoreDashboardScreen() {
           <div className="multi-store-stat-grid">
             <div className="multi-store-stat-card">
               <span className="multi-store-stat-value">{stores.length}</span>
-              <span className="multi-store-stat-label">Total Stores</span>
+              <span className="multi-store-stat-label"><Localized id="multi-store-stat-total-stores">Total Stores</Localized></span>
             </div>
             <div className="multi-store-stat-card">
               <span className="multi-store-stat-value">{activeTerminals}</span>
-              <span className="multi-store-stat-label">Active Terminals</span>
+              <span className="multi-store-stat-label"><Localized id="multi-store-stat-active-terminals">Active Terminals</Localized></span>
             </div>
             <div className="multi-store-stat-card">
               <span className="multi-store-stat-value">{onlineTerminals}</span>
-              <span className="multi-store-stat-label">Online Terminals</span>
+              <span className="multi-store-stat-label"><Localized id="multi-store-stat-online-terminals">Online Terminals</Localized></span>
             </div>
             <div className="multi-store-stat-card">
               <span className="multi-store-stat-value">{terminals.length}</span>
-              <span className="multi-store-stat-label">Total Terminals</span>
+              <span className="multi-store-stat-label"><Localized id="multi-store-stat-total-terminals">Total Terminals</Localized></span>
             </div>
           </div>
 
           {/* ── Store cards ───────────────────────────────────── */}
-          <section aria-label="Stores overview">
-            <h2 className="multi-store-section-title">Stores</h2>
+          <section aria-label={l10n.getString('multi-store-section-stores-overview')}>
+            <h2 className="multi-store-section-title"><Localized id="multi-store-section-stores">Stores</Localized></h2>
             <div className="multi-store-card-grid">
               {stores.map((store) => {
                 const tc = getTerminalCount(store.id);
@@ -128,7 +129,7 @@ export default function MultiStoreDashboardScreen() {
                       <div className="multi-store-card-header">
                         <span className="multi-store-card-name">{store.name}</span>
                         {store.is_primary && (
-                          <span className="multi-store-card-badge">Primary</span>
+                          <span className="multi-store-card-badge"><Localized id="multi-store-badge-primary">Primary</Localized></span>
                         )}
                       </div>
                     }
@@ -140,18 +141,18 @@ export default function MultiStoreDashboardScreen() {
                               variant="secondary"
                               size="sm"
                               onClick={() => handleSetPrimary(store.id)}
-                              aria-label={`Set ${store.name} as primary store`}
+                              aria-label={l10n.getString('multi-store-btn-set-primary-label', { name: store.name })}
                             >
-                              Set as Primary
+                              <Localized id="multi-store-btn-set-primary">Set as Primary</Localized>
                             </Button>
                             <Button
                               variant="danger"
                               size="sm"
                               loading={deletingId === store.id}
                               onClick={() => handleDelete(store.id)}
-                              aria-label={`Delete ${store.name}`}
+                              aria-label={l10n.getString('multi-store-btn-delete-label', { name: store.name })}
                             >
-                              Delete
+                              <Localized id="multi-store-btn-delete">Delete</Localized>
                             </Button>
                           </>
                         )}
@@ -161,26 +162,26 @@ export default function MultiStoreDashboardScreen() {
                     <div className="multi-store-card-body">
                       {store.address && (
                         <div className="multi-store-card-row">
-                          <span className="multi-store-card-label">Address</span>
+                          <span className="multi-store-card-label"><Localized id="multi-store-label-address">Address</Localized></span>
                           <span className="multi-store-card-value">{store.address}</span>
                         </div>
                       )}
                       {store.tax_id && (
                         <div className="multi-store-card-row">
-                          <span className="multi-store-card-label">Tax ID</span>
+                          <span className="multi-store-card-label"><Localized id="multi-store-label-tax-id">Tax ID</Localized></span>
                           <span className="multi-store-card-value">{store.tax_id}</span>
                         </div>
                       )}
                       <div className="multi-store-card-row">
-                        <span className="multi-store-card-label">Currency</span>
+                          <span className="multi-store-card-label"><Localized id="multi-store-label-currency">Currency</Localized></span>
                         <span className="multi-store-card-value">{store.currency}</span>
                       </div>
                       <div className="multi-store-card-row">
-                        <span className="multi-store-card-label">Timezone</span>
+                          <span className="multi-store-card-label"><Localized id="multi-store-label-timezone">Timezone</Localized></span>
                         <span className="multi-store-card-value">{store.timezone}</span>
                       </div>
                       <div className="multi-store-card-row">
-                        <span className="multi-store-card-label">Terminals</span>
+                          <span className="multi-store-card-label"><Localized id="multi-store-label-terminals">Terminals</Localized></span>
                         <span className="multi-store-card-value">{tc}</span>
                       </div>
                     </div>
@@ -191,7 +192,7 @@ export default function MultiStoreDashboardScreen() {
           </section>
 
           {/* ── Terminal Status Panel ─────────────────────────── */}
-          <section aria-label="Terminal status" className="multi-store-terminal-section">
+          <section aria-label={l10n.getString('multi-store-section-terminal-status')} className="multi-store-terminal-section">
             <TerminalStatusPanel refreshTrigger={0} />
           </section>
         </>

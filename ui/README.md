@@ -19,18 +19,18 @@ npm install            # one-time
 npm run dev            # vite dev server on http://localhost:1420
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
-npm run test           # vitest run (122 tests, 12 files)
+npm run test           # vitest run (33 test files)
 npm run build          # tsc -b && vite build
 ```
 
-`npm run dev` is what `cargo tauri dev` (from `src-tauri/`) launches.
+`npm run dev` is what `cargo tauri dev` (from `apps/desktop-client/`) launches.
 
 ## Structure
 
 ```
 ui/src/
 ├── api/
-│   └── pos.ts           # ONLY file that calls invoke() — ~40 wrappers
+│   └── (29 per-domain files)  # Typed invoke() wrappers — no invoke() in components
 ├── components/
 │   ├── AppLayout.tsx    # Sidebar navigation, route definitions, feature gates
 │   ├── Badge.tsx        # status/role badges
@@ -62,14 +62,14 @@ ui/src/
 ├── hooks/
 │   └── useFeatures.ts   # Feature flag hook for route gating
 ├── locales/
-│   └── en-US.ftl        # All user-visible strings (~200 IDs)
+│   └── en-US.ftl        # Primary locale (1900+ IDs across 25 .ftl files)
 ├── styles/
 │   ├── reset.css
 │   ├── tokens.css       # CSS custom properties (colors, spacing, typography)
 │   └── components.css   # Shared component styles
 ├── types/
 │   └── domain.ts        # Money, CartId, Sku, LineId, Product, formatMoney
-├── __tests__/           # Per-screen test files (12 files, 122 tests)
+├── __tests__/           # Per-screen test files (33 files)
 ├── App.tsx              # Root: setup guard → auth guard → AppLayout
 └── main.tsx             # Entry: Fluent bundle registration + StrictMode
 ```
@@ -93,7 +93,7 @@ ui/src/
 - Each feature screen has a `__tests__/<Screen>.test.tsx` file
 - IPC is mocked via `vi.hoisted()` → `vi.mock('@tauri-apps/api/core')`
 - Fluent strings are provided inline via `FluentBundle` + `FluentResource`
-- Run: `npm run test` (122 tests, 12 files, ~7s)
+- Run: `npm run test` (33 test files, ~7s)
 
 ## Conventions
 
@@ -106,4 +106,4 @@ ui/src/
 | Every screen has a test file | `__tests__/` audit |
 | Money displayed via `formatMoney()` | Import from `types/domain.ts` |
 
-> last audited 28-06-26 by docs-auditor
+> last audited 07-07-26 by docs-auditor

@@ -1,0 +1,169 @@
+/* ============================================================
+ * OZ-POS Cart Panel — action buttons + persistent undo.
+ *
+ * Owns the bottom action surface of `<div class="pos-cart-footer">`:
+ *   - Action buttons row (.pos-cart-actions-row + .pos-cart-pay-btn
+ *     flex variant)
+ *   - Pay hero button (.pos-cart-pay-btn + hover / active / disabled /
+ *     focus-visible)
+ *   - Hold button (.pos-cart-hold-btn + hover / focus-visible)
+ *   - Clear cart button (.pos-cart-clear-btn + hover / focus-visible)
+ *   - Persistent undo bar (.pos-cart-undo-bar, -message, -btn,
+ *     -dismiss) + slide-in keyframe
+ *
+ * The financial breakdown (subtotal/discount/tip/service/total +
+ * money-row helpers) lives in CartPanelFooterTotals.css.
+ *
+ * Brand hooks (consumed via var(--brand-token, fallback)):
+ *   --cart-pay-radius, --cart-pay-gradient-from,
+ *   --cart-pay-gradient-to, --cart-pay-shadow,
+ *   --cart-pay-shadow-hover                  → CartPanel.brand.css
+ *
+ * Loaded after CartPanel.css, CartPanelLineItem.css, and
+ * CartPanelFooterTotals.css so the action row cascades on top of
+ * all three; CartPanel.brand.css remains last for brand winners.
+ * ============================================================ */
+
+/* ── Action buttons row (Clear · Pay · Hold) ───────── */
+
+.pos-cart-actions-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Pay: flex 1 takes remaining space; the other two flank it. */
+.pos-cart-actions-row .pos-cart-pay-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ── Pay button (hero) ─────────────────────────────── */
+/* Elevated hero: 56 px tall, xl-size label, vertical accent
+ * gradient, soft accent-tinted glow that strengthens on hover
+ * together with a 1 px lift. */
+
+.pos-cart-pay-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-accent-fg);
+  background: linear-gradient(180deg,
+    var(--cart-pay-gradient-from, var(--color-accent)) 0%,
+    var(--cart-pay-gradient-to, var(--color-accent-hover)) 100%);
+  border: none;
+  border-radius: var(--cart-pay-radius, var(--radius-lg));
+  cursor: pointer;
+  box-shadow:
+    var(--cart-pay-shadow,
+      0 8px 22px -10px var(--color-accent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12));
+}
+
+.pos-cart-pay-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    var(--cart-pay-shadow-hover,
+      0 12px 28px -10px var(--color-accent-hover),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18));
+  filter: brightness(1.04);
+}
+
+.pos-cart-pay-btn:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.pos-cart-pay-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+.pos-cart-pay-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.pos-cart-pay-btn--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+/* ── Open Bill button ──────────────────────────────── */
+
+.pos-cart-open-bill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-primary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pos-cart-open-bill-btn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-hover);
+}
+
+.pos-cart-open-bill-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Clear cart button ─────────────────────────────── */
+
+.pos-cart-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-danger);
+  background: transparent;
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pos-cart-clear-btn:hover {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger);
+}
+
+.pos-cart-clear-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pos-cart-pay-btn {
+    transition: transform var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out), filter var(--duration-150) var(--ease-out);
+  }
+  .pos-cart-open-bill-btn {
+    transition: all var(--duration-150) var(--ease-out);
+  }
+  .pos-cart-clear-btn {
+    transition: all var(--duration-150) var(--ease-out);
+  }
+}

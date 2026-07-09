@@ -26,6 +26,7 @@ graph TD
 
 | Feature / Specification | 1 Time (IDR 3.5jt One-Time) | Standard (IDR 2jt / Year) | Pro (IDR 5jt / Year) | Enterprise (Bespoke / Quote) |
 | :--- | :---: | :---: | :---: | :---: |
+| **3-Month Free Trial** | ✓ (Limited: offline-only) | ✓ | ✓ | — |
 | **Offline-First SQLite Database** | ✓ | ✓ | ✓ | ✓ |
 | **Local Peripheral Integrations (HAL)** | ✓ | ✓ | ✓ | ✓ |
 | **Local Stock & Inventory Management** | ✓ | ✓ | ✓ | ✓ |

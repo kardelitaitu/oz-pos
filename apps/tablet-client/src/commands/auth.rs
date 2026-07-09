@@ -85,3 +85,57 @@ pub async fn staff_login(
         },
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn staff_login_args_deserialize() {
+        let json = r#"{"username":"cashier1","pin":"1234"}"#;
+        let args: StaffLoginArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.username, "cashier1");
+        assert_eq!(args.pin, "1234");
+    }
+
+    #[test]
+    fn staff_login_args_debug() {
+        let args = StaffLoginArgs {
+            username: "admin".into(),
+            pin: "9999".into(),
+        };
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("admin"));
+    }
+
+    #[test]
+    fn staff_login_result_serialize() {
+        let result = StaffLoginResult {
+            session: LoginSession {
+                user_id: "u1".into(),
+                display_name: "Alice".into(),
+                role_name: "Manager".into(),
+                role_id: "r1".into(),
+            },
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        let session = &json["session"];
+        assert_eq!(session["user_id"], "u1");
+        assert_eq!(session["display_name"], "Alice");
+        assert_eq!(session["role_name"], "Manager");
+    }
+
+    #[test]
+    fn staff_login_result_debug() {
+        let result = StaffLoginResult {
+            session: LoginSession {
+                user_id: "u1".into(),
+                display_name: "Bob".into(),
+                role_name: "Cashier".into(),
+                role_id: "r2".into(),
+            },
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("Bob"));
+    }
+}

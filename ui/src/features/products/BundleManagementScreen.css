@@ -81,7 +81,6 @@
   cursor: pointer;
   font-size: var(--text-xs);
   color: var(--color-fg);
-  transition: background-color 0.15s, color 0.15s;
 }
 
 .bundle-mgmt-action-btn:hover {
@@ -111,7 +110,6 @@
   cursor: pointer;
   font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
-  transition: background-color 0.15s, color 0.15s;
 }
 
 .bundle-mgmt-toggle--on {
@@ -207,7 +205,6 @@
   font-size: var(--text-sm);
   color: var(--color-fg);
   background-color: var(--color-bg);
-  transition: border-color 0.15s;
 }
 
 .bundle-mgmt-input:focus {
@@ -262,4 +259,16 @@
   gap: var(--space-2);
   padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--color-border);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bundle-mgmt-action-btn {
+    transition: background-color 0.15s, color 0.15s;
+  }
+  .bundle-mgmt-toggle {
+    transition: background-color 0.15s, color 0.15s;
+  }
+  .bundle-mgmt-input {
+    transition: border-color 0.15s;
+  }
 }

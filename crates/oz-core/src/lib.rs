@@ -28,6 +28,8 @@ pub mod error;
 pub mod events;
 pub mod exchange_rate;
 pub mod features;
+/// Gift cards — issue, redeem, top-up, freeze, balance checks.
+pub mod gift_card;
 pub mod inventory;
 pub mod kds;
 /// Loyalty program — points, tiers, and redemption.
@@ -42,19 +44,28 @@ pub mod product;
 pub mod product_bundle;
 pub mod product_variant;
 pub mod promotion;
+pub mod purchase_order;
+pub mod recipe;
 pub mod refund;
 pub mod sale;
 pub mod settings;
 pub mod shift;
 pub mod sku;
+pub mod stock_count;
+pub mod stock_transfer;
 pub mod store_profile;
+pub mod supplier;
+pub mod sync;
 pub mod sync_client;
 /// Restaurant table management — floor plan positions and statuses.
 pub mod table;
 pub mod tax_rate;
 pub mod terminal;
 pub mod terminal_override;
+pub mod terminal_profile;
 pub mod user;
+/// Per-user display preferences (card size, font size, etc.).
+pub mod user_preferences;
 
 pub use audit::AuditEntry;
 #[cfg(feature = "cache-redis")]
@@ -69,28 +80,45 @@ pub use db::reports::{
     TopProductRow, WeeklyRevenueRow,
 };
 pub use db::{ProductWithDetails, Store};
-pub use error::CoreError;
-pub use features::{Feature, FeatureRegistry};
+pub use error::{CoreError, CoreErrorKind};
+pub use features::{
+    Feature, FeatureGuard, FeatureGuardRegistry, FeatureRegistry, KdsFeatureGuard,
+    ShiftFeatureGuard,
+};
 pub use foundation;
 pub use foundation::{InvalidTransition, SaleStatus};
+pub use gift_card::{
+    GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
+    RedeemGiftCardResult,
+};
 pub use inventory::Inventory;
 pub use kds::{CreateKdsOrderInput, KdsOrder, KdsStatus};
 pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
 pub use money::{Currency, Money};
 pub use offline::{OfflineQueueItem, OfflineQueueStatus};
 pub use payment::{Payment, PaymentSplitArg};
-pub use product::Product;
+pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
+pub use product::{Product, ProductType};
 pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
 pub use product_variant::ProductVariant;
 pub use promotion::{Promotion, PromotionApplication, PromotionType};
+pub use purchase_order::{PurchaseOrder, PurchaseOrderLine, PurchaseOrderWithLines};
+pub use recipe::RecipeItem;
 pub use refund::{Refund, RefundLine};
 pub use sale::{Sale, SaleLine};
 pub use settings::Settings;
 pub use shift::Shift;
 pub use sku::{LineId, Sku};
+pub use stock_count::{CountType, StockAdjustment, StockCount, StockCountLine, StockCountStatus};
+pub use stock_transfer::{StockTransfer, StockTransferLine};
 pub use store_profile::StoreProfile;
-pub use sync_client::{SyncAttemptResult, SyncConfig, sync_pending, sync_pending_async};
+pub use supplier::Supplier;
+pub use sync_client::{
+    PullResult, SyncAttemptResult, SyncConfig, pull_snapshot, sync_pending, sync_pending_async,
+};
 pub use table::{Table, TableStatus};
 pub use terminal::Terminal;
 pub use terminal_override::TerminalFeatureOverride;
+pub use terminal_profile::TerminalProfile;
 pub use user::{Role, User, builtin_roles, seed_users};
+pub use user_preferences::UserPreferences;

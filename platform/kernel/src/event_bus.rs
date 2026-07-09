@@ -25,7 +25,37 @@ use tracing::{debug, error};
 /// A type-erased event handler stored in the bus.
 type HandlerFn = Box<dyn Fn(&dyn Any) -> ModuleResult + Send + Sync>;
 
-/// In-process event bus with synchronous dispatch.
+/// Wrap an `EventHandler<E>` into a type-erased `HandlerFn`.
+fn wrap_handler<E>(handler: Box<dyn EventHandler<E>>) -> HandlerFn
+where
+    E: DomainEvent + 'static,
+{
+    Box::new(move |event: &dyn Any| -> ModuleResult {
+        match event.downcast_ref::<E>() {
+            Some(typed) => handler.handle(typed),
+            None => Err(anyhow::anyhow!(
+                "event bus type mismatch: expected {}, got unknown type",
+                std::any::type_name::<E>(),
+            )),
+        }
+    })
+}
+
+/// A registered subscriber entry, optionally owned by a module.
+struct SubscriberEntry {
+    /// The module that registered this handler, or `""` for anonymous.
+    module_id: &'static str,
+    /// The type-erased handler function.
+    handler: HandlerFn,
+}
+
+/// In-process event bus with synchronous dispatch and module-scoped
+/// subscription tracking.
+///
+/// Handlers can be registered with an optional `module_id` via
+/// [`subscribe_for_module`](EventBus::subscribe_for_module). When a
+/// module is stopped, [`unsubscribe_module`](EventBus::unsubscribe_module)
+/// atomically removes all handlers owned by that module.
 ///
 /// # Example
 ///
@@ -55,8 +85,8 @@ type HandlerFn = Box<dyn Fn(&dyn Any) -> ModuleResult + Send + Sync>;
 /// bus.publish(&SaleCompleted { sale_id: "sale-1".into() })?;
 /// ```
 pub struct EventBus {
-    /// Map of topic name → type-erased handler functions.
-    subscribers: RwLock<HashMap<&'static str, Vec<HandlerFn>>>,
+    /// Map of topic name → subscriber entries (handler + ownership).
+    subscribers: RwLock<HashMap<&'static str, Vec<SubscriberEntry>>>,
 }
 
 impl EventBus {
@@ -74,23 +104,84 @@ impl EventBus {
     ///
     /// Multiple handlers can be registered for the same topic; they are
     /// called in registration order.
+    ///
+    /// This is an anonymous subscription (no module ownership tracking).
+    /// Prefer [`subscribe_for_module`](EventBus::subscribe_for_module)
+    /// when the handler belongs to a module that may be stopped at runtime.
     pub fn subscribe<E>(&self, topic: &'static str, handler: Box<dyn EventHandler<E>>)
     where
         E: DomainEvent + 'static,
     {
-        let wrapped: HandlerFn = Box::new(move |event: &dyn Any| -> ModuleResult {
-            match event.downcast_ref::<E>() {
-                Some(typed) => handler.handle(typed),
-                None => Err(anyhow::anyhow!(
-                    "event bus type mismatch: expected {}, got unknown type",
-                    std::any::type_name::<E>(),
-                )),
+        let mut subs = self.subscribers.write().expect("event bus lock poisoned");
+        subs.entry(topic).or_default().push(SubscriberEntry {
+            module_id: "",
+            handler: wrap_handler::<E>(handler),
+        });
+        debug!(topic, "anonymous event handler registered");
+    }
+
+    /// Register a handler owned by a specific module.
+    ///
+    /// When the module is stopped, call [`unsubscribe_module`]
+    /// to atomically remove all handlers registered under that
+    /// `module_id` across all topics.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// bus.subscribe_for_module("inventory", "sale.completed", Box::new(handler));
+    /// ```
+    pub fn subscribe_for_module<E>(
+        &self,
+        module_id: &'static str,
+        topic: &'static str,
+        handler: Box<dyn EventHandler<E>>,
+    ) where
+        E: DomainEvent + 'static,
+    {
+        let wrapped = wrap_handler::<E>(handler);
+        let mut subs = self.subscribers.write().expect("event bus lock poisoned");
+        subs.entry(topic).or_default().push(SubscriberEntry {
+            module_id,
+            handler: wrapped,
+        });
+        debug!(module = module_id, topic, "module event handler registered");
+    }
+
+    /// Remove all handlers owned by the given module across every topic.
+    ///
+    /// This is called by the kernel when a module is stopped, ensuring
+    /// stopped modules do not continue to receive events.
+    ///
+    /// Returns the number of handlers removed.
+    pub fn unsubscribe_module(&self, module_id: &'static str) -> usize {
+        let mut subs = self.subscribers.write().expect("event bus lock poisoned");
+        let mut total_removed = 0;
+
+        // Retain only entries that do NOT belong to the given module,
+        // dropping topic keys that become empty.
+        subs.retain(|topic, entries| {
+            let before = entries.len();
+            entries.retain(|e| e.module_id != module_id);
+            let removed = before - entries.len();
+            total_removed += removed;
+            if removed > 0 {
+                debug!(
+                    module = module_id,
+                    topic, removed, "unsubscribed module handlers"
+                );
             }
+            // Drop the topic key entirely if no handlers remain.
+            !entries.is_empty()
         });
 
-        let mut subs = self.subscribers.write().expect("event bus lock poisoned");
-        subs.entry(topic).or_default().push(wrapped);
-        debug!(topic, "event handler registered");
+        if total_removed > 0 {
+            debug!(
+                module = module_id,
+                total_removed, "module fully unsubscribed"
+            );
+        }
+        total_removed
     }
 
     /// Publish an event to all subscribed handlers.
@@ -109,7 +200,7 @@ impl EventBus {
         let any_ref: &dyn Any = event;
 
         let subs = self.subscribers.read().expect("event bus lock poisoned");
-        let handlers = match subs.get(topic) {
+        let entries = match subs.get(topic) {
             Some(h) => h,
             None => {
                 debug!(topic, "no handlers registered for this event");
@@ -117,12 +208,13 @@ impl EventBus {
             }
         };
 
-        let count = handlers.len();
-        for (i, handler) in handlers.iter().enumerate() {
-            if let Err(e) = handler(any_ref) {
+        let count = entries.len();
+        for (i, entry) in entries.iter().enumerate() {
+            if let Err(e) = (entry.handler)(any_ref) {
                 error!(
                     topic,
                     handler_index = i,
+                    module = entry.module_id,
                     error = %e,
                     "event handler failed (continuing)"
                 );
@@ -139,6 +231,17 @@ impl EventBus {
             .read()
             .expect("event bus lock poisoned")
             .len()
+    }
+
+    /// Number of handlers registered for a specific module across all topics.
+    pub fn handler_count_for_module(&self, module_id: &str) -> usize {
+        self.subscribers
+            .read()
+            .expect("event bus lock poisoned")
+            .values()
+            .flat_map(|v| v.iter())
+            .filter(|e| e.module_id == module_id)
+            .count()
     }
 
     /// Total number of registered handlers across all topics.
@@ -424,6 +527,118 @@ mod tests {
         .unwrap();
         assert_eq!(test_handler.last_value(), 42);
         assert_eq!(other_handler.last_message(), Some("hello".into()));
+    }
+
+    // ── Module-scoped subscription tests ─────────────────────────
+
+    #[test]
+    fn subscribe_for_module_tracks_module_id() {
+        let bus = EventBus::new();
+
+        bus.subscribe_for_module("inventory", "test.event", Box::new(CalledHandler::new()));
+        bus.subscribe_for_module("sales", "test.event", Box::new(CalledHandler::new()));
+
+        assert_eq!(bus.handler_count_for_module("inventory"), 1);
+        assert_eq!(bus.handler_count_for_module("sales"), 1);
+        assert_eq!(bus.handler_count_for_module("unknown"), 0);
+        assert_eq!(bus.handler_count(), 2);
+    }
+
+    #[test]
+    fn subscribe_for_module_and_publish() {
+        let bus = EventBus::new();
+        let handler = TestHandler::new();
+
+        bus.subscribe_for_module("inventory", "test.event", Box::new(handler.clone()));
+        bus.publish(&TestEvent { value: 42 }).unwrap();
+        assert_eq!(handler.last_value(), 42);
+    }
+
+    #[test]
+    fn unsubscribe_module_removes_all_its_handlers() {
+        let bus = EventBus::new();
+
+        bus.subscribe_for_module("inventory", "test.event", Box::new(CalledHandler::new()));
+        bus.subscribe_for_module("inventory", "other.event", Box::new(CalledHandler::new()));
+        bus.subscribe_for_module("sales", "test.event", Box::new(CalledHandler::new()));
+
+        assert_eq!(bus.handler_count(), 3);
+        assert_eq!(bus.handler_count_for_module("inventory"), 2);
+
+        let removed = bus.unsubscribe_module("inventory");
+        assert_eq!(removed, 2);
+
+        // Sales handler should remain.
+        assert_eq!(bus.handler_count(), 1);
+        assert_eq!(bus.handler_count_for_module("inventory"), 0);
+        assert_eq!(bus.handler_count_for_module("sales"), 1);
+    }
+
+    #[test]
+    fn unsubscribe_module_with_no_handlers_returns_zero() {
+        let bus = EventBus::new();
+        let removed = bus.unsubscribe_module("nonexistent");
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn unsubscribe_module_does_not_affect_anonymous_subscriptions() {
+        let bus = EventBus::new();
+
+        bus.subscribe("test.event", Box::new(CalledHandler::new()));
+        bus.subscribe_for_module("inventory", "test.event", Box::new(CalledHandler::new()));
+
+        assert_eq!(bus.handler_count(), 2);
+
+        let removed = bus.unsubscribe_module("inventory");
+        assert_eq!(removed, 1);
+
+        // Anonymous handler should remain.
+        assert_eq!(bus.handler_count(), 1);
+        assert!(bus.has_handlers("test.event"));
+    }
+
+    #[test]
+    fn unsubscribe_module_multiple_topics() {
+        let bus = EventBus::new();
+
+        bus.subscribe_for_module("inventory", "a", Box::new(CalledHandler::new()));
+        bus.subscribe_for_module("inventory", "b", Box::new(CalledHandler::new()));
+        bus.subscribe_for_module("inventory", "c", Box::new(CalledHandler::new()));
+
+        assert_eq!(bus.topic_count(), 3);
+        assert_eq!(bus.handler_count(), 3);
+
+        bus.unsubscribe_module("inventory");
+        assert_eq!(bus.handler_count(), 0);
+    }
+
+    #[test]
+    fn module_handlers_are_called_in_order() {
+        let bus = EventBus::new();
+        let first = TestHandler::new();
+        let second = TestHandler::new();
+
+        bus.subscribe_for_module("sales", "test.event", Box::new(first.clone()));
+        bus.subscribe_for_module("inventory", "test.event", Box::new(second.clone()));
+
+        bus.publish(&TestEvent { value: 100 }).unwrap();
+        assert_eq!(first.last_value(), 100);
+        assert_eq!(second.last_value(), 100);
+    }
+
+    #[test]
+    fn unsubscribe_then_resubscribe() {
+        let bus = EventBus::new();
+
+        bus.subscribe_for_module("inventory", "test.event", Box::new(CalledHandler::new()));
+        bus.unsubscribe_module("inventory");
+        assert_eq!(bus.handler_count(), 0);
+
+        // Re-subscribe.
+        bus.subscribe_for_module("inventory", "test.event", Box::new(CalledHandler::new()));
+        assert_eq!(bus.handler_count(), 1);
+        assert!(bus.has_handlers("test.event"));
     }
 
     #[test]

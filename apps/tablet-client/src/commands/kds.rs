@@ -53,7 +53,7 @@ pub async fn update_kds_status(
 pub async fn create_kds_order_from_sale(
     sale_id: String,
     state: State<'_, AppState>,
-) -> Result<KdsOrder, AppError> {
+) -> Result<Option<KdsOrder>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let order = store.complete_sale_to_kds(&sale_id)?;

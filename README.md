@@ -1,20 +1,99 @@
 # OZ-POS
 
-A modular Point-of-Sale framework built with Rust + Tauri v2.
+> **A modular, offline-first Point-of-Sale platform built with Rust and Tauri v2.**
+
+OZ-POS is an open-source Point-of-Sale platform designed for **retail, restaurants, cafés, and specialty businesses** that require reliability, performance, and long-term maintainability.
+
+Unlike traditional monolithic POS applications, OZ-POS is built around a modular architecture where business capabilities are implemented as independent modules. Organizations can deploy only the features they need while developers can extend the platform without modifying the core.
+
+---
+
+## Why OZ-POS?
+
+Modern POS systems often suffer from vendor lock-in, expensive subscriptions, cloud dependency, limited customization, and difficult maintenance. OZ-POS addresses these challenges through a modern software architecture.
+
+| Traditional POS | OZ-POS |
+|---|---|
+| Monolithic | Modular architecture |
+| Cloud required | Offline-first |
+| Proprietary integrations | Hardware abstraction layer |
+| Difficult customization | Plug-in modules |
+| Large desktop footprint | Lightweight Tauri application |
+| Vendor lock-in | Open ecosystem |
+
+### Core Principles
+
+- **Offline-first** — Operates without internet connectivity; sync when available
+- **Modular by design** — Independent modules for inventory, CRM, reporting, etc.
+- **Secure by default** — Encrypted backups, PAN masking, platform keychains
+- **Hardware abstraction** — Vendor-independent drivers for printers, scanners, displays
+- **Enterprise-grade code quality** — 1900+ Rust tests, strict Clippy, typed Money, transactional DB
+
+---
+
+## Key Features
+
+| Area | Capabilities |
+|------|-------------|
+| **Sales** | Fast checkout, barcode scanning, receipt printing, multiple payments, refunds, discounts |
+| **Inventory** | Product management, categories, stock adjustments, purchase tracking, movement history |
+| **Customer Management** | Profiles, purchase history, loyalty support, future CRM module |
+| **Reporting** | Daily sales, product performance, cash reconciliation, inventory reports, export |
+| **Security** | Encrypted backups (Argon2id + AES-256-GCM), PAN masking, TLS, platform keychain, audit logging |
+| **Hardware** | Receipt printers, barcode scanners, cash drawers, customer displays — USB, Bluetooth, TCP, serial, plus mock drivers for testing |
+
+---
 
 ## Architecture
+
+```
+                         Applications
+      ┌─────────────────────────────────────────────┐
+      │  Desktop Client  │  Tablet Client  │ Future │
+      └─────────────────────────────────────────────┘
+                        │
+                        ▼
+                   Tauri v2 Shell
+                        │
+                        ▼
+                   Platform Kernel
+      ┌────────────────────────────────────────┐
+      │ Event Bus │ Sync Engine │ Lifecycle    │
+      │ Auth      │ Startup                    │
+      └────────────────────────────────────────┘
+             │                    │
+      ┌──────┴────────────────────┴──────────────┐
+      ▼                                         ▼
+ Foundation                              Domain Modules
+ ┌──────────────┐                    ┌─────────────────┐
+ │ Money  SKU   │                    │ Inventory        │
+ │ Cart         │                    │ Reporting        │
+ │ Contracts    │                    │ CRM              │
+ └──────────────┘                    │ Tax / Discounts  │
+                                     │ Restaurant       │
+      │                              │ Loyalty          │
+      ▼                              └─────────────────┘
+ Infrastructure
+ ┌──────────────────────────────────────────────┐
+ │ SQLite   │  HAL  │  Security  │  Logging     │
+ │ Export   │  Lua Runtime                      │
+ └──────────────────────────────────────────────┘
+```
+
+Business logic, UI, hardware drivers, and platform services are isolated — new modules and applications can be added without changing the kernel.
+
+---
+
+## Repository Structure
 
 ```
 oz-pos/
 ├── apps/
 │   ├── desktop-client/     # Tauri v2 shell: IPC commands, app state, plugins
-│   │   └── src/commands/   # 65+ Tauri commands grouped by domain
 │   └── tablet-client/      # Tablet-optimised Tauri shell
 ├── crates/
 │   ├── oz-cli/             # CLI tool (backup, export/import .ozpkg, migrations)
 │   ├── oz-core/            # Domain models, SQLite Store, migrations, settings
-│   │   ├── src/db/         # Store facade — typed CRUD per entity
-│   │   └── src/ozpkg/      # Encrypted .ozpkg export/import (Argon2id + AES-256-GCM)
 │   ├── oz-hal/             # Hardware Abstraction Layer (printer, scanner, drawer, display)
 │   ├── oz-logging/         # Structured logging (console, file, syslog, eventlog)
 │   ├── oz-lua/             # Lua scripting engine (rlua — discount, tax, validation)
@@ -27,33 +106,32 @@ oz-pos/
 ├── ui/                     # React 18 + TypeScript + Vite
 │   └── src/
 │       ├── api/            # Per-domain invoke() wrappers — no invoke() in components
-│       ├── frontend/
-│       │   ├── shared/     # Button, Card, Modal, Badge, Toast, Spinner, etc.
-│       │   ├── shell/      # AppLayout, RoleBadge, ThemeProvider, ThemeToggle
-│       │   └── themes/     # Design tokens, reset, components CSS
-│       ├── features/       # 15+ screen components by domain
-│       ├── locales/        # Fluent (.ftl) files — 280+ IDs
-│       └── __tests__/      # Vitest + testing-library (122 tests, 12 files)
-├── docs/
-│   ├── ROADMAP.md          # Phased delivery plan (Phase 3 complete)
-│   ├── decisions/          # Architecture decision records
-│   └── specs/              # Module manifest format, PCI-DSS checklist
-├── scripts/examples/       # Example Lua business rule scripts
+│       ├── frontend/       # Shared components, shell layout, design tokens
+│       ├── features/       # 21+ screen components by domain
+│       ├── locales/        # Fluent (.ftl) files — 1900+ IDs across 25 files
+│       └── __tests__/      # Vitest + testing-library (33 files)
+├── docs/                   # ROADMAP.md, ADRs, specs, whitepaper
+├── scripts/                # Example Lua business rule scripts, coverage scripts
 └── packaging/              # MSI, .deb, .AppImage build configs
 ```
 
-## Foundation
+---
+
+## Technology Stack
 
 | Layer | Technology | Purpose |
-|-------|-----------|---------|
+|---|---|---|
 | Backend | Rust | Domain logic, DB access, hardware control |
-| Frontend | React 18 + TS + Vite | POS UI |
-| Shell | Tauri v2 | IPC bridge, native window, updater |
-| DB | SQLite (rusqlite) | On-device persistence, 25 migrations |
-| i18n | @fluent/react | All UI strings in `.ftl` files |
-| Hardware HAL | oz-hal traits | USB/TCP/BT/serial/mock drivers for printer, scanner, drawer, display |
-| Money | i64 minor units | Never f64 — `Currency`, `Money` structs |
-| Export | .ozpkg format | Argon2id + AES-256-GCM + zstd encrypted snapshots |
+| Desktop Shell | Tauri v2 | Native window, IPC bridge, updater |
+| Frontend | React 18 + TypeScript + Vite | POS UI |
+| Database | SQLite (rusqlite) | On-device persistence, 51 migrations |
+| Localization | @fluent/react | All UI strings in `.ftl` files |
+| Hardware | oz-hal traits | USB/TCP/BT/serial/mock drivers |
+| Money | `i64` minor units | Never `f32`/`f64` — `Currency`, `Money` structs |
+| Security | Argon2id + AES-256-GCM + zstd | Encrypted `.ozpkg` snapshots |
+| Automation | Lua (rlua) | Discount, tax, validation rules |
+
+---
 
 ## Quick Start
 
@@ -65,41 +143,79 @@ cd ui && npm install && cd ..
 cd apps/desktop-client && cargo tauri dev
 ```
 
-### Key scripts (ui/)
+See [docs/QUICKSTART.md](./docs/QUICKSTART.md) for detailed setup instructions.
+
+---
+
+## Development Commands
+
+### Frontend (ui/)
 
 | Command | Action |
-|---------|--------|
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | `vitest run` (122 tests, 12 files) |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run typecheck` | TypeScript validation |
 | `npm run lint` | ESLint + jsx-a11y |
+| `npm run test` | Vitest (33 files) |
 
-### Key scripts (root)
+### Backend (root)
 
 | Command | Action |
-|---------|--------|
-| `cargo clippy --all-targets` | Rust lint |
-| `cargo test --workspace` | Rust tests (400+) |
+|---|---|
+| `cargo fmt --all` | Format Rust code |
+| `cargo clippy --all-targets -- -D warnings` | Lint |
+| `cargo test --workspace` | Run tests (1900+) |
+| `bash scripts/coverage.sh` | Rust + UI coverage reports |
 
-## Backend Conventions
+---
 
-- **Money**: `i64 minor_units` + `Currency` — never `f32`/`f64`
-- **DB writes**: always inside `rusqlite` transactions
-- **Errors**: `thiserror` for libs, `anyhow` for app code
-- **Clippy**: must pass `-- -D warnings` before merge
-- **Migrations**: `.sql` files in `crates/oz-core/migrations/` registered in `migrations.rs`
+## Testing Strategy
 
-## Frontend Conventions
+| Layer | Approach |
+|---|---|
+| **Rust** | Unit tests, integration tests, DB migration tests, HAL mock tests |
+| **Frontend** | Component tests, feature tests, localization validation, accessibility checks |
+| **Coverage** | LLVM source-based (Rust) + v8 (UI) — HTML + JSON in `coverage/` |
 
-- **No `invoke()` in components** — use per-domain `api/*.ts` wrappers
-- **No hardcoded strings** — all text goes through `@fluent/react`
-- **Accessibility**: every interactive element has an `aria-label`
-- **Money display**: `formatMoney()` from `ui/src/locales/test-utils.tsx`
-- **Tests**: every feature screen has a corresponding `__tests__/` file
+Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before merge.
+
+---
 
 ## Status
 
-**Phase 3 (Transactions & Staff) complete.** 25 migrations, 65+ IPC commands, 15+ screen components, 122 front-end tests, 400+ Rust tests.
+**Phase 3 (Transactions & Staff) complete.** 51 migrations, 200+ IPC commands, 21+ screen components, 33 front-end test files, 1900+ Rust tests.
 
-See [ROADMAP.md](./docs/ROADMAP.md) for the phased delivery plan.
+| Phase | Status | Focus |
+|---|---|---|
+| 1 | Complete | Platform foundation |
+| 2 | Complete | Inventory & Products |
+| 3 | Complete | Transactions & Staff |
+| 4 | In Progress | CRM, Restaurant, Accounting |
+| 5 | Planned | Multi-store, Cloud Sync, Plugin Marketplace |
 
-> last audited 30-06-26 by docs-auditor
+See [ROADMAP.md](./docs/ROADMAP.md) for the full phased delivery plan, and [MODULAR_APP_PLAN.md](./docs/MODULAR_APP_PLAN.md) for detailed granular checklists covering feature presets, restaurant workflows, LAN KDS discovery, and Docker cloud server containerization (`apps/cloud-server`).
+
+---
+
+## Contributing
+
+Contributions of all sizes are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+
+- Branch naming and commit conventions
+- PR checklist and review guidelines
+- Coding standards (Money, DB, errors, etc.)
+- Adding new skills and modules
+- Security issue reporting
+
+New contributors are encouraged to start with documentation improvements, UI polish, accessibility enhancements, additional tests, or bug fixes labelled **Good First Issue**.
+
+---
+
+## License & Commercial Use
+
+**Proprietary and Confidential — Copyright (c) 2024-2026 OZ-POS Contributors / All Rights Reserved.**
+
+This software (`oz-pos`) is **NOT open source**. No part of this codebase, associated binaries, or documentation may be copied, modified, distributed, sublicensed, hosted, or deployed in any commercial, non-commercial, or production setting without explicit written permission and a valid executed Commercial License Agreement.
+
+See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **adikaradwiatmaja@gmail.com**.

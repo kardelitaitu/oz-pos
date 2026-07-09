@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://oz-pos.dev/schemas/module-manifest.json",
+  "title": "OZ-POS Module Manifest",
+  "description": "Schema for validating module manifest.json files in the OZ-POS module system.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable unique identifier (kebab-case, e.g. \"sales\").",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable display name (e.g. \"Sales\").",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version string (X.Y.Z).",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the module's purpose.",
+      "maxLength": 512
+    },
+    "author": {
+      "type": "string",
+      "description": "Module author name or organization.",
+      "maxLength": 128
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Module IDs that this module depends on.",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "permissions": {
+      "type": "array",
+      "description": "Permission strings required by this module (<domain>:<action>).",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "database_namespace": {
+      "type": "string",
+      "description": "Optional database namespace prefix (e.g. 'plugin_<id>_'). Restricted to prefixed tables.",
+      "pattern": "^[a-z][a-z0-9_]*_$",
+      "maxLength": 64
+    }
+  },
+  "required": ["id", "name", "version"],
+  "additionalProperties": false
+}

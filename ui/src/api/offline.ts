@@ -62,14 +62,24 @@ export interface SyncAttemptResult {
   error: string | null;
 }
 
+export interface PullResult {
+  productsPulled: number;
+  taxRatesPulled: number;
+  usersPulled: number;
+  error: string | null;
+}
+
 export const getSyncSettings = (): Promise<SyncSettingsDto> =>
   invoke<SyncSettingsDto>('get_sync_settings');
 
 export const updateSyncSettings = (args: UpdateSyncSettingsArgs): Promise<void> =>
   invoke<void>('update_sync_settings', { args });
 
-export const triggerSync = (): Promise<SyncAttemptResult> =>
-  invoke<SyncAttemptResult>('trigger_sync');
+export const syncRun = (): Promise<SyncAttemptResult> =>
+  invoke<SyncAttemptResult>('sync_run');
 
 export const pendingSyncCount = (): Promise<number> =>
   invoke<number>('pending_sync_count');
+
+export const syncPull = (): Promise<PullResult> =>
+  invoke<PullResult>('sync_pull');

@@ -1,0 +1,415 @@
+.stock-transfers {
+  padding: var(--space-6) var(--space-8);
+}
+
+.stock-transfers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.stock-transfers-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+  color: var(--color-fg);
+}
+
+.stock-transfers-loading {
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-base);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.stock-transfers-empty {
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+  color: var(--color-fg-secondary);
+}
+
+.stock-transfers-error-text {
+  margin-bottom: var(--space-3);
+}
+
+/* ── Filters ─────────────────────────────────────────────────── */
+
+.stock-transfers-filters {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.stock-transfers-filter-btn {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  color: var(--color-fg-secondary);
+  transition: all var(--duration-150) var(--ease-out);
+}
+
+.stock-transfers-filter-btn:hover {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+.stock-transfers-filter-btn.active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-color: var(--color-accent);
+}
+
+/* ── Table ──────────────────────────────────────────────────────── */
+
+.stock-transfers-table-wrap {
+  overflow-x: auto;
+}
+
+.stock-transfers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.stock-transfers-table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  border-bottom: 2px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.stock-transfers-table td {
+  padding: var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.stock-transfers-cell-number {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.stock-transfers-link {
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0;
+  text-decoration: none;
+}
+
+.stock-transfers-link:hover {
+  text-decoration: underline;
+}
+
+.stock-transfers-cell-date {
+  white-space: nowrap;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-xs);
+}
+
+.stock-transfers-cell-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.stock-transfers-action-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  color: var(--color-fg-secondary);
+  transition: all var(--duration-150) var(--ease-out);
+}
+
+.stock-transfers-action-btn:hover {
+  background: var(--color-bg-surface);
+}
+
+.stock-transfers-action-btn--danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger-dim);
+}
+
+.stock-transfers-action-btn--danger:hover {
+  background: var(--color-danger-bg);
+}
+
+/* ── Badge ──────────────────────────────────────────────────────── */
+
+.stock-transfers-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.stock-transfers-badge--draft {
+  background: var(--color-bg-surface);
+  color: var(--color-fg-tertiary);
+  border: 1px solid var(--color-border);
+}
+
+.stock-transfers-badge--pending {
+  background: var(--color-warning-bg, #fef3c7);
+  color: var(--color-warning, #92400e);
+}
+
+.stock-transfers-badge--in_transit {
+  background: var(--color-accent-dim, #dbeafe);
+  color: var(--color-accent, #1e40af);
+}
+
+.stock-transfers-badge--received {
+  background: var(--color-success-bg, #dcfce7);
+  color: var(--color-success, #166534);
+}
+
+.stock-transfers-badge--cancelled {
+  background: var(--color-danger-bg, #fef2f2);
+  color: var(--color-danger, #991b1b);
+}
+
+/* ── Overlay / Modal ─────────────────────────────────────────── */
+
+.stock-transfers-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  padding: var(--space-4);
+}
+
+.stock-transfers-modal {
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  max-height: 90vh;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 480px;
+}
+
+.stock-transfers-modal--wide {
+  max-width: 720px;
+}
+
+.stock-transfers-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.stock-transfers-modal-header h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.stock-transfers-modal-close {
+  background: none;
+  border: none;
+  font-size: var(--text-xl);
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.stock-transfers-modal-close:hover {
+  color: var(--color-fg);
+}
+
+.stock-transfers-modal-body {
+  padding: var(--space-4) var(--space-5);
+}
+
+.stock-transfers-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Detail ──────────────────────────────────────────────────────── */
+
+.stock-transfers-detail {
+  padding: var(--space-3) 0;
+}
+
+.stock-transfers-detail-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.stock-transfers-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stock-transfers-detail-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+}
+
+.stock-transfers-detail-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* ── Lines table (in detail) ─────────────────────────────────── */
+
+.stock-transfers-lines-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-3);
+}
+
+.stock-transfers-lines-table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-2);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.stock-transfers-lines-table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-dim);
+}
+
+/* ── Create form ─────────────────────────────────────────────────── */
+
+.stock-transfers-form-row {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.stock-transfers-form-row .stock-transfers-field {
+  flex: 1;
+}
+
+.stock-transfers-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.stock-transfers-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+}
+
+.stock-transfers-input {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.stock-transfers-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
+.stock-transfers-textarea {
+  resize: vertical;
+  min-height: 48px;
+}
+
+/* ── Lines section ──────────────────────────────────────────────── */
+
+.stock-transfers-lines-section {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-dim);
+}
+
+.stock-transfers-lines-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.stock-transfers-line-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.stock-transfers-line-sku {
+  flex: 2;
+}
+
+.stock-transfers-line-name {
+  flex: 3;
+}
+
+.stock-transfers-line-qty {
+  flex: 1;
+  min-width: 60px;
+}
+
+.stock-transfers-line-remove {
+  background: none;
+  border: none;
+  font-size: var(--text-lg);
+  color: var(--color-danger);
+  cursor: pointer;
+  padding: var(--space-1);
+  line-height: 1;
+}
+
+/* ── Error ────────────────────────────────────────────────────────── */
+
+.stock-transfers-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-top: var(--space-3);
+}

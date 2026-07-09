@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::db::Store;
-use oz_core::{Money, Refund, RefundLine};
+use oz_core::permissions;
+use oz_core::{Money, Refund, RefundLine, Sale};
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -40,6 +42,8 @@ pub struct ProcessRefundResult {
 }
 
 /// Process a refund against a completed sale.
+///
+/// Requires `sales:refund` permission.
 #[command]
 pub async fn process_refund(
     args: ProcessRefundArgs,
@@ -47,6 +51,9 @@ pub async fn process_refund(
 ) -> Result<ProcessRefundResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    // Permission check: caller must have sales:refund (derived from user_id).
+    require_permission_for_user(&store, &args.user_id, permissions::SALES_REFUND)?;
 
     // Verify the sale exists and is completed.
     let sale = store
@@ -109,6 +116,19 @@ pub async fn process_refund(
     })
 }
 
+/// Look up a sale by its receipt barcode for quick return.
+#[command]
+pub async fn lookup_sale_by_receipt_barcode(
+    barcode: String,
+    state: State<'_, AppState>,
+) -> Result<Option<Sale>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
+    drop(db);
+    Ok(sale)
+}
+
 /// List all refunds for a sale.
 #[command]
 pub async fn list_refunds(
@@ -129,10 +149,7 @@ mod tests {
     use rusqlite::Connection;
 
     fn fresh_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        migrations::run(&mut conn).unwrap();
-        conn
+        migrations::fresh_db()
     }
 
     fn seed_completed_sale(conn: &Connection) -> String {
@@ -233,5 +250,38 @@ mod tests {
         );
         let result = store.create_refund(&refund);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn refund_line_arg_deserialize() {
+        let json = r#"{"sale_line_id":"sl-1","sku":"CAKE","qty":1,"unit_price_minor":500,"currency":"USD","line_total_minor":500}"#;
+        let arg: RefundLineArg = serde_json::from_str(json).unwrap();
+        assert_eq!(arg.sale_line_id, "sl-1");
+        assert_eq!(arg.sku, "CAKE");
+        assert_eq!(arg.qty, 1);
+        assert_eq!(arg.unit_price_minor, 500);
+        assert_eq!(arg.line_total_minor, 500);
+    }
+
+    #[test]
+    fn process_refund_args_deserialize() {
+        let json = r#"{"sale_id":"s1","reason":"damaged","note":"box was crushed","user_id":"u1","lines":[{"sale_line_id":"sl-1","sku":"CAKE","qty":1,"unit_price_minor":500,"currency":"USD","line_total_minor":500}]}"#;
+        let args: ProcessRefundArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sale_id, "s1");
+        assert_eq!(args.reason, "damaged");
+        assert_eq!(args.note, Some("box was crushed".into()));
+        assert_eq!(args.lines.len(), 1);
+        assert_eq!(args.lines[0].sku, "CAKE");
+    }
+
+    #[test]
+    fn process_refund_result_serialize() {
+        let result = ProcessRefundResult {
+            refund_id: "ref-1".into(),
+            total_minor: 1500,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("ref-1"));
+        assert!(json.contains("1500"));
     }
 }

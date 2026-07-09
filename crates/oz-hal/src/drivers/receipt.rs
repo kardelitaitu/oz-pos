@@ -96,6 +96,8 @@ pub struct ReceiptConfig {
     pub show_tax: bool,
     /// Optional footer text (centered at the bottom).
     pub footer: Option<String>,
+    /// Whether to print the table number line.
+    pub show_table_number: bool,
 }
 
 impl Default for ReceiptConfig {
@@ -106,6 +108,7 @@ impl Default for ReceiptConfig {
             decimal_separator: DecimalSeparator::Dot,
             show_tax: true,
             footer: None,
+            show_table_number: false,
         }
     }
 }
@@ -167,6 +170,8 @@ pub struct SalesReceipt {
     pub date: String,
     /// Sequential receipt / invoice number.
     pub receipt_number: String,
+    /// Optional table number (printed after date line).
+    pub table_number: Option<String>,
     /// Purchased line items.
     pub items: Vec<LineItem>,
     /// Subtotal before tax.
@@ -380,6 +385,16 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
     let left_text = &r.date;
     let gap = " ".repeat(w.saturating_sub(left_text.len() + right_text.len() + 1));
     b.text(&format!("{left_text}{gap}{right_text}"));
+
+    // ── Table number (optional) ────────────────────────
+    if config.show_table_number
+        && let Some(ref tn) = r.table_number
+    {
+        let table_line = format!("Table: {tn}");
+        let table_gap = " ".repeat(w.saturating_sub(table_line.len()));
+        b.text(&format!("{table_gap}{table_line}"));
+    }
+
     b.separator();
 
     // ── Column headers ────────────────────────────────
@@ -530,6 +545,7 @@ mod tests {
             },
             date: "01 Jan 2026".into(),
             receipt_number: "REC-001".into(),
+            table_number: None,
             items: vec![
                 LineItem {
                     name: "Milk 2%".into(),
@@ -800,5 +816,53 @@ mod tests {
         assert_eq!(currency_symbol(&usd), "$");
         assert_eq!(currency_symbol(&eur), "€");
         assert_eq!(currency_symbol(&idr), "Rp");
+    }
+
+    #[test]
+    fn receipt_prints_table_number_when_enabled_and_provided() {
+        let cfg = ReceiptConfig {
+            show_table_number: true,
+            ..default_config()
+        };
+        let mut r = sample_receipt();
+        r.table_number = Some("5".into());
+        let data = format_sales_receipt(&r, &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(
+            text.contains("Table: 5"),
+            "receipt should contain 'Table: 5'"
+        );
+    }
+
+    #[test]
+    fn receipt_hides_table_number_when_disabled() {
+        let cfg = ReceiptConfig {
+            show_table_number: false,
+            ..default_config()
+        };
+        let mut r = sample_receipt();
+        r.table_number = Some("5".into());
+        let data = format_sales_receipt(&r, &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(
+            !text.contains("Table:"),
+            "receipt should not contain 'Table:'"
+        );
+    }
+
+    #[test]
+    fn receipt_hides_table_number_when_none() {
+        let cfg = ReceiptConfig {
+            show_table_number: true,
+            ..default_config()
+        };
+        let mut r = sample_receipt();
+        r.table_number = None;
+        let data = format_sales_receipt(&r, &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(
+            !text.contains("Table:"),
+            "receipt should not contain 'Table:'"
+        );
     }
 }

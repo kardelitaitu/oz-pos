@@ -146,6 +146,7 @@ export async function expandBundleItems(
         barcode: dto.barcode,
         inStock: dto.in_stock,
         stockQty: dto.stock_qty,
+        productType: dto.product_type as Product['productType'],
       },
       qty: item.qty,
     });

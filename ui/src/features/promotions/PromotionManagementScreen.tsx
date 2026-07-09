@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   listPromotions,
   createPromotion,
@@ -8,6 +8,7 @@ import {
   type Promotion,
   type CreatePromotionArgs,
 } from '@/api/promotions';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './PromotionManagementScreen.css';
@@ -42,6 +43,8 @@ const emptyForm = (): Promotion => ({
 });
 
 export default function PromotionManagementScreen() {
+  const { l10n } = useLocalization();
+  const { session } = useAuth();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -97,9 +100,9 @@ export default function PromotionManagementScreen() {
           min_order_minor: form.min_order_minor,
           category_id: form.category_id,
         };
-        await createPromotion(args);
+        await createPromotion(session?.user_id ?? '', args);
       } else {
-        await updatePromotion(form);
+        await updatePromotion(session?.user_id ?? '', form);
       }
       closeModal();
       await load();
@@ -108,30 +111,30 @@ export default function PromotionManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, modalMode, load, closeModal]);
+  }, [form, modalMode, load, closeModal, session?.user_id]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setDeleting(deleteTarget.id);
     setDeleteTarget(null);
     try {
-      await deletePromotion(deleteTarget.id);
+      await deletePromotion(session?.user_id ?? '', deleteTarget.id);
       await load();
     } catch (err) {
       console.error('Failed to delete promotion:', err);
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load]);
+  }, [deleteTarget, load, session?.user_id]);
 
   const toggleActive = useCallback(async (p: Promotion) => {
     try {
-      await updatePromotion({ ...p, active: !p.active });
+      await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
       await load();
     } catch (err) {
       console.error('Failed to toggle promotion:', err);
     }
-  }, [load]);
+  }, [load, session?.user_id]);
 
   return (
     <div className="promo-mgmt">
@@ -156,7 +159,7 @@ export default function PromotionManagementScreen() {
         </Card>
       ) : (
         <div className="promo-mgmt-table-wrap">
-          <table className="promo-mgmt-table" role="grid" aria-label="Promotions list">
+          <table className="promo-mgmt-table" role="grid" aria-label={l10n.getString('promotions-table-label')}>
             <thead>
               <tr>
                 <Localized id="promotions-name"><th>Name</th></Localized>
@@ -165,7 +168,7 @@ export default function PromotionManagementScreen() {
                 <Localized id="promotions-active"><th>Active</th></Localized>
                 <Localized id="promotions-starts-at"><th>Starts</th></Localized>
                 <Localized id="promotions-ends-at"><th>Ends</th></Localized>
-                <th aria-label="Actions"> </th>
+                <th aria-label={l10n.getString('promotions-table-actions')}> </th>
               </tr>
             </thead>
             <tbody>
@@ -179,7 +182,7 @@ export default function PromotionManagementScreen() {
                   </td>
                   <td>{p.promo_type === 'percentage' ? `${p.value_minor}%` : p.value_minor}</td>
                   <td>
-                    <label className="promo-mgmt-toggle" aria-label={`Toggle ${p.name} active`}>
+                    <label className="promo-mgmt-toggle" aria-label={l10n.getString('promotions-toggle-active', { name: p.name })}>
                       <input
                         type="checkbox"
                         checked={p.active}
@@ -192,10 +195,10 @@ export default function PromotionManagementScreen() {
                   <td>{p.ends_at ? new Date(p.ends_at).toLocaleDateString() : '—'}</td>
                   <td className="promo-mgmt-actions">
                     <Localized id="promotions-edit">
-                      <button type="button" className="promo-mgmt-btn" onClick={() => openEdit(p)} aria-label={`Edit ${p.name}`}>Edit</button>
+                      <button type="button" className="promo-mgmt-btn" onClick={() => openEdit(p)} aria-label={l10n.getString('promotions-edit-label', { name: p.name })}>Edit</button>
                     </Localized>
                     <Localized id="promotions-delete">
-                      <button type="button" className="promo-mgmt-btn promo-mgmt-btn--danger" onClick={() => setDeleteTarget({ id: p.id, name: p.name })} aria-label={`Delete ${p.name}`}>Delete</button>
+                      <button type="button" className="promo-mgmt-btn promo-mgmt-btn--danger" onClick={() => setDeleteTarget({ id: p.id, name: p.name })} aria-label={l10n.getString('promotions-delete-label', { name: p.name })}>Delete</button>
                     </Localized>
                   </td>
                 </tr>
@@ -207,16 +210,18 @@ export default function PromotionManagementScreen() {
 
       {/* ── Delete confirmation modal ── */}
       {deleteTarget && (
-        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Delete promotion">
+        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('promotions-modal-delete-label')}>
           <div className="promo-mgmt-modal">
             <div className="promo-mgmt-modal-header">
-              <Localized id="promotions-delete">
+              <Localized id="promotions-delete-confirm-title">
                 <h2 className="promo-mgmt-modal-title">Delete Promotion</h2>
               </Localized>
-              <button type="button" className="promo-mgmt-modal-close" onClick={() => setDeleteTarget(null)} aria-label="Close">&times;</button>
+              <button type="button" className="promo-mgmt-modal-close" onClick={() => setDeleteTarget(null)} aria-label={l10n.getString('close')}>&times;</button>
             </div>
             <div className="promo-mgmt-modal-body">
-              <p>Are you sure you want to delete &quot;{deleteTarget.name}&quot;?</p>
+              <Localized id="promotions-delete-confirm" vars={{ name: deleteTarget.name }}>
+                <p>Are you sure you want to delete &quot;{deleteTarget.name}&quot;?</p>
+              </Localized>
             </div>
             <div className="promo-mgmt-modal-actions">
               <Localized id="cancel">
@@ -232,76 +237,77 @@ export default function PromotionManagementScreen() {
 
       {/* ── Add / Edit modal ── */}
       {modalMode && (
-        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label={modalMode === 'add' ? 'Add promotion' : 'Edit promotion'}>
+        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(modalMode === 'add' ? 'promotions-modal-add-label' : 'promotions-modal-edit-label')}>
           <div className="promo-mgmt-modal promo-mgmt-modal--wide">
             <div className="promo-mgmt-modal-header">
               <Localized id={modalMode === 'add' ? 'promotions-add' : 'promotions-edit'}>
                 <h2 className="promo-mgmt-modal-title">{modalMode === 'add' ? 'Add Promotion' : 'Edit Promotion'}</h2>
               </Localized>
-              <button type="button" className="promo-mgmt-modal-close" onClick={closeModal} aria-label="Close">&times;</button>
+              <button type="button" className="promo-mgmt-modal-close" onClick={closeModal} aria-label={l10n.getString('close')}>&times;</button>
             </div>
 
             <div className="promo-mgmt-modal-body">
               <div className="promo-mgmt-form">
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-name"><span>Name</span></Localized>
-                  <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required aria-label="Name" />
+                  <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required aria-label={l10n.getString('promotions-field-name')} />
                 </label>
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-type"><span>Type</span></Localized>
-                  <select value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label="Type">
+                  <select value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label={l10n.getString('promotions-field-type')}>
                     {PROMO_TYPES.map((t) => (
                       <option key={t} value={t}>
-                        <Localized id={PROMO_TYPE_LABELS[t]!}><span>{t}</span></Localized>
+                        {l10n.getString(PROMO_TYPE_LABELS[t]!) || t}
                       </option>
                     ))}
+
                   </select>
                 </label>
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-value"><span>Value</span></Localized>
-                  <input type="number" value={form.value_minor} onChange={(e) => setForm({ ...form, value_minor: parseInt(e.target.value) || 0 })} aria-label="Value" />
+                  <input type="number" value={form.value_minor} onChange={(e) => setForm({ ...form, value_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-value')} />
                 </label>
 
                 {form.promo_type === 'buy_x_get_y' && (
                   <>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-min-qty"><span>Min Qty</span></Localized>
-                      <input type="number" value={form.min_qty ?? ''} onChange={(e) => setForm({ ...form, min_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label="Min Qty" />
+                      <input type="number" value={form.min_qty ?? ''} onChange={(e) => setForm({ ...form, min_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-min-qty')} />
                     </label>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-trigger-sku"><span>Trigger SKU</span></Localized>
-                      <input type="text" value={form.trigger_sku ?? ''} onChange={(e) => setForm({ ...form, trigger_sku: e.target.value || null })} aria-label="Trigger SKU" />
+                      <input type="text" value={form.trigger_sku ?? ''} onChange={(e) => setForm({ ...form, trigger_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-trigger-sku')} />
                     </label>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-reward-sku"><span>Reward SKU</span></Localized>
-                      <input type="text" value={form.reward_sku ?? ''} onChange={(e) => setForm({ ...form, reward_sku: e.target.value || null })} aria-label="Reward SKU" />
+                      <input type="text" value={form.reward_sku ?? ''} onChange={(e) => setForm({ ...form, reward_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-reward-sku')} />
                     </label>
                     <label className="promo-mgmt-field">
                       <Localized id="promotions-reward-qty"><span>Reward Qty</span></Localized>
-                      <input type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm({ ...form, reward_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label="Reward Qty" />
+                      <input type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm({ ...form, reward_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-reward-qty')} />
                     </label>
                   </>
                 )}
 
                 <label className="promo-mgmt-field">
-                  <Localized id="promotions-starts-at"><span>Starts At</span></Localized>
-                  <input type="datetime-local" value={form.starts_at ? form.starts_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label="Starts At" />
+                  <Localized id="promotions-field-starts-at"><span>Starts At</span></Localized>
+                  <input type="datetime-local" value={form.starts_at ? form.starts_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-starts-at')} />
                 </label>
                 <label className="promo-mgmt-field">
-                  <Localized id="promotions-ends-at"><span>Ends At</span></Localized>
-                  <input type="datetime-local" value={form.ends_at ? form.ends_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label="Ends At" />
+                  <Localized id="promotions-field-ends-at"><span>Ends At</span></Localized>
+                  <input type="datetime-local" value={form.ends_at ? form.ends_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-ends-at')} />
                 </label>
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-min-order"><span>Min Order</span></Localized>
-                  <input type="number" value={form.min_order_minor} onChange={(e) => setForm({ ...form, min_order_minor: parseInt(e.target.value) || 0 })} aria-label="Min Order" />
+                  <input type="number" value={form.min_order_minor} onChange={(e) => setForm({ ...form, min_order_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-min-order')} />
                 </label>
 
                 <label className="promo-mgmt-field">
                   <Localized id="promotions-category"><span>Category</span></Localized>
-                  <input type="text" value={form.category_id ?? ''} onChange={(e) => setForm({ ...form, category_id: e.target.value || null })} aria-label="Category" />
+                  <input type="text" value={form.category_id ?? ''} onChange={(e) => setForm({ ...form, category_id: e.target.value || null })} aria-label={l10n.getString('promotions-field-category')} />
                 </label>
               </div>
             </div>
