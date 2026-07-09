@@ -12,10 +12,10 @@
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
-| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 11 |
+| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 12 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **31** |
+| | **Total** | **46** | **32** |
 
 ---
 
@@ -156,7 +156,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 - [x] **3.4.1 [mDNS Service Broadcaster]**: In `crates/oz-core/src/sync/lan_discovery.rs`, implement `LanDiscoverer` advertising service `_oz-pos._tcp.local.` with TXT records `terminal_id`, `role`, and `tcp_port`.
 - [x] **3.4.2 [Local TCP/WebSocket Event Forwarder]**: Implement a lightweight TCP/WebSocket server inside `apps/desktop-client` (`port 9180`). When `sale.completed` or `order.course_fired` is emitted on Resto POS, forward the JSON event directly over LAN TCP to all connected KDS tablet peers.
-- [ ] **3.4.3 [LAN Offline Buffer & Reconnection]**: Add heartbeat ping (`every 5s`) between Resto POS desktop and KDS tablets. If LAN Wi-Fi drops, buffer fired tickets locally in `offline_lan_queue` and flush immediately upon TCP reconnection.
+- [x] **3.4.3 [LAN Offline Buffer & Reconnection]**: Add heartbeat ping (`every 5s`) between Resto POS desktop and KDS tablets. If LAN Wi-Fi drops, buffer fired tickets locally in `offline_lan_queue` and flush immediately upon TCP reconnection.
 
 #### 3.5 Menu Engineering Analytics Matrix
 
