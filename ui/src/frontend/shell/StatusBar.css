@@ -1,76 +1,155 @@
 /* ============================================================
- * Status Bar — fixed bottom-left overlay
+ * OZ-POS Status Bar — full-width bottom bar
  *
- * Shows backend connection health and any active foreground
- * operation (auth, sync, etc.) so the user always knows
- * the app is doing something, especially after PIN entry.
+ * Inspired by VS Code's status bar pattern: thin, monochrome,
+ * left/right segments with dots for live status.
  * ============================================================ */
 
-.status-bar {
-  position: fixed;
-  bottom: 12px;
-  left: 12px;
+.app-statusbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: var(--radius-md, 6px);
-  background: var(--color-bg-elevated, #fff);
-  border: 1px solid var(--color-border, #e5e5e5);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  font-size: var(--text-xs, 0.625rem);
-  font-family: var(--font-sans, sans-serif);
-  color: var(--color-fg-tertiary, #a3a3a3);
-  z-index: 2147483647;
-  pointer-events: none;
+  justify-content: space-between;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
   user-select: none;
-  line-height: 1;
+  z-index: var(--z-sticky);
+  flex-shrink: 0;
+  gap: var(--space-2);
 }
 
-/* ── Connection dot ────────────────────────────────── */
-.status-bar-dot {
-  width: 6px;
-  height: 6px;
+/* ── Left / Right segments ─────────────────────────── */
+
+.statusbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Grouped segment ──────────────────────────────── */
+
+.statusbar-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-100) var(--ease-out);
+}
+
+.statusbar-segment:hover {
+  background: var(--color-bg-surface);
+}
+
+/* ── Connection status dot ────────────────────────── */
+
+.statusbar-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.status-bar-dot--connected {
-  background: var(--success-500, #22c55e);
-  box-shadow: 0 0 4px var(--success-500, #22c55e);
+.statusbar-dot--online {
+  background: var(--color-success);
+  box-shadow: 0 0 4px var(--color-success);
 }
 
-.status-bar-dot--disconnected {
-  background: var(--danger-500, #ef4444);
+.statusbar-dot--offline {
+  background: var(--color-danger);
+  box-shadow: 0 0 4px var(--color-danger);
 }
 
-.status-bar-dot--checking {
-  background: var(--warning-500, #f59e0b);
-  animation: status-bar-pulse 1s ease-in-out infinite;
+/* ── Version text ─────────────────────────────────── */
+
+.statusbar-version {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
 }
 
-@keyframes status-bar-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+/* ── Gateway pill ─────────────────────────────────── */
+
+.statusbar-gateway {
+  gap: 4px;
 }
 
-/* ── Activity indicator ───────────────────────────── */
-.status-bar-activity {
-  display: flex;
+.statusbar-gateway-name {
+  white-space: nowrap;
+}
+
+/* ── License text ─────────────────────────────────── */
+
+.statusbar-license {
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* ── Divider ──────────────────────────────────────── */
+
+.statusbar-divider {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* ── Action button ────────────────────────────────── */
+
+.statusbar-btn {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--color-fg-secondary, #737373);
+  padding: 2px 6px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--duration-100) var(--ease-out),
+    background-color var(--duration-100) var(--ease-out);
 }
 
-.status-bar-spinner {
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid var(--color-border, #e5e5e5);
-  border-top-color: var(--color-accent, #10b981);
-  border-radius: 50%;
-  animation: status-bar-spin 0.6s linear infinite;
+.statusbar-btn:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
 }
 
-@keyframes status-bar-spin {
-  to { transform: rotate(360deg); }
+.statusbar-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+/* ── Theme Toggle inside status bar ───────────────── */
+.app-statusbar .theme-toggle {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.app-statusbar .theme-toggle svg {
+  width: 14px;
+  height: 14px;
 }

@@ -44,9 +44,16 @@
 
 .app-layout {
   display: flex;
+  flex-direction: column;
   height: 100dvh;
   overflow: hidden;
   background: var(--color-bg);
+}
+
+.app-layout-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Sidebar ──────────────────────────────────────── */
@@ -105,9 +112,7 @@
   height: 22px;
 }
 
-.app-sidebar.collapsed .app-sidebar-footer {
-  justify-content: center;
-}
+
 
 .app-nav-item {
   transition: padding var(--duration-200) var(--ease-out), justify-content var(--duration-200) var(--ease-out);
@@ -175,6 +180,8 @@
   gap: var(--space-1);
   padding: var(--space-3) var(--space-2);
   overflow-y: auto;
+  /* Extra bottom padding so last items don't crowd the bottom */
+  padding-bottom: var(--space-4);
 }
 
 /* ── Section accordion ──────────────────────────── */
@@ -284,40 +291,7 @@
   height: 18px;
 }
 
-/* ── Sidebar footer ───────────────────────────────── */
-.app-sidebar-footer {
-  padding: var(--space-3) var(--space-2);
-  border-top: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-1);
-}
-
-.app-sidebar-workspace-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: color var(--duration-100) var(--ease-out), background-color var(--duration-100) var(--ease-out);
-  white-space: nowrap;
-}
-
-.app-sidebar-workspace-btn:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
-}
-
-.app-sidebar-workspace-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
-}
+/* ── Sidebar footer (removed — moved to StatusBar) ── */
 
 /* ── Sidebar toggle button ────────────────────────── */
 .sidebar-toggle {

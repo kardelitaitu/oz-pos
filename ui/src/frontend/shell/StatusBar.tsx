@@ -1,57 +1,102 @@
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useLocalization } from '@fluent/react';
-import { ping } from '@/api/system';
+// ── StatusBar ──────────────────────────────────────────────────────
+// Full-width bar at the bottom of the app layout, inspired by VS Code's
+// status bar. Shows connection state, version, license, gateway status,
+// workspace switcher, and theme toggle.
+// ────────────────────────────────────────────────────────────────────
+
+import { Localized, useLocalization } from '@fluent/react';
+import { useGatewayStatus } from '@/hooks/useGatewayStatus';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
+import ThemeToggle from './ThemeToggle';
 import './StatusBar.css';
 
-type ConnectionState = 'checking' | 'connected' | 'disconnected';
-
+/**
+ * Thin status bar spanning the full width at the bottom of the app.
+ *
+ * Left segment:
+ *   • Connection dot + version label
+ *   • Gateway status pill (Stripe)
+ *
+ * Right segment:
+ *   • Switch Workspace button
+ *   • Theme Toggle (sun/moon icon)
+ */
 export default function StatusBar() {
   const { l10n } = useLocalization();
-  const { loading: authLoading } = useAuth();
-  const [connection, setConnection] = useState<ConnectionState>('checking');
-  const mountedRef = useRef(true);
+  const stripeStatus = useGatewayStatus();
+  const { goToWorkspacePicker } = useWorkspaceNav();
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-
-    const check = async () => {
-      try {
-        const res = await ping();
-        if (!mountedRef.current) return;
-        setConnection(res === 'pong' ? 'connected' : 'disconnected');
-      } catch {
-        if (!mountedRef.current) return;
-        setConnection(prev => prev === 'checking' ? 'disconnected' : 'disconnected');
-      }
-      if (mountedRef.current) {
-        timer = setTimeout(check, 15000);
-      }
-    };
-
-    check();
-    return () => clearTimeout(timer);
-  }, []);
-
-  const hasActivity = authLoading;
+  const connectionLabel = stripeStatus.online
+    ? l10n.getString('status-bar-connected')
+    : l10n.getString('status-bar-disconnected');
+  const connectionDotClass = stripeStatus.online
+    ? 'statusbar-dot--online'
+    : 'statusbar-dot--offline';
 
   return (
-    <div className="status-bar" role="status" aria-live="polite">
-      <span
-        className={`status-bar-dot status-bar-dot--${connection}`}
-        aria-label={l10n.getString(connection === 'connected' ? 'status-bar-connected' : connection === 'disconnected' ? 'status-bar-disconnected' : 'status-bar-checking')}
-      />
-      {hasActivity && (
-        <span className="status-bar-activity">
-          <span className="status-bar-spinner" />
-          {authLoading && l10n.getString('status-bar-authenticating')}
-        </span>
-      )}
-    </div>
+    <footer className="app-statusbar" role="status" aria-label="Application status">
+      {/* ── Left segment: connection + version ── */}
+      <div className="statusbar-left">
+        <div className="statusbar-segment" title={connectionLabel}>
+          <span className={`statusbar-dot ${connectionDotClass}`} aria-hidden="true" />
+          <span className="statusbar-version">OZ-POS Enterprise v0.0.3</span>
+        </div>
+
+        {/* Gateway status pill */}
+        {stripeStatus.configured && (
+          <div className="statusbar-segment statusbar-gateway">
+            <span
+              className={`statusbar-dot ${stripeStatus.online ? 'statusbar-dot--online' : 'statusbar-dot--offline'}`}
+              aria-hidden="true"
+            />
+            <span
+              className="statusbar-gateway-name"
+              title={stripeStatus.online
+                ? l10n.getString('gateway-status-online-aria', { name: 'Stripe' })
+                : l10n.getString('gateway-status-offline-aria', { name: 'Stripe' })
+              }
+            >
+              Stripe
+            </span>
+          </div>
+        )}
+
+        <span className="statusbar-divider" aria-hidden="true" />
+        <span className="statusbar-license">Proprietary License</span>
+      </div>
+
+      {/* ── Right segment: workspace + theme ── */}
+      <div className="statusbar-right">
+        <button
+          type="button"
+          className="statusbar-btn"
+          onClick={goToWorkspacePicker}
+          aria-label={l10n.getString('nav-switch-workspace')}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="14"
+            height="14"
+            aria-hidden="true"
+          >
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <Localized id="nav-switch-workspace">
+            <span>Workspace</span>
+          </Localized>
+        </button>
+
+        <span className="statusbar-divider" aria-hidden="true" />
+
+        <ThemeToggle />
+      </div>
+    </footer>
   );
 }
