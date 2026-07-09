@@ -4,6 +4,7 @@
 //! They are loaded from the `plugins/` directory at startup and
 //! given access to a sandboxed Lua environment.
 
+pub mod db;
 pub mod error;
 pub mod loader;
 pub mod manager;

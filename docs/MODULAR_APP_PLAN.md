@@ -180,7 +180,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 #### 4.2 Sandboxed Plugin Loader (`crates/oz-plugin` + `crates/oz-lua`)
 
 - [x] **4.2.1 [.ozpkg Archive Reader]**: Implement `.ozpkg` file parser in `crates/oz-plugin/src/package.rs` (reading zip archives containing `manifest.json`, SQLite migrations, and Lua scripts).
-- [ ] **4.2.2 [Isolated Database Namespace]**: Enforce prefix restrictions (`plugin_<id>_*`) on all SQLite statements executed by plugins to prevent modifying core `sales` or `users` tables directly.
+- [x] **4.2.2 [Isolated Database Namespace]**: Enforce prefix restrictions (`plugin_<id>_*`) on all SQLite statements executed by plugins to prevent modifying core `sales` or `users` tables directly.
 - [ ] **4.2.3 [Lua Event Bus Bridge]**: In `crates/oz-lua/src/bridge.rs`, expose event subscription callbacks to Lua scripts (`oz.on("sale.completed", function(event) ... end)`) for custom peripheral hardware drivers or local accounting hooks.
 
 #### 4.3 Feature Matrix Automated Testing
