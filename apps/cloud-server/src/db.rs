@@ -245,10 +245,14 @@ mod tests {
         );
     }
 
+    /// Serializes env-var-dependent tests since `std::env::set_var` is
+    /// process-global and tokio runs tests in parallel.
+    static ENV_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+        std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
+
     #[tokio::test]
     async fn from_env_defaults_to_sqlite() {
-        // Explicitly set DATABASE_URL to empty so a parallel test's
-        // postgres:// value doesn't race in.
+        let _guard = ENV_LOCK.lock().await;
         unsafe { std::env::set_var("DATABASE_URL", "") };
         unsafe { std::env::set_var("OZ_DB_PATH", ":memory:") };
         let pool = DbPool::from_env().await.unwrap();
@@ -259,6 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn from_env_detects_postgres_url() {
+        let _guard = ENV_LOCK.lock().await;
         unsafe { std::env::set_var("DATABASE_URL", "postgresql://localhost:5432/test") };
         let pool = DbPool::from_env().await;
         unsafe { std::env::remove_var("DATABASE_URL") };

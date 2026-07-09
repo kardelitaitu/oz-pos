@@ -73,6 +73,7 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     # `ui/src/locales/*.id.ftl` before they reach CI.
     cd ..
     step "i18n lint" "bash scripts/lint-i18n.sh" bash scripts/lint-i18n.sh
+    step "feature registry parity" "python3 scripts/verify-feature-registry.py" python3 scripts/verify-feature-registry.py
     step "ui build" "cd ui; npm run build" npm run build
 else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
