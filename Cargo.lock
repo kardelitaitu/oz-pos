@@ -3978,10 +3978,12 @@ dependencies = [
 name = "oz-reporting"
 version = "0.0.3"
 dependencies = [
+ "chrono",
  "oz-core",
  "prometheus",
  "rusqlite",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

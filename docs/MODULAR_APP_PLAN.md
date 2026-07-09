@@ -12,10 +12,10 @@
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
-| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 12 |
+| 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 13 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **32** |
+| | **Total** | **46** | **33** |
 
 ---
 
@@ -160,7 +160,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 3.5 Menu Engineering Analytics Matrix
 
-- [ ] **3.5.1 [Analytics Aggregation Query]**: In `crates/oz-reporting/src/menu_engineering.rs`, write SQL aggregation calculating total volume (`SUM(quantity)`) and total contribution margin (`SUM((unit_price - unit_cost) * quantity)`) per product over a selected date range.
+- [x] **3.5.1 [Analytics Aggregation Query]**: In `crates/oz-reporting/src/menu_engineering.rs`, write SQL aggregation calculating total volume (`SUM(quantity)`) and total contribution margin (`SUM((unit_price - unit_cost) * quantity)`) per product over a selected date range.
 - [ ] **3.5.2 [Quadrants Calculator Engine]**: Calculate median volume and median margin across all sold items. Assign classification:
   - **Star**: Volume ≥ Median AND Margin ≥ Median.
   - **Plowhorse**: Volume ≥ Median AND Margin < Median.
