@@ -513,6 +513,20 @@ impl Store<'_> {
         }
     }
 
+    /// Look up a product SKU by product ID.
+    pub fn product_sku_by_id(&self, product_id: &str) -> Result<Option<String>, CoreError> {
+        let result = self.conn.query_row(
+            "SELECT sku FROM products WHERE id = ?1",
+            params![product_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(sku) => Ok(Some(sku)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Adjust stock for a product by SKU inside a transaction.
     pub fn adjust_stock(&self, sku: &str, delta: i64) -> Result<i64, CoreError> {
         let product_id = self

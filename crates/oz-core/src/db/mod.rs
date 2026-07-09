@@ -34,6 +34,7 @@ pub mod products;
 pub mod promotions;
 /// CRUD for purchase orders.
 pub mod purchase_orders;
+pub mod recipes;
 pub mod refunds;
 pub mod reports;
 pub mod sales;
