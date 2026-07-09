@@ -1,5 +1,38 @@
 # TODO — OZ-POS v0.0.3
 
+## Active Sprint
+
+### 1. Product Type Separation (`product_type` enum)
+Separate retail products from restaurant menu items at the data model level.
+
+| Step | Area | What |
+|------|------|------|
+| 1.1 | **DB migration** | Add `product_type TEXT NOT NULL DEFAULT 'retail' CHECK(product_type IN ('retail','restaurant','both'))` to `products` |
+| 1.2 | **Rust** | Update `Product` struct + `ProductDto` + DB queries; add `product_type` filter param to `list_products` |
+| 1.3 | **Rust** | Update KDS order creation to skip lines whose product has `product_type = 'retail'` |
+| 1.4 | **Rust** | Add optional `restaurant_meta` table (prep_time_seconds, course_number, recipe_id, modifier_group_ids) |
+| 1.5 | **TS types** | Update `Product` / `ProductDto` / `CreateProductInput` with `productType` |
+| 1.6 | **RetailPosScreen** | Filter product grid to `product_type IN ('retail','both')` |
+| 1.7 | **RestaurantMenu** | Filter to `product_type IN ('restaurant','both')` |
+| 1.8 | **ProductManagementScreen** | Add product_type dropdown in add/edit form; show badge in table |
+| 1.9 | **ProductLookupScreen** | Respect workspace context when filtering |
+| 1.10 | **Tests** | Update existing tests; add tests for dual-type filtering |
+
+### 2. Categorized, Collapsible Side Menu
+Use the existing but unused `section` field on nav items to group them, rendered as accordion sections.
+
+| Step | Area | What |
+|------|------|------|
+| 2.1 | **NavItemRegistration** | Ensure `section` field has proper union type (e.g. `'management' | 'reporting' | 'config' | 'system'`) |
+| 2.2 | **menu-registry** | Assign every nav item to a section; add section labels + i18n keys |
+| 2.3 | **AppLayout.tsx** | Group items by `section`; render collapsible accordion groups |
+| 2.4 | **AppLayout.tsx** | Persist per-section collapse state in localStorage |
+| 2.5 | **AppLayout.tsx** | Respect global collapsed mode (icon-only → hide section controls) |
+| 2.6 | **AppLayout.css** | Section header styles, chevron animation, indent items |
+| 2.7 | **i18n** | Add FTL keys for section labels (en + id) |
+| 2.8 | **Admin workspace** | Verify all 15 admin screens render correctly under their sections |
+| 2.9 | **Tests** | Update AppLayout / sidebar tests if they reference DOM structure |
+
 ## Retail POS Improvements
 
 ### Feature Gaps

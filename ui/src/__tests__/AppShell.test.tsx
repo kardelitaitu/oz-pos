@@ -68,8 +68,10 @@ vi.mock('@/api/settings', () => ({
 
 // ── Mock other hooks and APIs ───────────────────────────────────
 
+let idleCallback: (() => void) | null = null;
+
 vi.mock('@/hooks/useIdleTimer', () => ({
-  useIdleTimer: vi.fn(),
+  useIdleTimer: (cb: () => void) => { idleCallback = cb; },
 }));
 
 vi.mock('@/hooks/useFeatures', () => ({
@@ -213,6 +215,120 @@ describe('AppShell — KDS workspace navigation', () => {
     clearPages();
     // Register the kds page so handleNavigate's accessibility check passes
     registerPage({ route: 'kds', component: () => null, label: 'KDS' });
+  });
+
+  // ── Idle auto-return ──────────────────────────────────────
+
+  describe('idle auto-return', () => {
+    beforeEach(() => {
+      idleCallback = null;
+    });
+
+    it('returns to workspace picker on idle timeout when in an active workspace', async () => {
+      const mockSetActive = vi.fn();
+      mockWorkspace.mockReturnValue({
+        activeWorkspace: 'store-pos',
+        setActiveWorkspace: mockSetActive,
+        availableWorkspaces: [],
+        workspaceScreens: [],
+        loading: false,
+      });
+
+      await renderInAct(wrap(<AppShell />));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
+      });
+
+      // Invoke the idle callback to simulate timeout
+      idleCallback?.();
+
+      expect(mockSetActive).toHaveBeenCalledWith(null);
+    });
+
+    it('calls logout when idle timeout fires on the workspace picker (no activeWorkspace)', async () => {
+      const mockLogout = vi.fn();
+      mockAuthSession.mockReturnValue({
+        session: {
+          user_id: 'user-1',
+          username: 'testuser',
+          role_name: 'cashier',
+          token: 'mock-token',
+          role_id: 'role-1',
+          display_name: 'Test User',
+        },
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: mockLogout,
+        clearError: vi.fn(),
+        isManager: false,
+        isOwner: false,
+      });
+
+      mockWorkspace.mockReturnValue({
+        activeWorkspace: null,
+        setActiveWorkspace: vi.fn(),
+        availableWorkspaces: [],
+        workspaceScreens: [],
+        loading: false,
+      });
+
+      await renderInAct(wrap(<AppShell />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
+      });
+
+      // Invoke the idle callback to simulate timeout on the picker
+      idleCallback?.();
+
+      expect(mockLogout).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call setActiveWorkspace when idle fires and there is no activeWorkspace', async () => {
+      const mockSetActive = vi.fn();
+      const mockLogout = vi.fn();
+      mockAuthSession.mockReturnValue({
+        session: {
+          user_id: 'user-1',
+          username: 'testuser',
+          role_name: 'cashier',
+          token: 'mock-token',
+          role_id: 'role-1',
+          display_name: 'Test User',
+        },
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: mockLogout,
+        clearError: vi.fn(),
+        isManager: false,
+        isOwner: false,
+      });
+
+      mockWorkspace.mockReturnValue({
+        activeWorkspace: null,
+        setActiveWorkspace: mockSetActive,
+        availableWorkspaces: [],
+        workspaceScreens: [],
+        loading: false,
+      });
+
+      await renderInAct(wrap(<AppShell />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
+      });
+
+      // Invoke the idle callback
+      idleCallback?.();
+
+      // Should NOT call setActiveWorkspace when already on picker
+      expect(mockSetActive).not.toHaveBeenCalled();
+      // Should call logout instead
+      expect(mockLogout).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ── store-pos workspace ────────────────────────────────────

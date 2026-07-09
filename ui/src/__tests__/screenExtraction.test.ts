@@ -228,7 +228,7 @@ const SCREENS: ScreenEntry[] = [
     name: 'WorkspaceHome',
     tsx: 'workspaces/WorkspaceHome.tsx',
     css: ['workspaces/WorkspaceHome.css'],
-    dynamicClassPrefixes: ['ws-color-'],
+    dynamicClassPrefixes: ['ws-color-', 'role-badge--'],
     externalClasses: ['workspace-home-user', 'workspace-card--active', 'workspace-card-ripple'],
   },
 

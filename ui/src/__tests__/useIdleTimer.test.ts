@@ -165,4 +165,50 @@ describe('useIdleTimer', () => {
     expect(firstCallback).not.toHaveBeenCalled();
     expect(secondCallback).toHaveBeenCalledTimes(1);
   });
+
+  it('resets timer on wheel event', () => {
+    const onIdle = vi.fn();
+    setAutoLockMinutes(1);
+    renderHook(() => useIdleTimer(onIdle));
+
+    act(() => { vi.advanceTimersByTime(55_000); });
+    act(() => { window.dispatchEvent(new Event('wheel')); });
+    act(() => { vi.advanceTimersByTime(55_000); });
+    expect(onIdle).not.toHaveBeenCalled();
+
+    act(() => { vi.advanceTimersByTime(5_000); });
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire twice when multiple activity events occur within a single interval', () => {
+    const onIdle = vi.fn();
+    setAutoLockMinutes(1);
+    renderHook(() => useIdleTimer(onIdle));
+
+    // Fire multiple events in quick succession
+    for (let i = 0; i < 10; i++) {
+      act(() => { window.dispatchEvent(new MouseEvent('mousedown')); });
+    }
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onIdle when timer is repeatedly reset before expiry', () => {
+    const onIdle = vi.fn();
+    setAutoLockMinutes(1);
+    renderHook(() => useIdleTimer(onIdle));
+
+    // Keep resetting the timer just before it would fire
+    for (let i = 0; i < 10; i++) {
+      act(() => { vi.advanceTimersByTime(55_000); });
+      act(() => { window.dispatchEvent(new MouseEvent('mousedown')); });
+    }
+
+    // Should not have fired yet
+    expect(onIdle).not.toHaveBeenCalled();
+
+    // Let it finally expire
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
 });
