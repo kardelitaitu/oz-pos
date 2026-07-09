@@ -11,9 +11,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::{Feature, Store, Terminal};
+use oz_core::{Feature, FeatureGuardRegistry, Store, Terminal};
 use platform_kernel::ModuleStatus;
-
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -119,10 +118,26 @@ pub async fn set_feature(
     let feature = oz_core::features::feature_from_key(&args.key)
         .ok_or_else(|| AppError::Invalid(format!("unknown feature key: {}", args.key)))?;
 
-    // ── Kernel module lifecycle (before DB changes) ──────────────
+    // ── Feature safety guards (before any changes) ────────────────
+    //
+    // For disable operations, run all registered FeatureGuards FIRST
+    // to ensure the toggle won't leave the system in an unsafe state
+    // (e.g. orphaned KDS tickets or unreconciled shifts). Guards are
+    // checked before kernel lifecycle so that a guard rejection does
+    // not leave a partially-stopped module.
+    if !args.enabled {
+        let db = state.db.lock().await;
+        let guards = FeatureGuardRegistry::new_with_defaults();
+        if let Err(reason) = guards.check_feature(feature, &db) {
+            return Err(AppError::Invalid(reason));
+        }
+        drop(db);
+    }
+
+    // ── Kernel module lifecycle (before DB persist) ───────────────
     //
     // For features that map to a kernel module, we attempt the
-    // start/stop first. This way, if the module fails to start,
+    // start/stop next. This way, if the module fails to start,
     // the feature toggle is not persisted (preventing inconsistent
     // state where the DB says enabled but the module is not running).
     if let Some(module_id) = feature_to_module_id(feature) {

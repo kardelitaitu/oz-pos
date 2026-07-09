@@ -13,6 +13,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+use rusqlite::Connection;
+
 /// Every toggleable feature in the OZ-POS framework.
 ///
 /// Variants are in logical groups: core, payments, products, staff,
@@ -508,6 +510,180 @@ pub fn feature_from_key(suffix: &str) -> Option<Feature> {
 impl Default for FeatureRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ── Feature Guards ──────────────────────────────────────────────────────
+
+/// Runtime safety guard that can veto a feature being disabled.
+///
+/// Guards are checked **before** the feature is toggled off in the
+/// kernel and persisted to the database. If any guard returns
+/// `Err(reason)` for the feature being disabled, the toggle is
+/// aborted and the error message is surfaced to the admin UI.
+///
+/// # Example
+///
+/// ```
+/// use oz_core::{Feature, FeatureGuard, KdsFeatureGuard};
+/// use rusqlite::Connection;
+///
+/// let conn = Connection::open_in_memory().unwrap();
+/// conn.execute_batch(
+///     "CREATE TABLE IF NOT EXISTS kds_orders (
+///         id TEXT PRIMARY KEY,
+///         status TEXT NOT NULL DEFAULT 'pending'
+///     );"
+/// ).unwrap();
+///
+/// let guard = KdsFeatureGuard;
+/// // No orders exist, so KitchenDisplay can be disabled safely.
+/// assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+/// ```
+pub trait FeatureGuard: Send + Sync {
+    /// Return `Ok(())` if the feature can be disabled, or
+    /// `Err(reason)` with an actionable message for the admin.
+    fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String>;
+}
+
+/// Guard that prevents disabling `KitchenDisplay` while KDS tickets
+/// are actively being prepared.
+///
+/// Queries the `kds_orders` table for orders with status `'pending'`
+/// or `'preparing'`. If any exist, the feature cannot be safely
+/// disabled because tickets will be orphaned.
+#[derive(Debug, Clone, Copy)]
+pub struct KdsFeatureGuard;
+
+impl FeatureGuard for KdsFeatureGuard {
+    fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String> {
+        if feature != Feature::KitchenDisplay {
+            return Ok(());
+        }
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM kds_orders WHERE status IN ('pending', 'preparing')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if count > 0 {
+            Err(format!(
+                "Cannot disable Kitchen Display while {count} ticket{} are actively in progress",
+                if count == 1 { " is" } else { "s are" }
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// Guard that prevents disabling `ShiftManagement` while a shift is
+/// still open and unreconciled.
+///
+/// Queries the `shifts` table for rows where `closed_at IS NULL`.
+/// Active shifts must be closed before the feature can be turned off.
+#[derive(Debug, Clone, Copy)]
+pub struct ShiftFeatureGuard;
+
+impl FeatureGuard for ShiftFeatureGuard {
+    fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String> {
+        if feature != Feature::ShiftManagement {
+            return Ok(());
+        }
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM shifts WHERE closed_at IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if count > 0 {
+            Err(format!(
+                "Cannot disable Shift Management while {} shift{} are actively open and unreconciled",
+                count,
+                if count == 1 { " is" } else { "s are" }
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// A registry of all active [`FeatureGuard`] instances.
+///
+/// `set_feature` calls `check_feature` before disabling a feature;
+/// the registry runs every guard and collects all failures.
+#[derive(Default)]
+pub struct FeatureGuardRegistry {
+    guards: Vec<Box<dyn FeatureGuard>>,
+}
+
+impl std::fmt::Debug for FeatureGuardRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FeatureGuardRegistry")
+            .field("count", &self.guards.len())
+            .finish()
+    }
+}
+
+impl FeatureGuardRegistry {
+    /// Create an empty registry with no guards.
+    pub fn new() -> Self {
+        Self { guards: Vec::new() }
+    }
+
+    /// Register a guard. Multiple guards can be registered; they are
+    /// all checked independently during `check_feature`.
+    pub fn register(&mut self, guard: Box<dyn FeatureGuard>) {
+        self.guards.push(guard);
+    }
+
+    /// Check `feature` against all registered guards.
+    ///
+    /// Returns `Ok(())` if **all** guards approve. Returns
+    /// `Err(reasons)` with **all** failure messages joined by `"; "`.
+    pub fn check_feature(&self, feature: Feature, conn: &Connection) -> Result<(), String> {
+        let failures: Vec<String> = self
+            .guards
+            .iter()
+            .filter_map(|guard| match guard.can_disable(feature, conn) {
+                Ok(()) => None,
+                Err(reason) => Some(reason),
+            })
+            .collect();
+
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(failures.join("; "))
+        }
+    }
+
+    /// Number of registered guards.
+    pub fn count(&self) -> usize {
+        self.guards.len()
+    }
+
+    /// True when no guards have been registered.
+    pub fn is_empty(&self) -> bool {
+        self.guards.is_empty()
+    }
+
+    /// Create a registry pre-loaded with all built-in guards.
+    ///
+    /// Currently includes:
+    /// - [`KdsFeatureGuard`] — protects open KDS tickets
+    /// - [`ShiftFeatureGuard`] — protects unreconciled shifts
+    pub fn new_with_defaults() -> Self {
+        let mut registry = Self::new();
+        registry.register(Box::new(KdsFeatureGuard));
+        registry.register(Box::new(ShiftFeatureGuard));
+        registry
     }
 }
 
@@ -1186,9 +1362,227 @@ mod tests {
         assert_eq!(features.len(), 2);
         assert!(features.contains(&Feature::CashPayment));
     }
-}
+}    // ── Feature guards ──────────────────────────────────────────────
 
-// ── Property-based tests (proptest) ─────────────────────────────────
+    #[test]
+    fn kds_guard_allows_other_features() {
+        let conn = Connection::open_in_memory().unwrap();
+        let guard = KdsFeatureGuard;
+        // Guards should always allow features they don't guard.
+        assert!(guard.can_disable(Feature::ShiftManagement, &conn).is_ok());
+        assert!(guard.can_disable(Feature::SimpleRetail, &conn).is_ok());
+        assert!(guard.can_disable(Feature::CashPayment, &conn).is_ok());
+    }
+
+    #[test]
+    fn kds_guard_allows_with_no_orders() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );",
+        )
+        .unwrap();
+        let guard = KdsFeatureGuard;
+        assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+    }
+
+    #[test]
+    fn kds_guard_rejects_with_active_orders() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'preparing');
+            INSERT INTO kds_orders (id, status) VALUES ('o2', 'pending');",
+        )
+        .unwrap();
+        let guard = KdsFeatureGuard;
+        let result = guard.can_disable(Feature::KitchenDisplay, &conn);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("2 tickets"));
+    }
+
+    #[test]
+    fn kds_guard_ignores_completed_orders() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'served');
+            INSERT INTO kds_orders (id, status) VALUES ('o2', 'cancelled');
+            INSERT INTO kds_orders (id, status) VALUES ('o3', 'ready');",
+        )
+        .unwrap();
+        let guard = KdsFeatureGuard;
+        // 'ready', 'served', and 'cancelled' are terminal states — not blocked.
+        assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+    }
+
+    #[test]
+    fn shift_guard_allows_other_features() {
+        let conn = Connection::open_in_memory().unwrap();
+        let guard = ShiftFeatureGuard;
+        assert!(guard.can_disable(Feature::KitchenDisplay, &conn).is_ok());
+        assert!(guard.can_disable(Feature::SimpleRetail, &conn).is_ok());
+    }
+
+    #[test]
+    fn shift_guard_allows_with_no_open_shifts() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'closed'
+            );
+            INSERT INTO shifts (id, closed_at, status)
+                VALUES ('s1', '2026-01-01T00:00:00Z', 'closed');
+            INSERT INTO shifts (id, closed_at, status)
+                VALUES ('s2', '2026-01-02T00:00:00Z', 'closed');",
+        )
+        .unwrap();
+        let guard = ShiftFeatureGuard;
+        assert!(guard.can_disable(Feature::ShiftManagement, &conn).is_ok());
+    }
+
+    #[test]
+    fn shift_guard_rejects_with_open_shifts() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', NULL, 'open');",
+        )
+        .unwrap();
+        let guard = ShiftFeatureGuard;
+        let result = guard.can_disable(Feature::ShiftManagement, &conn);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("1 shift"));
+    }
+
+    #[test]
+    fn shift_guard_rejects_with_multiple_open_shifts() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', NULL, 'open');
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s2', NULL, 'open');",
+        )
+        .unwrap();
+        let guard = ShiftFeatureGuard;
+        let result = guard.can_disable(Feature::ShiftManagement, &conn);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("2 shifts"));
+    }
+
+    #[test]
+    fn guard_registry_empty_by_default() {
+        let registry = FeatureGuardRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.count(), 0);
+    }
+
+    #[test]
+    fn guard_registry_new_with_defaults() {
+        let registry = FeatureGuardRegistry::new_with_defaults();
+        assert_eq!(registry.count(), 2);
+        assert!(!registry.is_empty());
+    }
+
+    #[test]
+    fn guard_registry_allows_when_all_guards_pass() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', '2026-01-01T00:00:00Z', 'closed');",
+        )
+        .unwrap();
+        let registry = FeatureGuardRegistry::new_with_defaults();
+        assert!(registry.check_feature(Feature::KitchenDisplay, &conn).is_ok());
+        assert!(registry.check_feature(Feature::ShiftManagement, &conn).is_ok());
+    }
+
+    #[test]
+    fn guard_registry_rejects_with_failures() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            CREATE TABLE shifts (
+                id TEXT PRIMARY KEY,
+                closed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'pending');
+            INSERT INTO shifts (id, closed_at, status) VALUES ('s1', NULL, 'open');",
+        )
+        .unwrap();
+        let registry = FeatureGuardRegistry::new_with_defaults();
+        // KitchenDisplay should fail due to KDS guard (not shift guard).
+        let result = registry.check_feature(Feature::KitchenDisplay, &conn);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("1 ticket"), "expected ticket error: {err}");
+        assert!(!err.contains("shift"), "should not include shift error for KitchenDisplay: {err}");
+
+        // ShiftManagement should fail due to shift guard (not KDS guard).
+        let result = registry.check_feature(Feature::ShiftManagement, &conn);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("1 shift"), "expected shift error: {err}");
+    }
+
+    #[test]
+    fn guard_registry_collects_all_failures() {
+        // When both guards fail for the same feature (unusual but possible
+        // if a future custom guard is added), all failures are returned.
+        // For now, KDS guard and Shift guard guard different features,
+        // so this test verifies the collection mechanism works.
+        let mut registry = FeatureGuardRegistry::new();
+        registry.register(Box::new(KdsFeatureGuard));
+        registry.register(Box::new(KdsFeatureGuard)); // duplicate
+
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE kds_orders (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            INSERT INTO kds_orders (id, status) VALUES ('o1', 'pending');",
+        )
+        .unwrap();
+
+        let result = registry.check_feature(Feature::KitchenDisplay, &conn);
+        assert!(result.is_err());
+        // Both KDS guards should fail — we get two "1 ticket is" messages.
+        let err = result.unwrap_err();
+        assert!(err.contains("ticket"), "expected ticket error in: {err}");
+    }
+
+    // ── Property-based tests (proptest) ─────────────────────────────────
 
 #[cfg(test)]
 mod proptests {

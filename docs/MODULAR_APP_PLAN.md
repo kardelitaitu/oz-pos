@@ -11,11 +11,11 @@
 | Phase | Area | Total Tasks | Done |
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
-| 2 | Dynamic Runtime Kernel & Safeguards | 10 | 4 |
+| 2 | Dynamic Runtime Kernel & Safeguards | 10 | 8 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 0 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **14** |
+| | **Total** | **46** | **18** |
 
 ---
 
@@ -119,10 +119,10 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 2.2 Active Operation Guards (Safe Disabling Validation)
 
-- [ ] **2.2.1 [Guard Trait & Error Structure]**: In `crates/oz-core/src/features.rs` (or `platform/kernel/`), define `pub trait FeatureGuard: Send + Sync { fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String>; }`.
-- [ ] **2.2.2 [KDS Tickets Safety Guard]**: Implement `KdsFeatureGuard`. When `feature == Feature::KitchenDisplay`, query `SELECT COUNT(*) FROM kds_tickets WHERE status IN ('new', 'preparing')`. If count > 0, return `Err(format!("Cannot disable Kitchen Display while {} tickets are actively in progress", count))`.
-- [ ] **2.2.3 [Shift Reconciliation Safety Guard]**: Implement `ShiftFeatureGuard`. When `feature == Feature::ShiftManagement`, query `SELECT COUNT(*) FROM shifts WHERE ended_at IS NULL`. If count > 0, return `Err("Cannot disable Shift Management while a shift is actively open and unreconciled")`.
-- [ ] **2.2.4 [IPC Guard Integration]**: In `set_feature` (`apps/desktop-client/src/commands/features.rs`), run all registered `FeatureGuard` checks before mutating `FeatureRegistry`. If any guard returns an `Err`, abort the transaction and return the actionable error string to the front-end toast (`setToast({ variant: 'error', message: err })`).
+- [x] **2.2.1 [Guard Trait & Error Structure]**: In `crates/oz-core/src/features.rs` (or `platform/kernel/`), define `pub trait FeatureGuard: Send + Sync { fn can_disable(&self, feature: Feature, conn: &Connection) -> Result<(), String>; }`.
+- [x] **2.2.2 [KDS Tickets Safety Guard]**: Implement `KdsFeatureGuard`. When `feature == Feature::KitchenDisplay`, query `SELECT COUNT(*) FROM kds_orders WHERE status IN ('pending', 'preparing')`. If count > 0, return `Err(format!("Cannot disable Kitchen Display while {} tickets are actively in progress", count))`.
+- [x] **2.2.3 [Shift Reconciliation Safety Guard]**: Implement `ShiftFeatureGuard`. When `feature == Feature::ShiftManagement`, query `SELECT COUNT(*) FROM shifts WHERE closed_at IS NULL`. If count > 0, return `Err("Cannot disable Shift Management while a shift is actively open and unreconciled")`.
+- [x] **2.2.4 [IPC Guard Integration]**: In `set_feature` (`apps/desktop-client/src/commands/features.rs`), run all registered `FeatureGuard` checks before mutating `FeatureRegistry`. If any guard returns an `Err`, abort the transaction and return the actionable error string.
 
 #### 2.3 Terminal Profiles & Kiosk Lock
 

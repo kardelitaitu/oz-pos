@@ -78,7 +78,10 @@ pub use db::reports::{
 };
 pub use db::{ProductWithDetails, Store};
 pub use error::{CoreError, CoreErrorKind};
-pub use features::{Feature, FeatureRegistry};
+pub use features::{
+    Feature, FeatureGuard, FeatureGuardRegistry, FeatureRegistry, KdsFeatureGuard,
+    ShiftFeatureGuard,
+};
 pub use foundation;
 pub use foundation::{InvalidTransition, SaleStatus};
 pub use gift_card::{
