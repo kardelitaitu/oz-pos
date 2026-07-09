@@ -50,7 +50,9 @@ For comprehensive local validation that mirrors the entire CI matrix (not just t
 
 ### Git & Branch Policy
 - Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
+- **Never run `git push` without an explicit, direct order from the user.** Even after committing code or completing verification, always wait for the user to explicitly instruct you to push before executing any `git push` command.
 - All PRs must pass the CI pipeline (lint, test, build) before merging.
+
 - CI only triggers on the `main` branch (push + pull_request). Feature-branch
   pushes do not run CI; open a PR targeting `main` to validate changes.
 - Never commit secrets, `.env` files, or SQLite database files.
