@@ -252,4 +252,168 @@ mod tests {
             resp.status()
         );
     }
+
+    // ── Multi-tenant isolation integration tests ─────────────────────
+
+    #[tokio::test]
+    async fn multi_tenant_tenant_a_push_invisible_to_tenant_b() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+        };
+        let app = build_router(state.clone());
+
+        // Tenant A pushes two items
+        let push_body = r#"[
+            {"id":"a-item-1","action":"sale.create","payload":"{\"total\":100}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
+            {"id":"a-item-2","action":"sale.void","payload":"{\"reason\":\"test\"}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-02T00:00:00Z","synced_at":null}
+        ]"#;
+        let push_req = authed_post("/api/sync/push", push_body, Some("tenant-a"));
+        let push_resp = app.clone().oneshot(push_req).await.unwrap();
+        assert_eq!(push_resp.status(), StatusCode::OK);
+
+        // Tenant B pulls — should see ZERO items (isolation)
+        let pull_req = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-b"));
+        let pull_resp = app.clone().oneshot(pull_req).await.unwrap();
+        assert_eq!(pull_resp.status(), StatusCode::OK);
+        let body = pull_resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json["items"].as_array().unwrap().len(),
+            0,
+            "Tenant B should see zero items from Tenant A's push"
+        );
+
+        // Tenant A pulls — should see its 2 items
+        let pull_a = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-a"));
+        let resp_a = app.clone().oneshot(pull_a).await.unwrap();
+        let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
+        let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
+        assert_eq!(json_a["items"].as_array().unwrap().len(), 2);
+        assert_eq!(json_a["items"][0]["id"], "a-item-1");
+        assert_eq!(json_a["items"][1]["id"], "a-item-2");
+    }
+
+    #[tokio::test]
+    async fn multi_tenant_bidirectional_isolation() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+        };
+        let app = build_router(state.clone());
+
+        // Tenant A pushes one item
+        let push_a = authed_post(
+            "/api/sync/push",
+            r#"[{"id":"only-a","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            Some("tenant-a"),
+        );
+        let r = app.clone().oneshot(push_a).await.unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+
+        // Tenant B pushes one item
+        let push_b = authed_post(
+            "/api/sync/push",
+            r#"[{"id":"only-b","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            Some("tenant-b"),
+        );
+        let r = app.clone().oneshot(push_b).await.unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+
+        // Tenant A should see ONLY 'only-a'
+        let pull_a = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-a"));
+        let r_a = app.clone().oneshot(pull_a).await.unwrap();
+        let b_a = r_a.into_body().collect().await.unwrap().to_bytes();
+        let j_a: serde_json::Value = serde_json::from_slice(&b_a).unwrap();
+        let items_a = j_a["items"].as_array().unwrap();
+        assert_eq!(items_a.len(), 1, "Tenant A sees only its own items");
+        assert_eq!(items_a[0]["id"], "only-a");
+
+        // Tenant B should see ONLY 'only-b'
+        let pull_b = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-b"));
+        let r_b = app.oneshot(pull_b).await.unwrap();
+        let b_b = r_b.into_body().collect().await.unwrap().to_bytes();
+        let j_b: serde_json::Value = serde_json::from_slice(&b_b).unwrap();
+        let items_b = j_b["items"].as_array().unwrap();
+        assert_eq!(items_b.len(), 1, "Tenant B sees only its own items");
+        assert_eq!(items_b[0]["id"], "only-b");
+    }
+
+    #[tokio::test]
+    async fn multi_tenant_status_scoped_per_tenant() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+        };
+        let app = build_router(state.clone());
+
+        // Tenant A pushes 3 items
+        let push_a = authed_post(
+            "/api/sync/push",
+            r#"[
+                {"id":"a-1","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
+                {"id":"a-2","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
+                {"id":"a-3","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}
+            ]"#,
+            Some("tenant-a"),
+        );
+        let r = app.clone().oneshot(push_a).await.unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+
+        // Tenant B pushes 1 item
+        let push_b = authed_post(
+            "/api/sync/push",
+            r#"[{"id":"b-1","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            Some("tenant-b"),
+        );
+        let r = app.clone().oneshot(push_b).await.unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+
+        // Tenant A status: 3 pending
+        let s_a = with_auth("/api/sync/status", Some("tenant-a"));
+        let r_a = app.clone().oneshot(s_a).await.unwrap();
+        let b_a = r_a.into_body().collect().await.unwrap().to_bytes();
+        let j_a: serde_json::Value = serde_json::from_slice(&b_a).unwrap();
+        assert_eq!(j_a["pending_count"], 3);
+
+        // Tenant B status: 1 pending
+        let s_b = with_auth("/api/sync/status", Some("tenant-b"));
+        let r_b = app.oneshot(s_b).await.unwrap();
+        let b_b = r_b.into_body().collect().await.unwrap().to_bytes();
+        let j_b: serde_json::Value = serde_json::from_slice(&b_b).unwrap();
+        assert_eq!(j_b["pending_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn multi_tenant_default_tenant_isolation() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+        };
+        let app = build_router(state.clone());
+
+        // Push items as default tenant
+        let push_d = authed_post(
+            "/api/sync/push",
+            r#"[{"id":"def-item","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            None,
+        );
+        let r = app.clone().oneshot(push_d).await.unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+
+        // Explicit tenant-c should NOT see default tenant's items
+        let pull_c = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-c"));
+        let r_c = app.clone().oneshot(pull_c).await.unwrap();
+        let b_c = r_c.into_body().collect().await.unwrap().to_bytes();
+        let j_c: serde_json::Value = serde_json::from_slice(&b_c).unwrap();
+        assert_eq!(
+            j_c["items"].as_array().unwrap().len(),
+            0,
+            "tenant-c should not see default tenant items"
+        );
+
+        // Default tenant should see its own item
+        let pull_d = authed_post("/api/sync/pull", r#"{"since":null}"#, None);
+        let r_d = app.oneshot(pull_d).await.unwrap();
+        let b_d = r_d.into_body().collect().await.unwrap().to_bytes();
+        let j_d: serde_json::Value = serde_json::from_slice(&b_d).unwrap();
+        assert_eq!(j_d["items"].as_array().unwrap().len(), 1);
+        assert_eq!(j_d["items"][0]["id"], "def-item");
+    }
 }

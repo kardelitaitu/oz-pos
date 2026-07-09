@@ -1,0 +1,120 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>oz-pos-ui</title><meta name="description" content="Documentation for oz-pos-ui"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">oz-pos-ui</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<h1>oz-pos-ui</h1></div>
+<div class="tsd-panel tsd-typography"><h1 id="-oz-pos-frontend" class="tsd-anchor-link"><code>ui/</code> — OZ-POS Frontend<a href="#-oz-pos-frontend" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
+<p>React 18 + TypeScript + Vite 5 + Tauri v2 webview.</p>
+<h2 id="stack" class="tsd-anchor-link">Stack<a href="#stack" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li><strong>React 18</strong> + react-dom</li>
+<li><strong>Vite 5</strong> (dev server + bundler)</li>
+<li><strong>TypeScript 5</strong> (strict: <code>exactOptionalPropertyTypes</code>, <code>noUncheckedIndexedAccess</code>)</li>
+<li><strong>@fluent/react</strong> (i18n via <code>.ftl</code> files)</li>
+<li><strong>@tauri-apps/api 2</strong> (IPC bridge)</li>
+<li><strong>Vitest</strong> + <strong>@testing-library/react</strong> (tests)</li>
+<li><strong>ESLint</strong> + <code>eslint-plugin-jsx-a11y</code> (accessibility enforced)</li>
+</ul>
+<h2 id="scripts" class="tsd-anchor-link">Scripts<a href="#scripts" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><span class="hl-1">            </span><span class="hl-3"># one-time</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">dev</span><span class="hl-1">            </span><span class="hl-3"># vite dev server on http://localhost:1420</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">typecheck</span><span class="hl-1">      </span><span class="hl-3"># tsc --noEmit</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">lint</span><span class="hl-1">           </span><span class="hl-3"># eslint .</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test</span><span class="hl-1">           </span><span class="hl-3"># vitest run (33 test files)</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">build</span><span class="hl-1">          </span><span class="hl-3"># tsc -b &amp;&amp; vite build</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>npm run dev</code> is what <code>cargo tauri dev</code> (from <code>apps/desktop-client/</code>) launches.</p>
+<h2 id="structure" class="tsd-anchor-link">Structure<a href="#structure" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<pre><code><span class="hl-4">ui</span><span class="hl-1">/</span><span class="hl-4">src</span><span class="hl-1">/</span><br/><span class="hl-1">├── </span><span class="hl-4">api</span><span class="hl-1">/</span><br/><span class="hl-1">│   └── (</span><span class="hl-5">29</span><span class="hl-1"> </span><span class="hl-4">per</span><span class="hl-1">-</span><span class="hl-4">domain</span><span class="hl-1"> </span><span class="hl-4">files</span><span class="hl-1">)  # </span><span class="hl-4">Typed</span><span class="hl-1"> </span><span class="hl-0">invoke</span><span class="hl-1">() </span><span class="hl-4">wrappers</span><span class="hl-1"> — </span><span class="hl-4">no</span><span class="hl-1"> </span><span class="hl-0">invoke</span><span class="hl-1">() </span><span class="hl-6">in</span><span class="hl-1"> </span><span class="hl-4">components</span><br/><span class="hl-1">├── </span><span class="hl-4">components</span><span class="hl-1">/</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">AppLayout</span><span class="hl-1">.</span><span class="hl-4">tsx</span><span class="hl-1">    # </span><span class="hl-4">Sidebar</span><span class="hl-1"> </span><span class="hl-4">navigation</span><span class="hl-1">, </span><span class="hl-4">route</span><span class="hl-1"> </span><span class="hl-4">definitions</span><span class="hl-1">, </span><span class="hl-4">feature</span><span class="hl-1"> </span><span class="hl-4">gates</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">Badge</span><span class="hl-1">.</span><span class="hl-4">tsx</span><span class="hl-1">        # </span><span class="hl-4">status</span><span class="hl-1">/</span><span class="hl-4">role</span><span class="hl-1"> </span><span class="hl-4">badges</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">Button</span><span class="hl-1">.</span><span class="hl-4">tsx</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">Card</span><span class="hl-1">.</span><span class="hl-4">tsx</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">RoleBadge</span><span class="hl-1">.</span><span class="hl-4">tsx</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">ThemeProvider</span><span class="hl-1">.</span><span class="hl-4">tsx</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">ThemeToggle</span><span class="hl-1">.</span><span class="hl-4">tsx</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">Toast</span><span class="hl-1">.</span><span class="hl-4">tsx</span><span class="hl-1">        # + </span><span class="hl-4">ToastProvider</span><span class="hl-1"> + </span><span class="hl-4">useToast</span><span class="hl-1"> </span><span class="hl-4">hook</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">UpdateBanner</span><span class="hl-1">.</span><span class="hl-4">tsx</span><br/><span class="hl-1">│   └── ...              # </span><span class="hl-4">EmptyState</span><span class="hl-1">, </span><span class="hl-4">ErrorState</span><span class="hl-1">, </span><span class="hl-4">Skeleton</span><span class="hl-1">, </span><span class="hl-4">Spinner</span><br/><span class="hl-1">├── </span><span class="hl-4">contexts</span><span class="hl-1">/</span><br/><span class="hl-1">│   └── </span><span class="hl-4">AuthContext</span><span class="hl-1">.</span><span class="hl-4">tsx</span><span class="hl-1">   # </span><span class="hl-4">Staff</span><span class="hl-1"> </span><span class="hl-4">login</span><span class="hl-1"> </span><span class="hl-4">session</span><span class="hl-1"> </span><span class="hl-4">state</span><br/><span class="hl-1">├── </span><span class="hl-4">features</span><span class="hl-1">/</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">audit</span><span class="hl-1">/           # </span><span class="hl-0">AuditLogScreen</span><span class="hl-1"> (</span><span class="hl-4">paginated</span><span class="hl-1">, </span><span class="hl-4">searchable</span><span class="hl-1">)</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">auth</span><span class="hl-1">/            # </span><span class="hl-4">StaffLoginScreen</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">categories</span><span class="hl-1">/      # </span><span class="hl-4">CategoryManagementScreen</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">currency</span><span class="hl-1">/        # </span><span class="hl-0">ExchangeRateScreen</span><span class="hl-1"> (</span><span class="hl-7">CRUD</span><span class="hl-1">)</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">customers</span><span class="hl-1">/       # </span><span class="hl-0">CustomerManagementScreen</span><span class="hl-1"> (</span><span class="hl-7">WIP</span><span class="hl-1">)</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">design</span><span class="hl-1">/          # </span><span class="hl-4">DesignSystem</span><span class="hl-1"> </span><span class="hl-4">showcase</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">inventory</span><span class="hl-1">/       # </span><span class="hl-4">InventoryAdjustmentScreen</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">products</span><span class="hl-1">/        # </span><span class="hl-4">ProductLookupScreen</span><span class="hl-1">, </span><span class="hl-4">ProductManagementScreen</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">sales</span><span class="hl-1">/           # </span><span class="hl-4">PosScreen</span><span class="hl-1">, </span><span class="hl-4">SalesHistoryScreen</span><span class="hl-1">, </span><span class="hl-4">SalesDashboardScreen</span><span class="hl-1">,</span><br/><span class="hl-1">│   │                    # </span><span class="hl-4">VoidOrdersScreen</span><span class="hl-1">, </span><span class="hl-4">EodReportScreen</span><span class="hl-1">, </span><span class="hl-4">PaymentModal</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">settings</span><span class="hl-1">/        # </span><span class="hl-4">SettingsPage</span><span class="hl-1">, </span><span class="hl-4">FeatureToggleScreen</span><span class="hl-1">, </span><span class="hl-4">DataManagementScreen</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">staff</span><span class="hl-1">/           # </span><span class="hl-4">StaffManagementScreen</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">setup</span><span class="hl-1">/           # </span><span class="hl-4">SetupWizard</span><br/><span class="hl-1">│   └── </span><span class="hl-4">tax</span><span class="hl-1">/             # </span><span class="hl-4">TaxConfigurationScreen</span><br/><span class="hl-1">├── </span><span class="hl-4">hooks</span><span class="hl-1">/</span><br/><span class="hl-1">│   └── </span><span class="hl-4">useFeatures</span><span class="hl-1">.</span><span class="hl-4">ts</span><span class="hl-1">   # </span><span class="hl-4">Feature</span><span class="hl-1"> </span><span class="hl-4">flag</span><span class="hl-1"> </span><span class="hl-4">hook</span><span class="hl-1"> </span><span class="hl-4">for</span><span class="hl-1"> </span><span class="hl-4">route</span><span class="hl-1"> </span><span class="hl-4">gating</span><br/><span class="hl-1">├── </span><span class="hl-4">locales</span><span class="hl-1">/</span><br/><span class="hl-1">│   └── </span><span class="hl-4">en</span><span class="hl-1">-</span><span class="hl-7">US</span><span class="hl-1">.</span><span class="hl-4">ftl</span><span class="hl-1">        # </span><span class="hl-4">Primary</span><span class="hl-1"> </span><span class="hl-0">locale</span><span class="hl-1"> (</span><span class="hl-5">1900</span><span class="hl-1">+ </span><span class="hl-4">IDs</span><span class="hl-1"> </span><span class="hl-4">across</span><span class="hl-1"> </span><span class="hl-5">25</span><span class="hl-1"> .</span><span class="hl-4">ftl</span><span class="hl-1"> </span><span class="hl-4">files</span><span class="hl-1">)</span><br/><span class="hl-1">├── </span><span class="hl-4">styles</span><span class="hl-1">/</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">reset</span><span class="hl-1">.</span><span class="hl-4">css</span><br/><span class="hl-1">│   ├── </span><span class="hl-4">tokens</span><span class="hl-1">.</span><span class="hl-4">css</span><span class="hl-1">       # </span><span class="hl-7">CSS</span><span class="hl-1"> </span><span class="hl-4">custom</span><span class="hl-1"> </span><span class="hl-0">properties</span><span class="hl-1"> (</span><span class="hl-4">colors</span><span class="hl-1">, </span><span class="hl-4">spacing</span><span class="hl-1">, </span><span class="hl-4">typography</span><span class="hl-1">)</span><br/><span class="hl-1">│   └── </span><span class="hl-4">components</span><span class="hl-1">.</span><span class="hl-4">css</span><span class="hl-1">   # </span><span class="hl-4">Shared</span><span class="hl-1"> </span><span class="hl-4">component</span><span class="hl-1"> </span><span class="hl-4">styles</span><br/><span class="hl-1">├── </span><span class="hl-4">types</span><span class="hl-1">/</span><br/><span class="hl-1">│   └── </span><span class="hl-4">domain</span><span class="hl-1">.</span><span class="hl-4">ts</span><span class="hl-1">        # </span><span class="hl-4">Money</span><span class="hl-1">, </span><span class="hl-4">CartId</span><span class="hl-1">, </span><span class="hl-4">Sku</span><span class="hl-1">, </span><span class="hl-4">LineId</span><span class="hl-1">, </span><span class="hl-4">Product</span><span class="hl-1">, </span><span class="hl-4">formatMoney</span><br/><span class="hl-1">├── </span><span class="hl-4">__tests__</span><span class="hl-1">/           # </span><span class="hl-4">Per</span><span class="hl-1">-</span><span class="hl-4">screen</span><span class="hl-1"> </span><span class="hl-4">test</span><span class="hl-1"> </span><span class="hl-0">files</span><span class="hl-1"> (</span><span class="hl-5">33</span><span class="hl-1"> </span><span class="hl-4">files</span><span class="hl-1">)</span><br/><span class="hl-1">├── </span><span class="hl-4">App</span><span class="hl-1">.</span><span class="hl-4">tsx</span><span class="hl-1">              # </span><span class="hl-8">Root</span><span class="hl-1">: </span><span class="hl-4">setup</span><span class="hl-1"> </span><span class="hl-4">guard</span><span class="hl-1"> → </span><span class="hl-4">auth</span><span class="hl-1"> </span><span class="hl-4">guard</span><span class="hl-1"> → </span><span class="hl-4">AppLayout</span><br/><span class="hl-1">└── </span><span class="hl-4">main</span><span class="hl-1">.</span><span class="hl-4">tsx</span><span class="hl-1">             # </span><span class="hl-8">Entry</span><span class="hl-1">: </span><span class="hl-4">Fluent</span><span class="hl-1"> </span><span class="hl-4">bundle</span><span class="hl-1"> </span><span class="hl-4">registration</span><span class="hl-1"> + </span><span class="hl-4">StrictMode</span>
+</code><button>Copy</button></pre>
+
+<h2 id="ipc-rules" class="tsd-anchor-link">IPC Rules<a href="#ipc-rules" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li><strong>No <code>invoke()</code> in components</strong> — every Tauri command has a typed wrapper in <code>api/pos.ts</code></li>
+<li>Components call <code>pos.ts</code> functions; <code>pos.ts</code> owns the <code>invoke()</code> calls</li>
+<li>All args/results are statically typed via exported interfaces</li>
+</ul>
+<h2 id="i18n" class="tsd-anchor-link">i18n<a href="#i18n" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li>All user-visible strings live in <code>src/locales/en-US.ftl</code></li>
+<li>Referenced via <code>&lt;Localized id=&quot;...&quot;&gt;</code> from <code>@fluent/react</code></li>
+<li>Hardcoded English in JSX is a build failure (enforced by code review)</li>
+<li>Add a new locale: copy <code>en-US.ftl</code>, translate, register in <code>main.tsx</code></li>
+</ul>
+<h2 id="testing" class="tsd-anchor-link">Testing<a href="#testing" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li><strong>Vitest</strong> + <code>@testing-library/react</code></li>
+<li>Each feature screen has a <code>__tests__/&lt;Screen&gt;.test.tsx</code> file</li>
+<li>IPC is mocked via <code>vi.hoisted()</code> → <code>vi.mock('@tauri-apps/api/core')</code></li>
+<li>Fluent strings are provided inline via <code>FluentBundle</code> + <code>FluentResource</code></li>
+<li>Run: <code>npm run test</code> (33 test files, ~7s)</li>
+</ul>
+<h2 id="conventions" class="tsd-anchor-link">Conventions<a href="#conventions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Enforcement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No <code>any</code> or <code>// @ts-ignore</code> without <code>// FIXME</code></td>
+<td>TypeScript strict mode</td>
+</tr>
+<tr>
+<td>ARIA labels on all interactive elements</td>
+<td>ESLint jsx-a11y</td>
+</tr>
+<tr>
+<td>No hardcoded colors/sizes</td>
+<td>CSS custom property tokens only</td>
+</tr>
+<tr>
+<td>Presentational components, hooks own behavior</td>
+<td>Code review</td>
+</tr>
+<tr>
+<td>Every screen has a test file</td>
+<td><code>__tests__/</code> audit</td>
+</tr>
+<tr>
+<td>Money displayed via <code>formatMoney()</code></td>
+<td>Import from <code>types/domain.ts</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>last audited 07-07-26 by docs-auditor</p>
+</blockquote>
+</div></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details"><a href="#-oz-pos-frontend"><span> — <wbr/>OZ-<wbr/>POS <wbr/>Frontend</span></a>
+<ul>
+<li><a href="#stack"><span>Stack</span></a></li>
+<li><a href="#scripts"><span>Scripts</span></a></li>
+<li><a href="#structure"><span>Structure</span></a></li>
+<li><a href="#ipc-rules"><span>IPC <wbr/>Rules</span></a></li>
+<li><a href="#i18n"><span>i18n</span></a></li>
+<li><a href="#testing"><span>Testing</span></a></li>
+<li><a href="#conventions"><span>Conventions</span></a></li></ul></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="modules.html">oz-pos-ui</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>
