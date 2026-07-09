@@ -84,12 +84,12 @@
   height: 32px;
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-fg);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   flex-shrink: 0;
 }
 
@@ -155,11 +155,11 @@
 
 .staff-mgmt-action-btn--restore {
   color: var(--color-success);
-  border-color: var(--color-success-dim, #86efac);
+  border-color: var(--color-success-dim);
 }
 
 .staff-mgmt-action-btn--restore:hover {
-  background: var(--color-success-bg, #f0fdf4);
+  background: var(--color-success-bg);
 }
 
 /* ── Modal ────────────────────────────────────────────────────────── */
@@ -171,7 +171,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-bg-overlay);
 }
 
 .staff-mgmt-modal {
@@ -281,7 +281,7 @@
   border-radius: var(--radius-md);
   color: var(--color-danger);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .staff-mgmt-error svg {
