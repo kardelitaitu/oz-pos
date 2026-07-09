@@ -120,7 +120,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         }).catch(() => {});
       }
     }
-  }, [lines]);
+  }, [lines, trackSerialMap]);
 
   const handleSerialChange = useCallback((lineId: string, serial: string) => {
     setSerialNumbers((prev) => ({ ...prev, [lineId]: serial }));

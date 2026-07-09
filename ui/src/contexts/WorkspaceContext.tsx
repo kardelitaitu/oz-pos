@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 // ── Fallback workspaces for development ──────────────────────────────
 
+// eslint-disable-next-line react-refresh/only-export-components
 const FALLBACK_WORKSPACES: WorkspaceDto[] = [
   { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Cashier terminal for restaurant ordering with menu categories and table management', icon: 'restaurant' },
   { key: 'store-pos', name: 'Store POS', description: 'Cashier terminal for retail with product lookup, customer management, and loyalty', icon: 'store' },
@@ -12,6 +13,7 @@ const FALLBACK_WORKSPACES: WorkspaceDto[] = [
   { key: 'admin', name: 'Admin', description: 'System settings, staff management, reports, audit logs, and configuration', icon: 'admin' },
 ];
 
+// eslint-disable-next-line react-refresh/only-export-components
 export interface WorkspaceContextValue {
   activeWorkspace: string | null;
   setActiveWorkspace: (key: string | null) => void;
@@ -139,6 +141,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext);
   if (!ctx) throw new Error('useWorkspace must be used within a WorkspaceProvider');

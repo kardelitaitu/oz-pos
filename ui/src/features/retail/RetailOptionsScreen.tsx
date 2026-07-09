@@ -210,7 +210,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
   useEffect(() => {
     listTaxRates().then(setTaxRates).catch(() => addToast({ message: l10n.getString('settings-toast-failed-tax-rates') || 'Failed to load tax rates', type: 'error' }));
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Store settings ────────────────────────────────────────────
 
@@ -222,7 +222,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       .then(setStore)
       .catch(() => addToast({ message: l10n.getString('settings-toast-failed-store-settings') || 'Failed to load store settings', type: 'error' }))
       .finally(() => setStoreLoaded(true));
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Receipt settings ──────────────────────────────────────────
 
@@ -238,7 +238,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       .then(setReceipt)
       .catch(() => addToast({ message: l10n.getString('settings-toast-failed-receipt-settings') || 'Failed to load receipt settings', type: 'error' }))
       .finally(() => setReceiptLoaded(true));
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Credit settings ───────────────────────────────────────────
 
@@ -253,7 +253,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       .then(setCredit)
       .catch(() => addToast({ message: l10n.getString('settings-toast-failed-credit-settings') || 'Failed to load credit settings', type: 'error' }))
       .finally(() => setCreditLoaded(true));
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Hardware settings ─────────────────────────────────────────
 
@@ -271,14 +271,14 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       .then(setHardware)
       .catch(() => addToast({ message: l10n.getString('settings-toast-failed-hardware-settings') || 'Failed to load hardware settings', type: 'error' }))
       .finally(() => setHardwareLoaded(true));
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Scanner list ──────────────────────────────────────────────
 
   const [scanners, setScanners] = useState<ScannerInfo[]>([]);
   useEffect(() => {
     listScanners().then(setScanners).catch(() => addToast({ message: l10n.getString('settings-toast-failed-scanners') || 'Failed to load scanners', type: 'error' }));
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Payment gateway config ─────────────────────────────────────
 
@@ -299,7 +299,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         if (mt) setMidtransKey(mt);
       } catch { /* ignore — settings DB may not be available yet */ }
     })();
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Quick tender presets ───────────────────────────────────────
 
@@ -347,7 +347,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
   useEffect(() => {
     listDisplays().then(setDisplays).catch(() => addToast({ message: l10n.getString('settings-toast-failed-displays') || 'Failed to load displays', type: 'error' }));
-  }, []);
+  }, [addToast, l10n]);
 
   // ── Save ──────────────────────────────────────────────────────
 
