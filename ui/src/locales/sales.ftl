@@ -670,6 +670,7 @@ retail-shortcut-shift = Open / Close shift
 retail-shortcut-options = Options
 retail-shortcut-list = This shortcut list
 retail-shortcut-close = Close modal / Options
+retail-shortcut-fullscreen = Toggle Fullscreen
 retail-toast-failed-products = Failed to load products
 retail-toast-failed-categories = Failed to load categories
 retail-toast-failed-settings = Failed to load store settings

@@ -670,6 +670,7 @@ retail-shortcut-shift = Buka / Tutup shift
 retail-shortcut-options = Opsi
 retail-shortcut-list = Daftar pintasan
 retail-shortcut-close = Tutup modal / Opsi
+retail-shortcut-fullscreen = Alihkan Layar Penuh
 retail-toast-failed-products = Gagal memuat produk
 retail-toast-failed-categories = Gagal memuat kategori
 retail-toast-failed-settings = Gagal memuat pengaturan toko

@@ -1737,6 +1737,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <span className="retail-shortcuts-key">F8</span><span>{l10n.getString('retail-fn-stok')}</span>
               <span className="retail-shortcuts-key">F9</span><span>{l10n.getString('retail-shortcut-shift')}</span>
               <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
+              <span className="retail-shortcuts-key">F11</span><span>{l10n.getString('retail-shortcut-fullscreen') || 'Toggle Fullscreen'}</span>
               <span className="retail-shortcuts-key">?</span><span>{l10n.getString('retail-shortcut-list')}</span>
               <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
               <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
