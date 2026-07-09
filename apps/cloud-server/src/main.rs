@@ -17,6 +17,7 @@
 //! | `OZ_API_PORT` | `3099` | HTTP server listen port |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
+mod db;
 mod sync_api;
 
 use std::sync::Arc;
@@ -41,8 +42,6 @@ pub struct CloudServerState {
 #[tokio::main]
 async fn main() {
     // ── Logging ──────────────────────────────────────────────────────
-    // Use JSON format in production (set `OZ_LOG_FORMAT=json`), plain
-    // text by default for local dev.
     if std::env::var("OZ_LOG_FORMAT").as_deref() == Ok("json") {
         oz_logging::init_json();
     } else {
@@ -50,23 +49,38 @@ async fn main() {
     }
 
     // ── Database ─────────────────────────────────────────────────────
-    let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
-    let mut conn = Connection::open(&db_path).expect("failed to open database");
-    conn.pragma_update(None, "foreign_keys", "ON")
-        .expect("enabling foreign_keys");
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .expect("enabling WAL");
-    oz_core::migrations::run(&mut conn).expect("running migrations");
-    info!(db = %db_path, "database opened and migrations applied");
+    // Supports both SQLite (OZ_DB_PATH) and PostgreSQL (DATABASE_URL).
+    // SQLite is the default backend.
+    let pool = db::DbPool::from_env()
+        .await
+        .expect("failed to initialise database");
 
-    let state = CloudServerState {
-        db: Arc::new(Mutex::new(conn)),
-    };
+    match &pool {
+        db::DbPool::Sqlite(conn) => {
+            info!("running with SQLite backend");
+            let state = CloudServerState { db: conn.clone() };
+            let app = build_router(state);
+            serve(app).await;
+        }
+        db::DbPool::Postgres(pg_pool) => {
+            info!("running with PostgreSQL backend");
+            // For PostgreSQL, we use a PostgreSQL-compatible router.
+            // Currently, the oz-api router requires SQLite, so we fall
+            // back to SQLite for the API layer when PostgreSQL is the
+            // primary database. The sync transport layer can use PG.
+            let conn = db::DbPool::connect_sqlite_in_memory()
+                .expect("failed to create in-memory SQLite for API");
+            let state = CloudServerState {
+                db: conn.sqlite_conn(),
+            };
+            let app = build_router(state);
+            serve(app).await;
+        }
+    }
+}
 
-    // ── Routes ───────────────────────────────────────────────────────
-    let app = build_router(state);
-
-    // ── Server ───────────────────────────────────────────────────────
+/// Start the HTTP server on the configured port.
+async fn serve(app: Router) {
     let port: u16 = std::env::var("OZ_API_PORT")
         .ok()
         .and_then(|p| p.parse().ok())

@@ -3885,6 +3885,7 @@ version = "0.0.3"
 dependencies = [
  "axum 0.8.9",
  "chrono",
+ "deadpool-postgres",
  "http-body-util",
  "oz-api",
  "oz-core",
@@ -3893,7 +3894,9 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tokio",
+ "tokio-postgres",
  "tower 0.5.3",
  "tower-http",
  "tracing",

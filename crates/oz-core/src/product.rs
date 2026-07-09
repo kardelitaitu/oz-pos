@@ -14,10 +14,11 @@ use crate::{Money, Sku};
 
 /// Product type classification that determines which workspace(s)
 /// a product appears in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProductType {
     /// Appears in Retail POS only (track_serial, weight scale, etc.).
     #[serde(rename = "retail")]
+    #[default]
     Retail,
     /// Appears in Restaurant Menu only (prep time, modifiers, KDS).
     #[serde(rename = "restaurant")]
@@ -30,7 +31,7 @@ pub enum ProductType {
 impl ProductType {
     /// Parse a string into a [`ProductType`]. Returns `None` for
     /// unrecognised values so callers can fall back to a default.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Option<Self> {
         match s {
             "retail" => Some(Self::Retail),
             "restaurant" => Some(Self::Restaurant),
@@ -46,12 +47,6 @@ impl ProductType {
             Self::Restaurant => "restaurant",
             Self::Both => "both",
         }
-    }
-}
-
-impl Default for ProductType {
-    fn default() -> Self {
-        Self::Retail
     }
 }
 
@@ -307,7 +302,7 @@ mod tests {
             ("restaurant", ProductType::Restaurant),
             ("both", ProductType::Both),
         ] {
-            assert_eq!(ProductType::from_str(s), Some(expected));
+            assert_eq!(ProductType::parse_str(s), Some(expected));
             assert_eq!(expected.as_str(), s);
             let json = serde_json::to_value(expected).unwrap();
             assert_eq!(json, serde_json::json!(s));
@@ -318,8 +313,8 @@ mod tests {
 
     #[test]
     fn product_type_from_str_unknown_returns_none() {
-        assert_eq!(ProductType::from_str("unknown"), None);
-        assert_eq!(ProductType::from_str(""), None);
+        assert_eq!(ProductType::parse_str("unknown"), None);
+        assert_eq!(ProductType::parse_str(""), None);
     }
 
     #[test]

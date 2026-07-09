@@ -144,7 +144,7 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         track_serial: row.get("track_serial").unwrap_or(false),
         product_type: product_type_str
             .as_deref()
-            .and_then(crate::ProductType::from_str)
+            .and_then(crate::ProductType::parse_str)
             .unwrap_or_default(),
     })
 }

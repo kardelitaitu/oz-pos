@@ -119,6 +119,7 @@ impl Store<'_> {
 
     /// Insert a new product and optionally an inventory row.
     /// `product_type` defaults to `"retail"` when `None`.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_product(
         &self,
         sku: &str,
@@ -208,7 +209,7 @@ impl Store<'_> {
             cache.invalidate_product(sku.trim());
         }
 
-        let parsed_pt = crate::ProductType::from_str(product_type).unwrap_or_default();
+        let parsed_pt = crate::ProductType::parse_str(product_type).unwrap_or_default();
         Ok(Product {
             id,
             sku: Sku::new(sku.trim()),

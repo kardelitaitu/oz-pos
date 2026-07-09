@@ -651,10 +651,7 @@ impl FeatureGuardRegistry {
         let failures: Vec<String> = self
             .guards
             .iter()
-            .filter_map(|guard| match guard.can_disable(feature, conn) {
-                Ok(()) => None,
-                Err(reason) => Some(reason),
-            })
+            .filter_map(|guard| guard.can_disable(feature, conn).err())
             .collect();
 
         if failures.is_empty() {

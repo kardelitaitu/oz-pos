@@ -148,7 +148,7 @@ fn stock_multiple_products_tracked_independently() {
 fn stock_adjust_overflow_rejected() {
     let conn = setup();
     let s = store(&conn);
-    let p = s
+    let _p = s
         .create_product(
             "OVERFLOW",
             "Overflow",
