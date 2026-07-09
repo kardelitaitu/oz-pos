@@ -26,6 +26,7 @@ interface FormData {
   categoryId: string;
   barcode: string;
   initialStock: string;
+  productType: string;
   taxRateIds: string[];
 }
 
@@ -37,6 +38,7 @@ const EMPTY_FORM: FormData = {
   categoryId: '',
   barcode: '',
   initialStock: '0',
+  productType: 'retail',
   taxRateIds: [],
 };
 
@@ -50,6 +52,7 @@ function dtoToProduct(dto: ProductDto): Product {
     inStock: dto.in_stock,
     stockQty: dto.stock_qty,
     priceUpdatedAt: dto.price_updated_at,
+    productType: dto.product_type as Product['productType'],
   };
 }
 
@@ -106,6 +109,7 @@ export default function ProductManagementScreen() {
       categoryId: p.category === 'Uncategorised' ? '' : p.category,
       barcode: p.barcode ?? '',
       initialStock: '0',
+      productType: p.productType,
       taxRateIds: dto?.tax_rate_ids ?? [],
     });
     setEditingSku(p.sku);
@@ -127,6 +131,7 @@ export default function ProductManagementScreen() {
           currency: form.currency,
           categoryId: form.categoryId || undefined,
           barcode: form.barcode || undefined,
+          productType: form.productType,
           taxRateIds: form.taxRateIds,
         });
       } else {
@@ -139,6 +144,7 @@ export default function ProductManagementScreen() {
           categoryId: form.categoryId || undefined,
           barcode: form.barcode || undefined,
           initialStock: parseInt(form.initialStock, 10) || 0,
+          productType: form.productType,
           taxRateIds: form.taxRateIds,
         });
       }
@@ -391,6 +397,22 @@ export default function ProductManagementScreen() {
                     placeholder="4901234567890"
                   />
                 </Localized>
+              </label>
+
+              <label className="product-mgmt-field" htmlFor="product-field-type">
+                <Localized id="product-mgmt-field-type">
+                  <span className="product-mgmt-label">Product Type</span>
+                </Localized>
+                <select
+                  className="product-mgmt-input product-mgmt-select"
+                  id="product-field-type"
+                  value={form.productType}
+                  onChange={(e) => setForm({ ...form, productType: e.target.value })}
+                >
+                  <option value="retail">Retail</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="both">Both</option>
+                </select>
               </label>
 
               {taxRates.length > 0 && (

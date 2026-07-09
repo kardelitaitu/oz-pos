@@ -15,6 +15,7 @@ export interface ProductDto {
   tax_rate_ids: string[];
   created_at: string;
   price_updated_at: string;
+  product_type: string;
 }
 
 export interface CreateProductArgs {
@@ -26,6 +27,7 @@ export interface CreateProductArgs {
   categoryId?: string | undefined;
   barcode?: string | undefined;
   initialStock: number;
+  productType?: string;
   taxRateIds: string[];
 }
 
@@ -37,6 +39,7 @@ export interface UpdateProductArgs {
   currency: string;
   categoryId?: string | undefined;
   barcode?: string | undefined;
+  productType?: string;
   taxRateIds: string[];
 }
 

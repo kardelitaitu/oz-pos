@@ -99,6 +99,8 @@ pub struct ProductDto {
     pub created_at: String,
     /// ISO-8601 timestamp of the last price change.
     pub price_updated_at: String,
+    /// Product type: "retail", "restaurant", or "both".
+    pub product_type: String,
 }
 
 /// Money DTO matching the front-end `Money` type (snake_case keys).
@@ -143,6 +145,7 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
                 stock_qty: pwd.stock_qty,
                 created_at: pwd.product.created_at,
                 price_updated_at: pwd.product.price_updated_at,
+                product_type: pwd.product.product_type.as_str().to_owned(),
                 tax_rate_ids: store
                     .get_product_tax_rates(pwd.product.sku.as_str())
                     .unwrap_or_default(),
@@ -235,6 +238,7 @@ fn map_pwd_to_dto(
             in_stock: pwd.stock_qty.is_some_and(|q| q > 0),
             stock_qty: pwd.stock_qty,
             tax_rate_ids,
+            product_type: pwd.product.product_type.as_str().to_owned(),
             created_at: pwd.product.created_at,
             price_updated_at: pwd.product.price_updated_at,
         }
