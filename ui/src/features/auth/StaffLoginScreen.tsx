@@ -284,24 +284,26 @@ export default function StaffLoginScreen() {
     <div className="staff-login-screen" onClick={handleScreenClick} onKeyDown={handleScreenClick} role="presentation" tabIndex={-1}>
       <div className="staff-login-card">
         {/* Logo */}
-        <div className="staff-login-logo">
-          {!primaryLogoError && resizedUrl ? (
-            <img
-              src={resizedUrl}
-              alt={brandSettings?.store_name || 'OZ-POS'}
-              className="staff-login-logo-img"
-            />
-          ) : !fallbackSvgError ? (
-            <img
-              src="/branding/logo-mark.svg"
-              alt={brandSettings?.store_name || 'OZ-POS'}
-              className="staff-login-logo-img"
-              onError={() => setFallbackSvgError(true)}
-            />
-          ) : (
-            <UserIcon />
-          )}
-        </div>
+        {step === 'username' && (
+          <div className="staff-login-logo">
+            {!primaryLogoError && resizedUrl ? (
+              <img
+                src={resizedUrl}
+                alt={brandSettings?.store_name || 'OZ-POS'}
+                className="staff-login-logo-img"
+              />
+            ) : !fallbackSvgError ? (
+              <img
+                src="/branding/logo-mark.svg"
+                alt={brandSettings?.store_name || 'OZ-POS'}
+                className="staff-login-logo-img"
+                onError={() => setFallbackSvgError(true)}
+              />
+            ) : (
+              <UserIcon />
+            )}
+          </div>
+        )}
 
         {step === 'username' && (
           <Localized id="staff-login-step-username">
