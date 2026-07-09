@@ -3,6 +3,7 @@ import {
   createPurchaseOrder,
   listSuppliers,
   type SupplierDto,
+  type CreatePurchaseOrderArgs,
 } from '@/api/purchasing';
 import { Button } from '@/components/Button';
 import './PurchaseOrderForm.css';
@@ -61,7 +62,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
     setSaving(true);
     setError(null);
     try {
-      const args: import('@/api/purchasing').CreatePurchaseOrderArgs = {
+      const args: CreatePurchaseOrderArgs = {
         po_number: poNumber.trim(),
         supplier_id: supplierId,
         lines: lines.map((l) => ({

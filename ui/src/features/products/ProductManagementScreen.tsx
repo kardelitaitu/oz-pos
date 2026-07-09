@@ -155,7 +155,7 @@ export default function ProductManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingSku, load]);
+  }, [form, editingSku, load, userId]);
 
   const confirmDelete = useCallback(async (sku: string) => {
     setDeleting(sku);

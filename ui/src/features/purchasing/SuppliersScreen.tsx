@@ -5,6 +5,8 @@ import {
   createSupplier,
   updateSupplier,
   type SupplierDto,
+  type UpdateSupplierArgs,
+  type CreateSupplierArgs,
 } from '@/api/purchasing';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -112,7 +114,7 @@ export default function SuppliersScreen() {
     setError(null);
     try {
       if (editingId) {
-        const args: import('@/api/purchasing').UpdateSupplierArgs = {
+        const args: UpdateSupplierArgs = {
           id: editingId,
           code: form.code.trim(),
           name: form.name.trim(),
@@ -126,7 +128,7 @@ export default function SuppliersScreen() {
         if (form.notes.trim()) args.notes = form.notes.trim();
         await updateSupplier(args);
       } else {
-        const args: import('@/api/purchasing').CreateSupplierArgs = {
+        const args: CreateSupplierArgs = {
           code: form.code.trim(),
           name: form.name.trim(),
         };

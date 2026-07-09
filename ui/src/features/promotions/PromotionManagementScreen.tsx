@@ -111,7 +111,7 @@ export default function PromotionManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, modalMode, load, closeModal]);
+  }, [form, modalMode, load, closeModal, session?.user_id]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -125,7 +125,7 @@ export default function PromotionManagementScreen() {
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load]);
+  }, [deleteTarget, load, session?.user_id]);
 
   const toggleActive = useCallback(async (p: Promotion) => {
     try {
@@ -134,7 +134,7 @@ export default function PromotionManagementScreen() {
     } catch (err) {
       console.error('Failed to toggle promotion:', err);
     }
-  }, [load]);
+  }, [load, session?.user_id]);
 
   return (
     <div className="promo-mgmt">

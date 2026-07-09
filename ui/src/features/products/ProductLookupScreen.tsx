@@ -180,7 +180,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
       // If bundle lookup fails, silently ignore.
     }
     setBarcodeInput('');
-  }, [barcodeInput, handleAddProduct, products, addToast]);
+  }, [barcodeInput, handleAddProduct, products, addToast, l10n, onAddProduct]);
 
   // Handle Enter key in barcode input
   const handleBarcodeKeyDown = useCallback(

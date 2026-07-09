@@ -81,7 +81,7 @@ export default function OfflineQueueScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -114,7 +114,7 @@ export default function OfflineQueueScreen() {
     } finally {
       setSyncing(false);
     }
-  }, [load]);
+  }, [load, l10n]);
 
   // ── Delete item ────────────────────────────────────────────────
 
