@@ -101,7 +101,9 @@ export default function FeatureToggleScreen() {
   const [features, setFeatures] = useState<FeatureInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [toggling, setToggling] = useState<string | null>(null);
+  const [togglingBatch, setTogglingBatch] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   const load = useCallback(async () => {
@@ -152,14 +154,60 @@ export default function FeatureToggleScreen() {
     [features],
   );
 
+  // ── Search filter ──────────────────────────────────────────────
+
+  const query = searchQuery.toLowerCase().trim();
+
+  const matchesSearch = (f: FeatureInfo) =>
+    !query ||
+    f.key.toLowerCase().includes(query) ||
+    f.name.toLowerCase().includes(query) ||
+    f.description.toLowerCase().includes(query);
+
   // ── Group features ────────────────────────────────────────────
 
   const grouped = GROUP_ORDER
     .map((group) => ({
       group,
-      features: features.filter((f) => f.group === group),
+      features: features.filter((f) => f.group === group && matchesSearch(f)),
     }))
     .filter((g) => g.features.length > 0);
+
+  const hasSearchResults = grouped.length > 0 || !query;
+
+  // ── Bulk toggle handlers ───────────────────────────────────────
+
+  const toggleGroup = useCallback(async (group: string, enable: boolean) => {
+    const groupFeatures = features.filter((f) => f.group === group);
+    setTogglingBatch(group);
+    try {
+      // Toggle each feature in sequence (individual IPC calls).
+      for (const feat of groupFeatures) {
+        if (feat.enabled !== enable) {
+          // We don't await result.features after every toggle —
+          // just update local state optimistically.
+          await setFeature(feat.key, enable);
+        }
+      }
+      // Reload full state after batch completes.
+      const result = await listAllFeatures();
+      setFeatures(result.features);
+      setToast({
+        message: l10n.getString(
+          enable ? 'feature-toggle-bulk-enabled' : 'feature-toggle-bulk-disabled',
+          { group },
+        ),
+        variant: 'success',
+      });
+    } catch (err) {
+      setToast({
+        message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
+        variant: 'error',
+      });
+    } finally {
+      setTogglingBatch(null);
+    }
+  }, [features, l10n]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -193,7 +241,50 @@ export default function FeatureToggleScreen() {
         </div>
       )}
 
-      {!loading && !error && grouped.length === 0 && (
+      {/* Search bar */}
+      {!loading && !error && (
+        <div className="feature-toggle-search">
+          <svg className="feature-toggle-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="16" height="16">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <Localized id="feature-toggle-search-placeholder" attrs={{ placeholder: true }}>
+            <input
+              type="search"
+              className="feature-toggle-search-input"
+              placeholder="Search features…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label={l10n.getString('feature-toggle-search-aria')}
+            />
+          </Localized>
+          {searchQuery && (
+            <button
+              type="button"
+              className="feature-toggle-search-clear"
+              onClick={() => setSearchQuery('')}
+              aria-label={l10n.getString('feature-toggle-search-clear-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
+      {!loading && !error && !hasSearchResults && (
+        <Card shadow="sm">
+          <div className="feature-toggle-empty">
+            <Localized id="feature-toggle-empty-search">
+              <p>No features match your search.</p>
+            </Localized>
+          </div>
+        </Card>
+      )}
+
+      {!loading && !error && grouped.length === 0 && hasSearchResults && features.length === 0 && (
         <Card shadow="sm">
           <div className="feature-toggle-empty">
             <Localized id="feature-toggle-empty"><p>No features found.</p></Localized>
@@ -210,15 +301,37 @@ export default function FeatureToggleScreen() {
 
       {!loading && !error && grouped.map(({ group, features: groupFeatures }) => (
         <div key={group} className="feature-toggle-group">
-          <Localized id={GROUP_L10N_IDS[group] ?? ''}>
-            <h2 className="feature-toggle-group-title">
-              <span className="feature-toggle-group-icon">{getGroupIcon(group)}</span>
-              {group}
-              <span className="feature-toggle-group-count">
-              {groupFeatures.filter((f) => f.enabled).length}/{groupFeatures.length}
-            </span>
-          </h2>
-          </Localized>
+          <div className="feature-toggle-group-header">
+            <Localized id={GROUP_L10N_IDS[group] ?? ''}>
+              <h2 className="feature-toggle-group-title">
+                <span className="feature-toggle-group-icon">{getGroupIcon(group)}</span>
+                {group}
+                <span className="feature-toggle-group-count">
+                {groupFeatures.filter((f) => f.enabled).length}/{groupFeatures.length}
+              </span>
+            </h2>
+            </Localized>
+            <div className="feature-toggle-bulk-actions">
+              <button
+                type="button"
+                className="feature-toggle-bulk-btn"
+                disabled={togglingBatch === group}
+                onClick={() => toggleGroup(group, true)}
+                aria-label={l10n.getString('feature-toggle-bulk-enable-aria', { group })}
+              >
+                <Localized id="feature-toggle-bulk-enable"><span>Enable All</span></Localized>
+              </button>
+              <button
+                type="button"
+                className="feature-toggle-bulk-btn feature-toggle-bulk-btn--disable"
+                disabled={togglingBatch === group}
+                onClick={() => toggleGroup(group, false)}
+                aria-label={l10n.getString('feature-toggle-bulk-disable-aria', { group })}
+              >
+                <Localized id="feature-toggle-bulk-disable"><span>Disable All</span></Localized>
+              </button>
+            </div>
+          </div>
 
           <Card shadow="xs">
             <div className="feature-toggle-list" role="group" aria-label={l10n.getString('feature-toggle-group-aria', { group })}>

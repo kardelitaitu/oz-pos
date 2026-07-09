@@ -10,12 +10,12 @@
 
 | Phase | Area | Total Tasks | Done |
 | :--- | :--- | ---: | ---: |
-| 1 | Admin Setup & Preset Polish | 10 | 8 |
+| 1 | Admin Setup & Preset Polish | 10 | 10 |
 | 2 | Dynamic Runtime Kernel & Safeguards | 10 | 0 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 0 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **8** |
+| | **Total** | **46** | **10** |
 
 ---
 
@@ -82,7 +82,7 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ---
 
-### Phase 1: Admin Setup & Preset Polish (Quick Wins) `[8/10]`
+### Phase 1: Admin Setup & Preset Polish (Quick Wins) `[10/10]`
 
 #### 1.1 Expand Preset Templates (`Quick Service Cafe / Bakery`, `Franchise Restaurant`)
 
@@ -102,8 +102,8 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 1.3 Category Search & Bulk Controls in Feature Toggle Screen
 
-- [ ] **1.3.1 [Keyword Search Bar UI]**: In `FeatureToggleScreen.tsx` (`ui/src/features/settings/FeatureToggleScreen.tsx`), add `searchQuery` state and search input box. Filter `grouped` items so only features whose `key`, `name`, or `description` match `searchQuery` case-insensitively are displayed.
-- [ ] **1.3.2 [Group Bulk Action Buttons]**: In `FeatureToggleScreen.tsx`, render "Enable All" and "Disable All" buttons in the header of each group category card (`Core`, `Hardware`, `Business Rules`, etc.).
+- [x] **1.3.1 [Keyword Search Bar UI]**: In `FeatureToggleScreen.tsx` (`ui/src/features/settings/FeatureToggleScreen.tsx`), add `searchQuery` state and search input box. Filter `grouped` items so only features whose `key`, `name`, or `description` match `searchQuery` case-insensitively are displayed.
+- [x] **1.3.2 [Group Bulk Action Buttons]**: In `FeatureToggleScreen.tsx`, render "Enable All" and "Disable All" buttons in the header of each group category card (`Core`, `Hardware`, `Business Rules`, etc.).
 - [ ] **1.3.3 [Bulk IPC Backend Command]**: Implement `set_features_bulk(keys: Vec<String>, enabled: bool)` in `apps/desktop-client/src/commands/features.rs` and register it in `lib.rs` so toggling an entire group of features executes atomically in a single SQLite transaction and returns the updated `ListAllFeaturesResult`.
 
 ---
