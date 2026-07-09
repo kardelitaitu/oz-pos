@@ -120,3 +120,8 @@ shift-field-payout-amount = Payout amount in minor units
 shift-field-payout-reason = Payout reason
 shift-field-closing-balance = Closing balance in minor units
 shift-field-notes = Shift notes
+
+# Shift Open Balance (ShiftManagementScreen)
+shift-open-balance-label = Opening balance
+shift-open-balance-placeholder =
+    .placeholder = e.g. 100.00

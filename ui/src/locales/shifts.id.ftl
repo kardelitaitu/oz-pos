@@ -121,4 +121,9 @@ shift-field-payout-reason = Alasan penarikan
 shift-field-closing-balance = Saldo akhir dalam unit minor
 shift-field-notes = Catatan shift
 
+# Shift Open Balance (ShiftManagementScreen)
+shift-open-balance-label = Saldo awal
+shift-open-balance-placeholder =
+    .placeholder = mis. 100.000
+
 # ── Staff Management (remaining) ──

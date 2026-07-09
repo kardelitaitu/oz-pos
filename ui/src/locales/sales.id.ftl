@@ -413,6 +413,21 @@ refund-cancel = Batal
 refund-submit = Proses Pengembalian Dana
 refund-error = Pengembalian dana gagal
 
+# Sales History Refund Line Items
+refund-previous-refunds = Pengembalian Sebelumnya
+refund-line-sku = SKU
+refund-line-qty = Jml
+refund-line-total = Total
+refund-action-refund = Kembalikan
+
+# Item Modifier Modal
+modifier-no-options = Tidak ada opsi tersedia
+modifier-free = Gratis
+modifier-base-price = Harga dasar
+modifier-addons = Tambahan
+modifier-total = Total
+modifier-add-to-cart = Tambah ke Keranjang
+
 # ── EOD Report ──
 eod-title = Laporan Akhir Hari
 eod-cashier-shifts = Shift Kasir
@@ -734,4 +749,49 @@ gift-cards-txn-balance = Saldo
 gift-cards-txn-notes = Catatan
 gift-cards-txn-date = Tanggal
 
+# ── Sales History ARIA (remaining) ──
+sales-history-search-placeholder =
+    .placeholder = Cari ID penjualan, pembayaran, kasir…
+sales-history-search-aria =
+    .aria-label = Cari penjualan
+sales-history-filter-aria =
+    .aria-label = Saring penjualan
+sales-history-status-filter-aria =
+    .aria-label = Saring berdasarkan status
+sales-history-date-from-aria =
+    .aria-label = Dari tanggal
+sales-history-date-to-aria =
+    .aria-label = Ke tanggal
+sales-history-cashier-aria =
+    .aria-label = Saring berdasarkan kasir
+sales-history-table-aria =
+    .aria-label = Riwayat penjualan
+sales-history-prev-aria =
+    .aria-label = Halaman sebelumnya
+sales-history-next-aria =
+    .aria-label = Halaman berikutnya
+sales-history-per-page-aria =
+    .aria-label = Hasil per halaman
+sales-history-void-overlay-aria =
+    .aria-label = Batalkan pesanan
+sales-history-void-reason-aria =
+    .aria-label = Alasan pembatalan
+sales-history-detail-overlay-aria =
+    .aria-label = Detail penjualan
+sales-history-detail-close-aria =
+    .aria-label = Tutup
+sales-history-lines-aria =
+    .aria-label = Item baris penjualan
+sales-history-actions-aria =
+    .aria-label = Tindakan
+sales-history-pagination-aria =
+    .aria-label = Paginasi
+sales-history-void-close-aria =
+    .aria-label = Tutup dialog pembatalan
+sales-history-refund-lines-aria =
+    .aria-label = Item baris pengembalian
+
+# ── Payment (remaining) ──
+payment-customer-name-aria =
+    .aria-label = Nama pelanggan untuk tagihan terbuka
 

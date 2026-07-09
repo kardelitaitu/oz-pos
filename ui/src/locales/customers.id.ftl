@@ -54,4 +54,14 @@ customer-mgmt-delete = Hapus
 customer-mgmt-empty = Belum ada pelanggan.
 customer-mgmt-empty-cta = Tambah pelanggan pertama
 
+# ── Customer Management ARIA ──
+customer-mgmt-name-aria =
+    .aria-label = Nama
+customer-mgmt-email-aria =
+    .aria-label = Email
+customer-mgmt-phone-aria =
+    .aria-label = Telepon
+customer-mgmt-notes-aria =
+    .aria-label = Catatan
+
 # ── Category (remaining) ──

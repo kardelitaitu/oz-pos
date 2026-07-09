@@ -28,6 +28,14 @@ day-thursday = Thu
 day-friday = Fri
 day-saturday = Sat
 
+# Dashboard
+dashboard-title = Dashboard
+dashboard-today-revenue = Today's Revenue
+dashboard-orders-today = Orders Today
+dashboard-top-product = Top Product
+dashboard-low-stock-alerts = Low Stock Alerts
+dashboard-no-data = No sales data for today
+
 # Menu Engineering
 menu-eng-title = Menu Engineering
 menu-eng-products = Products

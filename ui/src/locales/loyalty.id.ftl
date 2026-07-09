@@ -22,6 +22,16 @@ loyalty-tier-min-points = Poin Minimal
 loyalty-tier-ppu = Poin/Unit
 loyalty-tier-multiplier = Pengali
 loyalty-tier-colour = Warna
+loyalty-tier-name-aria =
+    .aria-label = Nama tingkatan
+loyalty-tier-min-points-aria =
+    .aria-label = Poin minimal
+loyalty-tier-ppu-aria =
+    .aria-label = Poin per unit
+loyalty-tier-multiplier-aria =
+    .aria-label = Pengali perolehan
+loyalty-tier-colour-aria =
+    .aria-label = Warna tingkatan
 
 loyalty-table-actions = Tindakan
 loyalty-expand = Perluas

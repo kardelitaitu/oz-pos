@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // ── Shared test helper: exit-animation host pattern ────────────────
 //
 // Import this into any test file that needs to drive a dismissing

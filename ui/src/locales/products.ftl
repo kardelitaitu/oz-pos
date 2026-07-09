@@ -24,6 +24,12 @@ restaurant-clear-color-aria =
     .aria-label = Clear color
 restaurant-categories-aria =
     .aria-label = Menu categories
+restaurant-menu-loading = Loading menu…
+restaurant-menu-empty = Menu is empty
+restaurant-size-label = Size
+restaurant-sort-label = Sort
+restaurant-card-add = Add
+restaurant-context-color-label = Color
 
 # Product Lookup
 product-lookup-title = Products
@@ -117,6 +123,8 @@ product-mgmt-barcode-placeholder =
 product-mgmt-stock-placeholder =
     .placeholder = 0
 product-mgmt-no-category = — No category —
+product-mgmt-col-type = Type
+product-mgmt-field-type = Type
 
 # Product Variants
 variant-mgmt-title = Variants — { $product }
@@ -181,3 +189,23 @@ variant-mgmt-delete-confirm-aria =
 variant-mgmt-error-load = Failed to load variants
 variant-mgmt-error-save = Failed to save variant
 variant-mgmt-error-delete = Failed to delete variant
+
+# Category Management
+categories-title = Categories
+categories-loading = Loading categories…
+categories-no-categories = No categories yet
+categories-empty-desc = Get started by creating your first category
+categories-add-first = Add your first category
+categories-add = Add Category
+categories-name = Name
+categories-name-placeholder =
+    .placeholder = e.g. Beverages
+categories-colour = Colour
+categories-icon = Icon
+categories-id-preview = ID Preview
+categories-edit = Edit
+categories-create = Create
+categories-save = Save
+categories-delete-confirm = Delete Category
+categories-delete-warning = This will unlink all products in this category.
+categories-preview = Preview

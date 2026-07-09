@@ -108,4 +108,9 @@ staff-login-backspace-aria =
 staff-login-digit-aria =
     .aria-label = { $digit }
 
+# ── Workspace Access ──
+staff-ws-section-label = Akses Ruang Kerja
+staff-ws-role-defaults = Gunakan default peran
+staff-ws-custom = Kustom
+
 # ── Product Management ──

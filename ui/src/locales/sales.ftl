@@ -363,6 +363,21 @@ refund-cancel = Cancel
 refund-submit = Process Refund
 refund-error = Refund failed
 
+# Sales History Refund Line Items
+refund-previous-refunds = Previous Refunds
+refund-line-sku = SKU
+refund-line-qty = Qty
+refund-line-total = Total
+refund-action-refund = Refund
+
+# Item Modifier Modal
+modifier-no-options = No options available
+modifier-free = Free
+modifier-base-price = Base price
+modifier-addons = Add-ons
+modifier-total = Total
+modifier-add-to-cart = Add to Cart
+
 # EOD Report
 eod-title = End-of-Day Report
 eod-cashier-shifts = Cashier Shifts
@@ -737,3 +752,5 @@ gift-cards-txn-amount = Amount
 gift-cards-txn-balance = Balance
 gift-cards-txn-notes = Notes
 gift-cards-txn-date = Date
+
+# Dashboard

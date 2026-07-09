@@ -17,7 +17,7 @@ import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
-import type { LineId } from '@/types/domain';
+import type { LineId, Sku } from '@/types/domain';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 
@@ -761,7 +761,7 @@ describe('RetailPosScreen', () => {
   it('shows warning when Pay is pressed without an active shift', async () => {
     const posState = await import('@/features/sales/usePosState');
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
@@ -790,7 +790,7 @@ describe('RetailPosScreen', () => {
   it('opens discount modal', async () => {
     const posState = await import('@/features/sales/usePosState');
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
@@ -817,7 +817,7 @@ describe('RetailPosScreen', () => {
     const posState = await import('@/features/sales/usePosState');
     const setDiscount = vi.fn();
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
@@ -847,7 +847,7 @@ describe('RetailPosScreen', () => {
   it('opens payment modal when Pay is clicked with items and active shift', async () => {
     const posState = await import('@/features/sales/usePosState');
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
@@ -910,7 +910,7 @@ describe('RetailPosScreen', () => {
   it('shows clear confirmation when Void/Clear is clicked with items', async () => {
     const posState = await import('@/features/sales/usePosState');
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
@@ -937,7 +937,7 @@ describe('RetailPosScreen', () => {
     const posState = await import('@/features/sales/usePosState');
     const resetCart = vi.fn();
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
@@ -965,7 +965,7 @@ describe('RetailPosScreen', () => {
   it('shows zero credit reminders when no outstanding credits', async () => {
     const sp = await import('@/features/sales/usePosState');
     vi.mocked(sp.usePosState).mockReturnValue({
-      lines: [{ id: crypto.randomUUID() as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1 }],
+      lines: [{ id: crypto.randomUUID() as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1 }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,
@@ -992,7 +992,7 @@ describe('RetailPosScreen', () => {
     const addProduct = vi.fn();
     const resetCart = vi.fn();
     vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as import('@/types/domain').Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
       discountPercent: 0, discountLabel: '', discountAmount: null,

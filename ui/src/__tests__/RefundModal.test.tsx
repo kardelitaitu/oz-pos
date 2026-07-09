@@ -32,6 +32,7 @@ import type { ExitAnimHostRef } from './test-utils/exitAnimHost';
 // ── Mock @/api/sales.processRefund so the async submit is deterministic ──
 
 vi.mock('@/api/sales', async () => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   const actual = await vi.importActual<typeof import('@/api/sales')>('@/api/sales');
   return {
     ...actual,

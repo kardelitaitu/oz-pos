@@ -33,6 +33,12 @@ restaurant-clear-color-aria =
     .aria-label = Hapus warna
 restaurant-categories-aria =
     .aria-label = Kategori menu
+restaurant-menu-loading = Memuat menu…
+restaurant-menu-empty = Menu kosong
+restaurant-size-label = Ukuran
+restaurant-sort-label = Urutkan
+restaurant-card-add = Tambah
+restaurant-context-color-label = Warna
 
 # Error Boundary
 product-lookup-title = Produk
@@ -126,6 +132,8 @@ product-mgmt-barcode-placeholder =
 product-mgmt-stock-placeholder =
     .placeholder = 0
 product-mgmt-no-category = — Tanpa Kategori —
+product-mgmt-col-type = Tipe
+product-mgmt-field-type = Tipe
 
 # ── Product Variants ──
 variant-mgmt-title = Varian — { $product }
@@ -190,5 +198,25 @@ variant-mgmt-delete-confirm-aria =
 variant-mgmt-error-load = Gagal memuat varian
 variant-mgmt-error-save = Gagal menyimpan varian
 variant-mgmt-error-delete = Gagal menghapus varian
+
+# ── Category Management ──
+categories-title = Kategori
+categories-loading = Memuat kategori…
+categories-no-categories = Belum ada kategori
+categories-empty-desc = Mulai dengan membuat kategori pertama Anda
+categories-add-first = Tambah kategori pertama
+categories-add = Tambah Kategori
+categories-name = Nama
+categories-name-placeholder =
+    .placeholder = mis. Minuman
+categories-colour = Warna
+categories-icon = Ikon
+categories-id-preview = Pratinjau ID
+categories-edit = Ubah
+categories-create = Buat
+categories-save = Simpan
+categories-delete-confirm = Hapus Kategori
+categories-delete-warning = Ini akan memutuskan tautan semua produk dalam kategori ini.
+categories-preview = Pratinjau
 
 # ── Customer Management (remaining) ──
