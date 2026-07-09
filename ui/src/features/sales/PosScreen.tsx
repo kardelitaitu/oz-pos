@@ -19,7 +19,7 @@ import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import { AppearanceSettings } from '@/features/settings/AppearanceSettings';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import DataManagementScreen from '@/features/settings/DataManagementScreen';
-import { formatMoney, type CartId, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
+import { formatMoney, COURSES, type CartId, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
 import { triggerInteraction } from '@/utils/interaction';
 import { useSwipe } from '@/hooks/useSwipe';
@@ -58,6 +58,7 @@ import './CartPanelLineItem.css';
 import './CartPanelFooterTotals.css';
 import './CartPanelActions.css';
 import './CartPanel.brand.css';
+import './CartPanelCourseBar.css';
 
 // ── Cart panel width, viewport-aware ──────────────────────────────────
 /**
@@ -422,6 +423,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     removeLine,
     updateQty,
     updateLinePrice,
+    fireCourse,
+    fireAllCourses,
     setDiscount,
     setTipPercent,
     setServiceCharge,
@@ -1390,6 +1393,42 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
             >
               &times;
             </button>
+          </div>
+        )}
+
+        {/* ── Course firing bar ──────────────────────── */}
+        {lines.length > 0 && activeWorkspace === 'restaurant-pos' && (
+          <div className="pos-cart-course-bar">
+            {COURSES.map((course) => {
+              const holdCount = lines.filter(
+                (l) => l.courseId === course.id && l.coursingStatus === 'hold',
+              ).length;
+              if (holdCount === 0) return null;
+              return (
+                <button
+                  key={course.id}
+                  type="button"
+                  className="pos-cart-course-btn"
+                  onClick={() => fireCourse(course.id)}
+                  data-testid={`fire-course-${course.id}`}
+                  aria-label={`Fire ${course.label} (${holdCount} items)`}
+                >
+                  <span className="pos-cart-course-emoji" aria-hidden="true">{course.emoji}</span>
+                  <span className="pos-cart-course-label">{course.label}</span>
+                  <span className="pos-cart-course-count">{holdCount}</span>
+                </button>
+              );
+            })}
+            {lines.some((l) => l.coursingStatus === 'hold') && (
+              <button
+                type="button"
+                className="pos-cart-course-btn pos-cart-course-btn--all"
+                onClick={fireAllCourses}
+                data-testid="fire-all-courses"
+              >
+                <span className="pos-cart-course-label">Fire All</span>
+              </button>
+            )}
           </div>
         )}
 

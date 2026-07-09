@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import type { CartLine, LineId, Money, Product } from '@/types/domain';
+import type { CartLine, CourseId, LineId, Money, Product } from '@/types/domain';
 import { triggerInteraction } from '@/utils/interaction';
 
 let nextLineId = 0;
@@ -90,6 +90,47 @@ export function usePosState() {
       ),
     );
   }, [setLines]);
+
+  /**
+   * Assign a course to a line item. Only applicable in restaurant mode.
+   * If the line already has the same course, this is a no-op.
+   */
+  const assignCourse = useCallback((lineId: LineId, courseId: CourseId) => {
+    setLines((prev) =>
+      prev.map((line) =>
+        line.id === lineId && line.courseId !== courseId
+          ? { ...line, courseId, coursingStatus: 'hold' as const }
+          : line,
+      ),
+    );
+  }, []);
+
+  /**
+   * Fire all lines that are currently on hold for a given course.
+   * Updates their coursing_status to 'fired'.
+   */
+  const fireCourse = useCallback((courseId: CourseId) => {
+    setLines((prev) =>
+      prev.map((line) =>
+        line.courseId === courseId && line.coursingStatus === 'hold'
+          ? { ...line, coursingStatus: 'fired' as const }
+          : line,
+      ),
+    );
+  }, []);
+
+  /**
+   * Fire ALL courses at once (batch-fire everything on hold).
+   */
+  const fireAllCourses = useCallback(() => {
+    setLines((prev) =>
+      prev.map((line) =>
+        line.coursingStatus === 'hold'
+          ? { ...line, coursingStatus: 'fired' as const }
+          : line,
+      ),
+    );
+  }, []);
 
   /** Computed subtotal (sum of all line qty × unit_price). */
   const subtotal: Money | null = useMemo(() => {
@@ -218,6 +259,9 @@ export function usePosState() {
     removeLine,
     updateQty,
     updateLinePrice,
+    assignCourse,
+    fireCourse,
+    fireAllCourses,
     setDiscount,
     setTipPercent,
     setServiceCharge,

@@ -16,6 +16,30 @@ export interface Money {
   readonly currency: string;
 }
 
+/** Course identifier for restaurant order coursing. */
+export type CourseId = 'appetizer' | 'main' | 'dessert' | 'drinks';
+
+/** Coursing status — items on hold wait to be fired to the kitchen. */
+export type CoursingStatus = 'hold' | 'fired';
+
+/** All defined course types with their display labels. */
+export const COURSES: { id: CourseId; label: string; emoji: string }[] = [
+  { id: 'appetizer', label: 'Appetizer', emoji: '🥗' },
+  { id: 'main', label: 'Main Course', emoji: '🍽️' },
+  { id: 'dessert', label: 'Dessert', emoji: '🍰' },
+  { id: 'drinks', label: 'Drinks', emoji: '🥤' },
+];
+
+/** Label for a given course ID. */
+export function courseLabel(courseId: CourseId): string {
+  return COURSES.find((c) => c.id === courseId)?.label ?? courseId;
+}
+
+/** Emoji for a given course ID. */
+export function courseEmoji(courseId: CourseId): string {
+  return COURSES.find((c) => c.id === courseId)?.emoji ?? '🍽️';
+}
+
 /** Single line in a cart. */
 export interface CartLine {
   readonly id: LineId;
@@ -26,6 +50,10 @@ export interface CartLine {
   readonly category?: string;
   readonly qty: number;
   readonly unit_price: Money;
+  /** Course assignment for restaurant coursing (undefined = not applicable). */
+  readonly courseId?: CourseId;
+  /** Coursing status — hold (not yet sent to kitchen) or fired. */
+  readonly coursingStatus?: CoursingStatus;
 }
 
 /**
