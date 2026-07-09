@@ -129,6 +129,7 @@ impl DbPool {
 
     /// Get a PostgreSQL client from the pool, if this is a PG pool.
     /// Panics if called on a SQLite pool.
+    #[allow(dead_code)]
     pub async fn pg_client(&self) -> Result<deadpool_postgres::Client, DbError> {
         match self {
             Self::Postgres(pool) => pool
@@ -142,11 +143,13 @@ impl DbPool {
     }
 
     /// Returns `true` if this is a PostgreSQL pool.
+    #[allow(dead_code)]
     pub fn is_postgres(&self) -> bool {
         matches!(self, Self::Postgres(_))
     }
 
     /// Returns `true` if this is a SQLite pool.
+    #[allow(dead_code)]
     pub fn is_sqlite(&self) -> bool {
         matches!(self, Self::Sqlite(_))
     }

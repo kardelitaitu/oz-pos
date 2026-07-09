@@ -27,6 +27,7 @@
       "icons/icon.ico"
     ],
     "category": "Business",
+    "copyright": "Copyright (c) 2024-2026 OZ-POS Contributors. All Rights Reserved.",
     "shortDescription": "OZ-POS tablet POS",
     "longDescription": "OZ-POS tablet-optimised point-of-sale for Android/iOS.",
     "android": {

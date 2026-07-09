@@ -208,9 +208,10 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
         </nav>
 
         <div className="app-sidebar-footer">
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>
-            v0.0.3
-          </span>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)', lineHeight: '1.35', padding: '0.25rem 0' }}>
+            <div style={{ fontWeight: 600, color: 'var(--color-fg-secondary)' }}>OZ-POS v0.0.3</div>
+            <div style={{ fontSize: '0.68rem', opacity: 0.85 }}>© 2024-2026 OZ-POS Contributors. All Rights Reserved.</div>
+          </div>
           <button
             type="button"
             className="app-sidebar-workspace-btn"

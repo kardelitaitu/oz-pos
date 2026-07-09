@@ -53,7 +53,13 @@ pub async fn list_all_features(
     let store = Store::new(&db);
     let reg = store.load_features()?;
 
-    let features = all_feature_metadata()
+    let features = build_feature_list(&reg);
+    Ok(ListAllFeaturesResult { features })
+}
+
+/// Build the full feature DTO list from a loaded registry.
+fn build_feature_list(reg: &oz_core::FeatureRegistry) -> Vec<FeatureDto> {
+    all_feature_metadata()
         .into_iter()
         .map(|(feat, name, desc, group)| {
             let key = oz_core::features::feature_key(feat).to_string();
@@ -71,9 +77,7 @@ pub async fn list_all_features(
                 dependencies: deps,
             }
         })
-        .collect();
-
-    Ok(ListAllFeaturesResult { features })
+        .collect()
 }
 
 // ── Set feature ──────────────────────────────────────────────────────
@@ -97,6 +101,78 @@ pub struct SetFeatureResult {
     /// If the operation cascaded (auto-enabled dependencies), these were
     /// also enabled.
     pub auto_enabled: Vec<String>,
+}
+
+// ── Set features bulk ───────────────────────────────────────────────
+
+/// Arguments for `set_features_bulk`.
+#[derive(Debug, Deserialize)]
+pub struct SetFeaturesBulkArgs {
+    /// Kebab-case keys of the features to toggle.
+    pub keys: Vec<String>,
+    /// Whether to enable (`true`) or disable (`false`) all given features.
+    pub enabled: bool,
+}
+
+/// Enable or disable multiple feature flags atomically in a single
+/// SQLite transaction.
+///
+/// Unlike `set_feature`, this bulk operation:
+/// - Executes all changes in a single SQLite transaction
+/// - Does NOT run kernel module lifecycle (use individual `set_feature`
+///   for module-backed features that need start/stop)
+/// - Does NOT cascade auto-enable dependencies (each feature is toggled
+///   individually; call `set_feature` if dependency resolution is needed)
+/// - Returns `ListAllFeaturesResult` so the front-end can refresh its
+///   display with a single response
+///
+/// This is intended for bulk group toggles in the Feature Toggle screen
+/// (e.g. "Enable all Hardware", "Disable all Advanced").
+#[command]
+pub async fn set_features_bulk(
+    args: SetFeaturesBulkArgs,
+    state: State<'_, AppState>,
+) -> Result<ListAllFeaturesResult, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+
+    // Start a SQLite transaction for atomicity.
+    let tx = store.conn.transaction().map_err(|e| {
+        AppError::Internal(format!("failed to start transaction for bulk toggle: {e}"))
+    })?;
+
+    // Load features within the transaction.
+    let mut reg = oz_core::FeatureRegistry::load_from_store(&tx).map_err(|e| {
+        AppError::Internal(format!("failed to load features in bulk toggle: {e}"))
+    })?;
+
+    // Parse and apply each key.
+    for key in &args.keys {
+        let feature = oz_core::features::feature_from_key(key)
+            .ok_or_else(|| AppError::Invalid(format!("unknown feature key: {key}")))?;
+
+        if args.enabled {
+            reg.enable(feature);
+        } else {
+            reg.disable(feature);
+        }
+    }
+
+    // Persist and prune within the transaction.
+    reg.save_to_store(&tx).map_err(|e| {
+        AppError::Internal(format!("failed to persist bulk feature toggle: {e}"))
+    })?;
+    reg.prune_stale_features(&tx).map_err(|e| {
+        AppError::Internal(format!("failed to prune stale features in bulk toggle: {e}"))
+    })?;
+
+    // Commit the transaction.
+    tx.commit().map_err(|e| {
+        AppError::Internal(format!("failed to commit bulk feature toggle: {e}"))
+    })?;
+
+    let features = build_feature_list(&reg);
+    Ok(ListAllFeaturesResult { features })
 }
 
 /// Enable or disable a single feature flag.

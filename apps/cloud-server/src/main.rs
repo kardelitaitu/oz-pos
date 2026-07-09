@@ -62,7 +62,7 @@ async fn main() {
             let app = build_router(state);
             serve(app).await;
         }
-        db::DbPool::Postgres(pg_pool) => {
+        db::DbPool::Postgres(_pg_pool) => {
             info!("running with PostgreSQL backend");
             // For PostgreSQL, we use a PostgreSQL-compatible router.
             // Currently, the oz-api router requires SQLite, so we fall
