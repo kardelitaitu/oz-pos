@@ -298,6 +298,8 @@ export default function StaffLoginScreen() {
 
         {/* PIN step */}
         {step === 'pin' && (
+          <>
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
             <div
               className="staff-login-pin-section"
               ref={pinSectionRef}
@@ -306,19 +308,20 @@ export default function StaffLoginScreen() {
               role="application"
               aria-label={l10n.getString('staff-login-pin-section-aria')}
             >
-            {renderPinDots(pin.length)}
-            {renderPinPad()}
+              {renderPinDots(pin.length)}
+              {renderPinPad()}
 
-            {/* Submit button for PINs shorter than max length */}
-            <button
-              type="button"
-              className="staff-login-submit-btn staff-login-pin-submit"
-              onClick={attemptLogin}
-              disabled={pin.length === 0 || loading}
-            >
-              {l10n.getString(loading ? 'staff-login-submitting' : 'staff-login-submit')}
-            </button>
+              {/* Submit button for PINs shorter than max length */}
+              <button
+                type="button"
+                className="staff-login-submit-btn staff-login-pin-submit"
+                onClick={attemptLogin}
+                disabled={pin.length === 0 || loading}
+              >
+                {l10n.getString(loading ? 'staff-login-submitting' : 'staff-login-submit')}
+              </button>
             </div>
+          </>
         )}
 
         {/* Error */}

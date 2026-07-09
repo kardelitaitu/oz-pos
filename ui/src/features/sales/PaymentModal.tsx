@@ -892,37 +892,45 @@ export default function PaymentModal({
                       </Localized>
                       </Localized>
                     </div>
-                    <label className="payment-method-label">
-                      <input
-                        type="radio"
-                        name="payment-method"
-                        value="open_bill"
-                        checked={method === 'open_bill'}
-                        onChange={() => setMethod('open_bill')}
-                      />
-                      <span className="payment-method-name">
-                        <Localized id="payment-open-bill"><span>Open Bill</span></Localized>
-                      </span>
-                    </label>
+                    <>
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      <label className="payment-method-label" htmlFor="payment-method-open-bill">
+                        <input
+                          id="payment-method-open-bill"
+                          type="radio"
+                          name="payment-method"
+                          value="open_bill"
+                          checked={method === 'open_bill'}
+                          onChange={() => setMethod('open_bill')}
+                        />
+                        <span className="payment-method-name">
+                          <Localized id="payment-open-bill"><span>Open Bill</span></Localized>
+                        </span>
+                      </label>
+                    </>
                   </div>
                 </fieldset>
 
                 {(method === 'open_bill' || method === 'credit') && (
                   <div className="payment-open-bill-section">
-                    <label className="payment-customer-label">
-                      <Localized id="payment-customer-name">
-                        <span>Customer Name</span>
-                      </Localized>
-                      <Localized id="payment-customer-name-aria" attrs={{ 'aria-label': true }}>
-                      <input
-                        type="text"
-                        className="payment-customer-input"
-                        placeholder="e.g. John Doe"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                      />
-                      </Localized>
-                    </label>
+                    <>
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      <label className="payment-customer-label" htmlFor="payment-customer-input">
+                        <Localized id="payment-customer-name">
+                          <span>Customer Name</span>
+                        </Localized>
+                        <Localized id="payment-customer-name-aria" attrs={{ 'aria-label': true }}>
+                          <input
+                            id="payment-customer-input"
+                            type="text"
+                            className="payment-customer-input"
+                            placeholder="e.g. John Doe"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                          />
+                        </Localized>
+                      </label>
+                    </>
                   </div>
                 )}
 
@@ -1250,8 +1258,10 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
+              /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */
               <div className="payment-customer-search-overlay" role="presentation" onClick={() => setShowCustomerSearch(false)}>
-                <div className="payment-customer-search-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
+                <div className="payment-customer-search-modal" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}>
                   <Localized id="payment-customer-search-heading">
                     <h3 className="payment-customer-search-heading">Select Customer</h3>
                   </Localized>

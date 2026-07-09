@@ -28,7 +28,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/features/kds/hooks/useTicketSla', () => ({
-  useTicketSla: (..._args: any[]) => mockUseTicketSla(),
+  useTicketSla: (..._args: unknown[]) => mockUseTicketSla(),
 }));
 
 vi.mock('@/frontend/shared/useSound', () => ({

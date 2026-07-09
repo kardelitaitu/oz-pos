@@ -280,7 +280,8 @@ describe('RetailPosScreen', () => {
       assignCourse: vi.fn(),
       fireCourse: vi.fn(),
       fireAllCourses: vi.fn(),
-    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any));
   });
 
   // ── Rendering ──────────────────────────────────────────────────
@@ -510,6 +511,7 @@ describe('RetailPosScreen', () => {
       setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
       setLines: vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -558,6 +560,7 @@ describe('RetailPosScreen', () => {
       setServiceCharge: vi.fn(),
       resetCart: vi.fn(),
       setLines: vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -593,6 +596,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -619,6 +623,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));
@@ -687,6 +692,7 @@ describe('RetailPosScreen', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     await renderInAct(wrap(<RetailPosScreen />));

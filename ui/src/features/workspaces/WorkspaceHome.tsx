@@ -140,7 +140,6 @@ function LogoutModal({
             type="button"
             className="logout-confirm-confirm"
             onClick={onConfirm}
-            autoFocus
           >
             <Localized id="workspace-home-logout-confirm-confirm">
               <span>Logout</span>

@@ -405,6 +405,7 @@ export default function ProductManagementScreen() {
                 </Localized>
               </label>
 
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <label className="product-mgmt-field" htmlFor="product-field-type">
                 <Localized id="product-mgmt-field-type">
                   <span className="product-mgmt-label">Product Type</span>

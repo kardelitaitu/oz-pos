@@ -280,7 +280,7 @@ export default function SettingsPage() {
         }
       >
         <div className="settings-form">
-          <label className="settings-field" htmlFor="settings-field-card-size">
+          <div className="settings-field">
             <Localized id="settings-field-card-size">
               <span className="settings-label">Menu Card Size</span>
             </Localized>
@@ -309,9 +309,9 @@ export default function SettingsPage() {
                 </button>
               </Localized>
             </div>
-          </label>
+          </div>
 
-          <label className="settings-field" htmlFor="settings-field-font-size">
+          <div className="settings-field">
             <Localized id="settings-field-font-size">
               <span className="settings-label">Font Size</span>
             </Localized>
@@ -340,7 +340,7 @@ export default function SettingsPage() {
                 </button>
               </Localized>
             </div>
-          </label>
+          </div>
 
           <div className="settings-field">
             <Localized id="settings-field-font-smoothing">
