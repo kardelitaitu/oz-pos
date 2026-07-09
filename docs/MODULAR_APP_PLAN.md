@@ -218,4 +218,4 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 ## 6. Next Steps for Execution
 
-Whenever we are ready to start building, we can pick any sub-item above (e.g. **1.1.1 [Rust Core Presets]**, **3.1.1 [SQLite BOM Schema]**, or **5.1.1 [Headless Server Crate Scaffolding]**), write the code and tests, verify against `cargo test` / `npm test` / `docker build`, and mark the item completed (`[x]`) while preserving 100% documentation integrity and our version lock (`0.0.3`).
+Whenever we are ready to start building, we can pick any sub-item above (e.g. **1.1.1 [Rust Core Presets]**, **3.1.1 [SQLite BOM Schema]**, or **5.1.1 [Headless Server Crate Scaffolding]**), write the code and tests, verify against `cargo test` / `npm test` / `docker build`, and mark the item completed (`[x]`) while preserving 100% documentation integrity and our version lock (`0.0.4`).

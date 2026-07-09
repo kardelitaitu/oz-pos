@@ -39,7 +39,7 @@ export default function StatusBar() {
       <div className="statusbar-left">
         <div className="statusbar-segment" title={connectionLabel}>
           <span className={`statusbar-dot ${connectionDotClass}`} aria-hidden="true" />
-          <span className="statusbar-version">OZ-POS Enterprise v0.0.3</span>
+          <span className="statusbar-version">OZ-POS Enterprise v0.0.4</span>
         </div>
 
         {/* Gateway status pill */}

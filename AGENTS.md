@@ -25,7 +25,7 @@ For comprehensive local validation that mirrors the entire CI matrix (not just t
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.3`.** Never change the version number
+- **Version is locked at `0.0.4`.** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
@@ -50,8 +50,10 @@ For comprehensive local validation that mirrors the entire CI matrix (not just t
 
 ### Git & Branch Policy
 - Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
+- **Always make a local commit after each major modification.** Whenever a logical task, feature step, or significant code change is completed and verified locally, commit it before moving on to the next task.
 - **Never run `git push` without an explicit, direct order from the user.** Even after committing code or completing verification, always wait for the user to explicitly instruct you to push before executing any `git push` command.
 - All PRs must pass the CI pipeline (lint, test, build) before merging.
+
 
 - CI only triggers on the `main` branch (push + pull_request). Feature-branch
   pushes do not run CI; open a PR targeting `main` to validate changes.

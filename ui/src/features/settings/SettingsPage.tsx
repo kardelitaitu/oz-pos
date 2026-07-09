@@ -596,7 +596,7 @@ export default function SettingsPage() {
         <div className="settings-form" style={{ gap: '0.65rem', fontSize: 'var(--text-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
             <span style={{ color: 'var(--color-fg-tertiary)' }}>Software Edition</span>
-            <span style={{ fontWeight: 600 }}>OZ-POS Enterprise v0.0.3</span>
+            <span style={{ fontWeight: 600 }}>OZ-POS Enterprise v0.0.4</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
             <span style={{ color: 'var(--color-fg-tertiary)' }}>License Type</span>
