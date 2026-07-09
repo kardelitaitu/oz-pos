@@ -68,7 +68,7 @@ RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
              modules/crm/src modules/tax/src modules/settings/src \
              modules/staff/src modules/reporting/src modules/terminal/src \
              modules/currency/src \
-             apps/cloud-server/src \
+             apps/cloud-server/src apps/desktop-client/src \
     && echo "// dummy" > crates/oz-core/src/lib.rs \
     && echo "// dummy" > crates/oz-api/src/lib.rs \
     && echo "// dummy" > crates/oz-logging/src/lib.rs \
@@ -94,6 +94,8 @@ RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
     && echo "// dummy" > modules/terminal/src/lib.rs \
     && echo "// dummy" > modules/currency/src/lib.rs \
     && echo "// dummy" > apps/cloud-server/src/main.rs \
+    && echo "// dummy" > apps/desktop-client/src/main.rs \
+    && printf '[package]\nname = "oz-pos-app"\nversion = "0.0.3"\nedition = "2021"\n' > apps/desktop-client/Cargo.toml \
     && cargo build --package oz-cloud-server --release 2>/dev/null || true
 
 # Now copy the actual source and rebuild (only changed source files
