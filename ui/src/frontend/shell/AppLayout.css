@@ -260,14 +260,14 @@
 }
 
 .app-nav-item--active {
-  background: var(--color-accent-subtle);
-  color: var(--color-accent-active);
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
   font-weight: var(--font-weight-semibold);
 }
 
 .app-nav-item--active:hover {
-  background: var(--color-accent-subtle);
-  color: var(--color-accent-active);
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
 }
 
 .app-nav-icon {

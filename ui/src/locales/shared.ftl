@@ -161,6 +161,7 @@ nav-offline-queue = Offline Queue
 nav-shifts = Shifts
 nav-bundles = Bundles
 nav-settings = Settings
+nav-general = General
 nav-dashboard-report = Dashboard
 nav-sales-report = Sales Report
 nav-inventory-report = Inventory Report

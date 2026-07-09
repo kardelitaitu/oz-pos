@@ -12,6 +12,7 @@ import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
 import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
 import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
+import { useTerminalProfile } from '@/hooks/useTerminalProfile';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
 import type { WizardState } from '@/features/setup/SetupWizard';
@@ -53,6 +54,7 @@ export default function AppShell() {
   const { session, logout } = useAuth();
   const { activeWorkspace } = useWorkspace();
   const { goToWorkspacePicker } = useWorkspaceNav();
+  const { isKdsKiosk } = useTerminalProfile();
 
   useIdleTimer(() => {
     if (activeWorkspace) {
@@ -181,6 +183,17 @@ export default function AppShell() {
   if (!hasCompletedSetup) {
     return (
       <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />
+    );
+  }
+
+  // ── KDS Kiosk — force KDS route, hide header, no workspace picker ──
+  if (isKdsKiosk) {
+    return (
+      <div className="workspace-fullscreen">
+        <div className="kds-workspace">
+          <KdsScreen />
+        </div>
+      </div>
     );
   }
 

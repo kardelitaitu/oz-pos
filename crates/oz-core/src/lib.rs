@@ -59,6 +59,7 @@ pub mod sync_client;
 pub mod table;
 pub mod tax_rate;
 pub mod terminal;
+pub mod terminal_profile;
 pub mod terminal_override;
 pub mod user;
 /// Per-user display preferences (card size, font size, etc.).
@@ -114,6 +115,7 @@ pub use sync_client::{
 };
 pub use table::{Table, TableStatus};
 pub use terminal::Terminal;
+pub use terminal_profile::TerminalProfile;
 pub use terminal_override::TerminalFeatureOverride;
 pub use user::{Role, User, builtin_roles, seed_users};
 pub use user_preferences::UserPreferences;

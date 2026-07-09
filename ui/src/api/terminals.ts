@@ -73,3 +73,37 @@ export const deleteTerminalOverride = (
   feature: string,
 ): Promise<void> =>
   invoke<void>('delete_terminal_override', { userId, terminalId, feature });
+
+// ── Terminal Profiles ───────────────────────────────────────────────
+
+export interface TerminalProfileDto {
+  terminalId: string;
+  profileType: string;
+  lockedScreen: string | null;
+  updatedAt: string;
+}
+
+export const getTerminalProfile = (
+  terminalId: string,
+): Promise<TerminalProfileDto | null> =>
+  invoke<TerminalProfileDto | null>('get_terminal_profile', { terminalId });
+
+export const setTerminalProfile = (
+  userId: string,
+  terminalId: string,
+  profileType: string,
+  lockedScreen: string | null,
+): Promise<void> =>
+  invoke<void>('set_terminal_profile', {
+    userId,
+    args: { terminalId, profileType, lockedScreen },
+  });
+
+export const listTerminalProfiles = (): Promise<TerminalProfileDto[]> =>
+  invoke<TerminalProfileDto[]>('list_terminal_profiles');
+
+export const deleteTerminalProfile = (
+  userId: string,
+  terminalId: string,
+): Promise<void> =>
+  invoke<void>('delete_terminal_profile', { userId, terminalId });

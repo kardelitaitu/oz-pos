@@ -145,8 +145,8 @@ registerPage({ route: 'bundles', component: BundleManagementScreen, label: 'Bund
 registerNavItem({ route: 'bundles', label: 'Bundles', requiredRole: 'manager', i18nKey: 'nav-bundles', section: 'products',
   icon: icon('M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z') });
 
-registerPage({ route: 'settings', component: SettingsPage, label: 'Settings', requiredRole: 'manager' });
-registerNavItem({ route: 'settings', label: 'Settings', requiredRole: 'manager', i18nKey: 'nav-settings', section: 'settings', icon: icon('M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42') });
+registerPage({ route: 'settings', component: SettingsPage, label: 'General', requiredRole: 'manager' });
+registerNavItem({ route: 'settings', label: 'General', requiredRole: 'manager', i18nKey: 'nav-general', section: 'settings', icon: icon('M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42') });
 
 registerPage({ route: 'dashboard', component: DashboardScreen, label: 'Dashboard' });
 registerNavItem({ route: 'dashboard', label: 'Dashboard', i18nKey: 'nav-dashboard-report', section: 'reports',

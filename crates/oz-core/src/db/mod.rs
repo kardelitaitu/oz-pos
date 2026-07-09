@@ -51,6 +51,7 @@ pub mod suppliers;
 pub mod tables;
 pub mod tax;
 pub mod terminal_overrides;
+pub mod terminal_profiles;
 pub mod terminals;
 pub mod workspaces;
 

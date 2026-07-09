@@ -11,11 +11,11 @@
 | Phase | Area | Total Tasks | Done |
 | :--- | :--- | ---: | ---: |
 | 1 | Admin Setup & Preset Polish | 10 | 10 |
-| 2 | Dynamic Runtime Kernel & Safeguards | 10 | 8 |
+| 2 | Dynamic Runtime Kernel & Safeguards | 10 | 10 |
 | 3 | Restaurant Workflow & Offline LAN KDS Sync | 13 | 0 |
 | 4 | Packaging, Plugin Ecosystem & Automated Testing | 5 | 0 |
 | 5 | Cloud Server & Docker Containerization | 8 | 0 |
-| | **Total** | **46** | **18** |
+| | **Total** | **46** | **20** |
 
 ---
 
@@ -126,9 +126,9 @@ Every phase and high-level objective is broken down below into actionable, atomi
 
 #### 2.3 Terminal Profiles & Kiosk Lock
 
-- [ ] **2.3.1 [SQLite Schema Migration]**: In `crates/oz-core/src/db/migrations/`, add migration table `terminal_profiles` (`terminal_id TEXT PRIMARY KEY, profile_type TEXT NOT NULL, locked_screen TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`). Profile types: `'counter_pos' | 'kds_kiosk' | 'customer_display' | 'unrestricted'`.
-- [ ] **2.3.2 [Terminal Profile IPC Commands]**: Implement `get_terminal_profile(terminal_id: String) -> Result<TerminalProfileDto, AppError>` and `set_terminal_profile(terminal_id: String, profile_type: String)` in `apps/desktop-client/src/commands/terminals.rs`.
-- [ ] **2.3.3 [UI Kiosk Lockdown Guard]**: In `ui/src/frontend/shell/AppShell.tsx`, load `activeTerminalProfile` via hook `useTerminalProfile()`. If `profile_type === 'kds_kiosk'`, bypass the workspace picker (`WorkspaceHome`), force `currentRoute = 'kds'`, and hide the top header and back buttons to prevent leaving KDS mode.
+- [x] **2.3.1 [SQLite Schema Migration]**: In `crates/oz-core/src/db/migrations/`, add migration table `terminal_profiles` (`terminal_id TEXT PRIMARY KEY, profile_type TEXT NOT NULL, locked_screen TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`). Profile types: `'counter_pos' | 'kds_kiosk' | 'customer_display' | 'unrestricted'`.
+- [x] **2.3.2 [Terminal Profile IPC Commands]**: Implement `get_terminal_profile(terminal_id: String) -> Result<TerminalProfileDto, AppError>` and `set_terminal_profile(terminal_id: String, profile_type: String)` in `apps/desktop-client/src/commands/terminals.rs`.
+- [x] **2.3.3 [UI Kiosk Lockdown Guard]**: In `ui/src/frontend/shell/AppShell.tsx`, load `activeTerminalProfile` via hook `useTerminalProfile()`. If `profile_type === 'kds_kiosk'`, bypass the workspace picker (`WorkspaceHome`), force `currentRoute = 'kds'`, and hide the top header and back buttons to prevent leaving KDS mode.
 
 ---
 

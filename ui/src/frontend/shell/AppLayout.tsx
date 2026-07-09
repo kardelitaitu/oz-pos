@@ -73,9 +73,12 @@ export interface AppLayoutProps {
  * `registerNavItem()`. The sidebar renders them dynamically
  * instead of using a hardcoded list.
  */
+const ADMIN_ROUTES = new Set(['settings', 'features', 'data-management']);
+
 export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole }: AppLayoutProps) {
   const { l10n } = useLocalization();
   const { settings: brandSettings } = useBrand();
+  const showTopbar = !ADMIN_ROUTES.has(route);
   const navItems = getNavItems(enabledFeatures, userRole);
   const stripeStatus = useGatewayStatus();
   const { goToWorkspacePicker } = useWorkspaceNav();
@@ -224,33 +227,35 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
 
       {/* ── Content area ─────────────────────────── */}
       <main className="app-content">
-        <div className="app-topbar" role="banner">
-          <div className="app-topbar-left">
-            <button
-              type="button"
-              className="sidebar-toggle"
-              onClick={toggleSidebar}
-              aria-label={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')}
-              aria-expanded={!sidebarCollapsed}
-            >
-              {sidebarCollapsed ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              )}
-            </button>
+        {showTopbar && (
+          <div className="app-topbar" role="banner">
+            <div className="app-topbar-left">
+              <button
+                type="button"
+                className="sidebar-toggle"
+                onClick={toggleSidebar}
+                aria-label={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')}
+                aria-expanded={!sidebarCollapsed}
+              >
+                {sidebarCollapsed ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <div className="app-topbar-right">
+              <StoreSwitcher />
+            </div>
           </div>
-          <div className="app-topbar-right">
-            <StoreSwitcher />
-          </div>
-        </div>
+        )}
         <UpdateBanner />
         <div className="app-content-inner" key={route}>
           {children}

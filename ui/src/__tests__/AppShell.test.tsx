@@ -66,6 +66,19 @@ vi.mock('@/api/settings', () => ({
   settleCredit: vi.fn(),
 }));
 
+// ── Mock useTerminalProfile (default: not kiosk) ─────────────
+
+const mockTerminalProfile = vi.fn(() => ({
+  profile: null,
+  loading: false,
+  isKdsKiosk: false,
+  error: null,
+}));
+
+vi.mock('@/hooks/useTerminalProfile', () => ({
+  useTerminalProfile: () => mockTerminalProfile(),
+}));
+
 // ── Mock other hooks and APIs ───────────────────────────────────
 
 let idleCallback: (() => void) | null = null;
@@ -328,6 +341,67 @@ describe('AppShell — KDS workspace navigation', () => {
       expect(mockSetActive).not.toHaveBeenCalled();
       // Should call logout instead
       expect(mockLogout).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── KDS Kiosk lockdown ────────────────────────────────────
+
+  describe('kds kiosk lockdown', () => {
+    beforeEach(() => {
+      mockTerminalProfile.mockReturnValue({
+        profile: { terminalId: 't1', profileType: 'kds_kiosk', lockedScreen: 'kds' },
+        loading: false,
+        isKdsKiosk: true,
+        error: null,
+      });
+    });
+
+    it('renders KdsScreen when terminal is in kds_kiosk lockdown', async () => {
+      await renderInAct(wrap(<AppShell />));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+      });
+      // No back button in kiosk lockdown
+      expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument();
+      // No workspace picker
+      expect(screen.queryByText('Select a workspace to start')).not.toBeInTheDocument();
+    });
+
+    it('skips workspace picker when terminal is in kds_kiosk lockdown', async () => {
+      // Even without active workspace, kds kiosk bypasses the picker.
+      mockWorkspace.mockReturnValue({
+        activeWorkspace: null,
+        setActiveWorkspace: vi.fn(),
+        availableWorkspaces: [],
+        workspaceScreens: [],
+        loading: false,
+      });
+
+      await renderInAct(wrap(<AppShell />));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Select a workspace to start')).not.toBeInTheDocument();
+    });
+
+    it('renders normal KDS workspace when not in kiosk lockdown', async () => {
+      mockTerminalProfile.mockReturnValue({
+        profile: null,
+        loading: false,
+        isKdsKiosk: false,
+        error: null,
+      });
+      mockKdsWorkspace();
+
+      await renderInAct(wrap(<AppShell />));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
+      });
+      // Normal KDS workspace has no back button (standalone)
+      expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument();
     });
   });
 

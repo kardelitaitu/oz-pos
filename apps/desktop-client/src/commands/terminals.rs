@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::{Store, Terminal, TerminalFeatureOverride};
+use oz_core::{Store, Terminal, TerminalFeatureOverride, TerminalProfile};
 
 use foundation::validate_not_empty;
 
@@ -260,6 +260,113 @@ pub async fn set_terminal_override(
         enabled,
         "terminal feature override set"
     );
+    Ok(())
+}
+
+// ── Terminal Profile Commands ──────────────────────────────────────
+
+/// Terminal profile DTO for the front-end.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalProfileDto {
+    pub terminal_id: String,
+    pub profile_type: String,
+    pub locked_screen: Option<String>,
+    pub updated_at: String,
+}
+
+impl From<TerminalProfile> for TerminalProfileDto {
+    fn from(p: TerminalProfile) -> Self {
+        Self {
+            terminal_id: p.terminal_id,
+            profile_type: p.profile_type,
+            locked_screen: p.locked_screen,
+            updated_at: p.updated_at,
+        }
+    }
+}
+
+/// Arguments for `set_terminal_profile`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetTerminalProfileArgs {
+    pub terminal_id: String,
+    pub profile_type: String,
+    pub locked_screen: Option<String>,
+}
+
+/// Get the profile for a terminal.
+#[command]
+pub async fn get_terminal_profile(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<TerminalProfileDto>, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let profile = store.get_terminal_profile(&terminal_id)?;
+    drop(db);
+
+    Ok(profile.map(TerminalProfileDto::from))
+}
+
+/// Set (upsert) the profile for a terminal.
+#[command]
+pub async fn set_terminal_profile(
+    user_id: String,
+    args: SetTerminalProfileArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &args.terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("profile_type", &args.profile_type)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.set_terminal_profile(&args.terminal_id, &args.profile_type, args.locked_screen.as_deref())?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id = %args.terminal_id,
+        profile_type = %args.profile_type,
+        "terminal profile set"
+    );
+    Ok(())
+}
+
+/// List all terminal profiles.
+#[command]
+pub async fn list_terminal_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalProfileDto>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let profiles = store.list_terminal_profiles()?;
+    drop(db);
+    Ok(profiles.into_iter().map(TerminalProfileDto::from).collect())
+}
+
+/// Delete a terminal's profile.
+#[command]
+pub async fn delete_terminal_profile(
+    user_id: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.delete_terminal_profile(&terminal_id)?;
+    drop(db);
+
+    tracing::info!(terminal_id, "terminal profile deleted");
     Ok(())
 }
 

@@ -29,6 +29,7 @@ nav-categories = Kategori
 nav-staff = Staf
 nav-customers = Pelanggan
 nav-inventory = Stok
+nav-general = Umum
 nav-settings = Pengaturan
 nav-reports = Laporan
 nav-design = Sistem Desain
