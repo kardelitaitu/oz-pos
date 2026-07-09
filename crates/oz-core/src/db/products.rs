@@ -41,7 +41,8 @@ impl Store<'_> {
     pub fn list_products(&self) -> Result<Vec<ProductWithDetails>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, p.track_serial,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -66,7 +67,8 @@ impl Store<'_> {
 
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, p.track_serial,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -98,7 +100,8 @@ impl Store<'_> {
         }
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
-                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, p.track_serial,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -123,6 +126,7 @@ impl Store<'_> {
         category_id: Option<&str>,
         barcode: Option<&str>,
         initial_stock: i64,
+        product_type: &str,
     ) -> Result<Product, CoreError> {
         if sku.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -158,8 +162,8 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         let result = tx.execute(
-            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 id,
                 sku.trim(),
@@ -172,6 +176,7 @@ impl Store<'_> {
                 now,
                 now,
                 0i32,
+                product_type,
             ],
         );
 
@@ -201,6 +206,7 @@ impl Store<'_> {
             cache.invalidate_product(sku.trim());
         }
 
+        let parsed_pt = crate::ProductType::from_str(product_type).unwrap_or_default();
         Ok(Product {
             id,
             sku: Sku::new(sku.trim()),
@@ -212,6 +218,7 @@ impl Store<'_> {
             updated_at: now.clone(),
             price_updated_at: now,
             track_serial: false,
+            product_type: parsed_pt,
         })
     }
 
@@ -223,6 +230,7 @@ impl Store<'_> {
         price: Money,
         category_id: Option<&str>,
         barcode: Option<&str>,
+        product_type: Option<&str>,
     ) -> Result<Product, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -246,8 +254,9 @@ impl Store<'_> {
             "UPDATE products
              SET name = ?1, price_minor = ?2, currency = ?3,
                  category_id = ?4, barcode = ?5, updated_at = ?6,
+                 product_type = COALESCE(?7, product_type),
                  price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END
-             WHERE sku = ?7",
+             WHERE sku = ?8",
             params![
                 name.trim(),
                 price.minor_units,
@@ -255,6 +264,7 @@ impl Store<'_> {
                 category_id,
                 barcode,
                 now,
+                product_type,
                 sku,
             ],
         )?;
@@ -271,7 +281,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -284,7 +294,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);

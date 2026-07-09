@@ -19,15 +19,21 @@ import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import PosScreen from '@/features/sales/PosScreen';
 import KdsScreen from '@/features/kds/KdsScreen';
 
-// ── Escape key: return to workspace picker ─────────────────────────
-// Only fires when no modal overlay is open, so in-workspace dialogs
-// (PaymentModal, RefundModal, etc.) can handle Escape themselves.
-function useWorkspaceEscape(active: string | null, onBack: () => void) {
+// ── Workspace navigation keyboard shortcuts ───────────────────────
+// Escape: return to workspace picker (only when no modal is open).
+// Ctrl+Shift+Escape: global shortcut to return to workspace picker
+// regardless of modals.
+function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
   useEffect(() => {
     if (!active) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !document.querySelector('.modal-overlay')) {
-        onBack();
+      if (e.key === 'Escape') {
+        // Ctrl+Shift+Escape always returns to the picker, bypassing modals.
+        if (e.ctrlKey && e.shiftKey) {
+          onBack();
+        } else if (!document.querySelector('.modal-overlay')) {
+          onBack();
+        }
       }
     };
     document.addEventListener('keydown', handler);
@@ -130,7 +136,7 @@ export default function AppShell() {
     goToWorkspacePicker();
   }, [goToWorkspacePicker]);
 
-  useWorkspaceEscape(activeWorkspace, handleBackToPicker);
+  useWorkspaceNavShortcuts(activeWorkspace, handleBackToPicker);
 
   const userRole = session?.role_name ?? '';
 

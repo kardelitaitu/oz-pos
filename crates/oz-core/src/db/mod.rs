@@ -125,6 +125,7 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
     let sku_str: String = row.get("sku")?;
     let cur_str: String = row.get("currency")?;
     let barcode_raw: Option<String> = row.get("barcode")?;
+    let product_type_str: Option<String> = row.get("product_type").ok();
     Ok(crate::Product {
         id: row.get("id")?,
         sku: crate::Sku::new(sku_str),
@@ -139,5 +140,9 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         updated_at: row.get("updated_at")?,
         price_updated_at: row.get("price_updated_at")?,
         track_serial: row.get("track_serial").unwrap_or(false),
+        product_type: product_type_str
+            .as_deref()
+            .and_then(crate::ProductType::from_str)
+            .unwrap_or_default(),
     })
 }
