@@ -75,6 +75,40 @@
   outline-offset: 2px;
 }
 
+/* ── Fullscreen toggle button ───────────────────────────────── */
+
+.workspace-home-fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  transition: color var(--duration-150), border-color var(--duration-150), background var(--duration-150);
+}
+
+.workspace-home-fullscreen-btn:hover {
+  color: var(--color-fg);
+  border-color: var(--color-border-hover);
+  background: var(--color-bg);
+}
+
+.workspace-home-fullscreen-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.workspace-home-top-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* ── Header ──────────────────────────────────────────────────────── */
 
 .workspace-home-header {

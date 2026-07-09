@@ -172,6 +172,7 @@ nav-tablist-aria = Navigation tabs
 nav-switch-workspace = Switch Workspace
 
 # Workspace home
+workspace-home-fullscreen-aria = Toggle fullscreen
 workspace-home-loading = Loading workspaces…
 workspace-home-subtitle = Select a workspace to start
 workspace-home-empty = No workspaces available

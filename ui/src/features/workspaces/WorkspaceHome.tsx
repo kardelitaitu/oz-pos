@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFullscreen } from '@/hooks/useFullscreen';
 import { Localized, useLocalization } from '@fluent/react';
 import { Modal } from '@/components/Modal';
 import './WorkspaceHome.css';
@@ -196,6 +197,9 @@ export default function WorkspaceHome() {
 
   const displayName = session?.display_name ?? session?.role_name ?? '';
 
+  // ── Fullscreen toggle ─────────────────────────────────────────
+  const { toggleFullscreen } = useFullscreen();
+
   // ── Logout confirmation ────────────────────────────────────────
 
   const handleLogoutClick = useCallback(() => {
@@ -345,6 +349,16 @@ export default function WorkspaceHome() {
     return (
       <div className="workspace-home">
         <div className="workspace-home-top-bar">
+          <button
+            type="button"
+            className="workspace-home-fullscreen-btn"
+            onClick={toggleFullscreen}
+            aria-label={l10n.getString('workspace-home-fullscreen-aria')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
+          </button>
           {session && (
             <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
@@ -379,19 +393,29 @@ export default function WorkspaceHome() {
   if (error && availableWorkspaces.length === 0) {
     return (
       <div className="workspace-home">
-        <div className="workspace-home-top-bar">
-          {session && (
-            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              <Localized id="workspace-home-logout"><span>Logout</span></Localized>
-            </button>
-          )}
-        </div>
-        <div className="workspace-error">
+      <div className="workspace-home-top-bar">
+        <button
+          type="button"
+          className="workspace-home-fullscreen-btn"
+          onClick={toggleFullscreen}
+          aria-label={l10n.getString('workspace-home-fullscreen-aria')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </button>
+        {session && (
+          <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <Localized id="workspace-home-logout"><span>Logout</span></Localized>
+          </button>
+        )}
+      </div>
+      <div className="workspace-error">
           <div className="workspace-error-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -437,6 +461,16 @@ export default function WorkspaceHome() {
   return (
     <div className="workspace-home">
       <div className="workspace-home-top-bar">
+        <button
+          type="button"
+          className="workspace-home-fullscreen-btn"
+          onClick={toggleFullscreen}
+          aria-label={l10n.getString('workspace-home-fullscreen-aria')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </button>
         {session && (
           <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
