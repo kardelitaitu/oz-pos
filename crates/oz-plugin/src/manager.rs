@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use chrono::{Datelike, Timelike};
-use oz_lua::{CartLineData, DiscountResult, LuaError, LuaRuntime, TaxOverride};
+use oz_lua::{CartLineData, DiscountResult, LuaError, LuaEventBridge, LuaRuntime, TaxOverride};
 
 use crate::error::PluginError;
 use crate::loader::PluginRegistry;
@@ -20,6 +20,7 @@ pub struct PluginManager {
     _registry: PluginRegistry,
     hook_names: Arc<Mutex<HashMap<String, Vec<String>>>>,
     pending_discounts: Arc<Mutex<Vec<PendingDiscount>>>,
+    bridge: Arc<Mutex<LuaEventBridge>>,
 }
 
 impl std::fmt::Debug for PluginManager {
@@ -36,6 +37,7 @@ impl PluginManager {
         let hook_names: Arc<Mutex<HashMap<String, Vec<String>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let pending_discounts: Arc<Mutex<Vec<PendingDiscount>>> = Arc::new(Mutex::new(Vec::new()));
+        let bridge: Arc<Mutex<LuaEventBridge>> = Arc::new(Mutex::new(LuaEventBridge::new()));
 
         // ── Register the `oz.*` API before loading any scripts ──
         {
@@ -113,6 +115,36 @@ impl PluginManager {
                 .set("register_hook", register_hook_fn)
                 .map_err(|e| PluginError::Lua(e.to_string()))?;
 
+            // oz.on(event, callback) — registers a Lua function callback
+            let br = bridge.clone();
+            let on_fn = lua
+                .create_function(move |lua, (event, callback): (String, rlua::Function)| {
+                    if let Ok(mut guard) = br.lock() {
+                        guard.register(lua, event, callback).map_err(|e| {
+                            rlua::Error::RuntimeError(format!("oz.on error: {e}"))
+                        })?;
+                    }
+                    Ok(())
+                })
+                .map_err(|e| PluginError::Lua(e.to_string()))?;
+            oz_table
+                .set("on", on_fn)
+                .map_err(|e| PluginError::Lua(e.to_string()))?;
+
+            // oz.off(event) — removes all callbacks for an event
+            let br_off = bridge.clone();
+            let off_fn = lua
+                .create_function(move |_, event: String| {
+                    if let Ok(mut guard) = br_off.lock() {
+                        guard.off(&event);
+                    }
+                    Ok(())
+                })
+                .map_err(|e| PluginError::Lua(e.to_string()))?;
+            oz_table
+                .set("off", off_fn)
+                .map_err(|e| PluginError::Lua(e.to_string()))?;
+
             globals
                 .set("oz", oz_table)
                 .map_err(|e| PluginError::Lua(e.to_string()))?;
@@ -137,6 +169,7 @@ impl PluginManager {
             _registry: registry,
             hook_names,
             pending_discounts,
+            bridge,
         })
     }
 
@@ -221,6 +254,18 @@ impl PluginManager {
             .map_err(|e| LuaError::Script(e.to_string()))?;
 
         self.fire_event("sale.before_complete", rlua::Value::Table(tbl))
+    }
+
+    /// Fire an event to all Lua callbacks registered via `oz.on()`.
+    ///
+    /// This calls the `LuaEventBridge` to dispatch the event to all
+    /// registered Lua function callbacks.
+    pub fn fire_bridge_event(&self, event: &str, args: rlua::Value) -> Result<(), LuaError> {
+        if let Ok(guard) = self.bridge.lock() {
+            guard.fire(self.runtime.inner(), event, args)
+        } else {
+            Err(LuaError::Script("bridge lock poisoned".into()))
+        }
     }
 
     pub fn fire_event(&self, event: &str, args: rlua::Value) -> Result<(), LuaError> {

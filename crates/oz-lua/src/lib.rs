@@ -29,8 +29,10 @@
 
 use std::path::Path;
 
+pub mod bridge;
 pub mod error;
 
+pub use bridge::LuaEventBridge;
 pub use error::LuaError;
 
 /// A line item passed into Lua business-rule hooks.
