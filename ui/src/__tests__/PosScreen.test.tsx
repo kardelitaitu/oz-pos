@@ -568,6 +568,7 @@ describe('PosScreen – bundle scanning toast', () => {
       tax_rate_ids: [],
       created_at: '',
       price_updated_at: '',
+      product_type: 'retail',
     });
 
     // Simulate scanning a barcode that matches a product (not a bundle).
@@ -620,6 +621,7 @@ describe('PosScreen – bundle scanning toast', () => {
       tax_rate_ids: [],
       created_at: '',
       price_updated_at: '',
+      product_type: 'retail',
     });
 
     // Scan a code that matches both a product barcode and a bundle SKU.

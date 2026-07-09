@@ -74,6 +74,27 @@
   color: var(--color-fg-tertiary);
 }
 
+.product-mgmt-type-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: capitalize;
+}
+.product-mgmt-type--retail {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.product-mgmt-type--restaurant {
+  background: #fce7f3;
+  color: #9d174d;
+}
+.product-mgmt-type--both {
+  background: #d1fae5;
+  color: #065f46;
+}
+
 .product-mgmt-stock-ok {
   color: var(--color-success, #16a34a);
   font-weight: var(--font-weight-medium);

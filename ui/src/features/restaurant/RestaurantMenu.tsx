@@ -421,7 +421,8 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   }, [categoryMeta]);
 
   const filtered = useMemo(() => {
-    let result = activeCategory === 'All' ? products : products.filter((p) => p.category === activeCategory);
+    let result = products.filter((p) => p.productType === 'restaurant' || p.productType === 'both');
+    if (activeCategory !== 'All') result = result.filter((p) => p.category === activeCategory);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));

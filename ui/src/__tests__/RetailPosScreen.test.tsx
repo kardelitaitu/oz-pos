@@ -645,6 +645,7 @@ describe('RetailPosScreen', () => {
       price: { minor_units: 10000, currency: 'IDR' }, barcode: '1234567890',
       in_stock: true, stock_qty: 10, tax_rate_ids: [], created_at: '',
       price_updated_at: '',
+      product_type: 'retail',
     });
 
     await renderInAct(wrap(<RetailPosScreen />));

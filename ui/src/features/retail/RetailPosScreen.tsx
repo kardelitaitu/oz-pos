@@ -18,7 +18,7 @@ import { getActiveShift, openShift, closeShift, type ShiftDto } from '@/api/shif
 import { holdCart, listHeldCarts, getHeldCart, deleteHeldCart, type HeldCartRow, type SaleDetail } from '@/api/sales';
 import { getStoreSettings, listCreditSales, settleCredit, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
-import { formatMoney, type CartId, type LineId, type Money, type Sku } from '@/types/domain';
+import { formatMoney, type CartId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import ScaleIndicator from './ScaleIndicator';
 import RetailOptionsScreen from './RetailOptionsScreen';
@@ -41,11 +41,7 @@ function clampRetailCartWidth(px: number, viewportWidth: number): number {
   return Math.max(RETAIL_CART_WIDTH_MIN, Math.min(Math.round(px), max));
 }
 
-function toProduct(p: ProductDto): {
-  sku: Sku; name: string; category: string; price: Money;
-  barcode: string | null; inStock: boolean; stockQty: number | null;
-  createdAt?: string; priceUpdatedAt?: string;
-} {
+function toProduct(p: ProductDto): Product {
   return {
     sku: p.sku as Sku,
     name: p.name,
@@ -56,6 +52,7 @@ function toProduct(p: ProductDto): {
     stockQty: p.stock_qty,
     createdAt: p.created_at,
     priceUpdatedAt: p.price_updated_at,
+    productType: p.product_type as Product['productType'],
   };
 }
 
@@ -240,7 +237,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleUndoRemove = useCallback(() => {
     if (undoStack.length === 0) return;
     const item = undoStack[0]!;
-    addProduct({ ...item, price: item.unit_price, barcode: null, inStock: true, stockQty: null });
+    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null });
     setUndoStack((prev) => prev.slice(1));
   }, [undoStack, addProduct]);
 
@@ -349,7 +346,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const PAGE_SIZE = 50;
 
   const filteredProducts = useMemo(() => {
-    let list = products;
+    let list = products.filter((p) => p.product_type === 'retail' || p.product_type === 'both');
     if (activeCategory) list = list.filter((p) => p.category === activeCategory);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -716,7 +713,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       const data = JSON.parse(full.cart_data);
       for (const l of data.lines) {
         for (let i = 0; i < (l.qty || 1); i++) {
-          addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null });
+          addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' });
         }
       }
       if (data.discountPercent) setDiscount(data.discountPercent, data.discountLabel ?? '');
@@ -935,6 +932,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             sku: p.sku, name: p.name, category: p.category,
             price: p.price, barcode: p.barcode ?? null,
             in_stock: p.inStock, stock_qty: p.stockQty ?? null,
+            product_type: p.productType,
             tax_rate_ids: [], created_at: '', price_updated_at: '',
           })} />
         </div>

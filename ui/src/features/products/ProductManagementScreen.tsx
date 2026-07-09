@@ -204,6 +204,7 @@ export default function ProductManagementScreen() {
                 <Localized id="product-mgmt-col-category"><th>Category</th></Localized>
                 <Localized id="product-mgmt-col-price"><th>Price</th></Localized>
                 <Localized id="product-mgmt-col-barcode"><th>Barcode</th></Localized>
+                <Localized id="product-mgmt-col-type"><th>Type</th></Localized>
                 <Localized id="product-mgmt-col-stock"><th>Stock</th></Localized>
                 <Localized id="product-mgmt-actions-aria" attrs={{ 'aria-label': true }}>
                   <th aria-label="Actions"> </th>
@@ -218,6 +219,11 @@ export default function ProductManagementScreen() {
                   <td>{p.category}</td>
                   <td className="product-mgmt-cell-price">{formatMoney(p.price)}</td>
                   <td className="product-mgmt-cell-barcode">{p.barcode ?? '\u2014'}</td>
+                  <td>
+                    <span className={`product-mgmt-type-badge product-mgmt-type--${p.productType}`}>
+                      {p.productType}
+                    </span>
+                  </td>
                   <td>
                     {p.stockQty != null && p.stockQty < 10 ? (
                       <span className="product-mgmt-stock-low" style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
