@@ -50,6 +50,7 @@ pub mod refund;
 pub mod sale;
 pub mod settings;
 pub mod shift;
+pub mod sync;
 pub mod sku;
 pub mod stock_count;
 pub mod stock_transfer;
