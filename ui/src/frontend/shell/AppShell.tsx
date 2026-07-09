@@ -132,7 +132,11 @@ export default function AppShell() {
   }
 
   if (!activeWorkspace) {
-    return <WorkspaceHome />;
+    return (
+      <div className="workspace-home-wrapper">
+        <WorkspaceHome />
+      </div>
+    );
   }
 
   // Render the current page from the registry, or null if not found.

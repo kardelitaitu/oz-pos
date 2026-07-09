@@ -7,10 +7,39 @@
  *   .app-content         → scrollable main area
  * ============================================================ */
 
+/* ── Transition animations ────────────────────────────────────── */
+
+@keyframes ws-page-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Fullscreen workspace (e.g. restaurant-pos) — no sidebar. */
 .workspace-fullscreen {
   height: 100dvh;
   overflow: hidden;
+  animation: ws-page-enter 0.25s var(--ease-out) both;
+}
+
+/* Workspace home wrapper — fades in when returning from a workspace. */
+.workspace-home-wrapper {
+  min-height: 100%;
+  animation: ws-page-enter 0.25s var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-fullscreen {
+    animation: none;
+  }
+  .workspace-home-wrapper {
+    animation: none;
+  }
 }
 
 .app-layout {
