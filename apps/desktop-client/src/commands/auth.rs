@@ -196,4 +196,3 @@ mod tests {
         assert_eq!(json["session"]["role_id"], "");
     }
 }
-
