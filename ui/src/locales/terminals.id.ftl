@@ -61,5 +61,6 @@ terminal-delete-aria =
     .aria-label = Hapus terminal
 terminal-col-actions =
     .aria-label = Tindakan
+terminal-table-label = Terminal
 
 # ── Promotions ──

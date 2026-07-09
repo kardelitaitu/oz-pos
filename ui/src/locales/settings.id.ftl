@@ -549,6 +549,8 @@ settings-tender-preset-remove-aria = Hapus preset { $n }
 settings-tender-preset-add = Tambah preset
 
 # ── Cloud Sync ──
+settings-font-smoothing-antialiased = Antialiased (tajam)
+settings-font-smoothing-subpixel = Subpixel (halus)
 settings-sync-heading = Sinkronisasi Cloud
 settings-sync-enabled-label = Aktifkan sinkronisasi cloud
 settings-sync-server-label = URL Server

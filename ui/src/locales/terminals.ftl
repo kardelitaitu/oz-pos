@@ -63,3 +63,4 @@ terminal-delete-aria =
     .aria-label = Delete terminal
 terminal-col-actions =
     .aria-label = Actions
+terminal-table-label = Terminals

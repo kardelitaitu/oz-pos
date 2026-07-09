@@ -167,11 +167,6 @@ export default function AuditLogScreen() {
               'success': 'audit-log-filter-success',
               'failure': 'audit-log-filter-failure',
             };
-            const outcomeLabels: Record<string, string> = {
-              'all': 'All',
-              'success': 'Success',
-              'failure': 'Failure',
-            };
             return (
               <Localized id={outcomeIds[outcome] ?? outcome} key={outcome}>
                 <button
@@ -181,11 +176,11 @@ export default function AuditLogScreen() {
                   role="radio"
                   aria-checked={outcomeFilter === outcome}
                 >
-                  <span>{outcomeLabels[outcome]}</span>
+                  <span>{outcome === 'all' ? 'All' : outcome === 'success' ? 'Success' : 'Failure'}</span>
                 </button>
               </Localized>
             );
-          })}
+            })}
         </div>
       </div>
 

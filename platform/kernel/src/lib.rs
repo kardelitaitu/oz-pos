@@ -33,5 +33,5 @@ pub mod manifest;
 
 pub use error::KernelError;
 pub use event_bus::EventBus;
-pub use kernel::Kernel;
+pub use kernel::{Kernel, ModuleStatus};
 pub use manifest::ModuleManifest;

@@ -22,5 +22,6 @@ offline-queue-status-failed = Gagal
 offline-queue-table-actions = Tindakan
 offline-queue-sync-all-label = Sinkron semua item offline tertunda
 offline-queue-delete-error = Gagal menghapus item
+offline-queue-sync-error = Sinkronisasi gagal
 
 # ── Terminal Management ──

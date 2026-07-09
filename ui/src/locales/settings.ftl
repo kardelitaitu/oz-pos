@@ -226,6 +226,8 @@ settings-btn-save-aria =
        *[save] Save settings
     }
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
+settings-font-smoothing-antialiased = Antialiased (crisp)
+settings-font-smoothing-subpixel = Subpixel (smooth)
 
 # Appearance / Brand settings
 settings-appearance = Appearance

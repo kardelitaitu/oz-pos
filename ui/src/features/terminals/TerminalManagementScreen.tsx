@@ -376,7 +376,7 @@ export default function TerminalManagementScreen() {
         </Card>
       ) : (
         <div className="terminal-mgmt-table-wrap">
-          <table className="terminal-mgmt-table" aria-label="Terminals">
+          <table className="terminal-mgmt-table" aria-label={l10n.getString('terminal-table-label')}>
             <thead>
               <tr>
                 <Localized id="terminal-name"><th>Name</th></Localized>

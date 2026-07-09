@@ -325,8 +325,12 @@ export default function SettingsPage() {
               onChange={(e) => setDisplayFontSmoothing(e.target.value)}
               aria-label={l10n.getString('settings-field-font-smoothing')}
             >
-              <option value="antialiased">Antialiased (crisp)</option>
-              <option value="subpixel">Subpixel (smooth)</option>
+              <Localized id="settings-font-smoothing-antialiased">
+                <option value="antialiased">Antialiased (crisp)</option>
+              </Localized>
+              <Localized id="settings-font-smoothing-subpixel">
+                <option value="subpixel">Subpixel (smooth)</option>
+              </Localized>
             </select>
           </div>
         </div>

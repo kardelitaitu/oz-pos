@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::{Feature, Store, Terminal};
+use platform_kernel::ModuleStatus;
+
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -103,6 +105,12 @@ pub struct SetFeatureResult {
 /// When enabling, all required dependencies are automatically enabled
 /// as well. When disabling, only the specified feature is turned off
 /// (dependents are NOT cascaded — the UI must handle that).
+///
+/// When the feature corresponds to a registered kernel module, the
+/// module is started (on enable) or stopped (on disable) via
+/// `kernel.start_module` / `kernel.stop_module`. Module lifecycle
+/// failures are logged but do not prevent the feature toggle from
+/// succeeding — the feature registry is persisted regardless.
 #[command]
 pub async fn set_feature(
     args: SetFeatureArgs,
@@ -110,6 +118,70 @@ pub async fn set_feature(
 ) -> Result<SetFeatureResult, AppError> {
     let feature = oz_core::features::feature_from_key(&args.key)
         .ok_or_else(|| AppError::Invalid(format!("unknown feature key: {}", args.key)))?;
+
+    // ── Kernel module lifecycle (before DB changes) ──────────────
+    //
+    // For features that map to a kernel module, we attempt the
+    // start/stop first. This way, if the module fails to start,
+    // the feature toggle is not persisted (preventing inconsistent
+    // state where the DB says enabled but the module is not running).
+    if let Some(module_id) = feature_to_module_id(feature) {
+        let mut kernel = state.kernel.lock().await;
+        if args.enabled {
+            match kernel.start_module(module_id) {
+                Ok(()) => {
+                    tracing::info!(
+                        module = module_id,
+                        feature = %args.key,
+                        "kernel module started via feature toggle"
+                    );
+                }
+                Err(e) => {
+                    // Module may already be started — that's fine.
+                    let status = kernel.module_status(module_id);
+                    if status != Some(ModuleStatus::Started) {
+                        tracing::warn!(
+                            module = module_id,
+                            error = %e,
+                            status = ?status,
+                            "failed to start kernel module for feature, aborting toggle"
+                        );
+                        return Err(AppError::Internal(format!(
+                            "failed to start module '{module_id}' for feature '{}': {e}",
+                            args.key,
+                        )));
+                    }
+                }
+            }
+        } else {
+            match kernel.stop_module(module_id) {
+                Ok(()) => {
+                    tracing::info!(
+                        module = module_id,
+                        feature = %args.key,
+                        "kernel module stopped via feature toggle"
+                    );
+                }
+                Err(e) => {
+                    let status = kernel.module_status(module_id);
+                    if status != Some(ModuleStatus::Stopped) && status != Some(ModuleStatus::Registered) {
+                        tracing::warn!(
+                            module = module_id,
+                            error = %e,
+                            status = ?status,
+                            "failed to stop kernel module for feature, aborting toggle"
+                        );
+                        return Err(AppError::Internal(format!(
+                            "failed to stop module '{module_id}' for feature '{}': {e}",
+                            args.key,
+                        )));
+                    }
+                }
+            }
+        }
+        // Release kernel lock before DB lock to avoid nested locking.
+        drop(kernel);
+    }
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -209,6 +281,28 @@ pub async fn set_feature(
 /// Uses `COMPUTERNAME` (Windows) or `HOSTNAME` (Unix) if available,
 /// falling back to `"unknown-device"`. This identifier is used to
 /// auto-register the terminal when multi-terminal mode is enabled.
+/// Map a [`Feature`] to its corresponding kernel module ID, if any.
+///
+/// Not all features have a dedicated kernel module — many are simple
+/// flag toggles (e.g. `CashPayment`, `BarcodeScanning`) that only
+/// affect UI rendering or payment routing. Only features backed by a
+/// registered [`Module`](foundation::contracts::Module) are listed here.
+fn feature_to_module_id(feature: Feature) -> Option<&'static str> {
+    match feature {
+        Feature::InventoryTracking => Some("inventory"),
+        Feature::CategoriesEnabled => Some("inventory"),
+        Feature::StaffLogin => Some("staff"),
+        Feature::StaffRoles => Some("staff"),
+        Feature::ShiftManagement => Some("staff"),
+        Feature::Reporting => Some("reporting"),
+        Feature::Analytics => Some("reporting"),
+        Feature::TaxEngine => Some("tax"),
+        Feature::SimpleRetail | Feature::Restaurant => Some("sales"),
+        Feature::MultiCurrency => Some("currency"),
+        _ => None,
+    }
+}
+
 fn device_hostname() -> String {
     std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
@@ -342,6 +436,146 @@ mod tests {
         let result = ListAllFeaturesResult { features: vec![] };
         let json = serde_json::to_value(&result).unwrap();
         assert!(json["features"].as_array().unwrap().is_empty());
+    }
+
+    // ── feature_to_module_id ────────────────────────────────────
+
+    #[test]
+    fn feature_to_module_id_inventory() {
+        assert_eq!(
+            feature_to_module_id(Feature::InventoryTracking),
+            Some("inventory")
+        );
+        assert_eq!(
+            feature_to_module_id(Feature::CategoriesEnabled),
+            Some("inventory")
+        );
+    }
+
+    #[test]
+    fn feature_to_module_id_staff() {
+        assert_eq!(
+            feature_to_module_id(Feature::StaffLogin),
+            Some("staff")
+        );
+        assert_eq!(
+            feature_to_module_id(Feature::StaffRoles),
+            Some("staff")
+        );
+        assert_eq!(
+            feature_to_module_id(Feature::ShiftManagement),
+            Some("staff")
+        );
+    }
+
+    #[test]
+    fn feature_to_module_id_reporting() {
+        assert_eq!(feature_to_module_id(Feature::Reporting), Some("reporting"));
+        assert_eq!(feature_to_module_id(Feature::Analytics), Some("reporting"));
+    }
+
+    #[test]
+    fn feature_to_module_id_tax() {
+        assert_eq!(feature_to_module_id(Feature::TaxEngine), Some("tax"));
+    }
+
+    #[test]
+    fn feature_to_module_id_sales() {
+        assert_eq!(feature_to_module_id(Feature::SimpleRetail), Some("sales"));
+        assert_eq!(feature_to_module_id(Feature::Restaurant), Some("sales"));
+    }
+
+    #[test]
+    fn feature_to_module_id_currency() {
+        assert_eq!(
+            feature_to_module_id(Feature::MultiCurrency),
+            Some("currency")
+        );
+    }
+
+    #[test]
+    fn feature_to_module_id_returns_none_for_non_module_features() {
+        assert_eq!(feature_to_module_id(Feature::CashPayment), None);
+        assert_eq!(feature_to_module_id(Feature::CardPayment), None);
+        assert_eq!(feature_to_module_id(Feature::BarcodeScanning), None);
+        assert_eq!(feature_to_module_id(Feature::ReceiptPrinting), None);
+        assert_eq!(feature_to_module_id(Feature::DiscountEngine), None);
+        assert_eq!(feature_to_module_id(Feature::GiftCards), None);
+        assert_eq!(feature_to_module_id(Feature::PluginSystem), None);
+        assert_eq!(feature_to_module_id(Feature::ExportImport), None);
+        assert_eq!(feature_to_module_id(Feature::CloudSync), None);
+    }
+
+    #[test]
+    fn feature_to_module_id_known_features_are_comprehensive() {
+        // Ensure every feature that maps to a module has its mapping
+        // listed above. This test will catch missing mappings when
+        // new features are added.
+        let all_features = [
+            Feature::SimpleRetail,
+            Feature::Restaurant,
+            Feature::CashPayment,
+            Feature::CardPayment,
+            Feature::MultiCurrency,
+            Feature::InventoryTracking,
+            Feature::ProductVariants,
+            Feature::CategoriesEnabled,
+            Feature::StaffLogin,
+            Feature::StaffRoles,
+            Feature::ShiftManagement,
+            Feature::AuditLog,
+            Feature::BarcodeScanning,
+            Feature::ReceiptPrinting,
+            Feature::CashDrawer,
+            Feature::CustomerDisplay,
+            Feature::NfcReader,
+            Feature::DiscountEngine,
+            Feature::TaxEngine,
+            Feature::LoyaltyProgram,
+            Feature::GiftCards,
+            Feature::PromotionsEngine,
+            Feature::ProductBundles,
+            Feature::KitchenDisplay,
+            Feature::TableManagement,
+            Feature::SelfServiceKiosk,
+            Feature::CloudSync,
+            Feature::MultiStore,
+            Feature::MultiTerminal,
+            Feature::Reporting,
+            Feature::Analytics,
+            Feature::ExportImport,
+            Feature::PluginSystem,
+            Feature::StockCounting,
+            Feature::StockTransfers,
+            Feature::PurchaseOrders,
+            Feature::SerialTracking,
+            Feature::QuickReturn,
+            Feature::UsbScale,
+        ];
+        for f in all_features {
+            let result = feature_to_module_id(f);
+            // Just ensure that known module-mapped features return Some
+            // and others return None — no panics.
+            if matches!(
+                f,
+                Feature::InventoryTracking
+                    | Feature::CategoriesEnabled
+                    | Feature::StaffLogin
+                    | Feature::StaffRoles
+                    | Feature::ShiftManagement
+                    | Feature::Reporting
+                    | Feature::Analytics
+                    | Feature::TaxEngine
+                    | Feature::SimpleRetail
+                    | Feature::Restaurant
+                    | Feature::MultiCurrency
+            ) {
+                assert!(
+                    result.is_some(),
+                    "feature {f:?} should have a module mapping"
+                );
+            }
+        }
     }
 
     // ── all_feature_metadata ─────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   getDailyRevenue,
   getTopProducts,
@@ -31,6 +31,7 @@ function fmtCurrency(minor: number, currency: string): string {
 }
 
 export default function DashboardScreen() {
+  const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revenue, setRevenue] = useState<DailyRevenueRow[]>([]);
@@ -64,7 +65,7 @@ export default function DashboardScreen() {
   if (loading) {
     return (
       <div className="dashboard">
-        <Spinner aria-label="Loading dashboard" />
+        <Spinner aria-label={l10n.getString('spinner-label')} />
       </div>
     );
   }

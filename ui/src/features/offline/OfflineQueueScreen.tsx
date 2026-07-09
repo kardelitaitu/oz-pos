@@ -77,7 +77,7 @@ export default function OfflineQueueScreen() {
       setItems(data);
       setPendingCount(count);
     } catch {
-      setError('Failed to load queue');
+      setError(l10n.getString('offline-queue-error'));
     } finally {
       setLoading(false);
     }
@@ -110,7 +110,7 @@ export default function OfflineQueueScreen() {
       setSyncResult(result);
       await load();
     } catch {
-      setError('Sync failed');
+      setError(l10n.getString('offline-queue-sync-error'));
     } finally {
       setSyncing(false);
     }
