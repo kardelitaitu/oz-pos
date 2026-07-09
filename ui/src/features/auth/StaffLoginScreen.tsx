@@ -309,9 +309,6 @@ export default function StaffLoginScreen() {
             <h1 className="staff-login-title">OZ-POS</h1>
           </Localized>
         )}
-        <Localized id="staff-login-subtitle">
-          <p className="staff-login-subtitle">Staff Login</p>
-        </Localized>
 
         {/* Step indicator */}
         <div className="staff-login-steps" role="status" aria-label={l10n.getString('staff-login-progress-aria')}>
