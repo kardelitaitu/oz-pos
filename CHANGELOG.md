@@ -57,6 +57,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **UI test & lint quality**: Resolved Vitest `exit code 1` on Node 24 CI by fixing invalid DOM nesting (`<span>` inside `<option>` across `PromotionManagementScreen`) and filtering React/Node 24 console warnings (`validateDOMNesting`, `punycode` deprecation, `act()`/`flushSync` warnings, and `@fluent/react` missing-key noise in `test-setup.ts` and `vite.config.ts`); fixed subshell pathing for `tee ui/vitest-output.log` in `.github/workflows/ci.yml` and `release.yml`; resolved all 15 React Hook `exhaustive-deps` warnings and all 5 fast-refresh/import type annotations in `ui/` (`vite.config.d.ts`, `LocaleContext`, `useToast`, `ThemeProvider`, `Toast`), achieving 0 ESLint errors and 0 warnings.
 
+### Changed
+- **Node.js 24 migration**: Migrated UI build and CI test environments (`ci.yml`, `release.yml`, and `ui/package.json` engines) to **Node.js 24**, aligning with local environments (`check.ps1`) and targeting Active LTS for the 2027 Q2 release window.
+
+
 
 
 
