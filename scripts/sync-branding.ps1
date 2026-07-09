@@ -20,15 +20,31 @@ if (-not (Test-Path $BrandDir)) {
 Write-Host "Syncing brand '$Brand' across OZ-POS apps..." -ForegroundColor Cyan
 
 # 1. Sync Desktop & Tablet Tauri Icons
-$desktopIco = "$BrandDir/desktop/icon.ico"
-if (Test-Path $desktopIco) {
-    Copy-Item -Force $desktopIco "apps/desktop-client/icons/icon.ico"
-    Copy-Item -Force $desktopIco "apps/tablet-client/icons/icon.ico"
-    Write-Host "  [OK] Updated apps/desktop-client/icons/icon.ico" -ForegroundColor Green
-    Write-Host "  [OK] Updated apps/tablet-client/icons/icon.ico" -ForegroundColor Green
+$desktopDir = "$BrandDir/desktop"
+if (Test-Path "$desktopDir/icon.ico") {
+    Copy-Item -Force "$desktopDir/icon.ico" "apps/desktop-client/icons/icon.ico"
+    Copy-Item -Force "$desktopDir/icon.ico" "apps/tablet-client/icons/icon.ico"
+    Write-Host "  [OK] Updated apps/*/icons/icon.ico" -ForegroundColor Green
 } else {
-    Write-Host "  [SKIP] No $desktopIco found" -ForegroundColor Yellow
+    Write-Host "  [SKIP] No $desktopDir/icon.ico found" -ForegroundColor Yellow
 }
+
+if (Test-Path "$desktopDir/256x256.png") {
+    Copy-Item -Force "$desktopDir/256x256.png" "apps/desktop-client/icons/256x256.png"
+    Copy-Item -Force "$desktopDir/256x256.png" "apps/desktop-client/icons/128x128@2x.png"
+    Copy-Item -Force "$desktopDir/256x256.png" "apps/tablet-client/icons/256x256.png"
+    Copy-Item -Force "$desktopDir/256x256.png" "apps/tablet-client/icons/128x128@2x.png"
+    Write-Host "  [OK] Updated apps/*/icons/256x256.png and 128x128@2x.png" -ForegroundColor Green
+}
+
+foreach ($size in @("128x128.png", "64x64.png", "32x32.png")) {
+    if (Test-Path "$desktopDir/$size") {
+        Copy-Item -Force "$desktopDir/$size" "apps/desktop-client/icons/$size"
+        Copy-Item -Force "$desktopDir/$size" "apps/tablet-client/icons/$size"
+        Write-Host "  [OK] Updated apps/*/icons/$size" -ForegroundColor Green
+    }
+}
+
 
 # 2. Sync Web & PWA Icons to ui/public/
 $webDir = "$BrandDir/web"
