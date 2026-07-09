@@ -20,6 +20,8 @@ export interface WorkspaceContextValue {
   loading: boolean;
   error: string | null;
   retry: () => void;
+  /** The most recently active workspace key — persists even after switching back to the picker. */
+  lastWorkspace: string | null;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -87,7 +89,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       .catch(() => setWorkspaceScreensState([]));
   }, [activeWorkspace]);
 
+  const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
+
   const handleSetActive = useCallback((key: string | null) => {
+    if (key) {
+      // Track the most recently entered workspace so the picker
+      // can show an active indicator when the user switches back.
+      setLastWorkspace(key);
+    }
     setActiveWorkspace(key);
   }, []);
 
@@ -122,6 +131,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         retry,
+        lastWorkspace,
       }}
     >
       {children}

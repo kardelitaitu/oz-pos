@@ -450,6 +450,54 @@
   animation-delay: 0.1s;
 }
 
+/* ── Active workspace indicator ───────────────────────────────── */
+
+.workspace-card--active {
+  border-color: var(--ws-accent, var(--color-accent)) !important;
+  background: var(--ws-accent-bg, var(--color-bg-elevated));
+  box-shadow:
+    0 0 0 1px var(--ws-accent, var(--color-accent)),
+    var(--shadow-md);
+}
+
+.workspace-card--active:hover {
+  border-color: var(--ws-accent, var(--color-accent)) !important;
+  background: var(--ws-accent-bg, var(--color-bg-elevated));
+  transform: translateY(-3px);
+}
+
+.workspace-card-active-dot {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 10px;
+  height: 10px;
+  color: var(--ws-accent, var(--color-accent));
+  opacity: 0.8;
+}
+
+/* ── Click ripple effect ──────────────────────────────────────── */
+
+@keyframes ws-ripple {
+  from {
+    opacity: 0.35;
+    transform: scale(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.5);
+  }
+}
+
+.workspace-card-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--ws-accent, var(--color-accent));
+  pointer-events: none;
+  animation: ws-ripple 0.5s var(--ease-out) forwards;
+  z-index: 1;
+}
+
 /* ── Card key hint (number badge) ──────────────────────────────── */
 
 .workspace-card-key-hint {
@@ -608,5 +656,13 @@
 
   .workspace-home-greeting {
     animation: none;
+  }
+
+  .workspace-card-ripple {
+    display: none !important;
+  }
+
+  .workspace-card--active {
+    box-shadow: none;
   }
 }

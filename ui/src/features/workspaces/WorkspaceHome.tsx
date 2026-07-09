@@ -106,19 +106,19 @@ function getGreeting(hour: number): { id: string } {
   return { id: 'workspace-home-greeting-night' };
 }
 
-// ── LogoutModal (extracted so it's defined before usage) ──────────
+// ── LogoutModal ───────────────────────────────────────────────────
 
 function LogoutModal({
   open,
   onCancel,
   onConfirm,
-  l10n,
 }: {
   open: boolean;
   onCancel: () => void;
   onConfirm: () => void;
-  l10n: ReturnType<typeof useLocalization>['l10n'];
 }) {
+  const { l10n } = useLocalization();
+
   return (
     <Modal
       open={open}
@@ -161,7 +161,7 @@ function LogoutModal({
 
 export default function WorkspaceHome() {
   const { l10n } = useLocalization();
-  const { availableWorkspaces, loading, error, retry, setActiveWorkspace } = useWorkspace();
+  const { availableWorkspaces, loading, error, retry, setActiveWorkspace, lastWorkspace } = useWorkspace();
   const { session, logout } = useAuth();
   const gridRef = useRef<HTMLDivElement>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -196,11 +196,6 @@ export default function WorkspaceHome() {
 
   const displayName = session?.display_name ?? session?.role_name ?? '';
 
-  const handleSelect = useCallback((key: string) => {
-    if (!canAccess(key)) return;
-    setActiveWorkspace(key);
-  }, [canAccess, setActiveWorkspace]);
-
   // ── Logout confirmation ────────────────────────────────────────
 
   const handleLogoutClick = useCallback(() => {
@@ -215,6 +210,38 @@ export default function WorkspaceHome() {
     setShowLogoutModal(false);
     logout();
   }, [logout]);
+
+  // ── Click ripple effect ─────────────────────────────────────────
+
+  const handleCardClick = useCallback(
+    (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
+      if (!canAccess(key)) return;
+      const card = e.currentTarget;
+      const rect = card.getBoundingClientRect();
+      const ripple = document.createElement('span');
+      ripple.className = 'workspace-card-ripple';
+      const size = Math.max(rect.width, rect.height);
+      // Center the ripple when triggered by keyboard (clientX/Y default to 0)
+      const clickX = e.clientX > 0 ? e.clientX : rect.left + rect.width / 2;
+      const clickY = e.clientY > 0 ? e.clientY : rect.top + rect.height / 2;
+      const x = clickX - rect.left - size / 2;
+      const y = clickY - rect.top - size / 2;
+      ripple.style.width = ripple.style.height = `${size}px`;
+      ripple.style.left = `${x}px`;
+      ripple.style.top = `${y}px`;
+      card.appendChild(ripple);
+      // Remove the ripple element after the animation completes
+      ripple.addEventListener('animationend', () => {
+        ripple.remove();
+      });
+      // Also remove after a timeout in case animationend doesn't fire
+      setTimeout(() => {
+        if (ripple.parentNode) ripple.remove();
+      }, 600);
+      setActiveWorkspace(key);
+    },
+    [canAccess, setActiveWorkspace],
+  );
 
   // ── Keyboard navigation ──────────────────────────────────────
 
@@ -246,7 +273,10 @@ export default function WorkspaceHome() {
           e.preventDefault();
           const target = cards[idx];
           if (target && !target.disabled) {
-            target.click();
+            // Programmatic click won't create a ripple,
+            // but we still need to activate the workspace.
+            // dispatchEvent is used to trigger the React onClick handler.
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           }
         }
         return;
@@ -296,7 +326,7 @@ export default function WorkspaceHome() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedWorkspaces]);
+  }, [sortedWorkspaces, setActiveWorkspace, canAccess]);
 
   // ── Mousemove glow effect ────────────────────────────────────
 
@@ -339,7 +369,6 @@ export default function WorkspaceHome() {
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
           onConfirm={handleLogoutConfirm}
-          l10n={l10n}
         />
       </div>
     );
@@ -398,7 +427,6 @@ export default function WorkspaceHome() {
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
           onConfirm={handleLogoutConfirm}
-          l10n={l10n}
         />
       </div>
     );
@@ -478,14 +506,15 @@ export default function WorkspaceHome() {
           {sortedWorkspaces.map((ws, idx) => {
             const disabled = !canAccess(ws.key);
             const colorClass = WS_COLORS[ws.key] ?? '';
+            const isActive = ws.key === lastWorkspace && !disabled;
             return (
               <button
                 key={ws.key}
                 type="button"
                 role="option"
-                aria-selected={false}
-                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}`}
-                onClick={() => handleSelect(ws.key)}
+                aria-selected={isActive}
+                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}`}
+                onClick={(e) => handleCardClick(ws.key, e)}
                 disabled={disabled}
                 onMouseMove={handleMouseMove}
                 aria-label={l10n.getString(
@@ -495,6 +524,13 @@ export default function WorkspaceHome() {
                 title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
               >
                 <div className="workspace-card-key-hint">{idx + 1}</div>
+                {isActive && (
+                  <div className="workspace-card-active-dot" aria-label="Active workspace">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
+                      <circle cx="12" cy="12" r="6" />
+                    </svg>
+                  </div>
+                )}
                 <div className="workspace-card-icon">
                   {getIcon(ws.key)}
                 </div>
@@ -530,7 +566,6 @@ export default function WorkspaceHome() {
         open={showLogoutModal}
         onCancel={handleLogoutCancel}
         onConfirm={handleLogoutConfirm}
-        l10n={l10n}
       />
     </div>
   );

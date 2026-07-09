@@ -112,6 +112,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -136,6 +137,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -157,6 +159,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -182,6 +185,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -205,6 +209,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -227,6 +232,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -245,6 +251,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -268,6 +275,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -292,6 +300,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -315,6 +324,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -344,6 +354,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -372,6 +383,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -401,6 +413,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -422,6 +435,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -458,6 +472,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -503,6 +518,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -552,6 +568,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -588,6 +605,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -610,6 +628,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -631,6 +650,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -642,6 +662,90 @@ describe('WorkspaceHome', () => {
       // Press '9' — only 5 cards, so no action
       fireEvent.keyDown(document.activeElement!, { key: '9' });
       expect(mockSetActiveWorkspace).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Active workspace indicator ───────────────────────────────
+
+  describe('active workspace indicator', () => {
+    it('does not show active indicator when lastWorkspace is null', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+      });
+
+      const activeCards = document.querySelectorAll('.workspace-card--active');
+      expect(activeCards.length).toBe(0);
+      const activeDots = document.querySelectorAll('.workspace-card-active-dot');
+      expect(activeDots.length).toBe(0);
+    });
+
+    it('shows active indicator on the last active workspace card', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: 'kds',
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
+      });
+
+      // The KDS card (index 2) should be active
+      const activeCards = document.querySelectorAll('.workspace-card--active');
+      expect(activeCards.length).toBe(1);
+      const activeCardName = activeCards[0]?.querySelector('.workspace-card-name')?.textContent;
+      expect(activeCardName).toBe('Kitchen Display');
+
+      // The active dot should be present on the KDS card
+      const activeDots = document.querySelectorAll('.workspace-card-active-dot');
+      expect(activeDots.length).toBe(1);
+      expect(activeCards[0]?.contains(activeDots[0] as Node)).toBe(true);
+    });
+
+    it('sets aria-selected on the active workspace card', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: 'admin',
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getByText('Admin')).toBeInTheDocument();
+      });
+
+      const adminCard = document.querySelectorAll('.workspace-card')[4] as HTMLButtonElement;
+      expect(adminCard.getAttribute('aria-selected')).toBe('true');
+
+      // Other cards should not be aria-selected
+      const firstCard = document.querySelectorAll('.workspace-card')[0] as HTMLButtonElement;
+      expect(firstCard.getAttribute('aria-selected')).toBe('false');
     });
   });
 
@@ -657,6 +761,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -688,6 +793,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -713,6 +819,7 @@ describe('WorkspaceHome', () => {
         setActiveWorkspace: mockSetActiveWorkspace,
         activeWorkspace: null,
         workspaceScreens: [],
+        lastWorkspace: null,
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
