@@ -5,7 +5,7 @@
 .reporting-dashboard-title {
   margin: 0 0 var(--space-4);
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .reporting-dashboard-empty {

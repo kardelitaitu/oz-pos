@@ -12,7 +12,7 @@
 .exchange-rate-title {
   margin: 0;
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .exchange-rate-loading {
@@ -57,7 +57,7 @@
 }
 
 .exchange-rate-table th {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-fg-secondary);
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -89,17 +89,17 @@
 }
 
 .exchange-rate-action-btn--danger:hover {
-  background: var(--color-danger-bg, rgba(220, 38, 38, 0.08));
+  background: var(--color-danger-bg);
 }
 
 .exchange-rate-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-modal, 100);
 }
 
 .exchange-rate-modal {
@@ -121,7 +121,7 @@
 .exchange-rate-modal-header h2 {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .exchange-rate-modal-close {
@@ -147,7 +147,7 @@
 
 .exchange-rate-label {
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--color-fg-secondary);
 }
 
@@ -163,7 +163,7 @@
 .exchange-rate-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-alpha, rgba(99, 102, 241, 0.2));
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
 
 .exchange-rate-select {

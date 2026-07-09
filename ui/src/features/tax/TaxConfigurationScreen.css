@@ -12,7 +12,7 @@
 .tax-config-title {
   margin: 0;
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .tax-config-loading {
@@ -47,7 +47,7 @@
 }
 
 .tax-config-table th {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-fg-secondary);
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -79,17 +79,17 @@
 }
 
 .tax-config-action-btn--danger:hover {
-  background: var(--color-danger-bg, rgba(220, 38, 38, 0.08));
+  background: var(--color-danger-bg);
 }
 
 .tax-config-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-modal, 100);
 }
 
 .tax-config-modal {
@@ -111,7 +111,7 @@
 .tax-config-modal-header h2 {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .tax-config-modal-close {
@@ -137,7 +137,7 @@
 
 .tax-config-label {
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--color-fg-secondary);
 }
 
@@ -153,7 +153,7 @@
 .tax-config-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-alpha, rgba(99, 102, 241, 0.2));
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
 
 .tax-config-hint {
@@ -191,7 +191,7 @@
 
 .tax-config-section-title {
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   margin: 0 0 var(--space-1);
 }
 
@@ -259,7 +259,7 @@
 
 .tax-config-toggle-btn--active {
   border-color: var(--color-accent);
-  background: var(--color-accent-alpha, rgba(99, 102, 241, 0.08));
+  background: var(--color-accent-dim);
 }
 
 .tax-config-toggle-desc {
@@ -294,7 +294,7 @@
 
 .tax-config-cat-rate-item--checked {
   border-color: var(--color-accent);
-  background: var(--color-accent-alpha, rgba(99, 102, 241, 0.08));
+  background: var(--color-accent-dim);
 }
 
 .tax-config-cat-rate-info {

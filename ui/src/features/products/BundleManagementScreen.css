@@ -94,7 +94,7 @@
 
 .bundle-mgmt-action-btn--danger:hover {
   background-color: var(--color-danger);
-  color: white;
+  color: var(--color-accent-fg);
 }
 
 .bundle-mgmt-action-btn:disabled {
@@ -114,13 +114,14 @@
 
 .bundle-mgmt-toggle--on {
   background-color: var(--color-success);
-  color: white;
+  color: var(--color-accent-fg);
   border-color: var(--color-success);
 }
 
 .bundle-mgmt-toggle--off {
-  background-color: var(--color-bg-tertiary);
+  background-color: var(--color-bg-surface);
   color: var(--color-fg-secondary);
+  border-color: var(--color-border);
 }
 
 /* ── Overlay / Modal ─────────────────────────────── */
@@ -128,11 +129,11 @@
 .bundle-mgmt-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.4);
+  background-color: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-modal, 100);
 }
 
 .bundle-mgmt-modal {
@@ -209,12 +210,12 @@
 
 .bundle-mgmt-input:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-alpha);
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
 
 .bundle-mgmt-input:disabled {
-  background-color: var(--color-bg-tertiary);
+  background-color: var(--color-bg-surface);
   color: var(--color-fg-tertiary);
   cursor: not-allowed;
 }
