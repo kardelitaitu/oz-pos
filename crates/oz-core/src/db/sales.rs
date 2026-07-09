@@ -1208,7 +1208,7 @@ mod tests {
             minor_units: 500,
             currency,
         };
-        s.create_product("VOID-SKU", "Voidable", money, None, None, 10)
+        s.create_product("VOID-SKU", "Voidable", money, None, None, 10, None)
             .unwrap();
 
         // Create an active sale with the product.
@@ -1445,7 +1445,7 @@ mod tests {
             minor_units: 1000,
             currency,
         };
-        s.create_product(sku, sku, money, category_id, None, 100)
+        s.create_product(sku, sku, money, category_id, None, 100, None)
             .unwrap();
     }
 
@@ -1685,6 +1685,7 @@ mod tests {
             None,
             None,
             i64::MAX - 1,
+            None,
         )
         .unwrap();
 

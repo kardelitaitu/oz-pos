@@ -92,7 +92,7 @@ pub use money::{Currency, Money};
 pub use offline::{OfflineQueueItem, OfflineQueueStatus};
 pub use payment::{Payment, PaymentSplitArg};
 pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
-pub use product::Product;
+pub use product::{Product, ProductType};
 pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
 pub use product_variant::ProductVariant;
 pub use promotion::{Promotion, PromotionApplication, PromotionType};

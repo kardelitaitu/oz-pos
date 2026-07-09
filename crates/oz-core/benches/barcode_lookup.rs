@@ -23,7 +23,7 @@ fn setup_store_with_products(count: usize) -> Store<'static> {
     for i in 0..count {
         let sku = format!("SKU-{:05}", i);
         store
-            .create_product(&sku, &format!("Product {}", i), price(1000), None, None, 0)
+            .create_product(&sku, &format!("Product {}", i), price(1000), None, None, 0, None)
             .unwrap();
     }
 

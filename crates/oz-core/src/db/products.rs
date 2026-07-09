@@ -118,6 +118,7 @@ impl Store<'_> {
     }
 
     /// Insert a new product and optionally an inventory row.
+    /// `product_type` defaults to `"retail"` when `None`.
     pub fn create_product(
         &self,
         sku: &str,
@@ -126,7 +127,7 @@ impl Store<'_> {
         category_id: Option<&str>,
         barcode: Option<&str>,
         initial_stock: i64,
-        product_type: &str,
+        product_type: Option<&str>,
     ) -> Result<Product, CoreError> {
         if sku.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -153,6 +154,7 @@ impl Store<'_> {
             });
         }
 
+        let product_type = product_type.unwrap_or("retail");
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let cur_str = std::str::from_utf8(&price.currency.0)
@@ -810,7 +812,7 @@ mod tests {
     fn create_product_minimal() {
         let conn = fresh();
         let p = store(&conn)
-            .create_product("NEW-001", "Widget", price(199), None, None, 0)
+            .create_product("NEW-001", "Widget", price(199), None, None, 0, None)
             .unwrap();
         assert_eq!(p.sku.as_str(), "NEW-001");
         assert_eq!(p.name, "Widget");
@@ -832,6 +834,7 @@ mod tests {
                 Some("cat-drinks"),
                 Some("1234567890123"),
                 5,
+                None,
             )
             .unwrap();
         assert_eq!(p.category_id.as_deref(), Some("cat-drinks"));
@@ -847,7 +850,7 @@ mod tests {
     fn create_product_without_stock() {
         let conn = fresh();
         let p = store(&conn)
-            .create_product("NOSTOCK", "No Stock", price(100), None, None, 0)
+            .create_product("NOSTOCK", "No Stock", price(100), None, None, 0, None)
             .unwrap();
         let qty = store(&conn).get_stock(&p.id).unwrap();
         assert_eq!(qty, 0);
@@ -857,10 +860,10 @@ mod tests {
     fn create_product_duplicate_sku() {
         let conn = fresh();
         store(&conn)
-            .create_product("DUP", "First", price(100), None, None, 0)
+            .create_product("DUP", "First", price(100), None, None, 0, None)
             .unwrap();
         let err = store(&conn)
-            .create_product("DUP", "Second", price(200), None, None, 0)
+            .create_product("DUP", "Second", price(200), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { .. }));
     }
@@ -870,19 +873,19 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let err = s
-            .create_product("  ", "X", price(1), None, None, 0)
+            .create_product("  ", "X", price(1), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "sku"));
         let err = s
-            .create_product("SKU", "", price(1), None, None, 0)
+            .create_product("SKU", "", price(1), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
         let err = s
-            .create_product("SKU", "X", price(-1), None, None, 0)
+            .create_product("SKU", "X", price(-1), None, None, 0, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
         let err = s
-            .create_product("SKU", "X", price(1), None, None, -5)
+            .create_product("SKU", "X", price(1), None, None, -5, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "initial_stock"));
     }
@@ -894,7 +897,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let updated = store(&conn)
-            .update_product("DRINK-001", "Latte", price(400), None, None)
+            .update_product("DRINK-001", "Latte", price(400), None, None, None)
             .unwrap();
         assert_eq!(updated.name, "Latte");
         assert_eq!(updated.price.minor_units, 400);
@@ -905,7 +908,7 @@ mod tests {
     fn update_product_not_found() {
         let conn = fresh();
         let err = store(&conn)
-            .update_product("NOPE", "X", price(1), None, None)
+            .update_product("NOPE", "X", price(1), None, None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
@@ -915,7 +918,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "", price(1), None, None)
+            .update_product("DRINK-001", "", price(1), None, None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
@@ -925,7 +928,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "X", price(-1), None, None)
+            .update_product("DRINK-001", "X", price(-1), None, None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
     }
@@ -935,7 +938,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let updated = store(&conn)
-            .update_product("DRINK-001", "Latte", price(400), Some("cat-food"), None)
+            .update_product("DRINK-001", "Latte", price(400), Some("cat-food"), None, None)
             .unwrap();
         assert_eq!(updated.category_id.as_deref(), Some("cat-food"));
     }

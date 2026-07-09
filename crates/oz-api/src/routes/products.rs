@@ -126,6 +126,7 @@ pub async fn create_product(
         body.category_id.as_deref(),
         body.barcode.as_deref(),
         initial_stock,
+        None,
     ) {
         Ok(product) => {
             let detail = ProductWithDetails {

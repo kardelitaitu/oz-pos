@@ -411,7 +411,7 @@ mod tests {
             minor_units: 1000,
             currency,
         };
-        s.create_product("SKU-TAX", "Taxed Product", money, None, None, 0)
+        s.create_product("SKU-TAX", "Taxed Product", money, None, None, 0, None)
             .unwrap();
 
         let rate = s.create_tax_rate("VAT", 1000, true, false).unwrap();
@@ -431,7 +431,7 @@ mod tests {
             minor_units: 1000,
             currency,
         };
-        s.create_product("SKU-TAX2", "Item", money, None, None, 0)
+        s.create_product("SKU-TAX2", "Item", money, None, None, 0, None)
             .unwrap();
 
         let r1 = s.create_tax_rate("R1", 500, false, false).unwrap();

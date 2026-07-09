@@ -21,7 +21,7 @@ fn setup_store() -> Store<'static> {
     let store = Store::new(conn);
 
     store
-        .create_product("SKU-BENCH", "Bench Product", price(1500), None, None, 100)
+        .create_product("SKU-BENCH", "Bench Product", price(1500), None, None, 100, None)
         .unwrap();
 
     store

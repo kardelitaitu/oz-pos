@@ -254,6 +254,12 @@ pub struct CreateProductArgs {
     pub barcode: Option<String>,
     pub initial_stock: i64,
     pub tax_rate_ids: Vec<String>,
+    #[serde(default = "default_product_type")]
+    pub product_type: String,
+}
+
+fn default_product_type() -> String {
+    "retail".to_owned()
 }
 
 #[derive(Debug, Serialize)]
@@ -291,6 +297,7 @@ pub async fn create_product(
             args.category_id.as_deref(),
             args.barcode.as_deref(),
             args.initial_stock,
+            Some(&args.product_type),
         )?;
 
         store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
@@ -336,6 +343,7 @@ pub struct UpdateProductArgs {
     pub category_id: Option<String>,
     pub barcode: Option<String>,
     pub tax_rate_ids: Vec<String>,
+    pub product_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -369,6 +377,7 @@ pub async fn update_product(
         price,
         args.category_id.as_deref(),
         args.barcode.as_deref(),
+        args.product_type.as_deref(),
     )?;
 
     store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;

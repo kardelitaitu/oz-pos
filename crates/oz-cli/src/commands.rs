@@ -766,7 +766,7 @@ pub(crate) fn run_product_create(
     };
 
     let product = store
-        .create_product(sku, name, money, None, None, 0)
+        .create_product(sku, name, money, None, None, 0, None)
         .map_err(|e| match &e {
             CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
             CoreError::Conflict { entity, field } => {
@@ -805,7 +805,7 @@ pub(crate) fn run_product_update(
     let bar = barcode.and_then(|s| if s.is_empty() { None } else { Some(s) });
 
     let product = store
-        .update_product(sku, name, money, cat, bar)
+        .update_product(sku, name, money, cat, bar, None)
         .map_err(|e| match &e {
             CoreError::NotFound { .. } => anyhow::anyhow!("Product not found: {sku}"),
             CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),
@@ -1379,7 +1379,7 @@ mod tests {
 
         let store = make_store(&conn);
         store
-            .create_product("SKU-001", "Test Product", money, None, None, 10)
+            .create_product("SKU-001", "Test Product", money, None, None, 10, None)
             .unwrap();
 
         let products = store.list_products().unwrap();
@@ -1397,7 +1397,7 @@ mod tests {
             currency,
         };
         store
-            .create_product("SKU-002", "Widget", money, None, None, 5)
+            .create_product("SKU-002", "Widget", money, None, None, 5, None)
             .unwrap();
 
         let result = run_product_get(&store, "SKU-002");
@@ -1414,7 +1414,7 @@ mod tests {
             currency,
         };
         store
-            .create_product("TO-DEL", "Delete Me", money, None, None, 0)
+            .create_product("TO-DEL", "Delete Me", money, None, None, 0, None)
             .unwrap();
         run_product_delete(&store, "TO-DEL").unwrap();
         let prod = store.get_product("TO-DEL").unwrap();
@@ -1433,7 +1433,7 @@ mod tests {
             currency,
         };
         store
-            .create_product("INV-001", "Stocked Item", money, None, None, 42)
+            .create_product("INV-001", "Stocked Item", money, None, None, 42, None)
             .unwrap();
 
         let result = run_inventory_get(&store, "INV-001");
@@ -1458,7 +1458,7 @@ mod tests {
             currency,
         };
         store
-            .create_product("ADJ-001", "Adjustable", money, None, None, 10)
+            .create_product("ADJ-001", "Adjustable", money, None, None, 10, None)
             .unwrap();
 
         run_inventory_adjust(&store, "ADJ-001", 5).unwrap();
@@ -1476,7 +1476,7 @@ mod tests {
             currency,
         };
         store
-            .create_product("ADJ-002", "Sellable", money, None, None, 10)
+            .create_product("ADJ-002", "Sellable", money, None, None, 10, None)
             .unwrap();
 
         run_inventory_adjust(&store, "ADJ-002", -3).unwrap();

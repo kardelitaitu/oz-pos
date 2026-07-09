@@ -314,7 +314,9 @@ describe('WorkspaceHome', () => {
       // Click the first workspace card (Restaurant POS)
       const firstCard = document.querySelectorAll('.workspace-card')[0] as HTMLButtonElement;
       await userEvent.click(firstCard);
-      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('restaurant-pos');
+      await waitFor(() => {
+        expect(mockSetActiveWorkspace).toHaveBeenCalledWith('restaurant-pos');
+      });
     });
 
     it('renders workspace cards in the correct sort order', async () => {
@@ -453,12 +455,16 @@ describe('WorkspaceHome', () => {
       // Find the Admin card by its heading text and click it
       const adminCard = document.querySelectorAll('.workspace-card')[4] as HTMLButtonElement;
       await userEvent.click(adminCard);
-      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('admin');
+      await waitFor(() => {
+        expect(mockSetActiveWorkspace).toHaveBeenCalledWith('admin');
+      });
 
       // Verify the KDS card is also clickable
       const kdsCard = document.querySelectorAll('.workspace-card')[2] as HTMLButtonElement;
       await userEvent.click(kdsCard);
-      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('kds');
+      await waitFor(() => {
+        expect(mockSetActiveWorkspace).toHaveBeenCalledWith('kds');
+      });
     });
   });
 
@@ -618,7 +624,9 @@ describe('WorkspaceHome', () => {
 
       // Press '3' to select the third card (KDS)
       fireEvent.keyDown(document.activeElement!, { key: '3' });
-      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('kds');
+      await waitFor(() => {
+        expect(mockSetActiveWorkspace).toHaveBeenCalledWith('kds');
+      });
     });
 
     it('pressing 1 selects the first workspace', async () => {
@@ -640,7 +648,9 @@ describe('WorkspaceHome', () => {
       });
 
       fireEvent.keyDown(document.activeElement!, { key: '1' });
-      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('restaurant-pos');
+      await waitFor(() => {
+        expect(mockSetActiveWorkspace).toHaveBeenCalledWith('restaurant-pos');
+      });
     });
 
     it('does nothing for number keys beyond workspace count', async () => {

@@ -268,7 +268,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let p = s
-            .create_product("T1", "Test", price(1), None, None, 0)
+            .create_product("T1", "Test", price(1), None, None, 0, None)
             .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM products WHERE sku = 'T1'", [], |r| {

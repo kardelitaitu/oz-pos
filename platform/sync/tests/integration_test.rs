@@ -507,6 +507,7 @@ async fn product_created_on_terminal_a_appears_on_terminal_b() {
             None,
             None,
             100,
+            None,
         )
         .unwrap();
 
@@ -615,6 +616,7 @@ async fn stock_adjustment_on_terminal_a_reflected_on_terminal_b() {
             None,
             None,
             50,
+            None,
         )
         .unwrap();
 
@@ -699,6 +701,7 @@ async fn full_sync_cycle_completes_under_one_second() {
             None,
             None,
             10,
+            None,
         )
         .unwrap();
 
@@ -802,6 +805,7 @@ async fn large_scale_sync_throughput() {
             None,
             None,
             1000,
+            None,
         )
         .unwrap();
 

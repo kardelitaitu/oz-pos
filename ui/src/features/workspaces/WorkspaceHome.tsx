@@ -83,9 +83,9 @@ function getIcon(key: string) {
 
 // ── Skeleton ──────────────────────────────────────────────────────
 
-function SkeletonGrid() {
+function SkeletonGrid({ exiting }: { exiting?: boolean }) {
   return (
-    <div className="workspace-skeleton-grid" aria-label="Loading workspaces">
+    <div className={`workspace-skeleton-grid${exiting ? ' workspace-skeleton-grid--exiting' : ''}`} aria-label="Loading workspaces">
       {[1, 2, 3].map((i) => (
         <div key={i} className="workspace-skeleton-card">
           <div className="workspace-skeleton-icon" />
@@ -182,6 +182,21 @@ function getRoleColor(role: string): string {
   }
 }
 
+// ── Ambient particles ─────────────────────────────────────────────
+
+function AmbientParticles() {
+  return (
+    <div className="workspace-home-particles" aria-hidden="true">
+      <div className="workspace-home-particle" />
+      <div className="workspace-home-particle" />
+      <div className="workspace-home-particle" />
+      <div className="workspace-home-particle" />
+      <div className="workspace-home-particle" />
+      <div className="workspace-home-particle" />
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────
 
 export default function WorkspaceHome() {
@@ -191,6 +206,7 @@ export default function WorkspaceHome() {
   const gridRef = useRef<HTMLDivElement>(null);
   const ripplesRef = useRef<HTMLSpanElement[]>([]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [exitingWorkspace, setExitingWorkspace] = useState<string | null>(null);
 
   const roleName = (session?.role_name ?? '').toLowerCase();
 
@@ -219,6 +235,23 @@ export default function WorkspaceHome() {
 
   const displayName = session?.display_name ?? session?.role_name ?? '';
 
+  // ── Skeleton → grid cross-fade ────────────────────────────────
+
+  const [holdLoading, setHoldLoading] = useState(false);
+  const prevLoadingRef = useRef(loading);
+  useEffect(() => {
+    if (prevLoadingRef.current && !loading) {
+      // Loading just finished — keep skeleton in DOM for exit animation
+      setHoldLoading(true);
+      const timer = setTimeout(() => setHoldLoading(false), 300);
+      return () => clearTimeout(timer);
+    }
+    prevLoadingRef.current = loading;
+  }, [loading]);
+
+  const showSkeleton = loading || holdLoading;
+  const skeletonExiting = holdLoading && !loading;
+
   // ── Fullscreen toggle ─────────────────────────────────────────
   const { toggleFullscreen } = useFullscreen();
 
@@ -246,18 +279,20 @@ export default function WorkspaceHome() {
     };
   }, []);
 
-  // ── Click ripple effect ─────────────────────────────────────────
+  // ── Click ripple + exit animation ───────────────────────────────
 
   const handleCardClick = useCallback(
     (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
       if (!canAccess(key)) return;
       if (error) return;
+      if (exitingWorkspace) return;
       const card = e.currentTarget;
       const rect = card.getBoundingClientRect();
+
+      // Ripple effect
       const ripple = document.createElement('span');
       ripple.className = 'workspace-card-ripple';
       const size = Math.max(rect.width, rect.height);
-      // Center the ripple when triggered by keyboard (clientX/Y default to 0)
       const clickX = e.clientX !== 0 ? e.clientX : rect.left + rect.width / 2;
       const clickY = e.clientY !== 0 ? e.clientY : rect.top + rect.height / 2;
       const x = clickX - rect.left - size / 2;
@@ -267,21 +302,26 @@ export default function WorkspaceHome() {
       ripple.style.top = `${y}px`;
       card.appendChild(ripple);
       ripplesRef.current.push(ripple);
-      // Remove the ripple element after the animation completes
       ripple.addEventListener('animationend', () => {
         ripple.remove();
         ripplesRef.current = ripplesRef.current.filter(r => r !== ripple);
       });
-      // Also remove after a timeout in case animationend doesn't fire
       setTimeout(() => {
         if (ripple.parentNode) {
           ripple.remove();
           ripplesRef.current = ripplesRef.current.filter(r => r !== ripple);
         }
       }, 600);
-      setActiveWorkspace(key);
+
+      // Exit animation: mark this card as exiting, then navigate after animation
+      setExitingWorkspace(key);
+      setTimeout(() => {
+        setActiveWorkspace(key);
+        // Reset exiting state so the component is ready for re-entry
+        setExitingWorkspace(null);
+      }, 300);
     },
-    [canAccess, setActiveWorkspace, error],
+    [canAccess, setActiveWorkspace, error, exitingWorkspace],
   );
 
   // ── Keyboard navigation ──────────────────────────────────────
@@ -371,22 +411,35 @@ export default function WorkspaceHome() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sortedWorkspaces, setActiveWorkspace, canAccess, error]);
 
-  // ── Mousemove glow effect ────────────────────────────────────
+  // ── Mousemove glow & 3D tilt effect ───────────────────────────
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     const card = e.currentTarget;
+    if (card.classList.contains('workspace-card--disabled') || card.classList.contains('workspace-card--exiting')) return;
     const rect = card.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
     card.style.setProperty('--mouse-x', `${x}%`);
     card.style.setProperty('--mouse-y', `${y}%`);
+    // 3D tilt: max ±6 degrees based on mouse position
+    const rotateY = ((e.clientX - rect.left) / rect.width - 0.5) * 12;
+    const rotateX = ((e.clientY - rect.top) / rect.height - 0.5) * -12;
+    card.style.setProperty('--rotate-x', `${rotateX}deg`);
+    card.style.setProperty('--rotate-y', `${rotateY}deg`);
+  }, []);
+
+  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const card = e.currentTarget;
+    card.style.setProperty('--rotate-x', '0deg');
+    card.style.setProperty('--rotate-y', '0deg');
   }, []);
 
   // ── Loading state ────────────────────────────────────────────
 
-  if (loading) {
+  if (showSkeleton) {
     return (
     <div className="workspace-home">
+      <AmbientParticles />
       <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }} role="status" aria-live="polite">
         {loading ? 'Loading workspaces...' : error && !loading ? 'Connection error' : `${sortedWorkspaces.length} workspaces available`}
       </span>
@@ -430,7 +483,7 @@ export default function WorkspaceHome() {
             </Localized>
           </p>
         </header>
-        <SkeletonGrid />
+        <SkeletonGrid exiting={skeletonExiting} />
         <LogoutModal
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
@@ -445,6 +498,7 @@ export default function WorkspaceHome() {
   if (error && availableWorkspaces.length === 0) {
     return (
       <div className="workspace-home">
+      <AmbientParticles />
       <div className="workspace-home-top-bar">
         <button
           type="button"
@@ -522,6 +576,7 @@ export default function WorkspaceHome() {
 
   return (
     <div className="workspace-home">
+      <AmbientParticles />
       <div className="workspace-home-top-bar">
         <button
           type="button"
@@ -618,10 +673,11 @@ export default function WorkspaceHome() {
                 key={ws.key}
                 type="button"
                 aria-current={isActive ? 'true' : undefined}
-                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}`}
+                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.key ? ' workspace-card--exiting' : ''}`}
                 onClick={(e) => handleCardClick(ws.key, e)}
-                disabled={disabled}
+                disabled={disabled || exitingWorkspace !== null}
                 onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
                 aria-label={l10n.getString(
                   disabled ? 'workspace-card-no-access-aria' : 'workspace-card-open-aria',
                   { name: ws.name },

@@ -270,7 +270,7 @@ mod tests {
 
     fn seed_product(conn: &Connection, sku: &str, name: &str) {
         let s = store(conn);
-        s.create_product(sku, name, price(500), None, None, 100)
+        s.create_product(sku, name, price(500), None, None, 100, None)
             .unwrap();
     }
 
