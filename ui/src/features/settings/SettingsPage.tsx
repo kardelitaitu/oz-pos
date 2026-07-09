@@ -285,25 +285,29 @@ export default function SettingsPage() {
               <span className="settings-label">Menu Card Size</span>
             </Localized>
             <div className="settings-size-controls">
-              <button
-                type="button"
-                className="settings-size-btn"
-                disabled={displayCardSize <= 0}
-                onClick={() => setDisplayCardSize((s) => Math.max(0, s - 1))}
-                aria-label="Decrease card size"
-              >
-                &minus;
-              </button>
+              <Localized id="settings-card-size-decrease-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayCardSize <= 0}
+                  onClick={() => setDisplayCardSize((s) => Math.max(0, s - 1))}
+                  aria-label="Decrease card size"
+                >
+                  &minus;
+                </button>
+              </Localized>
               <span className="settings-size-value">{displayCardSize}</span>
-              <button
-                type="button"
-                className="settings-size-btn"
-                disabled={displayCardSize >= 4}
-                onClick={() => setDisplayCardSize((s) => Math.min(4, s + 1))}
-                aria-label="Increase card size"
-              >
-                +
-              </button>
+              <Localized id="settings-card-size-increase-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayCardSize >= 4}
+                  onClick={() => setDisplayCardSize((s) => Math.min(4, s + 1))}
+                  aria-label="Increase card size"
+                >
+                  +
+                </button>
+              </Localized>
             </div>
           </label>
 
@@ -312,25 +316,29 @@ export default function SettingsPage() {
               <span className="settings-label">Font Size</span>
             </Localized>
             <div className="settings-size-controls">
-              <button
-                type="button"
-                className="settings-size-btn"
-                disabled={displayFontSize <= 0}
-                onClick={() => setDisplayFontSize((s) => Math.max(0, s - 1))}
-                aria-label="Decrease font size"
-              >
-                &minus;
-              </button>
+              <Localized id="settings-font-size-decrease-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayFontSize <= 0}
+                  onClick={() => setDisplayFontSize((s) => Math.max(0, s - 1))}
+                  aria-label="Decrease font size"
+                >
+                  &minus;
+                </button>
+              </Localized>
               <span className="settings-size-value">{displayFontSize}</span>
-              <button
-                type="button"
-                className="settings-size-btn"
-                disabled={displayFontSize >= 4}
-                onClick={() => setDisplayFontSize((s) => Math.min(4, s + 1))}
-                aria-label="Increase font size"
-              >
-                +
-              </button>
+              <Localized id="settings-font-size-increase-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-size-btn"
+                  disabled={displayFontSize >= 4}
+                  onClick={() => setDisplayFontSize((s) => Math.min(4, s + 1))}
+                  aria-label="Increase font size"
+                >
+                  +
+                </button>
+              </Localized>
             </div>
           </label>
 

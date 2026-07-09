@@ -193,6 +193,14 @@ settings-field-footer = Receipt footer
 # ── Display sub-section fields ──
 settings-field-card-size = Menu Card Size
 settings-field-font-size = Font Size
+settings-card-size-decrease-aria =
+    .aria-label = Decrease card size
+settings-card-size-increase-aria =
+    .aria-label = Increase card size
+settings-font-size-decrease-aria =
+    .aria-label = Decrease font size
+settings-font-size-increase-aria =
+    .aria-label = Increase font size
 settings-field-font-smoothing = Font Smoothing
 settings-toggle-show-currency = Show currency symbol on amounts
 settings-toggle-show-currency-aria =

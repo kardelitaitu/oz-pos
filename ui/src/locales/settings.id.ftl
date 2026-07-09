@@ -204,6 +204,14 @@ settings-field-footer = Kaki nota
 # ── Tampilan ──
 settings-field-card-size = Ukuran Kartu Menu
 settings-field-font-size = Ukuran Font
+settings-card-size-decrease-aria =
+    .aria-label = Kurangi ukuran kartu
+settings-card-size-increase-aria =
+    .aria-label = Tambah ukuran kartu
+settings-font-size-decrease-aria =
+    .aria-label = Kurangi ukuran font
+settings-font-size-increase-aria =
+    .aria-label = Tambah ukuran font
 settings-field-font-smoothing = Penghalusan Font
 settings-toggle-show-currency = Tampilkan simbol mata uang
 settings-toggle-show-currency-aria =
