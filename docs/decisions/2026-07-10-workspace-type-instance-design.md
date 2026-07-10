@@ -7,6 +7,43 @@
 
 ---
 
+## Implementation Checklist & Phased Rollout Tracker
+
+Use this master checklist to track execution progress across backend crates (`crates/oz-core`), security layers, Tauri IPC bridges, and frontend React components (`ui/src/`).
+
+### Phase 1: Database Schema & Core Backend Rust Models (`crates/oz-core`)
+- [ ] **SQL Migration Script (`create_workspace_types_and_instances.sql`)**: Create `workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, and `role_workspace_types` tables.
+- [ ] **Automated Seed & Default Instances**: Write SQL logic to copy existing keys into `workspace_types`, generate `default-<key>` instances (`store_id = NULL`), and migrate `user_workspaces` rows to `user_workspace_instances`.
+- [ ] **Rust Domain Models & DTOs**: Define `WorkspaceTypeRow`, `WorkspaceInstanceRow`, and `WorkspaceDto` (including `instance_id`, `type_key`, `name`, `description`, `icon`, `colour`, `render_mode`, and `store_id`) in `crates/oz-core/src/db/workspaces.rs`.
+- [ ] **Resolution Precedence Method**: Implement `list_workspaces(&self, role_id: &str, user_id: Option<&str>) -> Result<Vec<WorkspaceDto>>` enforcing: `role-owner` bypass → `user_workspace_instances` specific assignments → fallback to `role_workspace_types`.
+
+### Phase 2: Data Scoping Layer, Security Guard & Indexing (`crates/oz-core` / `oz-security`)
+- [ ] **Schema Scope Columns**: Add `store_id` (TEXT NULL) to `products`, `orders`, `order_lines`, and `customers`; add `warehouse_id` (TEXT NULL) to `stock` and `stock_counts`.
+- [ ] **Prefix Compound B-Tree Indexes**: Create high-performance indexes: `idx_orders_store_status (store_id, status, created_at DESC)`, `idx_order_lines_store_order (store_id, order_id)`, `idx_products_store_active (store_id, is_active, category_id)`, and `idx_stock_warehouse_item (warehouse_id, item_id)`.
+- [ ] **Type-Safe `ScopeGuard` Token**: Create `ScopeGuard` struct requiring validated `(user_id + terminal_id + instance_id)` credentials before constructing.
+- [ ] **Compile-Time Scoped Queries**: Update `Store` CRUD operations (`get_products`, `list_orders`, `get_stock`) to mandate `&ScopeGuard` and append `WHERE (store_id = ? OR store_id IS NULL)` to queries.
+- [ ] **Offline UUIDv7 / ULID Generation**: Ensure all newly created transactions generate time-ordered UUIDv7 keys (`version` + LSN tracking) to prevent offline register ID collisions.
+
+### Phase 3: Subscription Tier & Entitlement Enforcement (`crates/oz-core`)
+- [ ] **Subscription Tier Definitions**: Define `SubscriptionTier` quotas (`max_stores`, `max_pos_instances`, `allowed_workspace_types`).
+- [ ] **Runtime Quantity Quota Validation**: Implement instance count verification inside `create_workspace_instance()`, throwing `CoreError::SubscriptionLimitExceeded` when a merchant reaches register capacity.
+- [ ] **Workspace Type Entitlements**: Add `tier.allows_workspace_type()` checks when booting specialized screens (`kds`, `analytics-pro`) returning `CoreError::SubscriptionUpgradeRequired` if locked.
+- [ ] **Safe Downgrade Lifecycle**: Ensure subscription downgrades transition surplus register instances to `is_active = false` safely without deleting historical order data or audit logs.
+
+### Phase 4: Tauri IPC Bridge & Front-End API (`apps/` & `ui/src/api/`)
+- [ ] **Tauri Command Registration (`apps/desktop-client/src/commands/workspaces.rs`)**: Update `get_workspaces` command to return `Vec<WorkspaceDto>` matching the new DTO payload.
+- [ ] **Admin Management Commands**: Register `create_workspace_instance`, `update_workspace_instance`, `delete_workspace_instance`, and `assign_user_workspace_instance`.
+- [ ] **TypeScript API Adapter (`ui/src/api/workspaces.ts`)**: Update TypeScript definitions (`WorkspaceDto`, `WorkspaceScope`, `CreateInstanceRequest`) and ensure components never invoke raw Tauri commands directly.
+- [ ] **Scoped Real-Time Event Bus**: Implement `self.event_bus.emit_scoped` across Tauri channels so table updates and kitchen orders only broadcast to registers assigned to the target `store_id`.
+
+### Phase 5: Front-End State, Routing & UI Components (`ui/src/`)
+- [ ] **Workspace Context Refactor (`ui/src/context/WorkspaceContext.tsx`)**: Update state from `activeWorkspace: string` (flat key) to `activeInstance: WorkspaceDto | null` and provide `WorkspaceScope ({ storeId, warehouseId })` across hooks.
+- [ ] **Type-Based Routing (`ui/src/components/AppShell.tsx`)**: Refactor routing logic to switch on `activeInstance.type_key` (`restaurant-pos` → `<PosScreen />`, `store-pos` → `<RetailPosScreen />`, `kds` → `<KdsScreen />`, fallback → `<AppLayout />`).
+- [ ] **Instance Picker UI (`ui/src/components/WorkspaceHome.tsx`)**: Update `WorkspaceCard` rendering to list distinct instances grouped by `type_key` or location, displaying badges (`Downtown`, `Mall`, `Airport`) and instance accent colors.
+- [ ] **Full Automated Verification**: Run `scripts/check.sh`, verify `cargo clippy`, `cargo fmt`, ARIA compliance (`eslint-plugin-jsx-a11y`), Vitest unit tests, and pre-commit Fluent bundle parity checks.
+
+---
+
 ## Context
 
 OZ-POS currently defines workspaces as a flat set of unique keys:
