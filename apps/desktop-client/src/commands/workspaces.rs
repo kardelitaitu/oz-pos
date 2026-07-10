@@ -22,12 +22,12 @@ use crate::state::AppState;
 type HmacSha256 = Hmac<Sha256>;
 
 /// Legacy workspace DTO (pre-ADR #4).
-/// Kept for backward compatibility with existing frontend code.
-#[deprecated(
-    since = "0.0.4",
-    note = "Use WorkspaceDto from oz_core::db::workspaces instead"
-)]
+///
+/// Kept for backward compatibility with `list_workspace_types` and
+/// `list_all_workspaces` commands. New code should use `WorkspaceDto`
+/// from `oz_core::db::workspaces` instead.
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 pub struct WorkspaceTypeDto {
     pub key: String,
     pub name: String,
