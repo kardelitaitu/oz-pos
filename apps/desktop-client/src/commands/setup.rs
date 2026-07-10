@@ -145,6 +145,8 @@ pub async fn get_setup_status(state: State<'_, AppState>) -> Result<SetupStatus,
     Ok(SetupStatus { completed, preset })
 }
 
+/// **Deprecated — use `seed_default_roles_scoped` (ADR #7).**
+///
 /// Seed the three built-in roles (Owner, Manager, Cashier) with their
 /// preset permission sets. Idempotent — existing roles are left unchanged.
 ///
@@ -160,6 +162,34 @@ pub async fn seed_default_roles(
     let count = store.seed_default_roles()?;
     drop(db);
     tracing::info!(count, "default roles seeded");
+    Ok(count)
+}
+
+/// Seed default roles resolved from a session token. ADR #7.
+///
+/// Requires the `staff:manage_roles` permission.
+#[command]
+pub async fn seed_default_roles_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<usize, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::STAFF_MANAGE_ROLES,
+    )?;
+    let count = store.seed_default_roles()?;
+    drop(db);
+    tracing::info!(count, "default roles seeded (scoped)");
     Ok(count)
 }
 
@@ -432,8 +462,6 @@ mod tests {
         assert!(!loaded.is_enabled(oz_core::Feature::SimpleRetail));
     }
 
-    // -- DTO struct tests --
-
     #[test]
     fn complete_setup_args_deserialize() {
         let json = r##"{"preset":"simple-retail","features":["cash-payment","receipt-printing"]}"##;
@@ -666,5 +694,14 @@ mod tests {
             .map(|v| v == "false")
             .unwrap_or(false);
         assert!(!completed, "absent key means not completed");
+    }
+
+    // ── Token rejection test ──────────────────────────────
+
+    #[test]
+    fn setup_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }

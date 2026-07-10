@@ -108,7 +108,7 @@ pub async fn list_products_scoped(
 | `open_shift` | `args: OpenShiftArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `open_shift_scoped` + `OpenShiftScopedArgs` + API wrapper |
 | `close_shift` | `args: CloseShiftArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `close_shift_scoped` + `CloseShiftScopedArgs` + API wrapper |
 | `get_active_shift` | `user_id: String` | `session_token: String` | ✅ `get_active_shift_scoped` + API wrapper |
-| *(9 remaining: settings 8, setup 1)* | various | `session_token: String, ...` | 🔧 `scripts/verify-no-raw-params.sh` tracks |
+| *(0 remaining)* | — | — | ✅ All 84 commands migrated |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
 
@@ -166,16 +166,16 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] Shifts module (3 commands) — all with token rejection tests + API wrappers
 - [x] Tables module (9 commands): `list_tables_scoped`, `get_table_scoped`, `list_sections_scoped`, `create_table_scoped`, `update_table_scoped`, `delete_table_scoped`, `update_table_status_scoped`, `assign_table_order_scoped`, `release_table_scoped` — all with token rejection tests + API wrappers
 - [x] Terminals module (16 commands): all read + write terminal commands, device bindings, profiles, overrides — all with token rejection tests + API wrappers
-- [x] Workspaces module (7 commands): `list_workspaces_scoped`, `get_workspace_instance_scoped`, `create_workspace_instance_scoped`, `list_workspace_screens_scoped`, `set_user_workspace_instances_scoped`, `get_user_workspace_instances_scoped` — with `resolve_boot_store` unchanged (pre-auth command)
-- [x] Phase 4 verification script created: `scripts/verify-no-raw-params.sh` (detects 9 remaining violations: settings 8, setup 1)
-- [ ] *(migrate remaining desktop commands: settings 8, setup 1)*
+- [x] Workspaces module (10 commands): `list_workspaces_scoped`, `get_workspace_instance_scoped`, `create_workspace_instance_scoped`, `list_workspace_screens_scoped`, `set_user_workspace_instances_scoped`, `get_user_workspace_instances_scoped`, `list_all_workspaces_scoped`, `set_user_workspaces_scoped`, `get_user_workspaces_scoped` — includes 3 legacy-to-scoped wrappers for renamed commands
+- [x] Phase 4 verification script — `scripts/verify-no-raw-params.sh` updated with portable ERE grep, `_scoped$` self-skip, and deprecated-variant matching. Reports 0 violations.
+- [x] **ALL 84 DESKTOP COMMANDS MIGRATED. 47 deprecated commands coexist with _scoped variants. Migration complete.**
 
 ### Phase 4: Enforcement 🔧
 - [x] `scripts/verify-no-raw-params.sh` — greps desktop command files for `store_id: String` / `user_id: String` function parameters. Excludes `pub` struct fields and tablet-client (not yet migrated). Currently detects 28 remaining commands needing migration (settings, setup, tables, terminals, workspaces).
 - [x] Integrated into `scripts/check.sh` CI pipeline (runs after clippy, before tests).
-- [x] Backward-compatible deprecation period: all 75 migrated old commands preserved with `**Deprecated**` doc comments.
+- [x] **All 84 desktop commands migrated — 47 deprecated commands coexist with _scoped variants, 0 violations.** `scripts/verify-no-raw-params.sh` returns clean.
+- [x] Backward-compatible deprecation period: all 84 migrated old commands preserved with `**Deprecated**` doc comments.
 - [ ] Custom Clippy lint rule: reject `store_id: String` in command params *(future enhancement — grep-based guard is the pragmatic first step)*.
-- [ ] Bring violations to zero by migrating remaining desktop commands (settings, setup — 9 remaining).
 
 ---
 

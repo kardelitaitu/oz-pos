@@ -73,6 +73,7 @@ fn run_get_receipt_settings(conn: &rusqlite::Connection) -> Result<ReceiptSettin
 
 // ── Set receipt settings ──────────────────────────────────
 
+/// **Deprecated — use `set_receipt_settings_scoped` (ADR #7).**
 #[command]
 pub async fn set_receipt_settings(
     args: ReceiptSettingsDto,
@@ -83,6 +84,26 @@ pub async fn set_receipt_settings(
     let store = oz_core::db::Store::new(&conn);
     require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
     run_set_receipt_settings(&conn, &args)
+}
+
+/// Set receipt settings resolved from a session token. ADR #7.
+#[command]
+pub async fn set_receipt_settings_scoped(
+    session_token: String,
+    args: ReceiptSettingsDto,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    run_set_receipt_settings(&db, &args)
 }
 
 /// Business logic for `set_receipt_settings` (extracted for testing).
@@ -143,6 +164,7 @@ fn run_get_store_settings(conn: &rusqlite::Connection) -> Result<StoreSettingsDt
 
 // ── Set store settings ────────────────────────────────────────
 
+/// **Deprecated — use `set_store_settings_scoped` (ADR #7).**
 #[command]
 pub async fn set_store_settings(
     args: StoreSettingsDto,
@@ -153,6 +175,26 @@ pub async fn set_store_settings(
     let store = oz_core::db::Store::new(&conn);
     require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
     run_set_store_settings(&conn, &args)
+}
+
+/// Set store settings resolved from a session token. ADR #7.
+#[command]
+pub async fn set_store_settings_scoped(
+    session_token: String,
+    args: StoreSettingsDto,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    run_set_store_settings(&db, &args)
 }
 
 /// Business logic for `set_store_settings` (extracted for testing).
@@ -195,6 +237,7 @@ pub async fn get_credit_settings(
     })
 }
 
+/// **Deprecated — use `set_credit_settings_scoped` (ADR #7).**
 #[command]
 pub async fn set_credit_settings(
     args: CreditSettingsDto,
@@ -205,6 +248,31 @@ pub async fn set_credit_settings(
     let store = oz_core::db::Store::new(&conn);
     require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
     let tx = conn.unchecked_transaction()?;
+    Settings::set_credit_enabled(&tx, args.enabled)?;
+    Settings::set_credit_reminder_interval(&tx, args.reminder_interval_hours)?;
+    Settings::set_credit_max_limit(&tx, args.max_limit_minor)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Set credit settings resolved from a session token. ADR #7.
+#[command]
+pub async fn set_credit_settings_scoped(
+    session_token: String,
+    args: CreditSettingsDto,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    let tx = db.unchecked_transaction()?;
     Settings::set_credit_enabled(&tx, args.enabled)?;
     Settings::set_credit_reminder_interval(&tx, args.reminder_interval_hours)?;
     Settings::set_credit_max_limit(&tx, args.max_limit_minor)?;
@@ -253,6 +321,7 @@ pub async fn list_credit_sales(state: State<'_, AppState>) -> Result<Vec<CreditS
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
+/// **Deprecated — use `settle_credit_scoped` (ADR #7).**
 #[command]
 pub async fn settle_credit(
     sale_id: String,
@@ -263,6 +332,33 @@ pub async fn settle_credit(
     let store = oz_core::db::Store::new(&conn);
     require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
     let tx = conn.unchecked_transaction()?;
+    let now = chrono::Utc::now().to_rfc3339();
+    tx.execute(
+        "UPDATE payments SET settled_at = ?1 WHERE sale_id = ?2 AND method = 'credit'",
+        rusqlite::params![now, sale_id],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Settle a credit sale resolved from a session token. ADR #7.
+#[command]
+pub async fn settle_credit_scoped(
+    session_token: String,
+    sale_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    let tx = db.unchecked_transaction()?;
     let now = chrono::Utc::now().to_rfc3339();
     tx.execute(
         "UPDATE payments SET settled_at = ?1 WHERE sale_id = ?2 AND method = 'credit'",
@@ -298,6 +394,7 @@ pub async fn get_hardware_settings(
     })
 }
 
+/// **Deprecated — use `set_hardware_settings_scoped` (ADR #7).**
 #[command]
 pub async fn set_hardware_settings(
     args: HardwareSettingsDto,
@@ -317,6 +414,33 @@ pub async fn set_hardware_settings(
     Ok(())
 }
 
+/// Set hardware settings resolved from a session token. ADR #7.
+#[command]
+pub async fn set_hardware_settings_scoped(
+    session_token: String,
+    args: HardwareSettingsDto,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    let tx = db.unchecked_transaction()?;
+    Settings::set_printer_connection(&tx, &args.printer_connection)?;
+    Settings::set_printer_device_path(&tx, &args.printer_device_path)?;
+    Settings::set_printer_paper_size(&tx, &args.printer_paper_size)?;
+    Settings::set_scanner_device_id(&tx, &args.scanner_device_id)?;
+    Settings::set_scanner_input_mode(&tx, &args.scanner_input_mode)?;
+    tx.commit()?;
+    Ok(())
+}
+
 // ── User preferences ───────────────────────────────────────────
 
 /// One key-value pair within a user's preferences.
@@ -326,6 +450,7 @@ pub struct UserPrefEntry {
     pub value: String,
 }
 
+/// **Deprecated — use `get_user_preferences_scoped` (ADR #7).**
 #[command]
 pub async fn get_user_preferences(
     user_id: String,
@@ -335,6 +460,25 @@ pub async fn get_user_preferences(
     Ok(UserPreferences::get_all(&conn, &user_id)?)
 }
 
+/// Get user preferences resolved from a session token. ADR #7.
+/// Uses `session.user_id` for the preference lookup.
+#[command]
+pub async fn get_user_preferences_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, String>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(UserPreferences::get_all(&db, &session.user_id)?)
+}
+
+/// **Deprecated — use `set_user_preferences_scoped` (ADR #7).**
 #[command]
 pub async fn set_user_preferences(
     user_id: String,
@@ -344,6 +488,26 @@ pub async fn set_user_preferences(
     let conn = state.db.lock().await;
     let pairs: Vec<(String, String)> = prefs.into_iter().map(|e| (e.key, e.value)).collect();
     Ok(UserPreferences::set_batch(&conn, &user_id, &pairs)?)
+}
+
+/// Set user preferences resolved from a session token. ADR #7.
+/// Uses `session.user_id` for the preference write.
+#[command]
+pub async fn set_user_preferences_scoped(
+    session_token: String,
+    prefs: Vec<UserPrefEntry>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let pairs: Vec<(String, String)> = prefs.into_iter().map(|e| (e.key, e.value)).collect();
+    Ok(UserPreferences::set_batch(&db, &session.user_id, &pairs)?)
 }
 
 // ── Generic key-value settings ────────────────────────────────
@@ -365,6 +529,8 @@ fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<Stri
     Ok(Settings::get(conn, key)?)
 }
 
+/// **Deprecated — use `set_setting_scoped` (ADR #7).**
+///
 /// Write (or overwrite) a single setting value.
 ///
 /// Pass an empty string to store an empty value.
@@ -381,6 +547,29 @@ pub async fn set_setting(
     run_set_setting(&conn, &key, &value)
 }
 
+/// Write (or overwrite) a single setting value resolved from a session token. ADR #7.
+///
+/// Pass an empty string to store an empty value.
+#[command]
+pub async fn set_setting_scoped(
+    session_token: String,
+    key: String,
+    value: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    run_set_setting(&db, &key, &value)
+}
+
 /// Business logic for `set_setting` (extracted for testing).
 fn run_set_setting(conn: &rusqlite::Connection, key: &str, value: &str) -> Result<(), AppError> {
     Ok(Settings::set(conn, key, value)?)
@@ -395,6 +584,17 @@ mod tests {
     fn fresh_conn() -> Connection {
         migrations::fresh_db()
     }
+
+    // ── Token rejection tests ──────────────────────────────
+
+    #[test]
+    fn settings_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    // ── Receipt settings tests ─────────────────────────────
 
     #[test]
     fn get_receipt_settings_returns_defaults() {

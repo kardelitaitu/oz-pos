@@ -322,6 +322,35 @@ pub async fn list_all_workspaces(
         .collect())
 }
 
+/// List all workspace types resolved from a session token. ADR #7.
+#[command]
+pub async fn list_all_workspaces_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkspaceTypeDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
+    let rows = store.list_all_workspace_types()?;
+    drop(db);
+    Ok(rows
+        .into_iter()
+        .map(|r| WorkspaceTypeDto {
+            key: r.key,
+            name: r.name,
+            description: r.description,
+            icon: r.icon,
+        })
+        .collect())
+}
+
 /// Replace all workspace assignments for a user (legacy tables).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
@@ -342,6 +371,31 @@ pub async fn set_user_workspaces(
     Ok(())
 }
 
+/// Replace all workspace assignments for a user (legacy tables), caller from session. ADR #7.
+#[command]
+pub async fn set_user_workspaces_scoped(
+    session_token: String,
+    user_id: String,
+    workspace_keys: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+    let keys: Vec<&str> = workspace_keys.iter().map(|s| s.as_str()).collect();
+    store.set_user_workspaces_legacy(&user_id, keys)?;
+    drop(db);
+    tracing::info!(user_id = %user_id, count = %workspace_keys.len(), "user workspace assignments updated (legacy, scoped)");
+    Ok(())
+}
+
 /// Get the explicit workspace keys assigned to a user (legacy table).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
@@ -353,6 +407,28 @@ pub async fn get_user_workspaces(
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &user_id, permissions::STAFF_READ)?;
+    let keys = store.get_user_workspace_keys_legacy(&user_id)?;
+    drop(db);
+    Ok(keys)
+}
+
+/// Get workspace keys for a user (legacy table), caller from session. ADR #7.
+#[command]
+pub async fn get_user_workspaces_scoped(
+    session_token: String,
+    user_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
     let keys = store.get_user_workspace_keys_legacy(&user_id)?;
     drop(db);
     Ok(keys)

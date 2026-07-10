@@ -229,6 +229,13 @@ export async function listAllWorkspaces(
   return invoke<WorkspaceTypeDto[]>('list_all_workspaces', { userId });
 }
 
+/** List all workspace types (scoped — ADR #7). */
+export async function listAllWorkspacesScoped(
+  sessionToken: string,
+): Promise<WorkspaceTypeDto[]> {
+  return invoke<WorkspaceTypeDto[]>('list_all_workspaces_scoped', { sessionToken });
+}
+
 /**
  * @deprecated Use setUserWorkspaceInstancesScoped instead (ADR #7).
  * Replace workspace key assignments for a user.
@@ -245,10 +252,27 @@ export async function setUserWorkspaces(
   });
 }
 
+/** Replace workspace key assignments (legacy), caller from session. ADR #7. */
+export async function setUserWorkspacesScoped(
+  sessionToken: string,
+  userId: string,
+  workspaceKeys: string[],
+): Promise<void> {
+  return invoke<void>('set_user_workspaces_scoped', { sessionToken, userId, workspaceKeys });
+}
+
 /**
  * @deprecated Use getUserWorkspaceInstancesScoped instead (ADR #7).
  * Get workspace keys assigned to a user.
  */
 export async function getUserWorkspaces(userId: string): Promise<string[]> {
   return invoke<string[]>('get_user_workspaces', { userId });
+}
+
+/** Get workspace keys for a user (legacy), caller from session. ADR #7. */
+export async function getUserWorkspacesScoped(
+  sessionToken: string,
+  userId: string,
+): Promise<string[]> {
+  return invoke<string[]>('get_user_workspaces_scoped', { sessionToken, userId });
 }
