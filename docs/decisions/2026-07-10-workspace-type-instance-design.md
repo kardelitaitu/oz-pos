@@ -731,15 +731,13 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] `AppShell.tsx` unchanged — `activeWorkspace` derived from `activeInstance.type_key`.
    - **Files:** `ui/src/contexts/WorkspaceContext.tsx`, `ui/src/features/workspaces/WorkspaceHome.tsx`, `ui/src/api/workspaces.ts`
 
-6. **Verification**: ✅ `cargo check -p oz-core -p oz-pos-app` passes; `cargo test -p oz-core -- db::terminals` passes (17/17).
-
-6. **Verification**: ✅ Unit tests pass (18/18); `cargo check -p oz-core -p oz-pos-app` passes; 3 pre-existing `currency_integration` failures unrelated.
+6. **Verification**: ✅ All tests pass; `cargo check -p oz-core -p oz-pos-app` passes; 3 pre-existing `currency_integration` failures unrelated.
 
 ### Phase 2: Store-Scoped Databases
 
 **Goal:** Enable true multi-store isolation. Each additional store gets its own SQLite file.
 
-> **Status (2026-07-10):** Step 1 (StoreDatabaseManager) and Step 3 (Migration Tooling) complete. Step 2 (Store Switcher UI) deferred.
+> **Status (2026-07-10):** All steps complete.
 
 1. **Database Manager** (`platform/core/`) ✅
    - [x] `StoreDatabaseManager` — creates, migrates, opens per-store SQLite files (`store-<id>.sqlite`).
@@ -769,8 +767,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 **Goal:** Tablets and fixed terminals boot directly into their workspace without showing any picker.
 
-> **Status (2026-07-10):** Step 1 (Device Registration infrastructure) complete. Step 2 (Boot Resolution) complete.
-> Steps 3 (Tablet Shell Redesign) deferred.
+> **Status (2026-07-10):** Steps 1–3 complete. Admin UI for binding terminals deferred (frontend task).
 
 1. **Device Registration**:
    - [x] Backend: `set_device_binding`, `get_device_binding`, `clear_device_binding` Tauri commands with HMAC signing (Phase 1b).
