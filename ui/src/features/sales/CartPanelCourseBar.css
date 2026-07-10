@@ -35,7 +35,7 @@
 }
 
 .pos-cart-course-btn:hover {
-  background: var(--color-accent-dim, rgba(37, 99, 235, 0.08));
+  background: var(--color-accent-dim);
   border-color: var(--color-accent, #2563eb);
   transform: translateY(-1px);
 }

@@ -233,7 +233,7 @@
 }
 
 .audit-log-badge--info {
-  background: var(--color-accent-dim, #e0f2fe);
+  background: var(--color-accent-dim);
   color: var(--color-accent, #0284c7);
 }
 

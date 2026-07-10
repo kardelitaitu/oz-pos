@@ -5,7 +5,7 @@
   padding: 4px 8px;
   border-radius: 12px;
   font-size: 12px;
-  background: var(--surface-secondary);
+  background: var(--color-bg-surface);
 }
 .gateway-badge__dot {
   width: 8px;
@@ -20,5 +20,5 @@
   background: var(--color-danger, #ef4444);
 }
 .gateway-badge__name {
-  color: var(--text-secondary);
+  color: var(--color-fg-secondary);
 }

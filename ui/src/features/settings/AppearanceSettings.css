@@ -121,7 +121,7 @@
 }
 
 .appearance-preview-btn:hover {
-  box-shadow: 0 0 0 3px var(--color-accent-dim, rgba(0,0,0,0.08));
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
 }
 
 .appearance-preview-btn-outline {
@@ -140,7 +140,7 @@
 }
 
 .appearance-preview-btn-outline:hover {
-  background-color: var(--color-accent-dim, rgba(0,0,0,0.06));
+  background-color: var(--color-accent-dim);
 }
 
 .appearance-preview-badge {

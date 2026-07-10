@@ -29,7 +29,7 @@
 .sc-hist-loading,
 .sc-hist-empty {
   text-align: center;
-  color: var(--text-muted, #666);
+  color: var(--color-fg-tertiary);
   padding: 40px 0;
 }
 
@@ -60,7 +60,7 @@
 
 .sc-hist-item--sel {
   border-color: var(--accent, #2563eb);
-  background: var(--color-accent-dim, #eff6ff);
+  background: var(--color-accent-dim);
 }
 
 .sc-hist-item-number {
@@ -69,7 +69,7 @@
 
 .sc-hist-item-date {
   font-size: 0.8rem;
-  color: var(--text-muted, #666);
+  color: var(--color-fg-tertiary);
 }
 
 .sc-hist-detail {
