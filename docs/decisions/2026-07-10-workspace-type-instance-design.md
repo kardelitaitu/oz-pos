@@ -675,7 +675,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 ## Phased Implementation & Migration Guide
 
-> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅.</toml>
+> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅, Session Token Infrastructure ✅.</toml>
 
 ### Phase 1: Workspace Types + Default Instances + Session Context
 
@@ -698,6 +698,10 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 2. **Session Context** ✅ (struct only; extractor deferred to ADR #7)
    - [x] Implement `SessionContext` struct in `crates/oz-core/src/session.rs`.
+   - [x] `session_store` in-memory `HashMap<String, SessionContext>` with `resolve_session()` — foundational token infrastructure.
+   - [x] `create_session` and `destroy_session` Tauri commands with opaque UUID v4 tokens, input validation, and max-session eviction.
+   - [x] `InvalidSession` error variant on both desktop and tablet `AppError` enums.
+   - [x] `resolve_session` unit tests (valid token + unknown token).
    - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*

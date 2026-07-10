@@ -18,8 +18,10 @@
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 use rusqlite::Connection;
 use tauri::AppHandle;
@@ -27,6 +29,7 @@ use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
 
 use oz_core::migrations;
+use oz_core::session::SessionContext;
 use oz_hal::DriverRegistry;
 use platform_kernel::Kernel;
 
@@ -56,6 +59,10 @@ pub struct AppState {
     /// Module system kernel. Manages module lifecycle (load → start → stop).
     /// Modules are registered in `lib.rs::run()` during setup.
     pub kernel: Mutex<Kernel>,
+
+    /// In-memory session store mapping opaque session tokens to resolved
+    /// [`SessionContext`] values. ADR #4 / ADR #7.
+    pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
 }
 
 impl AppState {
@@ -89,7 +96,20 @@ impl AppState {
             db_path,
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
+            session_store: Arc::new(RwLock::new(HashMap::new())),
         })
+    }
+
+    /// Resolve an opaque session token to its [`SessionContext`].
+    ///
+    /// ADR #4 / ADR #7: Commands call this to look up the caller's
+    /// resolved scope.
+    /// Returns `AppError::InvalidSession` if the token is unknown.
+    pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
+        let store = self.session_store.read().map_err(|e| {
+            AppError::Internal(format!("session store lock poisoned: {e}"))
+        })?;
+        store.get(token).cloned().ok_or(AppError::InvalidSession)
     }
 }
 
@@ -124,6 +144,7 @@ impl AppState {
             db_path: ":memory:".into(),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
+            session_store: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -137,6 +158,7 @@ impl AppState {
             db_path: ":memory:".into(),
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
+            session_store: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }

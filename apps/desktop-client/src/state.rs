@@ -18,9 +18,11 @@
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::RwLock;
 use std::time::Duration;
 
 use notify::Watcher as _;
@@ -33,6 +35,7 @@ use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
 
 use oz_core::migrations;
+use oz_core::session::SessionContext;
 use oz_hal::DriverRegistry;
 use platform_core::StoreDatabaseManager;
 use platform_kernel::Kernel;
@@ -91,6 +94,13 @@ pub struct AppState {
     /// Shutdown sender for the inventory pub/sub background listener.
     /// Dropped on app shutdown to stop the listener thread gracefully.
     pub inventory_pubsub_shutdown: Option<std::sync::mpsc::Sender<()>>,
+
+    /// In-memory session store mapping opaque session tokens to resolved
+    /// [`SessionContext`] values. ADR #4 / ADR #7.
+    ///
+    /// Tokens are randomly-generated UUIDs created during login/session
+    /// resolution. Commands look up their context via [`AppState::resolve_session`].
+    pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
 }
 
 impl AppState {
@@ -206,6 +216,7 @@ impl AppState {
             sync_daemon: SyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
+            session_store: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 }
@@ -235,6 +246,18 @@ impl AppState {
     /// to benefit from Redis caching (when configured).
     pub fn store<'a>(&self, conn: &'a Connection) -> oz_core::db::Store<'a> {
         oz_core::db::Store::with_cache(conn, self.cache.clone())
+    }
+
+    /// Resolve an opaque session token to its [`SessionContext`].
+    ///
+    /// ADR #4 / ADR #7: Commands call this to look up the caller's
+    /// resolved scope (store, instance, type, user, role, terminal).
+    /// Returns `AppError::InvalidSession` if the token is unknown.
+    pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
+        let store = self.session_store.read().map_err(|e| {
+            AppError::Internal(format!("session store lock poisoned: {e}"))
+        })?;
+        store.get(token).cloned().ok_or(AppError::InvalidSession)
     }
 }
 
@@ -326,6 +349,37 @@ impl AppState {
             sync_daemon: SyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
+            session_store: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_session_returns_context_for_valid_token() {
+        let state = AppState::for_test();
+        let ctx = SessionContext::new(
+            "u1".into(),
+            "r1".into(),
+            "t1".into(),
+            "s1".into(),
+            "i1".into(),
+            "type1".into(),
+        );
+        state.session_store.write().unwrap().insert("tok-abc".into(), ctx.clone());
+
+        let resolved = state.resolve_session("tok-abc").unwrap();
+        assert_eq!(resolved.store_id, "s1");
+        assert_eq!(resolved.user_id, "u1");
+    }
+
+    #[test]
+    fn resolve_session_returns_error_for_unknown_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }
