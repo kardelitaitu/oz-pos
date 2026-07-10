@@ -345,9 +345,8 @@
   height: 28px;
 }
 
-/* Active nav item — accent left bar indicator. */
+/* Active nav item — accent left bar + colored icon/text only. */
 .app-nav-item--active {
-  background: var(--color-accent-subtle);
   color: var(--color-accent);
   font-weight: var(--font-weight-semibold);
   border-left-color: var(--color-accent);
@@ -355,7 +354,6 @@
 }
 
 .app-nav-item--active:hover {
-  background: var(--color-accent-subtle);
   color: var(--color-accent);
 }
 

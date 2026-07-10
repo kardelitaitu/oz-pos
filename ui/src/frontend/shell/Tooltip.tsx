@@ -10,6 +10,8 @@ export interface TooltipProps {
   showDelay?: number;
   /** Delay in ms before hiding the tooltip. Default 100ms. */
   hideDelay?: number;
+  /** Maximum width of the tooltip bubble (CSS value). Default '280px'. */
+  maxWidth?: string;
   /** The element that triggers the tooltip on hover/focus. */
   children: ReactElement;
 }
@@ -29,6 +31,7 @@ export default function Tooltip({
   position = 'right',
   showDelay = 400,
   hideDelay = 100,
+  maxWidth = '280px',
   children,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
@@ -74,6 +77,7 @@ export default function Tooltip({
         ref={tooltipRef}
         id={tooltipId}
         className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}`}
+        style={maxWidth ? { maxWidth } : undefined}
         role="tooltip"
         onMouseEnter={() => {
           clearTimeout(hideTimer.current);
