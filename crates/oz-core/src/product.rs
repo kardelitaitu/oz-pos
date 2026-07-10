@@ -114,7 +114,7 @@ impl Product {
         assert!(!name.is_empty(), "product name must not be empty");
 
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sku: sku.into(),
             name,
             price,

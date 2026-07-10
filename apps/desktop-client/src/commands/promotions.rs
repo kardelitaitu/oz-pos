@@ -201,7 +201,7 @@ pub async fn create_promotion(
 ) -> Result<Promotion, AppError> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let promo = Promotion {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: uuid::Uuid::now_v7().to_string(),
         name: args.name,
         description: args.description,
         promo_type: args.promo_type,
@@ -241,7 +241,7 @@ pub async fn create_promotion_scoped(
 
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let promo = Promotion {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: uuid::Uuid::now_v7().to_string(),
         name: args.name,
         description: args.description,
         promo_type: args.promo_type,
@@ -490,7 +490,7 @@ fn run_apply_promotion(
 
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let app = PromotionApplication {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: uuid::Uuid::now_v7().to_string(),
         promotion_id: promotion_id.to_string(),
         sale_id: sale_id.to_string(),
         discount_minor,

@@ -126,7 +126,7 @@ impl Store<'_> {
         source: &str,
         effective_date: &str,
     ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT INTO exchange_rates (id, from_currency, to_currency, rate, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![id, from_currency, to_currency, rate, source, effective_date],
@@ -161,7 +161,7 @@ impl Store<'_> {
         source: &str,
         effective_date: &str,
     ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT OR REPLACE INTO exchange_rates (id, from_currency, to_currency, rate, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![id, from_currency, to_currency, rate, source, effective_date],

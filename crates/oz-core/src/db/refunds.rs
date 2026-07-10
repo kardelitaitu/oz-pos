@@ -38,7 +38,7 @@ impl Store<'_> {
             "INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, outcome, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::now_v7().to_string(),
                 refund.processed_by,
                 "sale.refund",
                 "sale",

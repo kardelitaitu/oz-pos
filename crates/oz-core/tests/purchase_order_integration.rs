@@ -29,7 +29,7 @@ fn seed_supplier(conn: &Connection, id: &str, name: &str) {
 }
 
 fn seed_product_with_inventory(conn: &Connection, sku: &str, name: &str, qty: i64) -> String {
-    let pid = uuid::Uuid::new_v4().to_string();
+    let pid = uuid::Uuid::now_v7().to_string();
     conn.execute(
         "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at, price_updated_at)
          VALUES (?1, ?2, ?3, 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",

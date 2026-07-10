@@ -42,7 +42,7 @@ impl AuditEntry {
         outcome: impl Into<String>,
     ) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             user_id: user_id.into(),
             action: action.into(),
             target_type: target_type.map(|s| s.into()),

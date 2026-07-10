@@ -26,7 +26,7 @@ impl CashPayout {
     pub fn new(shift_id: impl Into<String>, amount_minor: i64, reason: impl Into<String>) -> Self {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             shift_id: shift_id.into(),
             amount_minor,
             reason: reason.into(),

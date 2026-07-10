@@ -69,7 +69,7 @@ impl OfflineQueueItem {
     /// Create a new offline queue item with the default tenant ("default").
     pub fn new(action: impl Into<String>, payload: impl Into<String>) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             action: action.into(),
             payload: payload.into(),
             status: OfflineQueueStatus::Pending,

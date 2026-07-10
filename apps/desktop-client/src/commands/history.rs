@@ -346,7 +346,7 @@ mod tests {
 
     fn make_sale_line(sale_id: &str, sku: &str, qty: i64, unit: i64) -> SaleLine {
         SaleLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sale_id: sale_id.into(),
             sku: sku.into(),
             qty,

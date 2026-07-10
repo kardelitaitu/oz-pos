@@ -136,7 +136,7 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 
 ### Phase 2 (Future)
 
-- [ ] Choose and adopt UUIDv7 or ULID for all new entity primary keys (project already uses UUID v4).
+- [x] Choose and adopt UUIDv7 for all entity primary keys — replaced all 158 `Uuid::new_v4()` call sites with `Uuid::now_v7()` across the entire workspace. Added `v7` feature to workspace `uuid` dependency. Added `oz_core::new_id()` helper for future entity ID generation.
 - [ ] Implement materialized `stock_summary` cache rebuild from deltas; invalidate on sync.
 - [ ] Populate `source_terminal_id` and `source_user_id` from session context in `adjust_stock_with_reason`.
 - [ ] Implement `FastPINOverlay.tsx` for shared touchscreen user switching.

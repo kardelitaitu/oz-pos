@@ -359,7 +359,7 @@ mod tests {
         let local = queue.enqueue(&store, "test", "{}").unwrap();
 
         let remote = OfflineQueueItem {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             action: "test".into(),
             payload: "{}".into(),
             status: OfflineQueueStatus::Pending,
@@ -391,7 +391,7 @@ mod tests {
         let local = queue.enqueue(&store, "test", "{}").unwrap();
 
         let remote = OfflineQueueItem {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             action: "test".into(),
             payload: r#"{"from":"server"}"#.into(),
             status: OfflineQueueStatus::Pending,

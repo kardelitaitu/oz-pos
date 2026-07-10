@@ -179,7 +179,7 @@ impl Store<'_> {
         }
 
         let product_type = product_type.unwrap_or("retail");
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let cur_str = std::str::from_utf8(&price.currency.0)
             .expect("currency bytes are valid UTF-8")
@@ -225,7 +225,7 @@ impl Store<'_> {
                 params![id, initial_stock, now],
             )?;
             // ADR #6: Record initial stock in the delta ledger.
-            let movement_id = uuid::Uuid::new_v4().to_string();
+            let movement_id = uuid::Uuid::now_v7().to_string();
             tx.execute(
                 "INSERT INTO stock_movements (id, item_id, delta, reason, created_at)
                  VALUES (?1, ?2, ?3, 'initial-stock', ?4)",
@@ -603,7 +603,7 @@ impl Store<'_> {
             })?;
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let movement_id = uuid::Uuid::new_v4().to_string();
+        let movement_id = uuid::Uuid::now_v7().to_string();
 
         let tx = self.conn.unchecked_transaction()?;
 
@@ -1351,7 +1351,7 @@ mod tests {
         let s = store(&conn);
 
         let v1 = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Small".into(),
             sku: "PARENT-001-SMALL".into(),
@@ -1364,7 +1364,7 @@ mod tests {
         };
 
         let v2 = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Large".into(),
             sku: "PARENT-001-LARGE".into(),
@@ -1407,7 +1407,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Medium".into(),
             sku: "PARENT-001-MED".into(),
@@ -1438,7 +1438,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Original".into(),
             sku: "VAR-001".into(),
@@ -1494,7 +1494,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Delete Me".into(),
             sku: "VAR-TO-DEL".into(),
@@ -1524,7 +1524,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "No Price".into(),
             sku: "VAR-NO-PRICE".into(),
@@ -1634,7 +1634,8 @@ mod tests {
         // Fallback to inventory table returns 0.
         let qty = store(&conn).get_stock_from_ledger("nonexistent").unwrap();
         assert_eq!(qty, 0);
-    }    #[test]
+    }
+    #[test]
     fn list_stock_movements_paginated() {
         let conn = fresh();
         seed_everything(&conn);
@@ -1648,15 +1649,11 @@ mod tests {
         }
 
         // With limit 3, should return 3 most recent.
-        let page1 = store(&conn)
-            .list_stock_movements("prod-1", 3, 0)
-            .unwrap();
+        let page1 = store(&conn).list_stock_movements("prod-1", 3, 0).unwrap();
         assert_eq!(page1.len(), 3);
 
         // With offset 3, should return remaining 2.
-        let page2 = store(&conn)
-            .list_stock_movements("prod-1", 10, 3)
-            .unwrap();
+        let page2 = store(&conn).list_stock_movements("prod-1", 10, 3).unwrap();
         assert_eq!(page2.len(), 2);
     }
 
@@ -1676,7 +1673,10 @@ mod tests {
             )
             .unwrap();
         // new_qty = previous_qty (50 from inventory) + 20 = 70
-        assert_eq!(qty, 70, "stock_summary should reflect current total after adjustment");
+        assert_eq!(
+            qty, 70,
+            "stock_summary should reflect current total after adjustment"
+        );
 
         // Second adjustment updates the summary.
         store(&conn).adjust_stock("DRINK-001", -10).unwrap();

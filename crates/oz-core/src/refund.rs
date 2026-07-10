@@ -56,7 +56,7 @@ impl Refund {
         lines: Vec<RefundLine>,
     ) -> Self {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         Self {
             id: id.clone(),
             sale_id: sale_id.into(),
@@ -89,7 +89,7 @@ impl RefundLine {
         line_total: Money,
     ) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             refund_id: String::new(), // filled by Refund::new
             sale_line_id: sale_line_id.into(),
             sku: sku.into(),

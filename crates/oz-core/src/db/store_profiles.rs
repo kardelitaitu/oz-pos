@@ -239,7 +239,7 @@ mod tests {
     fn create_second_store() {
         let (store, _) = setup();
         let second = StoreProfile {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: "Branch 2".into(),
             address: "456 Oak Ave".into(),
             tax_id: "TAX-002".into(),
@@ -277,7 +277,7 @@ mod tests {
     fn set_primary_store_promotes_and_demotes() {
         let (store, primary_id) = setup();
         let second = StoreProfile {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: "Branch 2".into(),
             address: "".into(),
             tax_id: "".into(),
@@ -318,7 +318,7 @@ mod tests {
     fn delete_second_store() {
         let (store, _) = setup();
         let second = StoreProfile {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: "Branch 2".into(),
             address: "".into(),
             tax_id: "".into(),

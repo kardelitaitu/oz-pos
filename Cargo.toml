@@ -84,7 +84,7 @@ async-channel = "2"
 clap = { version = "4", features = ["derive"] }
 embedded-hal = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 walkdir = "2"
 axum = { version = "0.8", features = ["macros"] }
 jsonwebtoken = "9"

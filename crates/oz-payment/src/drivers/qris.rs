@@ -227,7 +227,7 @@ impl QrisPaymentProcessor {
         format!(
             "QRIS-{}-{}",
             chrono::Utc::now().timestamp(),
-            uuid::Uuid::new_v4().to_string().get(..8).unwrap_or("0000")
+            uuid::Uuid::now_v7().to_string().get(..8).unwrap_or("0000")
         )
     }
 
@@ -461,7 +461,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
         _amount: Option<Money>,
     ) -> Result<PaymentResult, PaymentError> {
         let refund_body = serde_json::json!({
-            "refund_key": format!("refund-{}-{}", transaction_id, uuid::Uuid::new_v4()),
+            "refund_key": format!("refund-{}-{}", transaction_id, uuid::Uuid::now_v7()),
             "amount": null, // full refund
             "reason": "requested_by_merchant"
         });

@@ -45,7 +45,7 @@ impl ProductVariant {
         sku: impl Into<String>,
     ) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: parent_sku.into(),
             name: name.into(),
             sku: sku.into(),

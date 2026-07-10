@@ -43,7 +43,7 @@ fn sign_binding(
     let secret = match secret {
         Some(s) => s,
         None => {
-            let new_secret = uuid::Uuid::new_v4().to_string();
+            let new_secret = uuid::Uuid::now_v7().to_string();
             keyring
                 .set_secret(DEVICE_BINDING_KEYRING_NAME, &new_secret)
                 .map_err(|e| AppError::Internal(format!("keyring write failed: {e}")))?;

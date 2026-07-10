@@ -144,7 +144,7 @@ pub async fn create_stock_count(
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = uuid::Uuid::now_v7().to_string();
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let count_number = store.next_count_number()?;
     let count_type = CountType::from_db_str(&args.count_type).unwrap_or(CountType::Full);
@@ -208,7 +208,7 @@ pub async fn add_count_line(
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = uuid::Uuid::now_v7().to_string();
     let line = StockCountLine {
         id,
         count_id: args.count_id,

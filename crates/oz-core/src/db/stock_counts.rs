@@ -250,7 +250,7 @@ impl Store<'_> {
                 )?;
             }
 
-            let adj_id = uuid::Uuid::new_v4().to_string();
+            let adj_id = uuid::Uuid::now_v7().to_string();
             let adjustment = StockAdjustment {
                 id: adj_id.clone(),
                 count_id: Some(count_id.to_owned()),
@@ -340,7 +340,7 @@ mod tests {
     fn seed_product(conn: &Connection, sku: &str, name: &str) {
         conn.execute(
             "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES (?1, ?2, ?3, 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-            params![uuid::Uuid::new_v4().to_string(), sku, name],
+            params![uuid::Uuid::now_v7().to_string(), sku, name],
         ).unwrap();
     }
 
@@ -378,7 +378,7 @@ mod tests {
     fn create_and_get_stock_count() {
         let conn = fresh_conn();
         let store = Store::new(&conn);
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let count = StockCount {
@@ -407,7 +407,7 @@ mod tests {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let c1 = StockCount {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             count_number: "CNT-001".into(),
             status: StockCountStatus::Draft,
             count_type: CountType::Full,
@@ -418,7 +418,7 @@ mod tests {
             updated_at: now.clone(),
         };
         let c2 = StockCount {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             count_number: "CNT-002".into(),
             status: StockCountStatus::Completed,
             count_type: CountType::Cyclic,
@@ -442,7 +442,7 @@ mod tests {
     fn add_and_get_count_lines() {
         let conn = fresh_conn();
         let store = Store::new(&conn);
-        let count_id = uuid::Uuid::new_v4().to_string();
+        let count_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let count = StockCount {
@@ -459,7 +459,7 @@ mod tests {
         store.create_stock_count(&count).unwrap();
 
         let line = StockCountLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             count_id: count_id.clone(),
             sku: "TEST-SKU".into(),
             product_name: "Test Product".into(),
@@ -480,7 +480,7 @@ mod tests {
     fn update_count_line() {
         let conn = fresh_conn();
         let store = Store::new(&conn);
-        let count_id = uuid::Uuid::new_v4().to_string();
+        let count_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let count = StockCount {
@@ -497,7 +497,7 @@ mod tests {
         store.create_stock_count(&count).unwrap();
 
         let line = StockCountLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             count_id: count_id.clone(),
             sku: "UPDATE-SKU".into(),
             product_name: "Update Product".into(),
@@ -529,7 +529,7 @@ mod tests {
     fn complete_stock_count_creates_adjustments() {
         let conn = fresh_conn();
         let store = Store::new(&conn);
-        let count_id = uuid::Uuid::new_v4().to_string();
+        let count_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         // Seed user (FK target on stock_adjustments.created_by), product,
@@ -557,7 +557,7 @@ mod tests {
         store.create_stock_count(&count).unwrap();
 
         let line = StockCountLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             count_id: count_id.clone(),
             sku: "SKU-A".into(),
             product_name: "Product A".into(),
@@ -607,7 +607,7 @@ mod tests {
 
         // Create a count with that number.
         let count = StockCount {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             count_number: n1.clone(),
             status: StockCountStatus::Draft,
             count_type: CountType::Full,
@@ -628,7 +628,7 @@ mod tests {
     fn remove_count_line() {
         let conn = fresh_conn();
         let store = Store::new(&conn);
-        let count_id = uuid::Uuid::new_v4().to_string();
+        let count_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let count = StockCount {
@@ -645,7 +645,7 @@ mod tests {
         store.create_stock_count(&count).unwrap();
 
         let line = StockCountLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             count_id: count_id.clone(),
             sku: "RM-SKU".into(),
             product_name: "Remove Me".into(),
@@ -665,7 +665,7 @@ mod tests {
     fn complete_already_completed_count_rejected() {
         let conn = fresh_conn();
         let store = Store::new(&conn);
-        let count_id = uuid::Uuid::new_v4().to_string();
+        let count_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let count = StockCount {

@@ -69,6 +69,20 @@ pub mod user;
 /// Per-user display preferences (card size, font size, etc.).
 pub mod user_preferences;
 
+/// Generate a new time-ordered UUIDv7 primary key.
+///
+/// UUIDv7 embeds a millisecond-precision timestamp in the high bits,
+/// providing better B-tree index locality in SQLite and preventing
+/// ID collisions when multiple offline registers generate IDs
+/// independently (ADR #6).
+///
+/// Use this helper for all new entity IDs. Avoid `Uuid::new_v4()`
+/// in production code.
+#[must_use]
+pub fn new_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
 pub use audit::AuditEntry;
 #[cfg(feature = "cache-redis")]
 pub use cache::redis_cache::RedisCache;

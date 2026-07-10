@@ -56,7 +56,7 @@ impl Supplier {
         assert!(!code.is_empty(), "supplier code must not be empty");
 
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             code,
             name,
             contact_person: String::new(),

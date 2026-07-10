@@ -53,7 +53,7 @@ impl TaxRate {
         assert!(rate_bps >= 0, "rate_bps must be non-negative");
 
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name,
             rate_bps,
             is_default: false,

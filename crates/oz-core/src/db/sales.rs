@@ -386,7 +386,7 @@ impl Store<'_> {
         bill_type: &str,
         customer_name: Option<&str>,
     ) -> Result<String, CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency, bill_type, customer_name)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -492,7 +492,7 @@ impl Store<'_> {
 impl Store<'_> {
     /// Store a receipt barcode mapping for a sale.
     pub fn save_receipt_barcode(&self, sale_id: &str, barcode: &str) -> Result<(), CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT INTO receipt_barcodes (id, sale_id, barcode) VALUES (?1, ?2, ?3)",
             params![id, sale_id, barcode],
@@ -1232,7 +1232,7 @@ mod tests {
             tax_total: price(0),
             customer_id: None,
             lines: vec![SaleLine {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: uuid::Uuid::now_v7().to_string(),
                 sale_id: sale.id.clone(),
                 sku: "VOID-SKU".into(),
                 qty: 2,
@@ -1450,8 +1450,8 @@ mod tests {
     }
 
     fn make_single_line_sale(sku: &str, qty: i64, unit_minor: i64) -> Sale {
-        let line_id = uuid::Uuid::new_v4().to_string();
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let line_id = uuid::Uuid::now_v7().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         Sale {
             id: sale_id.clone(),
@@ -1570,7 +1570,7 @@ mod tests {
         seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
 
         let line1 = SaleLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sale_id: "sale-1".into(),
             sku: "COFFEE".into(),
             qty: 2,
@@ -1582,7 +1582,7 @@ mod tests {
             serial_number: None,
         };
         let line2 = SaleLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sale_id: "sale-1".into(),
             sku: "BAGEL".into(),
             qty: 1,
@@ -1689,8 +1689,8 @@ mod tests {
         )
         .unwrap();
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
-        let line_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        let line_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let sale = Sale {
             id: sale_id.clone(),

@@ -29,7 +29,7 @@ fn entry_with_timestamp(
     created_at: &str,
 ) -> AuditEntry {
     AuditEntry {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: uuid::Uuid::now_v7().to_string(),
         user_id: user_id.to_owned(),
         action: action.to_owned(),
         target_type: target_type.map(String::from),

@@ -78,7 +78,7 @@ impl Shift {
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             user_id,
             terminal_id: terminal_id.map(|t| t.into()),
             opened_at: now.clone(),

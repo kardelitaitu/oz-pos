@@ -30,7 +30,7 @@ impl Store<'_> {
             });
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let pin = input.pin.unwrap_or_default();
         let issued_to = input.issued_to.unwrap_or_default();
@@ -59,7 +59,7 @@ impl Store<'_> {
         )?;
 
         // Record the issue transaction.
-        let txn_id = uuid::Uuid::new_v4().to_string();
+        let txn_id = uuid::Uuid::now_v7().to_string();
         tx.execute(
             "INSERT INTO gift_card_transactions (id, gift_card_id, sale_id, txn_type, amount_minor,
              balance_after_minor, notes, created_at)
@@ -382,7 +382,7 @@ impl Store<'_> {
             });
         }
 
-        let txn_id = uuid::Uuid::new_v4().to_string();
+        let txn_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let new_balance = card.current_balance_minor - amount_minor;
 
@@ -465,7 +465,7 @@ impl Store<'_> {
             });
         }
 
-        let txn_id = uuid::Uuid::new_v4().to_string();
+        let txn_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let new_balance = card.current_balance_minor + amount_minor;
 

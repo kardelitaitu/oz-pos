@@ -147,7 +147,7 @@ pub async fn create_session(
         ));
     }
 
-    let token = uuid::Uuid::new_v4().to_string();
+    let token = uuid::Uuid::now_v7().to_string();
 
     {
         let mut store = state

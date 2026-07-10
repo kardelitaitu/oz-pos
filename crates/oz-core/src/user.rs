@@ -168,7 +168,7 @@ impl User {
         assert!(!display_name.is_empty(), "display name must not be empty");
 
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             username,
             pin_hash: pin_hash.into(),
             display_name,

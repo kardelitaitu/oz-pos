@@ -28,7 +28,7 @@ impl Store<'_> {
 
     /// Create a KDS order from input, auto-incrementing the display number per day.
     pub fn create_kds_order(&self, input: CreateKdsOrderInput) -> Result<KdsOrder, CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
         let tx = self.conn.unchecked_transaction()?;
@@ -318,7 +318,7 @@ mod tests {
         seed_product(&conn, "COFFEE", "Coffee");
 
         // Create a minimal sale.
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -376,7 +376,7 @@ mod tests {
         let s = store(&conn);
         seed_product(&conn, "TEA", "Tea");
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -417,7 +417,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -470,7 +470,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -519,8 +519,8 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id1 = uuid::Uuid::new_v4().to_string();
-        let sale_id2 = uuid::Uuid::new_v4().to_string();
+        let sale_id1 = uuid::Uuid::now_v7().to_string();
+        let sale_id2 = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         for sid in [&sale_id1, &sale_id2] {
@@ -578,9 +578,9 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id1 = uuid::Uuid::new_v4().to_string();
-        let sale_id2 = uuid::Uuid::new_v4().to_string();
-        let sale_id3 = uuid::Uuid::new_v4().to_string();
+        let sale_id1 = uuid::Uuid::now_v7().to_string();
+        let sale_id2 = uuid::Uuid::now_v7().to_string();
+        let sale_id3 = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         for sid in [&sale_id1, &sale_id2, &sale_id3] {
@@ -678,8 +678,8 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id1 = uuid::Uuid::new_v4().to_string();
-        let sale_id2 = uuid::Uuid::new_v4().to_string();
+        let sale_id1 = uuid::Uuid::now_v7().to_string();
+        let sale_id2 = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         for sid in [&sale_id1, &sale_id2] {
@@ -735,7 +735,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -758,7 +758,7 @@ mod tests {
         s.create_sale(&test_sale).unwrap();
 
         // Attempt a raw INSERT with an invalid status — should fail the CHECK constraint.
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let result = s.conn.execute(
             "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
              VALUES (?1, ?2, 'bogus', 'Test', 1, '')",
@@ -786,7 +786,7 @@ mod tests {
         // Insert orders with each valid status. Each needs its own sale_id
         // because kds_orders.sale_id has a UNIQUE constraint.
         for status in &["pending", "preparing", "ready", "served", "cancelled"] {
-            let sale_id = uuid::Uuid::new_v4().to_string();
+            let sale_id = uuid::Uuid::now_v7().to_string();
             let test_sale = Sale {
                 id: sale_id.clone(),
                 status: crate::SaleStatus::Completed,
@@ -807,7 +807,7 @@ mod tests {
             };
             s.create_sale(&test_sale).unwrap();
 
-            let order_id = uuid::Uuid::new_v4().to_string();
+            let order_id = uuid::Uuid::now_v7().to_string();
             s.conn
                 .execute(
                     "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
