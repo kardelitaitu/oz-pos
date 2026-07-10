@@ -87,6 +87,14 @@ export interface AdjustStockArgs {
 export const adjustStock = (args: AdjustStockArgs): Promise<number> =>
   invoke<number>('adjust_stock', { args });
 
+/**
+ * Adjust stock scoped to the store resolved from a session token.
+ *
+ * ADR #7: Prefer this over `adjustStock()` in multi-store deployments.
+ */
+export const adjustStockScoped = (sessionToken: string, args: AdjustStockArgs): Promise<number> =>
+  invoke<number>('adjust_stock_scoped', { sessionToken, args });
+
 // ── Product Variants ──────────────────────────────────────────────
 
 export interface ProductVariantDto {

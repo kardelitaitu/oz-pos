@@ -76,6 +76,54 @@ pub async fn adjust_stock(
     Ok(new_qty)
 }
 
+/// Adjust stock for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `adjust_stock`. The frontend passes a
+/// `session_token` instead of relying on the global database. The
+/// backend resolves the token to a `SessionContext`, opens the
+/// store-scoped database, and adjusts stock within that store only.
+#[command]
+pub async fn adjust_stock_scoped(
+    session_token: String,
+    args: AdjustStockArgs,
+    state: State<'_, AppState>,
+) -> Result<i64, AppError> {
+    validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("reason", &args.reason).map_err(|e| AppError::Invalid(e.to_string()))?;
+    if args.delta == 0 {
+        return Err(AppError::Invalid("delta must be non-zero".into()));
+    }
+
+    let conn = state.resolve_store(&session_token)?;
+
+    let new_qty = {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = oz_core::db::Store::new(&db);
+        store.adjust_stock(&args.sku, args.delta)?
+    };
+
+    // Publish the StockAdjusted domain event.
+    {
+        let event = StockAdjusted {
+            sku: args.sku.clone(),
+            delta: args.delta,
+            new_qty,
+            reason: args.reason.clone(),
+        };
+
+        let kernel = state.kernel.lock().await;
+        let bus = kernel.event_bus();
+        if let Err(e) = bus.publish(&event) {
+            tracing::warn!(sku = %args.sku, error = %e, "event bus publish failed");
+        }
+    }
+
+    tracing::info!(sku = %args.sku, delta = %args.delta, reason = %args.reason, new_qty, "stock adjusted (scoped)");
+    Ok(new_qty)
+}
+
 /// A product DTO for the front-end, mapped from `ProductWithDetails`.
 #[derive(Debug, Serialize)]
 pub struct ProductDto {

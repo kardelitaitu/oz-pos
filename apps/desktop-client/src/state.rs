@@ -281,6 +281,16 @@ impl AppState {
             .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
         Ok((session, conn))
     }
+
+    /// Resolve a session token and return only the store-scoped database
+    /// connection. Convenience wrapper for commands that don't need the
+    /// [`SessionContext`] (e.g., `adjust_stock_scoped`).
+    pub fn resolve_store(
+        &self,
+        token: &str,
+    ) -> Result<Arc<std::sync::Mutex<Connection>>, AppError> {
+        self.resolve_scope(token).map(|(_, conn)| conn)
+    }
 }
 
 /// Start a background file watcher that hot-reloads plugins when

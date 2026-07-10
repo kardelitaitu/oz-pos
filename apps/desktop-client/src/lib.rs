@@ -219,6 +219,7 @@ pub fn run() {
             commands::products::lookup_by_barcode,
             commands::products::lookup_product_by_sku,
             commands::products::adjust_stock,
+            commands::products::adjust_stock_scoped,
             commands::products::get_product_track_serial,
             commands::promotions::list_promotions,
             commands::promotions::get_promotion,
