@@ -35,7 +35,7 @@ Use this master checklist to track execution progress across backend crates (`cr
 - [ ] **Step 3.1**: Create `tenant_subscription` table schema (`tenant_id`, `tier_key`, `status`, `expires_at`, `max_stores`, `max_pos_instances`, `allowed_types_json`, `signature`) and `SubscriptionTier` Rust struct in `crates/oz-core/src/subscription.rs` with RSA/HMAC anti-tamper signature validation.
 - [ ] **Step 3.2**: Integrate runtime quantity validation inside `create_workspace_instance()`, querying active instances by type and returning `CoreError::SubscriptionLimitExceeded` when tier register quota is reached.
 - [ ] **Step 3.3**: Implement `tier.allows_workspace_type(&instance.type_key)` entitlement checks at workspace boot time, returning `CoreError::SubscriptionUpgradeRequired` if specialized templates (`kds`, `analytics-pro`) are locked.
-- [ ] **Step 3.4**: Implement 14-day offline grace window with **Monotonic Ledger Clock Check** (`MAX(orders.created_at, audit_logs.created_at)`) to detect OS clock rollbacks (`CoreError::SystemClockTampered`), and safe downgrade handling (`is_active = false` without data loss).
+- [ ] **Step 3.4**: Implement 14-day offline grace window with **Monotonic Ledger Clock Check** (`MAX(orders.created_at, audit_logs.created_at)`) to detect OS clock rollbacks (`CoreError::SystemClockTampered`), and three-state `InstanceStatus` (`Active`, `QuotaSuspended`, `Archived`) so downgraded surplus registers safely transition to `QuotaSuspended` and automatically re-activate upon subscription renewal or upgrade.
 - [ ] **Step 3.V1 (Verification - Tier & Signature Test)**: Write automated test `test_tenant_subscription_anti_tamper_and_quotas` in `crates/oz-core/src/db/workspaces.rs` testing creation quotas across tiers, verifying clock drift detection (`SystemClockTampered`), and asserting `CoreError::InvalidSubscriptionSignature` when local SQLite data is manually tampered.
 - [ ] **Step 3.V2 (Verification - Quality Check)**: Run `cargo test -p oz-core test_subscription` and verify clean formatting across error types.
 
@@ -471,9 +471,19 @@ if !tier.allows_workspace_type(&instance.type_key) {
 }
 ```
 
-#### 5. Graceful Upgrades & Downgrades
-- **Upgrades**: Raising a tier instantly increases `max_pos_instances` and adds allowed `workspace_types`. No database migration or client restart is required.
-- **Downgrading (Safe Archiving)**: If a client downgrades below their current register count, excess instances transition to `is_active = false`. Historical audit logs and orders (`WHERE store_id = ...`) are preserved, while only quota-compliant instances remain openable for new sales.
+#### 5. Graceful Upgrades, Downgrades & Automatic Recovery (`InstanceStatus`)
+To ensure zero manual admin intervention when recovering from an offline grace expiration or upgrading tiers, workspace instance status is tracked via a three-state enum rather than a simple boolean:
+
+```rust
+pub enum InstanceStatus {
+    Active,         // Normal operating register
+    QuotaSuspended, // Suspended automatically by subscription downgrade or offline grace expiration
+    Archived,       // Manually deleted/deactivated by an admin
+}
+```
+
+- **Upgrades & Automatic Recovery**: Raising a tier instantly increases `max_pos_instances` and unlocks `allowed_workspace_types`. When `apps/cloud-server` syncs an upgraded quota, the backend queries all `QuotaSuspended` instances and automatically restores them to `Active` (ordered by `last_accessed_at DESC`) up to the new tier limit. Admin-deleted (`Archived`) registers remain untouched.
+- **Downgrading (Safe Archiving)**: If a client downgrades below their current register count or their 14-day offline grace expires, surplus active instances transition to `QuotaSuspended`. Historical audit logs, cash accountability, and orders (`WHERE store_id = ...`) are completely preserved, while only quota-compliant instances remain openable for new sales.
 
 ### 8. Workspace Picker Visual Design
 
