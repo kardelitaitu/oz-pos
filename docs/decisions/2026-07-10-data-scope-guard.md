@@ -108,7 +108,7 @@ pub async fn list_products_scoped(
 | `open_shift` | `args: OpenShiftArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `open_shift_scoped` + `OpenShiftScopedArgs` + API wrapper |
 | `close_shift` | `args: CloseShiftArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `close_shift_scoped` + `CloseShiftScopedArgs` + API wrapper |
 | `get_active_shift` | `user_id: String` | `session_token: String` | ✅ `get_active_shift_scoped` + API wrapper |
-| *(28 remaining: settings 8, setup 1, tables 6, terminals 9, workspaces 9)* | various | `session_token: String, ...` | 🔧 `scripts/verify-no-raw-params.sh` tracks |
+| *(9 remaining: settings 8, setup 1)* | various | `session_token: String, ...` | 🔧 `scripts/verify-no-raw-params.sh` tracks |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
 
@@ -139,7 +139,7 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `resolve_scope()` on tablet `AppState`
 - [x] `list_products_scoped` simplified to use `resolve_scope()`
 
-### Phase 3: Domain Command Migration ⏳ (11 of 11 done)
+### Phase 3: Domain Command Migration ⏳ (14 of 14 done)
 - [x] `adjust_stock_scoped` — migrate stock adjustment
 - [x] `lookup_by_barcode_scoped` — migrate barcode lookup
 - [x] `lookup_product_by_sku_scoped` — migrate SKU lookup
@@ -161,18 +161,21 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `hold_cart_scoped` / `list_held_carts_scoped` / `list_open_bills_scoped` / `get_held_cart_scoped` / `delete_held_cart_scoped` / `compute_cart_tax_scoped` — migrate held cart commands
 - [x] `complete_sale_scoped` — migrate with `CompleteSaleScopedArgs` + dual-lock DB pattern
 - [x] `start_sale_scoped` / `add_line_scoped` — migrate POS cart creation (POS module fully scoped)
-- [x] KDS module (5 commands): `list_kds_orders_scoped`, `get_kds_queue_scoped`, `update_kds_status_scoped`, `create_kds_order_from_sale_scoped`, `get_kds_order_scoped` — all with token rejection tests + API wrappers
-- [x] Promotions module (7 commands): `list_promotions_scoped`, `get_promotion_scoped`, `create_promotion_scoped`, `update_promotion_scoped`, `delete_promotion_scoped`, `apply_promotion_scoped`, `get_sale_promotions_scoped` — all with token rejection tests + API wrappers
-- [x] Shifts module (3 commands): `open_shift_scoped`, `close_shift_scoped`, `get_active_shift_scoped` — all with token rejection tests + API wrappers
-- [x] Phase 4 verification script created: `scripts/verify-no-raw-params.sh` (detects 28 remaining violations across settings, setup, tables, terminals, workspaces)
-- [ ] *(migrate remaining desktop commands: settings 8, setup 1, tables 6, terminals 9, workspaces 9)*
+- [x] KDS module (5 commands) — all with token rejection tests + API wrappers
+- [x] Promotions module (7 commands) — all with token rejection tests + API wrappers
+- [x] Shifts module (3 commands) — all with token rejection tests + API wrappers
+- [x] Tables module (9 commands): `list_tables_scoped`, `get_table_scoped`, `list_sections_scoped`, `create_table_scoped`, `update_table_scoped`, `delete_table_scoped`, `update_table_status_scoped`, `assign_table_order_scoped`, `release_table_scoped` — all with token rejection tests + API wrappers
+- [x] Terminals module (16 commands): all read + write terminal commands, device bindings, profiles, overrides — all with token rejection tests + API wrappers
+- [x] Workspaces module (7 commands): `list_workspaces_scoped`, `get_workspace_instance_scoped`, `create_workspace_instance_scoped`, `list_workspace_screens_scoped`, `set_user_workspace_instances_scoped`, `get_user_workspace_instances_scoped` — with `resolve_boot_store` unchanged (pre-auth command)
+- [x] Phase 4 verification script created: `scripts/verify-no-raw-params.sh` (detects 9 remaining violations: settings 8, setup 1)
+- [ ] *(migrate remaining desktop commands: settings 8, setup 1)*
 
 ### Phase 4: Enforcement 🔧
 - [x] `scripts/verify-no-raw-params.sh` — greps desktop command files for `store_id: String` / `user_id: String` function parameters. Excludes `pub` struct fields and tablet-client (not yet migrated). Currently detects 28 remaining commands needing migration (settings, setup, tables, terminals, workspaces).
 - [x] Integrated into `scripts/check.sh` CI pipeline (runs after clippy, before tests).
-- [x] Backward-compatible deprecation period: all 43 migrated old commands preserved with `**Deprecated**` doc comments.
+- [x] Backward-compatible deprecation period: all 75 migrated old commands preserved with `**Deprecated**` doc comments.
 - [ ] Custom Clippy lint rule: reject `store_id: String` in command params *(future enhancement — grep-based guard is the pragmatic first step)*.
-- [ ] Bring violations to zero by migrating remaining desktop commands (settings, setup, tables, terminals, workspaces — 28 remaining).
+- [ ] Bring violations to zero by migrating remaining desktop commands (settings, setup — 9 remaining).
 
 ---
 

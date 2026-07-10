@@ -4,6 +4,9 @@
 //! ADR #4 Phase 1: Now returns `WorkspaceDto` with instance-aware fields
 //! and supports instance CRUD. Legacy commands are preserved for
 //! backward compatibility and marked as deprecated.
+//!
+//! ADR #7: All active commands have scoped variants using the session token
+//! pattern. Old commands taking raw `user_id` / `store_id` are deprecated.
 
 use serde::Serialize;
 use tauri::{State, command};
@@ -53,10 +56,163 @@ pub struct CreateInstanceRequest {
     pub colour: Option<String>,
 }
 
-// ── New Commands (ADR #4 Phase 1) ────────────────────────────────────
+// ── Scoped Commands (ADR #7) ────────────────────────────────────────
+
+/// List workspace instances accessible to the session user within their store. ADR #7.
+#[command]
+pub async fn list_workspaces_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkspaceDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows =
+        store.list_workspaces(&session.role_id, Some(&session.user_id), &session.store_id)?;
+    drop(db);
+    Ok(rows)
+}
+
+/// Get a single workspace instance. `is_default` reflects the session user. ADR #7.
+#[command]
+pub async fn get_workspace_instance_scoped(
+    session_token: String,
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let dto = store.get_workspace_instance(&instance_id, Some(&session.user_id))?;
+    drop(db);
+    Ok(dto)
+}
+
+/// Create a new workspace instance (admin). Permission from session. ADR #7.
+#[command]
+pub async fn create_workspace_instance_scoped(
+    session_token: String,
+    req: CreateInstanceRequest,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+    let _row = store.create_workspace_instance(
+        &req.id,
+        &req.type_key,
+        &req.store_id,
+        &req.name,
+        req.description.as_deref().unwrap_or(""),
+        req.colour.as_deref(),
+    )?;
+    let dto = store.get_workspace_instance(&req.id, Some(&session.user_id))?;
+    drop(db);
+    tracing::info!(
+        instance_id = %req.id,
+        type_key = %req.type_key,
+        store_id = %req.store_id,
+        "workspace instance created (scoped)"
+    );
+    Ok(dto)
+}
+
+/// List screens for a workspace type from the store-scoped database. ADR #7.
+#[command]
+pub async fn list_workspace_screens_scoped(
+    session_token: String,
+    type_key: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkspaceScreenDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows = store.list_workspace_type_screens(&type_key)?;
+    drop(db);
+    Ok(rows
+        .into_iter()
+        .map(|r| WorkspaceScreenDto {
+            screen_key: r.screen_key,
+            sort_order: r.sort_order,
+        })
+        .collect())
+}
+
+/// Replace all instance assignments for a user. Caller permission from session. ADR #7.
+#[command]
+pub async fn set_user_workspace_instances_scoped(
+    session_token: String,
+    user_id: String,
+    instance_ids: Vec<String>,
+    default_instance_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+    let ids: Vec<&str> = instance_ids.iter().map(|s| s.as_str()).collect();
+    store.set_user_workspace_instances(&user_id, ids, default_instance_id.as_deref())?;
+    drop(db);
+    tracing::info!(user_id = %user_id, count = %instance_ids.len(), "user workspace instance assignments updated (scoped)");
+    Ok(())
+}
+
+/// Get instance IDs assigned to a user. Permission check from session. ADR #7.
+#[command]
+pub async fn get_user_workspace_instances_scoped(
+    session_token: String,
+    user_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
+    let ids = store.get_user_workspace_instance_ids(&user_id)?;
+    drop(db);
+    Ok(ids)
+}
+
+// ── Original Commands (deprecated for multi-store — ADR #7) ─────────
 
 /// List workspace instances accessible to the given role and user
 /// within a specific store.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped`.
 #[command]
 pub async fn list_workspaces(
     state: State<'_, AppState>,
@@ -73,8 +229,7 @@ pub async fn list_workspaces(
 
 /// Get a single workspace instance by ID.
 ///
-/// When `user_id` is provided, `is_default` reflects whether this
-/// instance is the user's default.
+/// **Deprecated for multi-store (ADR #7):** Use `get_workspace_instance_scoped`.
 #[command]
 pub async fn get_workspace_instance(
     state: State<'_, AppState>,
@@ -89,7 +244,8 @@ pub async fn get_workspace_instance(
 }
 
 /// Create a new workspace instance (admin).
-/// Requires `staff:update` permission.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `create_workspace_instance_scoped`.
 #[command]
 pub async fn create_workspace_instance(
     state: State<'_, AppState>,
@@ -120,8 +276,9 @@ pub async fn create_workspace_instance(
 
 // ── Legacy Commands (backward compatible) ────────────────────────────
 
-/// List all workspace types (the old `list_workspaces`).
-/// Deprecated — use `list_workspaces` with `store_id` instead.
+/// List all workspace types.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped` instead.
 #[command]
 pub async fn list_workspace_types(
     state: State<'_, AppState>,
@@ -142,8 +299,8 @@ pub async fn list_workspace_types(
 }
 
 /// List ALL workspace types (for admin dropdowns).
-/// Requires `staff:read` permission.
-/// Deprecated — use `list_workspace_types`.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped` instead.
 #[command]
 pub async fn list_all_workspaces(
     state: State<'_, AppState>,
@@ -166,8 +323,8 @@ pub async fn list_all_workspaces(
 }
 
 /// Replace all workspace assignments for a user (legacy tables).
-/// Requires `staff:update` permission.
-/// Deprecated — use `set_user_workspace_instances` with instance IDs.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
 #[command]
 pub async fn set_user_workspaces(
     state: State<'_, AppState>,
@@ -186,8 +343,8 @@ pub async fn set_user_workspaces(
 }
 
 /// Get the explicit workspace keys assigned to a user (legacy table).
-/// Requires `staff:read` permission.
-/// Deprecated — use `get_user_workspace_instance_ids`.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
 #[command]
 pub async fn get_user_workspaces(
     state: State<'_, AppState>,
@@ -202,6 +359,8 @@ pub async fn get_user_workspaces(
 }
 
 /// List screens (nav items) for a given workspace type.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_workspace_screens_scoped`.
 #[command]
 pub async fn list_workspace_screens(
     state: State<'_, AppState>,
@@ -220,11 +379,9 @@ pub async fn list_workspace_screens(
         .collect())
 }
 
-// ── New Instance Assignment Commands ─────────────────────────────────
-
-/// Replace all instance assignments for a user.
-/// Passing empty `instance_ids` clears all assignments.
-/// Requires `staff:update` permission.
+/// Replace all instance assignments for a user (old command).
+///
+/// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
 #[command]
 pub async fn set_user_workspace_instances(
     state: State<'_, AppState>,
@@ -243,8 +400,9 @@ pub async fn set_user_workspace_instances(
     Ok(())
 }
 
-/// Get the explicit instance IDs assigned to a user.
-/// Requires `staff:read` permission.
+/// Get the explicit instance IDs assigned to a user (old command).
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
 #[command]
 pub async fn get_user_workspace_instances(
     state: State<'_, AppState>,
@@ -264,40 +422,20 @@ pub async fn get_user_workspace_instances(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BootResolution {
-    /// Whether the terminal is device-bound (HMAC-validated).
     pub is_bound: bool,
-    /// The resolved store ID (always present — falls back to primary store).
     pub store_id: String,
-    /// The bound instance ID, if the terminal is bound to a specific instance.
     pub instance_id: Option<String>,
 }
 
 /// Resolve the active store and instance from device binding.
 ///
-/// This is called once at boot time (before authentication) to determine
-/// which store database to open and whether to skip the workspace picker.
-///
-/// Resolution order:
-/// 1. Look up terminal by `device_id` (hostname).
-/// 2. If terminal has a device binding with valid HMAC signature:
-///    a. If both `bound_store_id` and `bound_instance_id` are set:
-///       → Open the store's database, verify the instance exists and is active.
-///       → Return `(store_id, instance_id, is_bound: true)` — skip picker.
-///    b. If only `bound_store_id` is set:
-///       → Return `(store_id, null, is_bound: true)` — skip store picker, show instance picker.
-/// 3. Otherwise:
-///    → Return the primary store with `is_bound: false`.
-///
-/// # Thread Safety
-///
-/// All non-`Send` values (`Keyring`, `Store`, `MutexGuard`)
-/// are confined to blocks that never cross an `.await` boundary.
+/// This is called once at boot time (before authentication). It does not use
+/// a session token because no user is logged in yet.
 #[command]
 pub async fn resolve_boot_store(
     state: State<'_, AppState>,
     device_id: Option<String>,
 ) -> Result<BootResolution, AppError> {
-    // Resolve device_id from param or system hostname.
     let device_id = device_id
         .filter(|d| !d.is_empty())
         .or_else(|| {
@@ -308,7 +446,6 @@ pub async fn resolve_boot_store(
         .unwrap_or_default();
 
     if device_id.is_empty() {
-        // No device identity — fall straight to primary store.
         let primary_id = {
             let db = state.db.lock().await;
             let store = Store::new(&db);
@@ -328,8 +465,6 @@ pub async fn resolve_boot_store(
         });
     }
 
-    // Step 1: Look up terminal by device_id and capture (terminal_id, binding).
-    // Confined to a block so Store borrow doesn't cross .await.
     let binding_info: Option<(String, String, String, String)> = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
@@ -345,10 +480,7 @@ pub async fn resolve_boot_store(
             })
     };
 
-    // Step 2: Validate HMAC signature and verify the bound instance.
     if let Some((terminal_id, bound_store_id, bound_instance_id, signature)) = binding_info {
-        // ── Phase 2a: HMAC verification ──
-        // Keyring is !Send — must drop before any .await.
         let signature_valid = {
             let keyring = oz_security::default_keyring()
                 .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
@@ -378,8 +510,6 @@ pub async fn resolve_boot_store(
                 "device binding HMAC validation failed — falling back to primary store"
             );
         } else {
-            // ── Phase 2b: Verify instance exists in store DB ──
-            // Store borrows from MutexGuard — must be confined to a block.
             let instance_exists = {
                 state
                     .db_manager
@@ -388,7 +518,6 @@ pub async fn resolve_boot_store(
                     .and_then(|db_arc| {
                         let db = db_arc.lock().ok()?;
                         let store = Store::new(&db);
-                        // get_workspace_instance already filters for status='active'.
                         store
                             .get_workspace_instance(&bound_instance_id, None)
                             .ok()
@@ -420,7 +549,6 @@ pub async fn resolve_boot_store(
         }
     }
 
-    // Step 3: Fallback — return the primary store.
     let primary_id = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
@@ -446,6 +574,15 @@ pub async fn resolve_boot_store(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Token Rejection ─────────────────────────────────────────────────
+
+    #[test]
+    fn workspaces_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
 
     // ── WorkspaceTypeDto ─────────────────────────────────────────────────
 

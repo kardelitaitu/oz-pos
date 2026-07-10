@@ -73,16 +73,67 @@ export async function resolveBootStore(
   return invoke<BootResolution>('resolve_boot_store', { deviceId: deviceId ?? null });
 }
 
-// ── Instance Commands (ADR #4 Phase 1) ─────────────────────────────────
+// ── Scoped Commands (ADR #7) ───────────────────────────────────────────
+
+/** List workspace instances for the session user within their store. ADR #7. */
+export async function listWorkspacesScoped(
+  sessionToken: string,
+): Promise<WorkspaceDto[]> {
+  return invoke<WorkspaceDto[]>('list_workspaces_scoped', { sessionToken });
+}
+
+/** Get a single workspace instance. `is_default` reflects the session user. ADR #7. */
+export async function getWorkspaceInstanceScoped(
+  sessionToken: string,
+  instanceId: string,
+): Promise<WorkspaceDto> {
+  return invoke<WorkspaceDto>('get_workspace_instance_scoped', { sessionToken, instanceId });
+}
+
+/** Create a new workspace instance (admin). Permission from session. ADR #7. */
+export async function createWorkspaceInstanceScoped(
+  sessionToken: string,
+  req: CreateInstanceRequest,
+): Promise<WorkspaceDto> {
+  return invoke<WorkspaceDto>('create_workspace_instance_scoped', { sessionToken, req });
+}
+
+/** List screens for a workspace type from the store-scoped database. ADR #7. */
+export async function listWorkspaceScreensScoped(
+  sessionToken: string,
+  typeKey: string,
+): Promise<WorkspaceScreenDto[]> {
+  return invoke<WorkspaceScreenDto[]>('list_workspace_screens_scoped', { sessionToken, typeKey });
+}
+
+/** Replace all instance assignments for a user. Caller permission from session. ADR #7. */
+export async function setUserWorkspaceInstancesScoped(
+  sessionToken: string,
+  userId: string,
+  instanceIds: string[],
+  defaultInstanceId?: string,
+): Promise<void> {
+  return invoke<void>('set_user_workspace_instances_scoped', {
+    sessionToken,
+    userId,
+    instanceIds,
+    defaultInstanceId: defaultInstanceId ?? null,
+  });
+}
+
+/** Get instance IDs assigned to a user. Permission check from session. ADR #7. */
+export async function getUserWorkspaceInstancesScoped(
+  sessionToken: string,
+  userId: string,
+): Promise<string[]> {
+  return invoke<string[]>('get_user_workspace_instances_scoped', { sessionToken, userId });
+}
+
+// ── Original Commands (deprecated for multi-store — ADR #7) ────────────
 
 /**
- * List workspace instances accessible to the given role and user
- * within a specific store.
- *
- * Resolution order:
- * 1. role-owner → all active instances in store
- * 2. user has explicit assignments → only those instances
- * 3. Otherwise → instances of types in role_workspace_types
+ * @deprecated Use listWorkspacesScoped with session token instead (ADR #7).
+ * List workspace instances accessible to the given role and user.
  */
 export async function listWorkspaces(
   roleId: string,
@@ -97,8 +148,8 @@ export async function listWorkspaces(
 }
 
 /**
+ * @deprecated Use getWorkspaceInstanceScoped with session token instead (ADR #7).
  * Get a single workspace instance by ID.
- * When userId is provided, is_default reflects the user's default instance.
  */
 export async function getWorkspaceInstance(
   instanceId: string,
@@ -111,8 +162,8 @@ export async function getWorkspaceInstance(
 }
 
 /**
+ * @deprecated Use createWorkspaceInstanceScoped with session token instead (ADR #7).
  * Create a new workspace instance (admin only).
- * Requires staff:update permission.
  */
 export async function createWorkspaceInstance(
   req: CreateInstanceRequest,
@@ -125,6 +176,7 @@ export async function createWorkspaceInstance(
 }
 
 /**
+ * @deprecated Use listWorkspaceScreensScoped with session token instead (ADR #7).
  * List screens (nav items) for a given workspace type.
  */
 export async function listWorkspaceScreens(
@@ -138,9 +190,8 @@ export async function listWorkspaceScreens(
 // ── Instance Assignment Commands ────────────────────────────────────────
 
 /**
+ * @deprecated Use setUserWorkspaceInstancesScoped with session token instead (ADR #7).
  * Replace all instance assignments for a user.
- * Passing empty instanceIds clears all assignments.
- * Requires staff:update permission.
  */
 export async function setUserWorkspaceInstances(
   userId: string,
@@ -157,8 +208,8 @@ export async function setUserWorkspaceInstances(
 }
 
 /**
+ * @deprecated Use getUserWorkspaceInstancesScoped with session token instead (ADR #7).
  * Get explicit instance IDs assigned to a user.
- * Requires staff:read permission.
  */
 export async function getUserWorkspaceInstances(
   userId: string,
@@ -169,7 +220,7 @@ export async function getUserWorkspaceInstances(
 // ── Legacy Commands (backward compatible, deprecated) ──────────────────
 
 /**
- * @deprecated Use listWorkspaces with storeId instead (ADR #4).
+ * @deprecated Use listWorkspacesScoped instead (ADR #7).
  * List all workspace types.
  */
 export async function listAllWorkspaces(
@@ -179,7 +230,7 @@ export async function listAllWorkspaces(
 }
 
 /**
- * @deprecated Use setUserWorkspaceInstances with instance IDs instead (ADR #4).
+ * @deprecated Use setUserWorkspaceInstancesScoped instead (ADR #7).
  * Replace workspace key assignments for a user.
  */
 export async function setUserWorkspaces(
@@ -195,7 +246,7 @@ export async function setUserWorkspaces(
 }
 
 /**
- * @deprecated Use getUserWorkspaceInstances instead (ADR #4).
+ * @deprecated Use getUserWorkspaceInstancesScoped instead (ADR #7).
  * Get workspace keys assigned to a user.
  */
 export async function getUserWorkspaces(userId: string): Promise<string[]> {

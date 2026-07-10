@@ -2,6 +2,9 @@
 //!
 //! CRUD operations for registered POS terminals. Each POS device
 //! registers itself with a unique name and device identifier.
+//!
+//! All commands have scoped variants (ADR #7) that use the session token
+//! pattern. Old commands are preserved with deprecation notices.
 
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
@@ -139,13 +142,30 @@ pub struct UpdateTerminalResult {
     pub id: String,
 }
 
-// ── Commands ──────────────────────────────────────────────────────────
+// ── Read Commands ────────────────────────────────────────────────────
 
 /// List all registered terminals.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_terminals_scoped`.
 #[command]
 pub async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<TerminalDto>, AppError> {
     let db = state.db.lock().await;
     run_list_terminals(&db)
+}
+
+/// List terminals from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_terminals_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let result = run_list_terminals(&db);
+    drop(db);
+    result
 }
 
 fn run_list_terminals(conn: &rusqlite::Connection) -> Result<Vec<TerminalDto>, AppError> {
@@ -156,6 +176,8 @@ fn run_list_terminals(conn: &rusqlite::Connection) -> Result<Vec<TerminalDto>, A
 }
 
 /// Get a single terminal by id.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_terminal_scoped`.
 #[command]
 pub async fn get_terminal(
     id: String,
@@ -171,7 +193,251 @@ pub async fn get_terminal(
     Ok(terminal.map(TerminalDto::from))
 }
 
+/// Get a terminal from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn get_terminal_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<TerminalDto>, AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let terminal = store.get_terminal(&id)?;
+    drop(db);
+
+    Ok(terminal.map(TerminalDto::from))
+}
+
+/// Ping a terminal to update its last_seen_at timestamp.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `ping_terminal_scoped`.
+#[command]
+pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    store.ping_terminal(&id)?;
+    drop(db);
+
+    tracing::debug!(id, "terminal pinged");
+    Ok(())
+}
+
+/// Ping a terminal in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn ping_terminal_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    store.ping_terminal(&id)?;
+    drop(db);
+
+    tracing::debug!(id, "terminal pinged (scoped)");
+    Ok(())
+}
+
+/// List feature overrides for a terminal.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_terminal_overrides_scoped`.
+#[command]
+pub async fn list_terminal_overrides(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalFeatureOverride>, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let overrides = store.list_terminal_overrides(&terminal_id)?;
+    drop(db);
+
+    Ok(overrides)
+}
+
+/// List terminal overrides from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_terminal_overrides_scoped(
+    session_token: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalFeatureOverride>, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let overrides = store.list_terminal_overrides(&terminal_id)?;
+    drop(db);
+
+    Ok(overrides)
+}
+
+/// List all terminal profiles.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_terminal_profiles_scoped`.
+#[command]
+pub async fn list_terminal_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalProfileDto>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let profiles = store.list_terminal_profiles()?;
+    drop(db);
+    Ok(profiles.into_iter().map(TerminalProfileDto::from).collect())
+}
+
+/// List terminal profiles from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_terminal_profiles_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalProfileDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let profiles = store.list_terminal_profiles()?;
+    drop(db);
+    Ok(profiles.into_iter().map(TerminalProfileDto::from).collect())
+}
+
+/// Get the profile for a terminal.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_terminal_profile_scoped`.
+#[command]
+pub async fn get_terminal_profile(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<TerminalProfileDto>, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let profile = store.get_terminal_profile(&terminal_id)?;
+    drop(db);
+
+    Ok(profile.map(TerminalProfileDto::from))
+}
+
+/// Get a terminal profile from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn get_terminal_profile_scoped(
+    session_token: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<TerminalProfileDto>, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let profile = store.get_terminal_profile(&terminal_id)?;
+    drop(db);
+
+    Ok(profile.map(TerminalProfileDto::from))
+}
+
+/// Get a terminal's device binding and validate its HMAC signature.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_device_binding_scoped`.
+#[command]
+pub async fn get_device_binding(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<DeviceBindingDto, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let binding = store.get_terminal_binding(&terminal_id)?;
+    drop(db);
+
+    build_device_binding_dto(&terminal_id, binding)
+}
+
+/// Get device binding from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn get_device_binding_scoped(
+    session_token: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<DeviceBindingDto, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let binding = store.get_terminal_binding(&terminal_id)?;
+    drop(db);
+
+    build_device_binding_dto(&terminal_id, binding)
+}
+
+fn build_device_binding_dto(
+    terminal_id: &str,
+    binding: Option<(String, String, String)>,
+) -> Result<DeviceBindingDto, AppError> {
+    match binding {
+        None => Ok(DeviceBindingDto {
+            bounded: false,
+            bound_store_id: None,
+            bound_instance_id: None,
+            signature_valid: false,
+        }),
+        Some((store_id, instance_id, signature)) => {
+            let keyring = oz_security::default_keyring()
+                .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+            let valid = verify_binding(
+                keyring.as_ref(),
+                terminal_id,
+                &store_id,
+                &instance_id,
+                &signature,
+            )
+            .unwrap_or(false);
+
+            Ok(DeviceBindingDto {
+                bounded: true,
+                bound_store_id: Some(store_id),
+                bound_instance_id: Some(instance_id),
+                signature_valid: valid,
+            })
+        }
+    }
+}
+
+// ── Write Commands ───────────────────────────────────────────────────
+
 /// Register a new terminal.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `register_terminal_scoped`.
 #[command]
 pub async fn register_terminal(
     user_id: String,
@@ -200,7 +466,50 @@ pub async fn register_terminal(
     Ok(RegisterTerminalResult { id: terminal.id })
 }
 
+/// Register a terminal in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn register_terminal_scoped(
+    session_token: String,
+    args: RegisterTerminalArgs,
+    state: State<'_, AppState>,
+) -> Result<RegisterTerminalResult, AppError> {
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("device_id", &args.device_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let mut terminal = Terminal::new(args.name, args.device_id);
+    if let Some(secret) = args.terminal_secret {
+        terminal = terminal.with_secret(secret);
+    }
+    if let Some(meta) = args.metadata {
+        terminal = terminal.with_metadata(meta);
+    }
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_REGISTER,
+    )?;
+    store.create_terminal(&terminal)?;
+    drop(db);
+
+    tracing::info!(id = %terminal.id, name = %terminal.name, "terminal registered (scoped)");
+    Ok(RegisterTerminalResult { id: terminal.id })
+}
+
 /// Update an existing terminal.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `update_terminal_scoped`.
 #[command]
 pub async fn update_terminal(
     user_id: String,
@@ -243,21 +552,64 @@ pub async fn update_terminal(
     Ok(UpdateTerminalResult { id: terminal.id })
 }
 
-/// Update a terminal's last_seen_at timestamp (heartbeat).
+/// Update a terminal in the store resolved from a session token. ADR #7.
 #[command]
-pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
-    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+pub async fn update_terminal_scoped(
+    session_token: String,
+    args: UpdateTerminalArgs,
+    state: State<'_, AppState>,
+) -> Result<UpdateTerminalResult, AppError> {
+    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let db = state.db.lock().await;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    store.ping_terminal(&id)?;
+
+    let mut terminal = store
+        .get_terminal(&args.id)?
+        .ok_or_else(|| AppError::Invalid(format!("terminal '{}' not found", args.id)))?;
+
+    if let Some(name) = args.name {
+        validate_not_empty("name", &name).map_err(|e| AppError::Invalid(e.to_string()))?;
+        terminal.name = name;
+    }
+    if let Some(device_id) = args.device_id {
+        validate_not_empty("device_id", &device_id)
+            .map_err(|e| AppError::Invalid(e.to_string()))?;
+        terminal.device_id = device_id;
+    }
+    if let Some(secret) = args.terminal_secret {
+        terminal.terminal_secret = Some(secret);
+    }
+    if let Some(active) = args.is_active {
+        terminal.is_active = active;
+    }
+    if let Some(meta) = args.metadata {
+        terminal.metadata = Some(meta);
+    }
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    store.update_terminal(&terminal)?;
     drop(db);
 
-    tracing::debug!(id, "terminal pinged");
-    Ok(())
+    tracing::info!(id = %terminal.id, "terminal updated (scoped)");
+    Ok(UpdateTerminalResult { id: terminal.id })
 }
 
 /// Delete a terminal by id.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_scoped`.
 #[command]
 pub async fn delete_terminal(
     user_id: String,
@@ -276,24 +628,40 @@ pub async fn delete_terminal(
     Ok(())
 }
 
-/// List all feature overrides for a terminal.
+/// Delete a terminal in the store resolved from a session token. ADR #7.
 #[command]
-pub async fn list_terminal_overrides(
-    terminal_id: String,
+pub async fn delete_terminal_scoped(
+    session_token: String,
+    id: String,
     state: State<'_, AppState>,
-) -> Result<Vec<TerminalFeatureOverride>, AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
+) -> Result<(), AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let db = state.db.lock().await;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let overrides = store.list_terminal_overrides(&terminal_id)?;
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_DELETE,
+    )?;
+    store.delete_terminal(&id)?;
     drop(db);
 
-    Ok(overrides)
+    tracing::info!(id, "terminal deleted (scoped)");
+    Ok(())
 }
 
 /// Set (upsert) a feature override for a terminal.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `set_terminal_override_scoped`.
 #[command]
 pub async fn set_terminal_override(
     user_id: String,
@@ -317,6 +685,108 @@ pub async fn set_terminal_override(
         feature,
         enabled,
         "terminal feature override set"
+    );
+    Ok(())
+}
+
+/// Set a terminal override in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn set_terminal_override_scoped(
+    session_token: String,
+    terminal_id: String,
+    feature: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    store.set_terminal_override(&terminal_id, &feature, enabled)?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id,
+        feature,
+        enabled,
+        "terminal feature override set (scoped)"
+    );
+    Ok(())
+}
+
+/// Delete a feature override for a terminal.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_override_scoped`.
+#[command]
+pub async fn delete_terminal_override(
+    user_id: String,
+    terminal_id: String,
+    feature: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.delete_terminal_override(&terminal_id, &feature)?;
+    drop(db);
+
+    tracing::info!(terminal_id, feature, "terminal feature override deleted");
+    Ok(())
+}
+
+/// Delete a terminal override in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn delete_terminal_override_scoped(
+    session_token: String,
+    terminal_id: String,
+    feature: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    store.delete_terminal_override(&terminal_id, &feature)?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id,
+        feature,
+        "terminal feature override deleted (scoped)"
     );
     Ok(())
 }
@@ -353,24 +823,9 @@ pub struct SetTerminalProfileArgs {
     pub locked_screen: Option<String>,
 }
 
-/// Get the profile for a terminal.
-#[command]
-pub async fn get_terminal_profile(
-    terminal_id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<TerminalProfileDto>, AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let profile = store.get_terminal_profile(&terminal_id)?;
-    drop(db);
-
-    Ok(profile.map(TerminalProfileDto::from))
-}
-
 /// Set (upsert) the profile for a terminal.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `set_terminal_profile_scoped`.
 #[command]
 pub async fn set_terminal_profile(
     user_id: String,
@@ -400,19 +855,51 @@ pub async fn set_terminal_profile(
     Ok(())
 }
 
-/// List all terminal profiles.
+/// Set a terminal profile in the store resolved from a session token. ADR #7.
 #[command]
-pub async fn list_terminal_profiles(
+pub async fn set_terminal_profile_scoped(
+    session_token: String,
+    args: SetTerminalProfileArgs,
     state: State<'_, AppState>,
-) -> Result<Vec<TerminalProfileDto>, AppError> {
-    let db = state.db.lock().await;
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &args.terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("profile_type", &args.profile_type)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let profiles = store.list_terminal_profiles()?;
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    store.set_terminal_profile(
+        &args.terminal_id,
+        &args.profile_type,
+        args.locked_screen.as_deref(),
+    )?;
     drop(db);
-    Ok(profiles.into_iter().map(TerminalProfileDto::from).collect())
+
+    tracing::info!(
+        terminal_id = %args.terminal_id,
+        profile_type = %args.profile_type,
+        "terminal profile set (scoped)"
+    );
+    Ok(())
 }
 
 /// Delete a terminal's profile.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_profile_scoped`.
 #[command]
 pub async fn delete_terminal_profile(
     user_id: String,
@@ -432,7 +919,39 @@ pub async fn delete_terminal_profile(
     Ok(())
 }
 
-// ── Device Binding Commands (ADR #4 Phase 1b) ─────────────────────
+/// Delete a terminal profile in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn delete_terminal_profile_scoped(
+    session_token: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    store.delete_terminal_profile(&terminal_id)?;
+    drop(db);
+
+    tracing::info!(terminal_id, "terminal profile deleted (scoped)");
+    Ok(())
+}
+
+// ── Device Binding Commands ────────────────────────────────────────
 
 /// Arguments for setting a device binding.
 #[derive(Debug, Deserialize)]
@@ -445,9 +964,7 @@ pub struct SetDeviceBindingArgs {
 
 /// Set (or update) a terminal's device binding with HMAC signature.
 ///
-/// The binding directs the terminal to boot directly into a specific
-/// store + workspace instance, skipping all pickers. The HMAC signature
-/// makes tampering detectable (not impossible — see ADR #4 §2).
+/// **Deprecated for multi-store (ADR #7):** Use `set_device_binding_scoped`.
 #[command]
 pub async fn set_device_binding(
     user_id: String,
@@ -461,8 +978,6 @@ pub async fn set_device_binding(
     validate_not_empty("bound_instance_id", &args.bound_instance_id)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    // Sign the binding BEFORE acquiring the db lock — keyring is not Send.
-    // Use a block so keyring goes out of scope before the .await.
     let signature = {
         let keyring = oz_security::default_keyring()
             .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
@@ -494,6 +1009,64 @@ pub async fn set_device_binding(
     Ok(())
 }
 
+/// Set a device binding in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn set_device_binding_scoped(
+    session_token: String,
+    args: SetDeviceBindingArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &args.terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("bound_store_id", &args.bound_store_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("bound_instance_id", &args.bound_instance_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let session = state.resolve_session(&session_token)?;
+
+    let signature = {
+        let keyring = oz_security::default_keyring()
+            .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+        sign_binding(
+            keyring.as_ref(),
+            &args.terminal_id,
+            &args.bound_store_id,
+            &args.bound_instance_id,
+        )?
+    };
+
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    store.update_terminal_binding(
+        &args.terminal_id,
+        &args.bound_store_id,
+        &args.bound_instance_id,
+        &signature,
+    )?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id = %args.terminal_id,
+        store_id = %args.bound_store_id,
+        instance_id = %args.bound_instance_id,
+        "device binding set (scoped)"
+    );
+    Ok(())
+}
+
 /// DTO for device binding info.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -504,54 +1077,9 @@ pub struct DeviceBindingDto {
     pub signature_valid: bool,
 }
 
-/// Get a terminal's device binding and validate its HMAC signature.
-///
-/// Returns the binding info with `signature_valid` indicating whether
-/// the HMAC signature matches (false = tampered or no keyring secret).
-#[command]
-pub async fn get_device_binding(
-    terminal_id: String,
-    state: State<'_, AppState>,
-) -> Result<DeviceBindingDto, AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let binding = store.get_terminal_binding(&terminal_id)?;
-    drop(db);
-
-    match binding {
-        None => Ok(DeviceBindingDto {
-            bounded: false,
-            bound_store_id: None,
-            bound_instance_id: None,
-            signature_valid: false,
-        }),
-        Some((store_id, instance_id, signature)) => {
-            // Verify signature outside the db lock — keyring is not Send.
-            let keyring = oz_security::default_keyring()
-                .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
-            let valid = verify_binding(
-                keyring.as_ref(),
-                &terminal_id,
-                &store_id,
-                &instance_id,
-                &signature,
-            )
-            .unwrap_or(false);
-
-            Ok(DeviceBindingDto {
-                bounded: true,
-                bound_store_id: Some(store_id),
-                bound_instance_id: Some(instance_id),
-                signature_valid: valid,
-            })
-        }
-    }
-}
-
 /// Clear a terminal's device binding.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `clear_device_binding_scoped`.
 #[command]
 pub async fn clear_device_binding(
     user_id: String,
@@ -571,25 +1099,35 @@ pub async fn clear_device_binding(
     Ok(())
 }
 
-/// Delete a single feature override for a terminal.
+/// Clear a device binding in the store resolved from a session token. ADR #7.
 #[command]
-pub async fn delete_terminal_override(
-    user_id: String,
+pub async fn clear_device_binding_scoped(
+    session_token: String,
     terminal_id: String,
-    feature: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     validate_not_empty("terminal_id", &terminal_id)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let db = state.db.lock().await;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.delete_terminal_override(&terminal_id, &feature)?;
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    store.clear_terminal_binding(&terminal_id)?;
     drop(db);
 
-    tracing::info!(terminal_id, feature, "terminal feature override deleted");
+    tracing::info!(terminal_id, "device binding cleared (scoped)");
     Ok(())
 }
 
@@ -601,6 +1139,13 @@ mod tests {
 
     fn fresh_conn() -> Connection {
         migrations::fresh_db()
+    }
+
+    #[test]
+    fn terminals_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 
     #[test]
@@ -622,7 +1167,6 @@ mod tests {
 
         let terminals = run_list_terminals(&conn).unwrap();
         assert_eq!(terminals.len(), 2);
-        // Ordered by name: Drive-Thru, Front Counter
         assert_eq!(terminals[0].name, "Drive-Thru");
         assert_eq!(terminals[1].name, "Front Counter");
     }
@@ -699,7 +1243,6 @@ mod tests {
         let t = Terminal::new("Counter", "host-06");
         store.create_terminal(&t).unwrap();
 
-        // Initially last_seen_at is None.
         assert!(
             store
                 .get_terminal(&t.id)
