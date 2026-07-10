@@ -146,7 +146,7 @@ pub enum InstanceStatus {
 - [x] Wire entitlement filtering into `list_workspaces_scoped` Tauri command (filters by `tier.allows_workspace_type()`).
 - [x] Write tests (14 subscription + 22 workspace = 36/36 pass).
 - [x] Implement entitlement check during session resolution (filter `list_workspaces` by tier-allowed types via `list_workspaces_with_entitlement()`).
-- [ ] Implement 14-day offline grace and monotonic clock rollback detection.
+- [x] Implement 14-day offline grace period (`is_within_grace_period()`, `effective_tier()`) and monotonic clock rollback detection (`validate_clock_rollback()`, `compute_max_ledger_timestamp()`). Wired into both `create_workspace_instance_scoped` and `list_workspaces_scoped`.
 - [ ] Implement automatic instance recovery on tier upgrade (iterates all store DBs).
 - [ ] Run `cargo clippy -p oz-core -- -D warnings` and full test suite.
 

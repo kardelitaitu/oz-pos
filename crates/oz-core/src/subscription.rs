@@ -1,5 +1,6 @@
-//! Subscription tier definitions, signature verification, and quota
-//! enforcement for ADR #5 (Subscription Tier & Entitlement Architecture).
+//! Subscription tier definitions, signature verification, quota
+//! enforcement, clock rollback detection, and offline grace period
+//! for ADR #5 (Subscription Tier & Entitlement Architecture).
 //!
 //! The `tenant_subscription` table lives in the global database. This
 //! module provides the Rust types and logic for reading that table,
@@ -10,6 +11,16 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
+
+/// Maximum clock skew tolerance before detecting tampering (5 minutes).
+const CLOCK_SKEW_TOLERANCE_MINUTES: i64 = 5;
+
+/// Offline grace period for paid tiers (14 days). After this period
+/// without a successful cloud sync, the tier reverts to Free quotas.
+const OFFLINE_GRACE_DAYS: i64 = 14;
+
+/// Tolerance window in seconds for timestamp comparison.
+const CLOCK_SKEW_TOLERANCE_SECONDS: i64 = CLOCK_SKEW_TOLERANCE_MINUTES * 60;
 
 // ── Instance Status ─────────────────────────────────────────────────
 
@@ -193,6 +204,136 @@ impl TenantSubscription {
         Err(CoreError::InvalidSubscriptionSignature(
             "Subscription signature verification is not yet implemented. Connect to cloud-server to validate your subscription.".into(),
         ))
+    }
+
+    /// Compute the maximum ledger timestamp across all domain tables
+    /// in the given database connection.
+    ///
+    /// Queries `MAX(created_at)` from the `sales` and `audit_log` tables.
+    /// The effective time is the maximum of these values (or `Utc::now()`
+    /// if all tables are empty). This prevents users from rolling back
+    /// their OS clock to bypass subscription expiration.
+    ///
+    /// In multi-store mode (Phase 2), this would iterate all store
+    /// databases and return the global maximum.
+    pub fn compute_max_ledger_timestamp(conn: &rusqlite::Connection) -> Result<String, CoreError> {
+        // Get the most recent timestamp from sales.
+        let max_sales: Option<String> = conn
+            .query_row("SELECT MAX(created_at) FROM sales", [], |row| row.get(0))
+            .unwrap_or(None);
+
+        // Get the most recent timestamp from audit_log.
+        let max_audit: Option<String> = conn
+            .query_row("SELECT MAX(created_at) FROM audit_log", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(None);
+
+        // Pick the maximum of the two ledger timestamps.
+        let ledger_max = match (max_sales, max_audit) {
+            (Some(a), Some(b)) => {
+                if a > b {
+                    a
+                } else {
+                    b
+                }
+            }
+            (Some(v), None) | (None, Some(v)) => v,
+            (None, None) => {
+                // No ledger data — use current time.
+                return Ok(chrono::Utc::now().to_rfc3339());
+            }
+        };
+
+        Ok(ledger_max)
+    }
+
+    /// Validate that the system clock has not been rolled back.
+    ///
+    /// Compares the maximum ledger timestamp against `Utc::now()`.
+    /// If the ledger has timestamps more than `CLOCK_SKEW_TOLERANCE`
+    /// in the future relative to the wall clock, the system detects
+    /// clock tampering and returns `CoreError::SystemClockTampered`.
+    pub fn validate_clock_rollback(conn: &rusqlite::Connection) -> Result<(), CoreError> {
+        let ledger_ts = Self::compute_max_ledger_timestamp(conn)?;
+        let ledger_dt = chrono::DateTime::parse_from_rfc3339(&ledger_ts).map_err(|e| {
+            CoreError::Internal(format!(
+                "failed to parse ledger timestamp '{ledger_ts}': {e}"
+            ))
+        })?;
+        let now_naive = chrono::Utc::now().naive_utc();
+        let ledger_naive = ledger_dt.naive_utc();
+
+        // If the ledger timestamp is further in the future than our
+        // tolerance window, the clock has been rolled back.
+        let delta = ledger_naive.signed_duration_since(now_naive).num_seconds();
+
+        if delta > CLOCK_SKEW_TOLERANCE_SECONDS {
+            return Err(CoreError::SystemClockTampered(format!(
+                "Ledger timestamp {ledger_ts} is {delta}s ahead of system clock. \
+                 Clock rollback detected — register locked until online cloud sync."
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Check if the subscription is within the offline grace period.
+    ///
+    /// Free tier has no grace period (always "within grace" since it's free).
+    /// Paid tiers (Pro, Premium, Enterprise) get 14 days offline before
+    /// quotas revert to Free.
+    ///
+    /// A canceled subscription is never within grace.
+    ///
+    /// Returns `true` if the subscription is still valid (not expired or
+    /// within grace period).
+    pub fn is_within_grace_period(&self) -> bool {
+        // Canceled subscriptions are never within grace.
+        if self.status == "canceled" {
+            return false;
+        }
+
+        // Free tier — always within grace.
+        if self.tier == SubscriptionTier::Free {
+            return true;
+        }
+
+        // No expiry — lifetime/perpetual license.
+        let expires_at = match &self.expires_at {
+            Some(ts) => ts.clone(),
+            None => return true,
+        };
+
+        let expiry = match chrono::DateTime::parse_from_rfc3339(&expires_at) {
+            Ok(dt) => dt,
+            Err(_) => return false, // Unparseable expiry → assume expired
+        };
+
+        let now = chrono::Utc::now();
+        let grace_deadline = expiry + chrono::Duration::days(OFFLINE_GRACE_DAYS);
+
+        now <= grace_deadline
+    }
+
+    /// Determine the effective subscription tier after applying
+    /// offline grace rules.
+    ///
+    /// - If the subscription has not expired (or is within the 14-day
+    ///   grace period), returns the actual tier.
+    /// - If the grace period has elapsed and the register is still
+    ///   offline, returns `Free` (downgraded).
+    pub fn effective_tier(&self) -> SubscriptionTier {
+        if self.is_within_grace_period() {
+            self.tier.clone()
+        } else {
+            tracing::warn!(
+                tier = %self.tier.name(),
+                expires_at = ?self.expires_at,
+                "subscription grace period expired — reverting to Free tier"
+            );
+            SubscriptionTier::Free
+        }
     }
 }
 
@@ -432,5 +573,193 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("kds"));
         assert!(msg.contains("Free"));
+    }
+
+    // ── Clock Rollback Detection ──────────────────────────
+
+    #[test]
+    fn clock_rollback_detects_future_timestamps() {
+        use crate::migrations;
+        let conn = migrations::fresh_db();
+
+        // Insert a sale with a timestamp far in the future.
+        conn.execute(
+            "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
+             VALUES ('sale-1', 'completed', 1000, 'USD', 1, '2099-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let result = TenantSubscription::validate_clock_rollback(&conn);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("system clock tampered"));
+        assert!(err.contains("2099"));
+    }
+
+    #[test]
+    fn clock_rollback_passes_with_recent_timestamps() {
+        use crate::migrations;
+        let conn = migrations::fresh_db();
+
+        // Insert a sale with a recent timestamp.
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
+             VALUES ('sale-1', 'completed', 1000, 'USD', 1, ?1, ?1)",
+            rusqlite::params![now],
+        )
+        .unwrap();
+
+        let result = TenantSubscription::validate_clock_rollback(&conn);
+        assert!(result.is_ok(), "expected OK, got: {result:?}");
+    }
+
+    #[test]
+    fn clock_rollback_passes_with_empty_tables() {
+        use crate::migrations;
+        let conn = migrations::fresh_db();
+        // No sales or audit_logs — should default to Utc::now().
+        let result = TenantSubscription::validate_clock_rollback(&conn);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn compute_max_ledger_timestamp_prefers_recent_over_older() {
+        use crate::migrations;
+        let conn = migrations::fresh_db();
+
+        conn.execute(
+            "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
+             VALUES ('s1', 'completed', 1000, 'USD', 1, '2025-06-01T00:00:00.000Z', '2025-06-01T00:00:00.000Z')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO audit_log (id, action, user_id, created_at)
+             VALUES ('a1', 'login', 'user-1', '2025-07-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let ts = TenantSubscription::compute_max_ledger_timestamp(&conn).unwrap();
+        // Should pick the audit_log timestamp (2025-07-01) over sales (2025-06-01).
+        assert!(ts.contains("2025-07-01"), "expected July, got: {ts}");
+    }
+
+    // ── Offline Grace Period ──────────────────────────────
+
+    #[test]
+    fn free_tier_always_within_grace() {
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Free,
+            status: "active".into(),
+            expires_at: Some("2020-01-01T00:00:00.000Z".into()),
+            max_stores: 1,
+            max_pos_instances: 1,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            updated_at: String::new(),
+        };
+        assert!(sub.is_within_grace_period());
+        assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+    }
+
+    #[test]
+    fn paid_tier_with_no_expiry_within_grace() {
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Pro,
+            status: "active".into(),
+            expires_at: None, // lifetime
+            max_stores: 2,
+            max_pos_instances: 3,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            updated_at: String::new(),
+        };
+        assert!(sub.is_within_grace_period());
+        assert_eq!(sub.effective_tier(), SubscriptionTier::Pro);
+    }
+
+    #[test]
+    fn paid_tier_within_14_day_grace() {
+        // Expiry is 7 days ago — still within 14-day grace.
+        let recent = chrono::Utc::now() - chrono::Duration::days(7);
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Premium,
+            status: "active".into(),
+            expires_at: Some(recent.to_rfc3339()),
+            max_stores: 5,
+            max_pos_instances: 10,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            updated_at: String::new(),
+        };
+        assert!(sub.is_within_grace_period());
+        assert_eq!(sub.effective_tier(), SubscriptionTier::Premium);
+    }
+
+    #[test]
+    fn paid_tier_outside_grace_downgrades_to_free() {
+        // Expiry is 30 days ago — outside 14-day grace.
+        let old = chrono::Utc::now() - chrono::Duration::days(30);
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Premium,
+            status: "active".into(),
+            expires_at: Some(old.to_rfc3339()),
+            max_stores: 5,
+            max_pos_instances: 10,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            updated_at: String::new(),
+        };
+        assert!(!sub.is_within_grace_period());
+        assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+    }
+
+    #[test]
+    fn enterprise_lifetime_never_downgrades() {
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Enterprise,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 0,
+            max_pos_instances: 0,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            updated_at: String::new(),
+        };
+        assert!(sub.is_within_grace_period());
+        assert_eq!(sub.effective_tier(), SubscriptionTier::Enterprise);
+    }
+
+    // ── constants ────────────────────────────────────────
+
+    #[test]
+    fn canceled_subscription_not_within_grace() {
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Pro,
+            status: "canceled".into(),
+            expires_at: None, // lifetime but canceled
+            max_stores: 2,
+            max_pos_instances: 3,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            updated_at: String::new(),
+        };
+        assert!(!sub.is_within_grace_period());
+        assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+    }
+
+    #[test]
+    fn clock_skew_constants_are_reasonable() {
+        assert_eq!(CLOCK_SKEW_TOLERANCE_MINUTES, 5);
+        assert_eq!(CLOCK_SKEW_TOLERANCE_SECONDS, 300);
+        assert_eq!(OFFLINE_GRACE_DAYS, 14);
     }
 }

@@ -67,12 +67,13 @@ pub async fn list_workspaces_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceDto>, AppError> {
-    let session = state.resolve_session(&session_token)?;
-    // ADR #5: Load subscription from global DB for entitlement filtering.
+    let session = state.resolve_session(&session_token)?;    // ADR #5: Load subscription from global DB for entitlement filtering.
+    // Also validates the system clock has not been rolled back.
     let tier = {
         let global_db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&global_db)?;
         TenantSubscription::load(&global_db, "default")?
-            .map(|sub| sub.tier)
+            .map(|sub| sub.effective_tier())
             .unwrap_or_else(|| {
                 tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
                 oz_core::SubscriptionTier::Free
@@ -129,10 +130,12 @@ pub async fn create_workspace_instance_scoped(
     let session = state.resolve_session(&session_token)?;
 
     // ADR #5: Load subscription from the GLOBAL database first.
+    // Also validates the system clock has not been rolled back.
     // This must happen before opening the store DB to avoid holding
     // a std::sync::MutexGuard across an .await boundary.
     let sub = {
         let global_db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&global_db)?;
         TenantSubscription::load(&global_db, "default")?
             .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
     };
