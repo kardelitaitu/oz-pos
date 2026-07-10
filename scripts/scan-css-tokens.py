@@ -254,11 +254,15 @@ def main():
     print()
 
     tokens_css_refs: dict[str, int] = defaultdict(int)
-    tokens_css_text = TOKENS_FILE.read_text(encoding="utf-8")
-    for m in VAR_REF_RE.finditer(tokens_css_text):
-        token_name = m.group(1)
-        if token_name in known_tokens:
-            tokens_css_refs[token_name] += 1
+    # Count self-references in both token definition files
+    token_texts = [TOKENS_FILE.read_text(encoding="utf-8")]
+    if THEME_TOKENS_FILE.exists():
+        token_texts.append(THEME_TOKENS_FILE.read_text(encoding="utf-8"))
+    for text in token_texts:
+        for m in VAR_REF_RE.finditer(text):
+            token_name = m.group(1)
+            if token_name in known_tokens:
+                tokens_css_refs[token_name] += 1
 
     orphaned = []
     for token in sorted(known_tokens):
