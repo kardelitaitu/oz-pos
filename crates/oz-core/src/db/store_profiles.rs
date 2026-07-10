@@ -213,7 +213,8 @@ mod tests {
                 "2026-06-30T12:00:00Z",
                 "2026-06-30T12:00:00Z",
             ],
-        ).unwrap();
+        )
+        .unwrap();
         (store, "default".into())
     }
 
