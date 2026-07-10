@@ -805,7 +805,7 @@ pub(crate) fn run_product_update(
     let bar = barcode.filter(|s| !s.is_empty());
 
     let product = store
-        .update_product(sku, name, money, cat, bar, None)
+        .update_product(sku, name, money, cat, bar, None, None)
         .map_err(|e| match &e {
             CoreError::NotFound { .. } => anyhow::anyhow!("Product not found: {sku}"),
             CoreError::Validation { message, .. } => anyhow::anyhow!("Validation error: {message}"),

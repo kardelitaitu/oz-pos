@@ -122,6 +122,11 @@ pub struct Sale {
     /// Customer ID linked to this sale for loyalty tracking.
     #[serde(default)]
     pub customer_id: Option<String>,
+
+    /// Optimistic concurrency version (ADR #6).
+    /// Incremented on every status transition or void; compared before writing.
+    #[serde(default = "crate::default_version")]
+    pub version: i64,
 }
 
 impl Sale {
@@ -187,6 +192,7 @@ impl Sale {
             discount_label: cart.discount_label().map(String::from),
             subtotal: Money::zero(currency),
             tax_total: Money::zero(currency),
+            version: 1,
         })
     }
 

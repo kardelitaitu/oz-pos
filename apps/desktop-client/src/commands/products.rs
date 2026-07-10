@@ -617,6 +617,7 @@ pub async fn update_product(
         args.category_id.as_deref(),
         args.barcode.as_deref(),
         args.product_type.as_deref(),
+        None,
     )?;
 
     store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
@@ -667,6 +668,7 @@ pub async fn update_product_scoped(
             args.category_id.as_deref(),
             args.barcode.as_deref(),
             args.product_type.as_deref(),
+            None,
         )?;
 
         store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;

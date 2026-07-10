@@ -139,8 +139,8 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 - [x] Choose and adopt UUIDv7 for all entity primary keys — replaced all 158 `Uuid::new_v4()` call sites with `Uuid::now_v7()` across the entire workspace. Added `v7` feature to workspace `uuid` dependency. Added `oz_core::new_id()` helper for future entity ID generation.
 - [x] Implement materialized `stock_summary` cache rebuild from deltas — `rebuild_stock_summary()` method recomputes both `stock_summary` and `inventory` tables from `SUM(delta)` in a single transaction. Sync integration point ready but not yet wired. Added 2 new tests.
 - [x] Populate `source_terminal_id` and `source_user_id` from session context — `adjust_stock_with_reason` now accepts optional audit params. Scoped `adjust_stock_scoped` Tauri command passes `session.terminal_id` and `session.user_id`. Backward-compat `adjust_stock` passes `None`. Added 2 new tests verifying audit field persistence.
+- [x] Add `version` and `updated_at` optimistic concurrency fields to synced entities — migration 065 adds `version INTEGER NOT NULL DEFAULT 1` to both `products` and `sales`. `update_product` accepts `Option<i64>` for gradual adoption. `update_sale_status` and `void_sale` increment version on UPDATE. All struct literals and row mappers updated across the workspace.
 - [ ] Implement `FastPINOverlay.tsx` for shared touchscreen user switching.
-- [ ] Add `version` and `updated_at` optimistic concurrency fields to synced entities.
 - [ ] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database.
 - [ ] Cross-store delta routing via `platform/sync/`.
 

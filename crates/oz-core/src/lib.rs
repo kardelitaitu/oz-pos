@@ -83,6 +83,16 @@ pub fn new_id() -> String {
     uuid::Uuid::now_v7().to_string()
 }
 
+/// Default optimistic concurrency version (ADR #6).
+///
+/// Used as the `#[serde(default)]` value for [`Product::version`]
+/// and [`Sale::version`] so that deserialization from pre-migration
+/// payloads succeeds.
+#[doc(hidden)]
+pub fn default_version() -> i64 {
+    1
+}
+
 pub use audit::AuditEntry;
 #[cfg(feature = "cache-redis")]
 pub use cache::redis_cache::RedisCache;

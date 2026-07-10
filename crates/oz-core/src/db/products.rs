@@ -65,7 +65,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
-                     p.track_serial, p.product_type,
+                     p.track_serial, p.product_type, p.version,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -91,7 +91,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
-                     p.track_serial, p.product_type,
+                     p.track_serial, p.product_type, p.version,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -124,7 +124,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
-                     p.track_serial, p.product_type,
+                     p.track_serial, p.product_type, p.version,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -188,8 +188,8 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         let result = tx.execute(
-            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1)",
             params![
                 id,
                 sku.trim(),
@@ -259,10 +259,18 @@ impl Store<'_> {
             price_updated_at: now,
             track_serial: false,
             product_type: parsed_pt,
+            version: 1,
         })
     }
 
     /// Update an existing product identified by SKU.
+    ///
+    /// Uses optimistic concurrency (ADR #6): when `expected_version` is
+    /// `Some`, includes `version` in the WHERE clause and increments it
+    /// on success. Returns [`CoreError::Conflict`] if another process
+    /// modified the product concurrently. When `None`, the update is
+    /// performed unconditionally (backward-compat for callers that do
+    /// not track versions).
     pub fn update_product(
         &self,
         sku: &str,
@@ -271,6 +279,7 @@ impl Store<'_> {
         category_id: Option<&str>,
         barcode: Option<&str>,
         product_type: Option<&str>,
+        expected_version: Option<i64>,
     ) -> Result<Product, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -290,26 +299,64 @@ impl Store<'_> {
             .expect("currency bytes are valid UTF-8")
             .to_owned();
 
-        let rows = self.conn.execute(
-            "UPDATE products
-             SET name = ?1, price_minor = ?2, currency = ?3,
-                 category_id = ?4, barcode = ?5, updated_at = ?6,
-                 product_type = COALESCE(?7, product_type),
-                 price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END
-             WHERE sku = ?8",
-            params![
-                name.trim(),
-                price.minor_units,
-                cur_str,
-                category_id,
-                barcode,
-                now,
-                product_type,
-                sku,
-            ],
-        )?;
+        let rows = if let Some(ver) = expected_version {
+            self.conn.execute(
+                "UPDATE products
+                 SET name = ?1, price_minor = ?2, currency = ?3,
+                     category_id = ?4, barcode = ?5, updated_at = ?6,
+                     product_type = COALESCE(?7, product_type),
+                     price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END,
+                     version = version + 1
+                 WHERE sku = ?8 AND version = ?9",
+                params![
+                    name.trim(),
+                    price.minor_units,
+                    cur_str,
+                    category_id,
+                    barcode,
+                    now,
+                    product_type,
+                    sku,
+                    ver,
+                ],
+            )?
+        } else {
+            self.conn.execute(
+                "UPDATE products
+                 SET name = ?1, price_minor = ?2, currency = ?3,
+                     category_id = ?4, barcode = ?5, updated_at = ?6,
+                     product_type = COALESCE(?7, product_type),
+                     price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END,
+                     version = version + 1
+                 WHERE sku = ?8",
+                params![
+                    name.trim(),
+                    price.minor_units,
+                    cur_str,
+                    category_id,
+                    barcode,
+                    now,
+                    product_type,
+                    sku,
+                ],
+            )?
+        };
 
         if rows == 0 {
+            if expected_version.is_some() {
+                // Determine if it's a version conflict or a not-found.
+                let exists: bool = self.conn.query_row(
+                    "SELECT COUNT(*) > 0 FROM products WHERE sku = ?1",
+                    params![sku],
+                    |r| r.get(0),
+                )?;
+                if exists {
+                    return Err(CoreError::Conflict {
+                        entity: "product",
+                        field: "version",
+                    });
+                }
+            }
             return Err(CoreError::NotFound {
                 entity: "product",
                 id: sku.to_owned(),
@@ -321,7 +368,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -334,7 +381,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);
@@ -1109,7 +1156,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let updated = store(&conn)
-            .update_product("DRINK-001", "Latte", price(400), None, None, None)
+            .update_product("DRINK-001", "Latte", price(400), None, None, None, Some(1))
             .unwrap();
         assert_eq!(updated.name, "Latte");
         assert_eq!(updated.price.minor_units, 400);
@@ -1120,7 +1167,7 @@ mod tests {
     fn update_product_not_found() {
         let conn = fresh();
         let err = store(&conn)
-            .update_product("NOPE", "X", price(1), None, None, None)
+            .update_product("NOPE", "X", price(1), None, None, None, Some(1))
             .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
@@ -1130,7 +1177,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "", price(1), None, None, None)
+            .update_product("DRINK-001", "", price(1), None, None, None, Some(1))
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
@@ -1140,7 +1187,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "X", price(-1), None, None, None)
+            .update_product("DRINK-001", "X", price(-1), None, None, None, Some(1))
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
     }
@@ -1157,6 +1204,7 @@ mod tests {
                 Some("cat-food"),
                 None,
                 None,
+                Some(1),
             )
             .unwrap();
         assert_eq!(updated.category_id.as_deref(), Some("cat-food"));
@@ -1410,8 +1458,8 @@ mod tests {
 
     fn seed_product_variant_parent(conn: &Connection) {
         conn.execute_batch(
-            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES
-                ('pv-parent', 'PARENT-001', 'Parent Product', 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at, price_updated_at) VALUES
+                ('pv-parent', 'PARENT-001', 'Parent Product', 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
     }
 

@@ -317,6 +317,7 @@ pub async fn import_data(
                     product.category_id.as_deref(),
                     product.barcode.as_ref().map(|b| b.as_str()),
                     Some(product.product_type.as_str()),
+                    None,
                 )?;
             } else {
                 store.create_product(

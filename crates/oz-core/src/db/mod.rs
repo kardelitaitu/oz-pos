@@ -146,5 +146,6 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
             .as_deref()
             .and_then(crate::ProductType::parse_str)
             .unwrap_or_default(),
+        version: row.get("version").unwrap_or(1),
     })
 }
