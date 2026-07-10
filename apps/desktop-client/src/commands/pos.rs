@@ -103,7 +103,11 @@ pub async fn set_cart_discount_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    require_permission_for_user(&store, &session.user_id, oz_core::permissions::SALES_DISCOUNT)?;
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_DISCOUNT,
+    )?;
 
     let mut cart = store
         .load_active_cart(&args.cart_id)?
@@ -174,7 +178,9 @@ pub async fn list_active_carts_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<CartId>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let ids = store.list_active_carts()?;
     drop(db);
@@ -206,7 +212,9 @@ pub async fn get_active_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<Cart>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let cart = store.load_active_cart(&cart_id)?;
     drop(db);
@@ -281,7 +289,13 @@ pub async fn override_line_price(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    run_override_line_price(&db, &args.cart_id, &args.line_id, args.new_price_minor, &args.user_id)
+    run_override_line_price(
+        &db,
+        &args.cart_id,
+        &args.line_id,
+        args.new_price_minor,
+        &args.user_id,
+    )
 }
 
 /// Args for `override_line_price_scoped` — without `user_id`.
@@ -311,7 +325,13 @@ pub async fn override_line_price_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    run_override_line_price(&db, &args.cart_id, &args.line_id, args.new_price_minor, &session.user_id)
+    run_override_line_price(
+        &db,
+        &args.cart_id,
+        &args.line_id,
+        args.new_price_minor,
+        &session.user_id,
+    )
 }
 
 /// Shared business logic for overriding a line price.
@@ -645,9 +665,7 @@ pub async fn complete_sale_scoped(
 
         let cart = store
             .load_active_cart(&args.cart_id)?
-            .ok_or_else(|| {
-                AppError::Invalid(format!("cart not found: {}", args.cart_id))
-            })?;
+            .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
         store.delete_active_cart(&args.cart_id)?;
         cart // db lock dropped here
     };
@@ -665,8 +683,7 @@ pub async fn complete_sale_scoped(
                     sku: cl.sku.as_str().to_owned(),
                     qty: cl.qty,
                     unit_price_minor: cl.unit_price.minor_units,
-                    currency: String::from_utf8_lossy(&cl.unit_price.currency.0)
-                        .into_owned(),
+                    currency: String::from_utf8_lossy(&cl.unit_price.currency.0).into_owned(),
                 })
                 .collect();
 
@@ -688,10 +705,7 @@ pub async fn complete_sale_scoped(
                 .apply_discount(&lines)
                 .map_err(|e| AppError::Internal(e.to_string()))?
             {
-                let label = discount
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| "Lua Rule".into());
+                let label = discount.label.clone().unwrap_or_else(|| "Lua Rule".into());
                 if !(0..=100).contains(&discount.percent) {
                     return Err(AppError::Invalid(format!(
                         "Lua returned invalid discount percent: {}",
@@ -703,22 +717,13 @@ pub async fn complete_sale_scoped(
                 cart.set_discount(lua_pct, Some(label));
             }
 
-            let currency =
-                String::from_utf8_lossy(&cart.currency().0).into_owned();
-            let total_minor =
-                cart.total().map(|m| m.minor_units).unwrap_or(0);
+            let currency = String::from_utf8_lossy(&cart.currency().0).into_owned();
+            let total_minor = cart.total().map(|m| m.minor_units).unwrap_or(0);
             plugins
-                .fire_sale_before_complete(
-                    &lines,
-                    total_minor,
-                    &currency,
-                    &session.user_id,
-                )
+                .fire_sale_before_complete(&lines, total_minor, &currency, &session.user_id)
                 .map_err(|e| AppError::Internal(e.to_string()))?;
 
-            if let Some(pd) =
-                plugins.drain_pending_discounts().into_iter().next()
-            {
+            if let Some(pd) = plugins.drain_pending_discounts().into_iter().next() {
                 if !(0..=100).contains(&pd.percent) {
                     return Err(AppError::Invalid(format!(
                         "Plugin returned invalid discount percent: {}",
@@ -731,15 +736,9 @@ pub async fn complete_sale_scoped(
         }
     }
 
-    let mut sale =
-        oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
-            .ok_or_else(|| {
-                AppError::Invalid("cart total overflowed i64".into())
-            })?;
-    let has_splits = args
-        .payment_splits
-        .as_ref()
-        .is_some_and(|s| !s.is_empty());
+    let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
+        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
+    let has_splits = args.payment_splits.as_ref().is_some_and(|s| !s.is_empty());
     sale.payment_method = Some(if has_splits {
         "split".to_string()
     } else {
@@ -754,9 +753,7 @@ pub async fn complete_sale_scoped(
         let plugins = state.plugins.lock().await;
         if let Some(ref plugins) = *plugins {
             for cl in cart.lines() {
-                let currency_str =
-                    String::from_utf8_lossy(&cl.unit_price.currency.0)
-                        .into_owned();
+                let currency_str = String::from_utf8_lossy(&cl.unit_price.currency.0).into_owned();
                 if let Some(override_) = plugins
                     .calc_line_tax(
                         cl.sku.as_str(),
@@ -788,9 +785,7 @@ pub async fn complete_sale_scoped(
 
         if let Some(ref serial_numbers) = args.serial_numbers {
             for sn in serial_numbers {
-                if let Some(line) =
-                    sale.lines.iter_mut().find(|l| l.sku == sn.sku)
-                {
+                if let Some(line) = sale.lines.iter_mut().find(|l| l.sku == sn.sku) {
                     line.serial_number = Some(sn.serial.clone());
                 }
             }
@@ -800,12 +795,7 @@ pub async fn complete_sale_scoped(
 
         if let Some(ref splits) = args.payment_splits {
             if !splits.is_empty() {
-                store.create_payments(
-                    &sale_id,
-                    splits,
-                    &sale.currency,
-                    &sale.created_at,
-                )?;
+                store.create_payments(&sale_id, splits, &sale.currency, &sale.created_at)?;
             }
         } else {
             let single_split = vec![PaymentSplitArg {
@@ -815,12 +805,7 @@ pub async fn complete_sale_scoped(
                 gateway_status: None,
                 gateway_response: None,
             }];
-            store.create_payments(
-                &sale_id,
-                &single_split,
-                &sale.currency,
-                &sale.created_at,
-            )?;
+            store.create_payments(&sale_id, &single_split, &sale.currency, &sale.created_at)?;
         }
 
         store.update_sale_status(&sale_id, SaleStatus::Completed)?
@@ -898,7 +883,9 @@ pub async fn compute_cart_tax_scoped(
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let tax = store.compute_cart_tax(&lines, parsed)?;
     drop(db);
@@ -960,11 +947,18 @@ pub async fn hold_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<HoldCartResult, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let id = store.hold_cart(
-        &args.label, &args.cart_data, args.item_count, args.total_minor,
-        &args.currency, &args.bill_type, args.customer_name.as_deref(),
+        &args.label,
+        &args.cart_data,
+        args.item_count,
+        args.total_minor,
+        &args.currency,
+        &args.bill_type,
+        args.customer_name.as_deref(),
     )?;
     drop(db);
     tracing::info!(held_cart_id = %id, label = %args.label, "cart held (scoped)");
@@ -992,7 +986,9 @@ pub async fn list_held_carts_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let carts = store.list_held_carts()?;
     drop(db);
@@ -1020,7 +1016,9 @@ pub async fn list_open_bills_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let carts = store.list_open_bills()?;
     drop(db);
@@ -1050,7 +1048,9 @@ pub async fn get_held_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<oz_core::db::HeldCartFull>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let cart = store.get_held_cart(&id)?;
     drop(db);
@@ -1078,7 +1078,9 @@ pub async fn delete_held_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     store.delete_held_cart(&id)?;
     drop(db);

@@ -62,7 +62,14 @@ pub async fn process_refund(
     state: State<'_, AppState>,
 ) -> Result<ProcessRefundResult, AppError> {
     let db = state.db.lock().await;
-    run_process_refund(&db, &args.sale_id, &args.reason, args.note.as_deref(), &args.user_id, &args.lines)
+    run_process_refund(
+        &db,
+        &args.sale_id,
+        &args.reason,
+        args.note.as_deref(),
+        &args.user_id,
+        &args.lines,
+    )
 }
 
 /// Process a refund within the store resolved from a session token.
@@ -85,7 +92,14 @@ pub async fn process_refund_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    run_process_refund(&db, &args.sale_id, &args.reason, args.note.as_deref(), &session.user_id, &args.lines)
+    run_process_refund(
+        &db,
+        &args.sale_id,
+        &args.reason,
+        args.note.as_deref(),
+        &session.user_id,
+        &args.lines,
+    )
 }
 
 /// Shared business logic for processing a refund.

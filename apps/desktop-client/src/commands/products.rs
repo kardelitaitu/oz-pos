@@ -261,7 +261,9 @@ pub async fn lookup_by_barcode_scoped(
 ) -> Result<Option<ProductDto>, AppError> {
     validate_not_empty("barcode", &barcode).map_err(|e| AppError::Invalid(e.to_string()))?;
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     run_lookup_by_barcode(&db, &barcode)
 }
 
@@ -302,7 +304,9 @@ pub async fn lookup_product_by_sku_scoped(
 ) -> Result<Option<ProductDto>, AppError> {
     validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     run_lookup_product_by_sku(&db, &sku)
 }
 
