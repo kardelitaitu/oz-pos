@@ -1,59 +1,9 @@
-# ADR #4: Workspace Type/Instance Architecture
+# ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture
 
-**Status:** Accepted
+**Status:** Accepted (Updated 2026-07-10)
 **Date:** 2026-07-10
 **Author:** Architecture Team & OZ-POS Contributors
-**Tags:** architecture, workspaces, multi-store, data-scoping, multi-terminal
-
----
-
-## Implementation Checklist & Phased Rollout Tracker
-
-Use this master checklist to track execution progress across backend crates (`crates/oz-core`), security layers, Tauri IPC bridges, and frontend React components (`ui/src/`).
-
-### Phase 1: Database Schema & Core Backend Rust Models (`crates/oz-core`)
-- [ ] **Step 1.1**: Create SQL migration script (`crates/oz-core/migrations/004_workspace_instances.sql`) defining tables (`workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, `role_workspace_types`) with explicit `FOREIGN KEY (store_id) REFERENCES store_profiles(id) ON DELETE RESTRICT ON UPDATE CASCADE` constraints to prevent orphaned register crashes.
-- [ ] **Step 1.2**: Add SQL seed & backward-compatibility migration script to insert base templates (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`), auto-generate `default-<key>` instances (`store_id = NULL`), and migrate existing `user_workspaces` rows to `user_workspace_instances`.
-- [ ] **Step 1.3**: Define Rust DTOs and structs (`WorkspaceTypeRow`, `WorkspaceInstanceRow`, `WorkspaceDto`) in `crates/oz-core/src/db/workspaces.rs` with fields for `instance_id`, `type_key`, `name`, `description`, `icon`, `colour`, `render_mode`, and `store_id`.
-- [ ] **Step 1.4**: Implement core backend queries in `crates/oz-core/src/db/workspaces.rs`:
-  - `list_workspaces(&self, role_id: &str, user_id: Option<&str>) -> Result<Vec<WorkspaceDto>>` with exact precedence (`role-owner` bypass → assigned `user_workspace_instances` → fallback to `role_workspace_types`).
-  - `get_workspace_instance(&self, instance_id: &str) -> Result<WorkspaceDto>`
-  - `create_workspace_instance(&self, req: &CreateInstanceRequest) -> Result<WorkspaceDto>`
-- [ ] **Step 1.V1 (Verification - Unit Test)**: Write comprehensive unit test `test_workspace_instance_migration_and_resolution` in `crates/oz-core/src/db/workspaces.rs` using an in-memory SQLite database (`Store::open_in_memory()`) verifying migration execution, `default-<key>` creation, and `list_workspaces()` access precedence.
-- [ ] **Step 1.V2 (Verification - Quality Check)**: Run `cargo clippy -p oz-core -- -D warnings` and `cargo test -p oz-core db::workspaces` ensuring zero compilation warnings and 100% test pass rate.
-
-### Phase 2: Data Scoping Layer, Security Guard & Indexing (`crates/oz-core` / `oz-security`)
-- [ ] **Step 2.1**: Add data scoping columns via schema migration: `store_id` (TEXT NULL) on `products`, `orders`, `order_lines`, and `customers`; `warehouse_id` (TEXT NULL) on `stock` and `stock_counts`.
-- [ ] **Step 2.2**: Create prefix compound B-Tree indexes: `idx_orders_store_status (store_id, status, created_at DESC)`, `idx_order_lines_store_order (store_id, order_id)`, `idx_products_store_active (store_id, is_active, category_id)`, and `idx_stock_warehouse_item (warehouse_id, item_id)`.
-- [ ] **Step 2.3**: Implement type-safe `ScopeGuard` struct in `crates/oz-core/src/scope.rs` utilizing `ScopeMode` (`SingleStore`, `MultiStore`, `ChainGlobal`) and requiring cryptographic session `(user_id + terminal_id + instance_id)` validation via `oz-security`.
-- [ ] **Step 2.4**: Refactor domain `Store` CRUD methods (`get_products`, `list_orders`, `get_stock`, `create_order`) across all db modules (`sales.rs`, `products.rs`, `stock_counts.rs`) to mandate `&ScopeGuard` and dynamically expand query scoping (e.g. `WHERE store_id IN (...)` or bypass for `ChainGlobal`).
-- [ ] **Step 2.5**: Integrate time-ordered `UUIDv7` / `ULID` ID generation, optimistic concurrency fields (`version INTEGER`, `updated_at TEXT`), and the **CRDT Delta Ledger pattern** (`stock_movements` delta inserts instead of absolute quantity overwrites) to eliminate offline inventory race conditions.
-- [ ] **Step 2.V1 (Verification - Scope & Index Test)**: Write automated test `test_scope_guard_enforcement_and_indexing` verifying that cross-store access attempts throw `CoreError::UnauthorizedScope`, chain-wide aggregation succeeds for `ChainGlobal`, and confirm B-Tree index hits via `EXPLAIN QUERY PLAN`.
-- [ ] **Step 2.V2 (Verification - Quality Check)**: Run `cargo clippy -p oz-core -- -D warnings` and `cargo test -p oz-core` across all modified database modules.
-
-### Phase 3: Subscription Tier & Entitlement Enforcement (`crates/oz-core`)
-- [ ] **Step 3.1**: Create `tenant_subscription` table schema (`tenant_id`, `tier_key`, `status`, `expires_at`, `max_stores`, `max_pos_instances`, `allowed_types_json`, `signature`) and `SubscriptionTier` Rust struct in `crates/oz-core/src/subscription.rs` with RSA/HMAC anti-tamper signature validation.
-- [ ] **Step 3.2**: Integrate runtime quantity validation inside `create_workspace_instance()`, querying active instances by type and returning `CoreError::SubscriptionLimitExceeded` when tier register quota is reached.
-- [ ] **Step 3.3**: Implement `tier.allows_workspace_type(&instance.type_key)` entitlement checks at workspace boot time, returning `CoreError::SubscriptionUpgradeRequired` if specialized templates (`kds`, `analytics-pro`) are locked.
-- [ ] **Step 3.4**: Implement 14-day offline grace window with **Monotonic Ledger Clock Check** (`MAX(orders.created_at, audit_logs.created_at)`) to detect OS clock rollbacks (`CoreError::SystemClockTampered`), and three-state `InstanceStatus` (`Active`, `QuotaSuspended`, `Archived`) so downgraded surplus registers safely transition to `QuotaSuspended` and automatically re-activate upon subscription renewal or upgrade.
-- [ ] **Step 3.V1 (Verification - Tier & Signature Test)**: Write automated test `test_tenant_subscription_anti_tamper_and_quotas` in `crates/oz-core/src/db/workspaces.rs` testing creation quotas across tiers, verifying clock drift detection (`SystemClockTampered`), and asserting `CoreError::InvalidSubscriptionSignature` when local SQLite data is manually tampered.
-- [ ] **Step 3.V2 (Verification - Quality Check)**: Run `cargo test -p oz-core test_subscription` and verify clean formatting across error types.
-
-### Phase 4: Tauri IPC Bridge & Front-End API (`apps/` & `ui/src/api/`)
-- [ ] **Step 4.1**: Update Tauri `get_workspaces` command in `apps/desktop-client/src/commands/workspaces.rs` and `apps/tablet-client/src/commands/workspaces.rs` to return `Vec<WorkspaceDto>` with full instance and scope attributes.
-- [ ] **Step 4.2**: Register new admin Tauri commands in `lib.rs`: `create_workspace_instance`, `update_workspace_instance`, `delete_workspace_instance`, and `assign_user_workspace_instance`.
-- [ ] **Step 4.3**: Update TypeScript interfaces (`WorkspaceDto`, `WorkspaceScope`, `CreateInstanceRequest`) and implement clean async wrapper functions in `ui/src/api/workspaces.ts`.
-- [ ] **Step 4.4**: Implement scoped event emission (`self.event_bus.emit_scoped(scope.store_id(), ...)` across Tauri IPC channels (`StoreEvent::OrderCompleted`, `StoreEvent::TableStatusChanged`) so table updates broadcast strictly by `store_id`.
-- [ ] **Step 4.V1 (Verification - API & IPC Test)**: Write integration tests `ui/src/__tests__/api/workspaces.test.ts` verifying `api/workspaces.ts` correctly deserializes `WorkspaceDto` and transmits `WorkspaceScope` headers.
-- [ ] **Step 4.V2 (Verification - Quality Check)**: Run `cargo clippy -p desktop-client -p tablet-client -- -D warnings` and verify zero Tauri IPC command registration or serialization errors.
-
-### Phase 5: Front-End State, Routing & UI Components (`ui/src/`)
-- [ ] **Step 5.1**: Refactor `WorkspaceContext.tsx` (`WorkspaceProvider`) state from `activeWorkspace: string` (flat key) to `activeInstance: WorkspaceDto | null`, expose `useWorkspaceScope()` (`{ storeId, warehouseId }`), and implement **Fast-Switch Staff PIN Overlay (`FastPINOverlay.tsx`)** + `ScopeGuard.user_id` hot-swapping for shared touchscreens without session hijacking.
-- [ ] **Step 5.2**: Update all data-fetching hooks (`useProducts`, `useOrders`, `useStock`) across `ui/src/features/` to extract `storeId` from `useWorkspaceScope()` and pass it to API adapters.
-- [ ] **Step 5.3**: Refactor `AppShell.tsx` routing logic to switch on `activeInstance.type_key` (`restaurant-pos` → `<PosScreen />`, `store-pos` → `<RetailPosScreen />`, `kds` → `<KdsScreen />`, fallback → `<AppLayout />`).
-- [ ] **Step 5.4**: Update `WorkspaceHome.tsx` (`WorkspaceCard`) to render grouped instances (`Downtown - Cashier 1`, `Mall - Cashier 1`), displaying location badges (`Downtown`, `Mall`, `Airport`), instance colors, and active status.
-- [ ] **Step 5.V1 (Verification - UI Component Tests)**: Create/update Vitest tests `ui/src/__tests__/WorkspaceHome.test.tsx` and `ui/src/__tests__/AppShell.test.tsx` verifying instance card rendering, group labels, ARIA compliance, and `type_key` routing.
-- [ ] **Step 5.V2 (Verification - Full Pre-Commit & CI Matrix Gate)**: Run `./scripts/check.sh` confirming `cargo fmt --all`, `i18n lint`, `bundle-parity`, `FTL dedupe`, `cargo clippy -- -D warnings`, and the complete front-end test suite pass with zero errors across the entire codebase.
+**Tags:** architecture, tenancy, workspaces, multi-store, data-isolation, device-binding
 
 ---
 
@@ -80,11 +30,8 @@ The core problem is that each workspace key conflates **type** (what UI to rende
 ### Current Limitations
 
 1. **No duplicated types** — You cannot have two `restaurant-pos` workspaces because the key must be unique and the frontend routing is key-based.
-
 2. **No data scoping** — All products, orders, customers, and inventory are global. There is no `store_id` or `warehouse_id` filter.
-
-3. **Hardcoded frontend** — `AppShell.tsx`, `WorkspaceHome.tsx`, and `WorkspaceIcon` have hardcoded key → behavior mappings that new workspaces cannot integrate with.
-
+3. **Hardcoded frontend** — `AppShell.tsx`, `WorkspaceHome.tsx`, and `WorkspaceIcon` have hardcoded key → behavior mappings.
 4. **User assignment is type-based** — `user_workspaces` assigns a user to a workspace KEY, not to an instance. A user cannot be assigned to "Downtown Restaurant" specifically.
 
 ### Requirements
@@ -94,97 +41,134 @@ The core problem is that each workspace key conflates **type** (what UI to rende
 - The **workspace picker** shows instance names (e.g., "Downtown Restaurant POS"), not type names.
 - **User assignment** is per-instance, not per-type.
 - The **rendering system** determines what UI to show from the workspace type, while the **data layer** filters by the instance's scope.
-
-### Real-World Example: Multi-Location Restaurant Chain (3 Stores, 9 Workspaces)
-
-Consider a restaurant group with three locations: **Downtown (`store-downtown`)**, **Mall (`store-mall`)**, and **Airport (`store-airport`)**. Each location requires **2 Cashier POS terminals** and **1 Inventory management workspace**.
-
-Under the old flat architecture, this setup is impossible due to unique key constraints (`restaurant-pos` and `inventory` can only exist once). With Type/Instance separation, exactly **2 templates** govern all **9 instances**:
-
-```
-Workspace Types (Templates seeded once):
-├── restaurant-pos  → Fullscreen POS layout, table map, order processing
-└── inventory       → Sidebar AppLayout with stock counts and ordering
-
-Workspace Instances (Deployments with store_id data scoping):
-├── Downtown Store (`store_id: 'store-downtown'`)
-│   ├── [ws-dt-cashier-1]   "Downtown - Cashier 1"       (Type: restaurant-pos)
-│   ├── [ws-dt-cashier-2]   "Downtown - Cashier 2"       (Type: restaurant-pos)
-│   └── [ws-dt-inventory]   "Downtown - Inventory"       (Type: inventory)
-│
-├── Mall Store (`store_id: 'store-mall'`)
-│   ├── [ws-mall-cashier-1] "Mall - Cashier 1"           (Type: restaurant-pos)
-│   ├── [ws-mall-cashier-2] "Mall - Cashier 2"           (Type: restaurant-pos)
-│   └── [ws-mall-inventory] "Mall - Inventory"           (Type: inventory)
-│
-└── Airport Store (`store_id: 'store-airport'`)
-    ├── [ws-air-cashier-1]  "Airport - Cashier 1"        (Type: restaurant-pos)
-    ├── [ws-air-cashier-2]  "Airport - Cashier 2"        (Type: restaurant-pos)
-    └── [ws-air-inventory]  "Airport - Inventory"        (Type: inventory)
-```
-
-#### User Access & Scoping Behavior:
-- **Restaurant Owner (`user-owner`)**: Assigned to all 9 instances (or bypasses via `role-owner`). Their Workspace Picker (`WorkspaceHome.tsx`) groups all 9 instances cleanly across locations. Clicking *Mall - Cashier 1* queries `WHERE store_id = 'store-mall'`, while clicking *Airport - Inventory* queries `WHERE store_id = 'store-airport'`.
-- **Downtown Staff Member (`user-cashier-dt`)**: Assigned exclusively to `ws-dt-cashier-1` and `ws-dt-cashier-2`. When they log in, only the two Downtown registers appear. They cannot see Mall or Airport data.
-- **Mall Stock Manager (`user-stock-mall`)**: Assigned exclusively to `ws-mall-inventory`. They boot directly into the inventory sidebar layout scoped strictly to the Mall location (`store_id = 'store-mall'`).
+- The system scales from a single food stall to a 500-store chain.
 
 ---
 
-## Decision
+## Foundational Decision: Store-First Tenancy Model
 
-### 1. Separate Workspace Type from Workspace Instance
+Before designing workspace types and instances, the framework must answer a more fundamental question: **what is the unit of data isolation?**
 
-#### Workspace Type (Template)
+### The Tenancy Options
 
-A workspace type defines **what the workspace looks like and how it renders**:
+| Model | Mechanism | Max Stores | Tradeoffs |
+|---|---|---|---|
+| **Device-bound** | Each terminal assigned to one store; scope is implicit | Unlimited | Simplest; users can't switch stores from a single device |
+| **Store-scoped databases** | Each store gets its own `POS.sqlite` file | Unlimited | Cross-store reporting requires cloud aggregation or separate reporting DB; per-store backup/restore is trivial |
+| **Multi-tenant SQLite** | All stores in one DB, scoped via `WHERE store_id = ?` on every query | ~50–100 stores | Index bloat; `store_id` colonization of every table; no per-store backup isolation |
+
+### Decision: Device-Bound Default + Store-Scoped Databases for Isolation
+
+**We choose device-bound as the default session model with store-scoped databases for data isolation.** This means:
+
+1. **Every terminal/device is assigned to a default store and a default workspace instance.** When a user logs in on that device, they operate within that store's scope automatically — no workspace picker, no store switcher. This covers 90%+ of POS usage.
+
+2. **Each store gets its own SQLite database file** (`store-<id>.sqlite`). Data isolation is built into the filesystem — no `store_id` column needed on every table. Backup, restore, and migration are per-store. SQLite performance remains constant regardless of total store count.
+
+3. **The desktop admin shell is the exception.** Administrators and owners on desktop may need to switch between stores for reporting and management. The admin app uses a **store picker** (not a workspace picker) as the top-level navigation, then optionally an instance picker within the store.
+
+4. **Cross-store operations go through the sync layer** (`platform/sync/`). Chain-wide reporting, shared customer profiles, and centralized catalog management are cloud features that aggregate data from per-store databases during sync cycles.
+
+5. **Single-store deployments** (the vast majority) keep a single `POS.sqlite` and see no change. The device binding is transparent — the terminal simply boots into its default state.
+
+### Why This Scales
+
+| Concern | How It's Handled |
+|---|---|
+| **Data isolation** | Filesystem — each store is its own SQLite file |
+| **Query performance** | Per-store databases never grow beyond one store's data |
+| **Backup** | Per-store; copy one file |
+| **500-store chain** | 500 small SQLite files; owner views aggregated reports via cloud |
+| **Regional manager** | Cloud sync delivers manager's assigned stores' data to their device |
+| **Cross-store inventory transfer** | Mediated by cloud sync; source store writes a delta, target store receives it |
+
+### The Three-Tier Resolution Hierarchy
+
+Every session resolves through three levels, from most specific to most general:
+
+```
+Level 1 — Store (Tenancy)
+  └── Resolved from: device binding > user's primary store > store picker
+
+Level 2 — Workspace Instance (Deployment)
+  └── Resolved from: device binding > user's default instance > instance picker
+
+Level 3 — Workspace Type (UI Template)
+  └── Resolved from: instance.type_key (always implicit from the instance)
+```
+
+For a **device-bound terminal** (95% of cases): all three levels resolve automatically at boot. The user never sees a picker.
+
+For a **desktop admin session**: Level 1 may show a store picker (if multi-store). Level 2 may show an instance picker (if user has multiple instances within the store). Level 3 is always implicit.
+
+---
+
+## Decision: Workspace Type/Instance Separation
+
+With the tenancy model established, workspace types and instances are properly scoped:
+
+### Workspace Type (UI Template — Global)
+
+A workspace type defines **what the workspace looks like and how it renders**. Types are global (not per-store) and shared across the entire system:
 
 ```rust
 pub struct WorkspaceType {
     pub key: String,           // 'restaurant-pos', 'store-pos', 'inventory', 'admin', 'kds'
     pub name: String,          // 'Restaurant POS'
-    pub render_mode: String,   // 'fullscreen' | 'sidebar'
-    pub icon: String,          // 'restaurant', 'store', 'inventory', 'admin', 'kds'
+    pub layout_mode: String,   // 'fullscreen' | 'sidebar'
+    pub icon: String,          // Icon identifier
     pub sort_order: i32,
+    pub accent_colour: String, // Default accent colour (overridable per instance)
 }
 ```
 
 - Types are **seeded at migration time** and rarely change.
-- `render_mode` tells the shell whether to render fullscreen (PosScreen, RetailPosScreen, KdsScreen) or inside the sidebar AppLayout (inventory, admin).
-- `workspace_type_screens` maps each type to its nav items (same as current `workspace_screens`).
+- `layout_mode` tells the shell whether to render fullscreen (POS, KDS) or inside the sidebar AppLayout (inventory, admin). This is a layout hint, not a rendering instruction — the frontend still maps `type_key` to specific React components.
+- `workspace_type_screens` maps each type to its nav items.
 
-#### Workspace Instance (Deployment)
+### Workspace Instance (Deployment — Scoped to a Store)
 
-A workspace instance is a **specific deployment of a type**, with its own name, description, and data scope:
+A workspace instance is a **specific deployment of a type within a specific store**:
 
 ```rust
 pub struct WorkspaceInstance {
-    pub id: String,             // 'ws-downtown-resto', 'ws-mall-resto', 'ws-wh-a'
+    pub id: String,             // 'ws-dt-cashier-1', 'ws-mall-inventory'
     pub type_key: String,       // 'restaurant-pos'
-    pub name: String,           // 'Downtown Restaurant POS'
+    pub store_id: String,       // The store this instance belongs to (NOT NULL)
+    pub name: String,           // 'Downtown - Cashier 1'
     pub description: String,
-    pub store_id: Option<String>, // scopes data; None = global scope
-    pub colour: Option<String>,   // optional accent colour override
-    pub is_active: bool,
+    pub colour: Option<String>, // Per-instance accent colour override
+    pub status: InstanceStatus, // Active | QuotaSuspended | Archived
+    pub created_at: String,
+    pub updated_at: String,
 }
 ```
 
-- Instances are created by administrators and can be named per-venue.
-- `store_id` links to the store/location that this workspace manages. When present, all data queries include `WHERE store_id = ?`.
+Key differences from the old flat model:
+- `store_id` is **NOT NULL** — every instance belongs to exactly one store. (A `NULL` store was the old "global workspace" pattern; that's replaced by default instances in the primary store.)
+- Status replaces the `is_active` boolean (see ADR #5 for the `InstanceStatus` enum).
+- Data scoping is handled by the store-level database switch, not by query-level `WHERE store_id = ?` clauses.
 
-### 2. Database Schema
+---
+
+## Database Schema
+
+### Workspace Types (Logically Global, Physically Replicated)
+
+Workspace types are **logically global** — the same set of types exists across all stores. They are **physically replicated** into every store database via migration. When a new workspace type is added (e.g., a future `kiosk` type), the migration is applied to all store databases. There is no single global `workspace_types` table that per-store tables reference — each database has its own copy.
 
 ```sql
--- What a workspace looks like (seeded, rarely changes)
+-- Seeded into every store database by migration
 CREATE TABLE workspace_types (
-    key         TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    render_mode TEXT NOT NULL DEFAULT 'sidebar',  -- 'fullscreen' | 'sidebar'
-    icon        TEXT NOT NULL DEFAULT '',
-    sort_order  INTEGER NOT NULL DEFAULT 0
+    key            TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    description    TEXT NOT NULL DEFAULT '',
+    layout_mode    TEXT NOT NULL DEFAULT 'sidebar',  -- 'fullscreen' | 'sidebar'
+    icon           TEXT NOT NULL DEFAULT '',
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    accent_colour  TEXT NOT NULL DEFAULT ''
 );
 
--- Which screens/nav items appear in each workspace type
 CREATE TABLE workspace_type_screens (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     type_key    TEXT NOT NULL REFERENCES workspace_types(key),
@@ -192,396 +176,459 @@ CREATE TABLE workspace_type_screens (
     sort_order  INTEGER NOT NULL DEFAULT 0,
     UNIQUE(type_key, screen_key)
 );
+```
 
--- Actual workspace deployments (created by admins)
+### Workspace Instances (Per-Store, in Each Store's Database)
+
+```sql
 CREATE TABLE workspace_instances (
     id          TEXT PRIMARY KEY,
     type_key    TEXT NOT NULL REFERENCES workspace_types(key),
+    store_id    TEXT NOT NULL,        -- Boot-time validation: must match the database's owning store.
+                                      -- No FK — store_profiles lives in the global DB, not per-store DBs.
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    store_id    TEXT,                   -- nullable; scopes data queries
-    colour      TEXT,                   -- optional accent colour for picker card
-    is_active   INTEGER NOT NULL DEFAULT 1,
+    colour      TEXT,                   -- optional accent colour override
+    status      TEXT NOT NULL DEFAULT 'active',  -- 'active', 'quota_suspended', 'archived'
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
-
--- Per-user workspace assignment (pointing at INSTANCES, not types)
-CREATE TABLE user_workspace_instances (
-    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    instance_id TEXT NOT NULL REFERENCES workspace_instances(id) ON DELETE CASCADE,
-    is_default  INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE(user_id, instance_id)
-);
-
--- Role-level defaults (which instance types a role can access)
-CREATE TABLE role_workspace_types (
-    role_id  TEXT NOT NULL REFERENCES roles(id),
-    type_key TEXT NOT NULL REFERENCES workspace_types(key),
-    UNIQUE(role_id, type_key)
-);
 ```
 
-#### Migration Path from Current Tables
+Since each store has its own database, every instance row necessarily belongs to that store. The `store_id` column is a **boot-time validation field** (not a query filter) — on startup, the system checks that the database's instances match the expected store identity. All domain queries use the implicit database scope without `WHERE store_id = ?`.
 
-| Current Table | Migrates To |
-|---|---|
-| `workspaces` | `workspace_types` (data preserved as-is) |
-| `workspace_screens` | `workspace_type_screens` (data preserved) |
-| `role_workspaces` | `role_workspace_types` (renamed, data preserved) |
-| `user_workspaces` | `user_workspace_instances` (migrate each row: create a default instance per type_key, then point user at it) |
-
-A migration script creates one **default instance** per existing workspace key so existing deployments are unaffected:
+### User Assignments (Per-Store Database)
 
 ```sql
-INSERT INTO workspace_instances (id, type_key, name, description)
-SELECT 'default-' || key, key, name, description FROM workspaces;
+CREATE TABLE user_workspace_instances (
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    instance_id  TEXT NOT NULL REFERENCES workspace_instances(id) ON DELETE CASCADE,
+    is_default   INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(user_id, instance_id)
+);
 ```
 
-### 3. Workspace Resolution Algorithm
+### Device Binding (Global Database — Logical Reference)
 
-When resolving a user's accessible workspaces:
+Device binding lives in the global (primary) database where the `terminals` table and `store_profiles` table are stored. Since `workspace_instances` lives in per-store databases, `bound_instance_id` is a **logical reference** (no FK constraint) — validated at resolution time by opening the target store's database and checking the instance exists.
+
+```sql
+-- Extends the existing terminals table (migration 016).
+-- bound_store_id has an FK because store_profiles is in the global DB.
+-- bound_instance_id is a logical reference (validated at boot, not enforced by FK).
+ALTER TABLE terminals ADD COLUMN bound_store_id TEXT
+    REFERENCES store_profiles(id);
+ALTER TABLE terminals ADD COLUMN bound_instance_id TEXT;  -- logical ref; validated at boot
+```
+
+At boot time, if both columns are set, the system opens the bound store's database and verifies that `bound_instance_id` exists and is active. If validation fails, the terminal falls through to user-based resolution and logs a warning.
+
+A terminal bound to both a store and an instance boots directly into that workspace, skipping all pickers. This is the default for tablets, KDS screens, and fixed POS registers.
+
+### Migration Path from Current Tables
+
+| Current Table | Migrates To | Notes |
+|---|---|---|
+| `workspaces` | `workspace_types` | Data preserved; `key` becomes PK |
+| `workspace_screens` | `workspace_type_screens` | Data preserved; `workspace_key` → `type_key` |
+| `role_workspaces` | `role_workspace_types` | Renamed; data preserved |
+| `user_workspaces` | `user_workspace_instances` | Each row: create a default instance per type_key in the primary store, then point user at it |
+
+For single-store deployments, a migration creates one default instance per type in the primary store:
+
+```sql
+INSERT INTO workspace_instances (id, type_key, store_id, name, description)
+SELECT 'default-' || key, key, (SELECT id FROM store_profiles WHERE is_primary = 1 LIMIT 1), name, description
+FROM workspaces;
+```
+
+---
+
+## Session Resolution Algorithm
+
+When a user logs in, the system resolves their active context in this order:
 
 ```
-1. If role = 'role-owner' → return ALL active instances.
-2. If user_workspace_instances has rows → return ONLY those instances.
-3. Otherwise → find instances whose type_key is in role_workspace_types.
+1. DEVICE BINDING CHECK:
+   If terminal has bound_store_id AND bound_instance_id
+     → Set active store = bound_store_id, active instance = bound_instance_id
+     → Skip all pickers. Boot directly into the workspace.
+     → DONE.
+
+2. STORE RESOLUTION:
+   a. If user is 'role-owner' AND user_store_access is empty (single-store deployment):
+        → Return ALL stores (legacy backward-compatible behavior)
+   b. If user is 'role-owner' AND user_store_access has rows (multi-store chain):
+        → Return ONLY stores in user_store_access (NO automatic all-stores access)
+   c. If user_store_access has rows for this user:
+        → Return those stores
+   d. If user has a primary/default store assignment:
+        → Set active store = user's default store
+   e. Otherwise (single-store deployment):
+        → Set active store = the sole store
+
+3. INSTANCE RESOLUTION (within the active store):
+   a. If user_workspace_instances has rows for this (user, store):
+        → Return ONLY those instances
+   b. If role = 'role-owner':
+        → Return ALL active instances in this store
+   c. Otherwise:
+        → Return instances whose type_key is in role_workspace_types for this store
+
+4. If user has exactly ONE accessible instance:
+        → Auto-select it. Skip the picker.
+   If user has MULTIPLE instances:
+        → Show instance picker (WorkspaceHome) scoped to this store.
+
+5. CREATE SESSION CONTEXT:
+   → Build an immutable SessionContext { user_id, role_id, terminal_id, store_id, instance_id, type_key }
+   → All subsequent Tauri commands read store_id from this context, not from frontend params.
+   → Switching stores destroys the session and re-runs from Step 1.
 ```
 
-The `WorkspaceDto` sent to the frontend includes both instance and type info:
+The `WorkspaceDto` sent to the frontend includes the full resolution chain:
 
 ```rust
 pub struct WorkspaceDto {
     pub instance_id: String,
     pub type_key: String,
-    pub name: String,              // Instance name (e.g., "Downtown Restaurant POS")
+    pub store_id: String,
+    pub store_name: String,        // For display: "Downtown"
+    pub name: String,              // Instance name: "Downtown - Cashier 1"
     pub description: String,
     pub icon: String,              // From the type
-    pub colour: Option<String>,    // Instance-specific colour override
-    pub render_mode: String,
-    pub store_id: Option<String>,
+    pub layout_mode: String,       // From the type
+    pub colour: Option<String>,    // Instance override, falls back to type accent_colour
+    pub is_default: bool,          // This is the user's default instance
 }
 ```
 
-### 4. Frontend Routing by Type, Not Key
+---
 
-`AppShell.tsx` switches on `type_key` instead of the workspace key:
+## Frontend Routing by Type
+
+`AppShell.tsx` switches on `type_key` — unchanged from the original proposal:
 
 ```typescript
-const workspaceTypeRoute: Record<string, string> = {
-  'restaurant-pos': 'sales',
-  'store-pos': 'products',
-  kds: 'kds',
-  inventory: 'inventory',
-  admin: 'settings',
-};
-
-// Instead of:
-//   if (activeWorkspace === 'restaurant-pos') ...
-// Use:
-const instance = getActiveWorkspaceInstance();
 switch (instance.type_key) {
   case 'restaurant-pos':
     return <PosScreen storeId={instance.store_id} onNavigate={...} />;
   case 'store-pos':
     return <RetailPosScreen storeId={instance.store_id} onNavigate={...} />;
-  // ...
+  case 'kds':
+    return <KdsScreen />;
+  case 'inventory':
+  case 'admin':
+  default:
+    return <AppLayout route={route}><PageComponent /></AppLayout>;
 }
 ```
 
-Unknown `type_key` values fall through to the generic `AppLayout` sidebar renderer.
+The `layout_mode` field provides a coarse hint (`fullscreen` vs `sidebar`) but the `type_key` → component mapping remains hardcoded. This is intentional — different types need different React components, and no database field can replace that mapping.
 
-### 5. Data Scoping via `store_id`
+---
 
-Every major data query that should be scoped per-location includes a `WHERE store_id = ?` parameter:
+## Data Isolation: Store-Scoped Databases
 
-```sql
--- Products for "Downtown Restaurant POS":
-SELECT * FROM products WHERE store_id = 'store-downtown';
+Since each store has its own SQLite database, **no `store_id` columns are needed on domain tables.** Data isolation is automatic:
 
--- Open orders for "Mall Store POS":
-SELECT * FROM orders WHERE store_id = 'store-mall' AND status != 'completed';
+- `products` in `store-downtown.sqlite` are Downtown's products
+- `orders` in `store-mall.sqlite` are the Mall's orders
+- `stock` in `store-warehouse-a.sqlite` is Warehouse A's inventory
 
--- Stock for "Warehouse A" workspace:
-SELECT * FROM stock WHERE warehouse_id = 'wh-a';
-```
+### What This Avoids
 
-The `store_id` / `warehouse_id` column is added to each relevant table:
+- No `WHERE store_id = ?` on every query
+- No `store_id` column on `products`, `orders`, `order_lines`, `customers`, `gift_cards`, `stock`, `stock_counts`
+- No `OR store_id IS NULL` ambiguity
+- No "is this product intentionally global or just not yet assigned?" confusion
+- No index bloat as store count grows
 
-| Table | Scope Column |
+### Cross-Store Data Flow
+
+Data that needs to move between stores goes through the sync layer:
+
+| Use Case | Mechanism |
 |---|---|
-| `products` | `store_id` |
-| `orders` | `store_id` |
-| `order_lines` | `store_id` (denormalized for query performance) |
-| `stock` | `warehouse_id` |
-| `stock_counts` | `warehouse_id` |
-| `customers` | `store_id` (or global if shared) |
-| `gift_cards` | `store_id` (or global) |
+| **Chain-wide reporting** | Cloud aggregates per-store databases after sync |
+| **Shared customer profiles** | Customer data replicated via sync to all stores (or looked up via cloud API) |
+| **Central catalog management** | Product templates pushed from cloud to each store's database |
+| **Inventory transfer between stores** | Source store writes a stock_movement delta; target store receives it via sync |
+| **Regional manager dashboard** | Sync delivers a consolidated view for assigned stores |
 
-The scope parameter is threaded through the React component tree via a `WorkspaceScope` context:
+### Single-Store Deployments (95% of Users)
 
-```typescript
-interface WorkspaceScope {
-  storeId?: string;
-  warehouseId?: string;
-}
-```
+For the vast majority of deployments, there is one store and one database file. The store picker is never shown. Device binding is configured once during setup and never changes. The system behaves exactly as it does today.
 
-All API calls extract the scope from context rather than hardcoding it:
+---
 
-```typescript
-function useProducts() {
-  const { storeId } = useWorkspaceScope();
-  return useQuery(['products', storeId], () => getProducts(storeId));
-}
-```
+## Security Architecture
 
-### 6. Security & Hardening Pillars (Enterprise Architecture)
+Store-scoped databases provide filesystem-level data isolation, but the application layer must enforce that a session cannot cross store boundaries. The following security controls are mandatory.
 
-To ensure this multi-instance architecture operates reliably across thousands of registers without data swapping, offline sync collisions, or query lag, the framework enforces four mandatory security and performance boundaries:
+### 1. Session Scope (The `SessionContext`)
 
-#### Pillar 1: Type-Safe Query Scope Guard (`Compile-Time Scope Enforcer`)
-To prevent developers from accidentally omitting `WHERE store_id = ?` in backend endpoints, data scoping is enforced by Rust's type system via `ScopeGuard`:
-- Every store-scoped data query method (`list_orders`, `get_products`, `update_stock`) requires a validated `&ScopeGuard` parameter.
-- A `ScopeGuard` can only be constructed after the backend verifies the caller's session (`user_id`) against `user_workspace_instances` and `terminals` (`terminal_id`).
-- If the frontend sends a tampered `store_id` payload, the verification fails (`CoreError::UnauthorizedScope`). If a backend developer forgets to scope a query, the Rust compiler (`rustc`) rejects the method signature.
+Every authenticated session carries an immutable `SessionContext` that binds the user to their resolved scope:
 
 ```rust
-pub enum ScopeMode {
-    SingleStore(String),       // Regular Cashier / Stock Manager (1 store)
-    MultiStore(Vec<String>),   // Area Manager (assigned to specific stores)
-    ChainGlobal,               // Owner / Admin (chain-wide consolidated views)
-}
-
-pub struct ScopeGuard {
-    pub mode: ScopeMode,
-    pub warehouse_id: Option<String>,
-    pub terminal_id: String,
+pub struct SessionContext {
     pub user_id: String,
-}
-
-impl Store<'_> {
-    // This will NOT compile or execute without passing a cryptographically verified ScopeGuard
-    pub fn list_orders(&self, scope: &ScopeGuard, status: &str) -> Result<Vec<Order>> {
-        let (sql_filter, params) = match &scope.mode {
-            ScopeMode::SingleStore(store_id) => ("(store_id = ? OR store_id IS NULL)", vec![store_id.clone()]),
-            ScopeMode::MultiStore(stores) => {
-                let placeholders = vec!["?"; stores.len()].join(", ");
-                // Builds `(store_id IN (?, ?) OR store_id IS NULL)`
-                // ...
-            },
-            ScopeMode::ChainGlobal => ("1=1", vec![]), // Owner accesses all stores across the chain
-        };
-        // ...
-    }
+    pub role_id: String,
+    pub terminal_id: String,
+    pub store_id: String,          // Immutable after resolution
+    pub instance_id: String,       // Immutable after resolution
+    pub type_key: String,          // Derived from instance
 }
 ```
 
-#### Pillar 2: Cryptographic Terminal Binding, CRDT Stock Ledger & Offline UUIDv7 Sync
-In multi-register environments, offline connectivity must not cause ID collisions, inventory race conditions, or cross-store data overwrites:
-- **Zero Auto-Increment IDs**: All entity primary keys (`orders`, `order_lines`, `payments`, `stock_transfers`) use time-ordered **UUIDv7 / ULID** keys (`01F8MECH...`), eliminating ID conflicts when multiple registers operate offline locally.
-- **CRDT Delta Ledger for Inventory (`stock_movements`)**: Offline registers never overwrite absolute `quantity` columns directly (`last-write-wins`). They only insert immutable delta ledger rows into `stock_movements` (`+5` or `-2`). When registers reconnect and sync, deltas sum up deterministically across `(store_id, item_id)` with zero race conditions or missing stock.
-- **Terminal Keyring Binding (`oz-security`)**: Every POS hardware device holds a cryptographic profile (`terminal_id` bound via OS keyring). Sessions require `(user_id + terminal_id + instance_id)` validation.
-- **Shared Touchscreen Fast-Switching (`ScopeGuard.user_id` Hot-Swapping)**: To prevent session hijacking on shared touchscreens without slowing service down, the frontend overlays a **Quick Staff PIN Pad (`FastPINOverlay.tsx`)**. Upon PIN verification, the backend dynamically hot-swaps `ScopeGuard.user_id` while keeping `terminal_id` and `instance_id` invariant, ensuring perfect audit logs and cash drawer accountability per operator.
-- **Immutable Transaction Clock (`version` + LSN)**: Every record tracks `version INTEGER` and `updated_at TEXT` so when offline registers reconnect to each other or `cloud-server`, optimistic concurrency checks prevent ghost overwrites.
-- **Orphan Prevention (`ON DELETE RESTRICT`)**: All foreign keys to `store_profiles` explicitly enforce `ON DELETE RESTRICT ON UPDATE CASCADE`, making it impossible to delete a location while it has active registers, open shifts, or historical transactions.
+This context is **created once** during session resolution and **never mutated** for the lifetime of the session. All Tauri commands receive the `SessionContext` and use its `store_id` to select the correct database connection. The frontend never passes `store_id` as a parameter — it's always read from the session.
 
-#### Pillar 3: Prefix Compound B-Tree Indexing `(store_id, ...)`
-To maintain sub-millisecond query performance across large-scale multi-store databases:
-- All store-scoped tables must define compound B-Tree indexes prefixed with the scoping column (`store_id` or `warehouse_id`):
-  ```sql
-  CREATE INDEX idx_orders_store_status ON orders(store_id, status, created_at DESC);
-  CREATE INDEX idx_order_lines_store_order ON order_lines(store_id, order_id);
-  CREATE INDEX idx_products_store_active ON products(store_id, is_active, category_id);
-  CREATE INDEX idx_stock_warehouse_item ON stock(warehouse_id, item_id);
-  ```
-- SQLite immediately jumps directly to the target instance's index slice, isolating multi-million row tables by store in `< 1ms`.
+**Implementation pattern for Tauri v2:** Tauri v2 has no middleware, no request-scoped DI beyond `State`. The `SessionContext` is resolved explicitly in each command handler via a helper function, not auto-injected:
 
-#### Pillar 4: Scoped Real-Time Event Bus (`Tauri v2 IPC Channels`)
-To ensure cashier screens update instantaneously without receiving unrelated cross-store noise:
-- The backend broadcasts domain events (`StoreEvent::OrderCompleted`, `StoreEvent::TableStatusChanged`) via scoped Tauri IPC channels:
-  ```rust
-  self.event_bus.emit_scoped(
-      scope.store_id.as_deref(),
-      &StoreEvent::TableStatusChanged { table_id: "tbl-4".into(), status: "occupied".into() }
-  )?;
-- Only client instances whose active `WorkspaceScope` matches the emitted `store_id` process the event and trigger a re-render.
+```rust
+// Real Tauri v2 pattern — session_token is passed from frontend, validated every command
+#[command]
+pub async fn list_orders(
+    state: State<'_, AppState>,
+    session_token: String,          // opaque token; frontend holds this, not the context
+    status: Option<String>,
+) -> Result<Vec<OrderDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;   // validates + returns SessionContext
+    let db = state.db_manager.open_store(&session.store_id)?;
+    let store = Store::new(&db);
+    store.list_orders(status.as_deref())
+}
+```
 
-### 7. Subscription Tier & Entitlement Architecture
+The `session_token` is an **opaque, randomly-generated identifier** (not a JWT, not parseable by the frontend). It is generated by the backend during login/session-resolution and stored in the frontend's `WorkspaceContext` as an opaque string. The backend maintains an in-memory session store (`HashMap<session_token, SessionContext>`) that maps tokens to resolved contexts. When a command arrives, `resolve_session()` looks up the token and returns the context — if the token is invalid or expired, the command fails with `AppError::InvalidSession`.
 
-Separating `WorkspaceType` from `WorkspaceInstance` unlocks granular, backend-enforced subscription tiering across three monetization dimensions: physical locations (`store_profiles`), concurrent cashier registers (`workspace_instances`), and specialized UI templates (`workspace_types`).
+This is enforced by **code review convention**: any Tauri command that accepts `store_id: String` as a direct parameter is a violation. A custom `clippy` lint rule rejects `store_id` in command signatures.
 
-#### 1. Signed Tenant Subscription Schema (Anti-Tamper & Offline Grace)
-Because `oz-pos` stores data locally in SQLite (`rusqlite`), subscription limits must be cryptographically signed (`RSA/HMAC`) to prevent users from opening `POS.sqlite` locally and modifying their tier. The active subscription is stored with a signature issued by `apps/cloud-server`:
+**Session token rotation on store switch:** When an admin switches stores, the old `session_token` is invalidated and a new one is issued with the new `SessionContext`. Two concurrent tabs using the same old token would both fail after the switch, forcing re-resolution. This prevents stale scope from persisting.
+
+### 2. Device Binding Integrity
+
+Device binding (`terminals.bound_store_id` / `bound_instance_id`) is stored in the global database, which is writable by any process with filesystem access. To make tampering **detectable** (not impossible), device bindings are **cryptographically signed**:
+
+1. **At write time** (admin binds a terminal): the backend writes the binding row AND computes an HMAC-SHA256 signature over `(terminal_id, bound_store_id, bound_instance_id)` using a key stored in the OS keyring (`oz-security::Keyring`). The signature is stored alongside the binding.
+
+2. **At boot time** (resolution): the backend reads the binding, recomputes the HMAC, and compares it to the stored signature. If they don't match, the binding is rejected and the terminal falls through to user-based resolution with a `SecurityEvent::DeviceBindingTampered` audit log entry.
 
 ```sql
-CREATE TABLE tenant_subscription (
-    tenant_id          TEXT PRIMARY KEY,
-    tier_key           TEXT NOT NULL,        -- 'free', 'pro', 'premium', 'enterprise'
-    status             TEXT NOT NULL,        -- 'active', 'past_due', 'canceled'
-    expires_at         TEXT NULL,            -- ISO timestamp (NULL = lifetime/free)
-    max_stores         INTEGER NOT NULL,
-    max_pos_instances  INTEGER NOT NULL,
-    allowed_types_json TEXT NOT NULL,        -- '["restaurant-pos", "store-pos", "admin"]'
-    signature          TEXT NOT NULL,        -- RSA/HMAC signature from apps/cloud-server
-    updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ALTER TABLE terminals ADD COLUMN binding_signature TEXT;  -- HMAC-SHA256
+```
+
+**Threat model:** This protects against **casual tampering** — someone who opens the SQLite file in a text editor or a hex editor and modifies the binding row, but does not also read the OS keyring. It does NOT protect against a determined attacker who has code execution as the same OS user (they can read the keyring and forge valid signatures). The real defense against that threat is SQLCipher encryption (Section 5) which prevents reading the SQLite at all, plus OS-level file permissions.
+
+**Key recovery:** If the OS keyring is lost (OS reinstall, hardware migration), all device bindings become invalid. The admin recovery path is: authenticate as `role-owner`, which triggers an interactive prompt to re-key all bindings (generate a new keyring secret, re-sign all binding rows). This requires explicit admin action and is audit-logged.
+
+Hardware-backed attestation (TPM/Secure Enclave) is a future enhancement that would provide stronger binding, tracked separately.
+
+### 3. Store-Level Access Control
+
+The ADR's resolution algorithm assumes `role-owner` sees all stores, but this doesn't scale. A regional manager should only see their 5 assigned stores, not all 500. We add a `user_store_access` table in the global database:
+
+```sql
+CREATE TABLE user_store_access (
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    store_id     TEXT NOT NULL REFERENCES store_profiles(id) ON DELETE CASCADE,
+    access_level TEXT NOT NULL DEFAULT 'operator',  -- 'operator' | 'manager' | 'viewer'
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(user_id, store_id)
 );
 ```
 
-**Security & Offline Rules:**
-- **Signature Verification**: On startup and prior to quota checks, the backend verifies `signature` against the public key (`oz-pos-updater.key.pub`). If tampered, the backend raises `CoreError::InvalidSubscriptionSignature`.
-- **14-Day Offline Grace & Monotonic Ledger Clock Check**: When offline (`offline.rs`), registers evaluate `expires_at`. To prevent users from rolling back their Windows/iPad OS System Clock to bypass expiration indefinitely, the backend computes:
-  $$\text{Effective Time} = \max\Big(\mathtt{Utc::now()},\; \max_{r \in \text{orders}}(\mathtt{r.created\_at}),\; \max_{l \in \text{audit\_logs}}(\mathtt{l.created\_at})\Big)$$
-  If `MAX(orders.created_at)` exceeds `Utc::now()`, the system detects clock rollback (`CoreError::SystemClockTampered`) and immediately locks the register until an online cloud sync occurs. Paid tiers (`Pro`, `Premium`, `Enterprise`) continue operating for up to 14 days offline. If 14 days elapse without syncing, the system gracefully reverts to `Free` tier quotas until connectivity returns.
+**Modification guard:** `user_store_access` rows can only be modified by users holding the `chain:manage_stores` permission — a permission that is NOT granted by `role-owner` by default. This prevents self-escalation: a regional manager with `staff:update` cannot add themselves to additional stores. Only a chain-level administrator with `chain:manage_stores` can assign store access.
 
-#### 2. Subscription Tier Enforcement Matrix
+The updated store resolution algorithm becomes:
 
-| Tier | Store Quota (`store_profiles`) | POS Register Quota (`workspace_instances`) | Allowed Workspace Types (`workspace_types`) | Advanced Features & Hardware |
-| :--- | :--- | :--- | :--- | :--- |
-| **Free** | **1 Store** | **1 POS Register** | `store-pos` (or `restaurant-pos`), `admin` | Basic receipt printing (`oz-hal`), Local SQLite only. |
-| **Pro** | **Up to 2 Stores** | **Up to 3 Registers / Store** | `restaurant-pos`, `store-pos`, `inventory`, `admin` | Barcode scanners, Cash drawers, Basic inventory tracking. |
-| **Premium** | **Up to 5 Stores** | **Up to 10 Registers / Store** | + `kds` (Kitchen Display System), `analytics-pro` | Multi-store cloud sync (`apps/cloud-server`), Advanced recipe costing. |
-| **Enterprise** | **Unlimited (`N`)** | **Unlimited Registers** | + All types + Custom Plugin Workspaces (`oz-plugin`) | Multi-warehouse routing, Custom Lua scripts (`oz-lua`), Dedicated API access. |
-
-#### 3. Runtime Quota Validation (`create_workspace_instance`)
-When an administrator attempts to create a new register instance or add a location, the backend evaluates active instance counts against `SubscriptionTier` limits inside a database transaction:
-
-```rust
-pub fn create_workspace_instance(&self, req: &CreateInstanceRequest, tier: &SubscriptionTier) -> Result<WorkspaceDto> {
-    self.verify_subscription_signature()?; // Ensures local database was not tampered with
-    let active_pos_count = self.count_active_instances_by_type(&req.type_key)?;
-    if active_pos_count >= tier.max_pos_instances() {
-        return Err(CoreError::SubscriptionLimitExceeded(
-            format!("Your {} tier allows maximum {} registers. Upgrade to add more.", tier.name, tier.max_pos_instances())
-        ));
-    }
-    // ... proceed with instance creation
-}
+```
+STORE RESOLUTION (revised):
+  a. If user is 'role-owner' AND user_store_access is empty (single-store deployment):
+       → Return ALL stores (legacy backward-compatible behavior)
+  b. If user is 'role-owner' AND user_store_access has rows:
+       → Return ONLY those stores (even if partial — row existence triggers scoped mode)
+  c. If user_store_access has rows for this user:
+       → Return those stores
+  d. If user has a primary/default store assignment:
+       → Return that store
+  e. Otherwise (single-store deployment):
+       → Return the sole store
 ```
 
-#### 4. Workspace Boot Entitlement Check (`allows_workspace_type`)
-When a user attempts to open an advanced workspace (`kds` or `analytics-pro`), the backend verifies template entitlements before issuing session scope credentials:
+**Edge case — partial owner access:** If `role-owner` has 3 of 20 stores in `user_store_access`, they see only those 3. The presence of ANY rows triggers scoped mode. To grant chain-wide access, an admin must explicitly insert rows for all 20 stores (or use `role-chain-owner`, a future role gated behind MFA). This explicit-is-better-than-implicit approach prevents surprises.
 
-```rust
-if !tier.allows_workspace_type(&instance.type_key) {
-    return Err(CoreError::SubscriptionUpgradeRequired(
-        "Kitchen Display System (KDS) requires Premium tier or higher."
-    ));
-}
+Key change: `role-owner` in a multi-store chain does NOT get automatic access to all stores. The chain owner must be explicitly assigned to each store (a one-time setup during onboarding). This eliminates the blast radius of a compromised owner account — a stolen owner credential only exposes assigned stores, not the entire chain.
+
+### 4. Admin Store Switching Triggers Full Re-Resolution
+
+When an admin switches stores via the store picker, the session token is **invalidated** and a new one is issued. This ensures:
+
+- The new `SessionContext` is freshly validated against `user_store_access`.
+- The database connection is switched atomically (old connection closed, new one opened).
+- All in-memory caches are invalidated.
+- An `AuditEvent::StoreSwitched { from_store_id, to_store_id, user_id }` entry is written.
+
+Shared touchscreen fast-switching (ADR #6's `FastPINOverlay.tsx`) follows the same rule: switching users always invalidates the old session token and issues a new one with the new user's resolved scope. A cashier cannot hot-swap to a manager and inherit access to stores the manager shouldn't see.
+
+**Token lifecycle:**
+- Login → session token created, stored in backend's `SessionStore` (in-memory `HashMap`)
+- Store switch → old token removed from `SessionStore`, new token issued with new scope
+- Logout → token removed from `SessionStore`
+- App restart → `SessionStore` is empty; user must re-authenticate
+
+### 5. Database File Encryption at Rest
+
+Each store's SQLite file is encrypted using SQLCipher (Community Edition, BSD-style license) or an equivalent at-rest encryption layer. The encryption key is derived from a master key stored in the OS keyring. This provides defense-in-depth:
+
+- If an attacker copies a `store-<id>.sqlite` file, they cannot open it without the keyring secret.
+- The global database (containing device bindings and user auth) is also encrypted.
+- Combined with the HMAC device binding, this creates two layers: you can't read the file (SQLCipher), and if you somehow bypass encryption, modifying the binding is detectable (HMAC).
+
+SQLCipher Community Edition is available under a permissive license compatible with commercial distribution. If a paid commercial license is later required, alternative encryption backends (e.g., `sqlite3mc`) can be substituted via a trait abstraction.
+
+This is tracked in ADR #7 (Data Scope Guard) but noted here as a dependency of the store-scoped model.
+
+### 6. Required Audit Events
+
+For PCI-DSS compliance (Requirement 10.2.1) and security monitoring, the following events must be logged:
+
+| Event | Data | Trigger |
+|---|---|---|
+| `SessionCreated` | `{ user_id, terminal_id, store_id, instance_id }` | Session resolution completes |
+| `SessionDestroyed` | `{ user_id, terminal_id, reason }` | Logout, timeout, store switch |
+| `StoreSwitched` | `{ user_id, from_store_id, to_store_id }` | Admin changes store in picker |
+| `DeviceBindingTampered` | `{ terminal_id }` | HMAC validation fails at boot |
+| `DeviceBindingSet` | `{ user_id, terminal_id, store_id, instance_id }` | Admin binds a terminal |
+| `UserStoreAccessModified` | `{ modifier_user_id, target_user_id, store_id, action }` | `user_store_access` row added/removed |
+| `CrossStoreAccessBlocked` | `{ user_id, attempted_store_id, session_store_id }` | Command called with mismatched scope (defense-in-depth; should be impossible with SessionContext) |
+
+All audit events are written to the immutable append-only audit log. **Audit log placement:** There is one **global audit log** in the global database for tenant-level security events (DeviceBindingTampered, UserStoreAccessModified, SessionCreated, SessionDestroyed, CrossStoreAccessBlocked). Each **store database** has its own audit log for domain events (sale completed, stock adjusted, price changed) — these are created by an audit log migration applied to every store database. The `StoreSwitched` event is written to both the global log (for security monitoring) and the source store's log (for operational audit). The clock rollback check in ADR #5 aggregates timestamps across the global audit log, all store audit logs, and all store orders tables.
+
+### Security Posture Summary
+
+| Threat | Control |
+|---|---|
+| Frontend requests wrong store's data | `SessionContext` resolves `store_id` from opaque token, not from frontend params |
+| SQLite row tampering of device binding | HMAC signature on binding, verified against OS keyring at boot |
+| Attacker with OS keyring access forges bindings | Defense-in-depth: SQLCipher prevents reading the SQLite; HMAC is a detection layer, not prevention |
+| Compromised owner account accesses all stores | `user_store_access` limits owner to explicitly assigned stores; empty rows = scoped mode |
+| Admin self-escalates store access | `chain:manage_stores` permission required to modify `user_store_access` |
+| Admin store switching bypasses access control | Session token invalidation + re-resolution on every store switch |
+| Stale session token after store switch | Token rotation invalidates old token; concurrent tabs fail and re-resolve |
+| Stolen SQLite file opened directly | SQLCipher encryption at rest (ADR #7) |
+| Shared terminal user hot-swap inherits wrong scope | `FastPINOverlay` triggers full session re-resolution + new token |
+| No audit trail for security events | Required audit events logged to immutable append-only audit table |
+
+---
+
+## Workspace Picker Design
+
+The picker (`WorkspaceHome.tsx`) only appears when the user has **multiple accessible instances within the active store**. This is rare — most users have one instance per type and auto-boot into it.
+
+### Picker Hierarchy
+
+```
+┌─────────────────────────────────────────────┐
+│  [Store: Downtown ▼]   (only if multi-store) │
+├─────────────────────────────────────────────┤
+│                                             │
+│  ┌──────────┐  ┌──────────┐                │
+│  │ Cashier 1 │  │ Cashier 2 │               │
+│  │ Restaurant│  │ Restaurant│               │
+│  └──────────┘  └──────────┘                │
+│  ┌──────────┐                               │
+│  │Inventory  │                               │
+│  │ Downtown  │                               │
+│  └──────────┘                               │
+│                                             │
+└─────────────────────────────────────────────┘
 ```
 
-#### 5. Graceful Upgrades, Downgrades & Automatic Recovery (`InstanceStatus`)
-To ensure zero manual admin intervention when recovering from an offline grace expiration or upgrading tiers, workspace instance status is tracked via a three-state enum rather than a simple boolean:
+### Card Design
 
-```rust
-pub enum InstanceStatus {
-    Active,         // Normal operating register
-    QuotaSuspended, // Suspended automatically by subscription downgrade or offline grace expiration
-    Archived,       // Manually deleted/deactivated by an admin
-}
-```
+Each card shows:
+- **Instance name** ("Cashier 1") — prominent
+- **Type tag** ("Restaurant POS") — subtle, below the name
+- **Store location badge** — only when multi-store is active
+- **Instance colour** — from `workspace_instances.colour`, falling back to `workspace_types.accent_colour`
+- **Active indicator** — dot on the most recently used instance
 
-- **Upgrades & Automatic Recovery**: Raising a tier instantly increases `max_pos_instances` and unlocks `allowed_workspace_types`. When `apps/cloud-server` syncs an upgraded quota, the backend queries all `QuotaSuspended` instances and automatically restores them to `Active` (ordered by `last_accessed_at DESC`) up to the new tier limit. Admin-deleted (`Archived`) registers remain untouched.
-- **Downgrading (Safe Archiving)**: If a client downgrades below their current register count or their 14-day offline grace expires, surplus active instances transition to `QuotaSuspended`. Historical audit logs, cash accountability, and orders (`WHERE store_id = ...`) are completely preserved, while only quota-compliant instances remain openable for new sales.
+### When the Picker Is Skipped
 
-### 8. Workspace Picker Visual Design
+| Scenario | Picker? |
+|---|---|
+| Device-bound terminal (bound_store_id + bound_instance_id set) | **Skipped** — boots directly |
+| Single instance per type, single store | **Skipped** — auto-selects the sole instance |
+| Multiple instances, but user has exactly one accessible | **Skipped** — auto-selects |
+| Multiple instances, user has multiple accessible | **Shown** — instance picker within store |
+| Multi-store owner/manager (desktop admin) | **Shown** — store picker first, then instance picker |
 
-The workspace picker (`WorkspaceHome.tsx`) shows workspace **instances**, not types:
+---
 
-```typescript
-interface WorkspaceCardDto {
-  instanceId: string;
-  typeKey: string;
-  name: string;
-  description: string;
-  icon: string;
-  colour?: string;
-  storeId?: string;
-  lastAccessed?: boolean;
-}
-```
-
-Cards are grouped by type (e.g., all restaurant POS instances together) with a small type label. Each card has:
-
-- A type-based icon (drawn by `WorkspaceIcon` using `typeKey`).
-- The instance name prominently displayed.
-- A subtle type tag (e.g., "Restaurant POS") below.
-- An accent colour derived from the instance's `colour` field, falling back to a `WS_COLORS` mapping by type.
-
-The `WS_COLORS` and `WS_ORDER` maps are migrated from hardcoded objects to database-driven values:
-
-```sql
--- accent_colours stored alongside workspace_types
-ALTER TABLE workspace_types ADD COLUMN accent_colour TEXT NOT NULL DEFAULT '';
-```
-
-### 9. Default Instance + Backward Compatibility
+## Default Instances + Backward Compatibility
 
 To ensure zero disruption for existing single-location deployments:
 
-- A migration creates a default instance (e.g., `default-restaurant-pos`, `default-store-pos`) for each existing workspace key.
+- A migration creates one default instance per type in the primary store.
 - Existing `user_workspaces` rows are migrated to point at the corresponding default instance.
-- The frontend falls back to the default instance if no other instance is specified.
-- Single-location businesses see exactly the same UI and data as before.
+- The device binding fields (`bound_store_id`, `bound_instance_id`) default to the primary store and the default `restaurant-pos` or `store-pos` instance.
+- Single-location businesses see exactly the same UI and data as before — the picker is skipped because there's only one instance per type.
+
+### Store-First Backward Compatibility
+
+For deployments that already have multiple stores via `store_profiles`:
+
+**Data splitting strategy:** The existing database becomes the primary store's database (no data migration needed). When a second store is created via the admin UI, a new empty `store-<id>.sqlite` is created with all migrations applied (including workspace types, default instances, and role assignments). The new store starts with no products, orders, or customers — these are populated via the admin's catalog management or cloud sync. This avoids the risky "split existing data" problem entirely — the primary store keeps everything, new stores start fresh.
+
+- Each existing store gets its own set of default instances seeded at database creation.
+- The `StoreSwitcher` component in the topbar becomes the primary navigation control for admin users.
+- The existing `StoreSwitcher` is enhanced to trigger a database connection switch and instance re-resolution.
 
 ---
 
 ## Options Considered
 
-### Option A — Type/Instance Separation (Chosen)
+### Option A — Type/Instance Separation + Store-First Tenancy (Chosen)
 
-Separate workspace types (UI template) from workspace instances (deployment + data scope).
+Separate workspace types (UI template) from workspace instances (deployment within a store). Use store-scoped databases for data isolation. Device binding as the default session model.
 
-- **Pro:** Clean conceptual model, works for all business types (restaurant chains, retail chains, multi-warehouse).
-- **Pro:** Data scoping is explicit and consistent across all queries.
-- **Pro:** User assignment is naturally per-instance.
-- **Con:** Requires database migration for existing data.
-- **Con:** All data queries need a scope parameter added.
+- **Pro:** Data isolation is filesystem-level — no query-level scoping needed.
+- **Pro:** Scales to 500+ stores without performance degradation.
+- **Pro:** Device binding matches real-world POS behavior (a terminal is a terminal).
+- **Pro:** The workspace picker is only shown when actually needed (rare).
+- **Pro:** Clean separation of concerns: store = data boundary, instance = deployment, type = UI template.
+- **Con:** Requires per-store database management (creation, migration, backup).
+- **Con:** Cross-store operations require sync layer mediation.
 
-### Option B — Tags on Workspace Keys (Rejected)
+### Option B — Multi-Tenant SQLite with Type/Instance Separation (Rejected)
 
-Keep a flat workspace list but allow duplicate keys differentiated by tags/metadata:
+Put all stores in one SQLite file, scope everything with `WHERE store_id = ?`.
 
-```
-restaurant-pos:downtown
-restaurant-pos:mall
-inventory:warehouse-a
-inventory:warehouse-b
-```
+- **Pro:** Simpler database management — one file, one migration path.
+- **Pro:** Cross-store queries are possible locally.
+- **Con:** Every domain table needs a `store_id` column. Every query needs scope filtering.
+- **Con:** Index bloat as store count grows. SQLite query planning degrades.
+- **Con:** No per-store backup isolation.
+- **Con:** `NULL` store_id creates permanent ambiguity between "unscoped" and "unassigned."
+- **Con:** Breaks down past ~50 stores.
 
-- **Pro:** Minimal schema change — just add metadata JSON column.
-- **Con:** Tag parsing is fragile, rendering logic becomes conditional on tag values.
-- **Con:** No clear place to store `store_id` scope — would be buried in JSON metadata.
-- **Con:** Type comparison requires string parsing (`key.split(':')[0]`).
+### Option C — Tags on Workspace Keys (Rejected)
 
-### Option C — Separate Store/Location Entity (Deferred)
+Keep flat workspace list with colon-delimited tags: `restaurant-pos:downtown`.
 
-Make "store" the primary organizational unit, and workspaces a display mode within a store:
-
-```
-Store: Downtown
-  ├── Restaurant POS (type)
-  ├── Inventory (type)
-  └── Admin (type)
-
-Store: Mall
-  ├── Store POS (type)
-  └── Inventory (type)
-```
-
-- **Pro:** Clean data model — store is the scoping entity, workspace is just the UI mode.
-- **Con:** More radical departure from current architecture. Every screen and API would need store-level awareness.
-- **Con:** Many cross-store features (global reporting, chain-wide inventory management) become harder.
-- **Decision:** Consider for Phase 6+ if chain-wide operations become a primary use case.
+- **Pro:** Minimal schema change.
+- **Con:** Fragile string parsing. No clear data scoping mechanism.
+- **Con:** Doesn't address the tenancy question at all.
 
 ### Option D — Multi-Workspace Per User Session (Deferred)
 
-Allow a user to have multiple workspaces open simultaneously in tabs within the same session.
+Allow a user to have multiple workspaces open simultaneously in tabs.
 
-- **Pro:** Power users can switch between workspaces without losing context.
-- **Con:** Major frontend complexity (multi-tab state, conflicting scopes).
-- **Decision:** Revisit when the single-workspace-per-session model proves limiting.
+- **Pro:** Power users can switch without losing context.
+- **Con:** Major frontend complexity with conflicting scopes.
+- **Decision:** Revisit when single-workspace-per-session proves limiting.
 
 ---
 
@@ -589,101 +636,159 @@ Allow a user to have multiple workspaces open simultaneously in tabs within the 
 
 ### Positive
 
-- A business can create N workspaces of any type, each scoped to a specific location.
-- The workspace picker shows meaningful instance names ("Downtown Restaurant POS") instead of technical keys.
-- User assignment is granular — a manager can access "Downtown Inventory" but not "Mall Inventory".
-- Data scoping is consistent — every query filters by store/warehouse, preventing data leaks between locations.
-- The type system is forward-compatible with future workspace types (e.g., a self-service kiosk type).
-- Existing single-location deployments are unaffected (default instances + migration).
+- A business can create N instances of any type, each within a specific store.
+- Data isolation is filesystem-level — impossible to leak data between stores.
+- Device binding eliminates unnecessary pickers for 90%+ of usage.
+- The workspace picker only appears when genuinely needed.
+- Scales linearly with store count — each store is an independent SQLite file.
+- Existing single-location deployments are 100% unaffected.
 
 ### Negative
 
-- All major data tables need a `store_id` or `warehouse_id` column added.
-- All API endpoints and Rust handlers need a scope parameter threaded through.
-- The frontend query layer needs `WorkspaceScope` context on every data-fetching hook.
-- Migration from existing `user_workspaces` requires creating default instances.
-- The `WorkspaceIcon` component must handle type-based rendering.
+- Per-store database management requires tooling (create, migrate, backup, restore).
+- Cross-store operations must go through the sync layer.
+- The `StoreSwitcher` must be enhanced to trigger a database connection switch.
+- For very large chains, the admin interface needs a store search/dropdown component.
 
 ### Mitigations
 
-- The scope column can be added as a single migration with a default value for existing rows.
-- The `WorkspaceScope` context is set once at workspace entry and consumed by hooks — no prop drilling.
-- Instance creation is an admin UI feature gated behind `staff:update` permission.
-- The `render_mode` field on types makes adding new workspace types a data-only operation.
+- Database creation and migration are automated via `platform/core/` tooling.
+- Store-scoped databases are created lazily — only when a second store is added.
+- The `StoreSwitcher` enhancement is Phase 2 work, not blocking Phase 1.
+- For 500+ store chains, the admin app uses cloud-side aggregated reporting — it doesn't need to open 500 databases locally.
+
+---
+
+## Out of Scope (Covered by Other ADRs)
+
+| Concern | Reason | Tracking |
+|---|---|---|
+| **Subscription tier & entitlement enforcement** | Business-model decision; instance status enum (Active/QuotaSuspended/Archived) is defined here but quota logic is separate. | ADR #5 |
+| **CRDT delta ledger & offline UUIDv7 sync** | Major data-model change for inventory. | ADR #6 |
+| **Hard `ScopeGuard` compile-time enforcement** | Follow-up to soft scoping; the `SessionContext` pattern described in Security Architecture is the soft version. | ADR #7 |
+| **Scoped real-time event bus** | Depends on stable workspace scope model; events must only broadcast to terminals in the same store. | ADR #8 |
+| **Cross-store sync protocol** | The sync layer (`platform/sync/`) already exists; cross-store sync is an extension. | Future ADR |
+| **SQLCipher / at-rest database encryption** | Defense-in-depth; encrypts per-store SQLite files and the global DB. | ADR #7 |
+| **Hardware-backed device attestation (TPM/Secure Enclave)** | Stronger device binding beyond HMAC; requires TPM/SE integration. | Future ADR |
 
 ---
 
 ## Phased Implementation & Migration Guide
 
-To execute this transition cleanly without breaking existing single-location deployments or introducing regressions, we divide the implementation into 5 sequential phases:
+### Phase 1: Workspace Types + Default Instances + Session Context
 
-### Phase 1: Database Schema & Core Backend Rust Models (`crates/oz-core`)
-1. **Migration SQL Script (`create_workspace_types_and_instances.sql`)**:
+**Goal:** Deliver type/instance separation with session-scope enforcement. All data stays in one database; store-level access control is prepared but not yet enforced (single-store mode).
+
+1. **Migration SQL (`060_workspace_instances.sql`)**:
    - Create `workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, and `role_workspace_types` tables.
-   - Run seed script to copy existing rows from `workspaces` into `workspace_types` (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`).
-   - Run auto-generation script to create one **default instance** per existing workspace key (e.g., `default-restaurant-pos` pointing to type `restaurant-pos` with `store_id = NULL`).
-   - Migrate existing user assignments from `user_workspaces` to `user_workspace_instances` (`instance_id = 'default-' || key`).
-2. **Rust DTOs & Domain Models (`crates/oz-core/src/db/workspaces.rs`)**:
-   - Define `WorkspaceTypeRow`, `WorkspaceInstanceRow`, and `WorkspaceDto` (containing `instance_id`, `type_key`, `name`, `description`, `icon`, `colour`, `render_mode`, and `store_id`).
-   - Implement `list_workspaces(&self, role_id: &str, user_id: Option<&str>) -> Result<Vec<WorkspaceDto>>`:
-     - Query `workspace_instances` joined with `workspace_types`.
-     - Maintain resolution precedence: `role-owner` → all active instances; `user_workspace_instances` rows → only assigned instances; otherwise fallback to `role_workspace_types`.
+   - Create `user_store_access` table (used in Phase 2, prepared now).
+   - Copy existing `workspaces` rows into `workspace_types`.
+   - Create one default instance per type in the primary store.
+   - Migrate `user_workspaces` → `user_workspace_instances`.
+   - Add `bound_store_id`, `bound_instance_id`, and `binding_signature` columns to `terminals`.
+   - Add `InstanceStatus` enum (`active`, `quota_suspended`, `archived`) replacing `is_active` boolean.
+   - Keep old tables deprecated for one release.
 
-### Phase 2: Data Scoping Layer & Store Filtering (`store_id` / `warehouse_id`)
-1. **Schema Scope Columns**:
-   - Add `store_id` (TEXT NULL) to `products`, `orders`, `order_lines`, and `customers`.
-   - Add `warehouse_id` (TEXT NULL) to `stock` and `stock_counts`.
-2. **Query Builder Enhancements**:
-   - Update `Store` CRUD operations (`get_products`, `list_orders`, `get_stock`) to accept an optional `scope: Option<&WorkspaceScope>`.
-   - When `store_id` is present, append `AND (store_id = ? OR store_id IS NULL)` so global shared items (or unscoped single-store setups) remain accessible while multi-store data is partitioned cleanly.
+2. **Session Context**:
+   - Implement `SessionContext` struct in `crates/oz-core/src/session.rs`.
+   - `session_context()` extractor for Tauri commands — reads scope from signed session token.
+   - All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`.
+   - `clippy` lint rule: reject `store_id: String` in command parameters.
 
-### Phase 3: Tauri IPC Bridge & Front-End API (`apps/` & `ui/src/api/`)
-1. **Tauri Command Registration (`apps/desktop-client/src/commands/workspaces.rs`)**:
-   - Update `get_workspaces` command to return `Vec<WorkspaceDto>` matching the new DTO payload.
-   - Add admin commands: `create_workspace_instance`, `update_workspace_instance`, `delete_workspace_instance`, and `assign_user_workspace_instance`.
-2. **Front-End API Adapter (`ui/src/api/workspaces.ts`)**:
-   - Update TypeScript interfaces (`WorkspaceDto`, `WorkspaceInstanceCreateRequest`).
-   - Ensure all calls flow through clean `api/workspaces.ts` wrappers without direct `invoke()` usage in components.
+3. **Rust DTOs & Models**:
+   - `WorkspaceTypeRow`, `WorkspaceInstanceRow`, `WorkspaceDto` with all new fields.
+   - `list_workspaces(role_id, user_id, store_id)` — resolution algorithm with store access check.
+   - `create_workspace_instance`, `get_workspace_instance`.
+   - Tauri commands: update `list_workspaces`, add admin CRUD for instances, add `get_device_binding`/`set_device_binding` (with HMAC signature).
 
-### Phase 4: Front-End State & Type-Based Routing (`ui/src/`)
-1. **Workspace Context (`ui/src/context/WorkspaceContext.tsx`)**:
-   - Update state from `activeWorkspace: string` (flat key) to `activeInstance: WorkspaceDto | null`.
-   - Provide `WorkspaceScope` context (`{ storeId: activeInstance?.store_id, typeKey: activeInstance?.type_key }`) across the component tree so data hooks (`useQuery`) can automatically attach `storeId` to requests.
-2. **Type-Based Routing (`ui/src/components/AppShell.tsx`)**:
-   - Change routing logic to switch on `activeInstance.type_key` instead of the unique instance ID:
-     ```typescript
-     switch (activeInstance?.type_key) {
-       case 'restaurant-pos':
-         return <PosScreen storeId={activeInstance.store_id} onNavigate={...} />;
-       case 'store-pos':
-         return <RetailPosScreen storeId={activeInstance.store_id} onNavigate={...} />;
-       case 'kds':
-         return <KdsScreen storeId={activeInstance.store_id} onNavigate={...} />;
-       default:
-         return <AppLayout activeScreen={currentScreen} />;
-     }
-     ```
-3. **Workspace Picker Card UI (`ui/src/components/WorkspaceHome.tsx`)**:
-   - Render `WorkspaceCard` items using `instance_id` as key and `name` as primary title (e.g., "Downtown - Cashier 1").
-   - Group cards by `type_key` or `store_id` depending on user role.
-   - Display a subtle location badge (`Downtown`, `Mall`, `Airport`) when `store_id` is set, and apply instance `colour` overrides.
+4. **Device Binding Signing**:
+   - On `set_device_binding`: generate HMAC signature over `(terminal_id, store_id, instance_id)` using OS keyring key.
+   - Store signature in `terminals.binding_signature`.
+   - On boot resolution: validate signature before trusting binding.
 
-### Phase 5: Verification & Automated Safety Gates
-1. **Automated Unit & Integration Tests**:
-   - Verify `rusqlite` migration script creates exact `default-<key>` instances for existing databases.
-   - Test `list_workspaces()` under `role-owner`, specific user assignments (`user_workspace_instances`), and role defaults (`role_workspace_types`).
-   - Run Vitest/Jest tests for `AppShell` routing ensuring each `type_key` renders the appropriate screen (`PosScreen`, `RetailPosScreen`, `AppLayout`).
-2. **Pre-Commit Hook Validation (`core.hooksPath .githooks`)**:
-   - Run `scripts/check.sh` and ensure `cargo clippy`, `cargo fmt`, ARIA checks, and Fluent i18n (`bundle-parity` / `FTL dedupe`) pass with zero errors across all modified Rust crates and React components.
+5. **Frontend Context**:
+   - `WorkspaceContext` state: `activeInstance: WorkspaceDto | null` (replaces `activeWorkspace: string`).
+   - `WorkspaceScope` context: `{ storeId, instanceId, typeKey }`.
+   - Compatibility shim for components still using `activeWorkspace` string.
+
+6. **Verification**: Unit tests for session context extraction, HMAC validation, and resolution with store access; `cargo clippy -p oz-core -- -D warnings`.
+
+### Phase 2: Store-Scoped Databases
+
+**Goal:** Enable true multi-store isolation. Each additional store gets its own SQLite file.
+
+1. **Database Manager** (`platform/core/`):
+   - `StoreDatabaseManager` — creates, migrates, opens per-store SQLite files.
+   - Lazy creation: second store's DB is created when the store is added.
+   - Connection pool: one open connection per active store, idle stores closed.
+
+2. **Store Switcher Enhancement**:
+   - Switching stores triggers a database connection switch.
+   - Active instance is re-resolved from the new store's database.
+   - In-memory caches are invalidated on store switch.
+
+3. **Migration Tooling**:
+   - Migrations run on all store databases, not just the primary.
+   - New migrations are applied to each store database on startup.
+
+4. **Verification**: Integration tests for store creation, switching, and cross-store data isolation.
+
+### Phase 3: Device Binding + Tablet Boot Flow
+
+**Goal:** Tablets and fixed terminals boot directly into their workspace without showing any picker.
+
+1. **Device Registration**:
+   - On first boot, a terminal registers itself (writes to the `terminals` table in the global DB).
+   - Admin UI allows binding a terminal to a store + instance.
+   - Boot-time validation: if `bound_instance_id` is set, open the bound store's database and verify the instance exists and is active.
+
+2. **Boot Resolution**:
+   - `bound_store_id` + `bound_instance_id` → auto-boot, no picker.
+   - `bound_store_id` only → auto-select store, show instance picker within store.
+   - Neither bound → fall through to user-based resolution.
+
+3. **Tablet Shell Redesign**:
+   - `TabletAppShell.tsx` currently uses a hardcoded tab bar (`pos`, `products`, `sales-history`, `kds`) with no `WorkspaceContext`. This is replaced with the same device-binding resolution as the desktop shell.
+   - On boot, the tablet resolves its bound store + instance and renders the appropriate UI (POS screen, KDS, etc.) with the correct nav tabs from `workspace_type_screens`.
+   - The bottom tab bar is dynamically generated from the instance's type screens, not hardcoded.
+   - A single-purpose tablet (e.g., a kitchen KDS display) is bound to `(store_id, kds_instance_id)` and boots directly into `<KdsScreen />` with no tab bar.
+   - A multi-purpose tablet (e.g., a server tablet) is bound to `(store_id, restaurant_pos_instance_id)` and boots into `<PosScreen />` with tabs from `workspace_type_screens`.
+
+4. **Verification**: `./scripts/check.sh` full matrix; integration tests for device binding.
+
+---
+
+## Scaling Analysis
+
+| Deployment Size | Stores | Instances | DB Files | Picker Behavior | Performance |
+|---|---|---|---|---|---|
+| **Single food stall** | 1 | 1–5 | 1 | Never shown | Optimal |
+| **Small restaurant** | 1 | 3–8 | 1 | Never shown (device-bound) | Optimal |
+| **Multi-location chain** | 3–20 | 12–80 | 3–20 | Store picker for owner; skipped for staff | Per-store optimal |
+| **Regional chain** | 20–100 | 80–400 | 20–100 | Store picker with search for owner | Per-store optimal |
+| **Enterprise (500+)** | 500+ | 2,000+ | 500+ | Cloud-side aggregated admin; terminals device-bound | Per-store optimal; admin uses cloud |
+
+### Key Scaling Properties
+
+- **The picker never shows more cards than one store's worth of instances.** Even for a 500-store chain, a cashier at Store #347 sees only Store #347's 2–5 instances.
+- **SQLite performance is constant.** Each store's database only contains that store's data, regardless of chain size.
+- **The admin interface for enterprise uses cloud-side aggregation.** The owner doesn't open 500 databases — they use cloud reporting.
 
 ---
 
 ## Related
 
-- `WorkspaceContext.tsx` — Current workspace state management (needs instance awareness)
-- `WorkspaceHome.tsx` — Workspace picker (needs instance rendering)
-- `AppShell.tsx` — Workspace routing (needs type-based dispatch)
+- `WorkspaceContext.tsx` — Current workspace state (needs instance awareness)
+- `WorkspaceHome.tsx` — Workspace picker (needs store-scoped instance rendering)
+- `AppShell.tsx` — Workspace routing (needs type-based dispatch + device binding)
+- `TabletAppShell.tsx` — Tablet shell (needs device binding integration)
 - `crates/oz-core/src/db/workspaces.rs` — Backend workspace queries
 - `apps/desktop-client/src/commands/workspaces.rs` — Tauri workspace commands
+- `apps/desktop-client/src/commands/store_profiles.rs` — Store management commands
+- `platform/sync/` — Cross-store sync layer
+- `crates/oz-core/migrations/016_terminals.sql` — Terminals table (needs binding columns)
+- `crates/oz-core/migrations/025_store_profiles.sql` — Store profiles (existing)
 - ADR #1 — Module System Design
 - ADR #3 — Frontend Restructure (registry-based shell)
+- ADR #5 — Subscription Tier & Entitlement (planned)
+- ADR #6 — CRDT Delta Ledger & Offline Sync (planned)
