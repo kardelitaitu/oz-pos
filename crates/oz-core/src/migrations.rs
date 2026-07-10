@@ -239,6 +239,10 @@ pub const ALL: &[Migration] = &[
         id: "055_offline_queue_tenant.sql",
         sql: include_str!("../migrations/055_offline_queue_tenant.sql"),
     },
+    Migration {
+        id: "060_workspace_instances.sql",
+        sql: include_str!("../migrations/060_workspace_instances.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -249,7 +253,7 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
 
 /// Create a fresh in-memory database with all migrations already applied.
 ///
-/// Concatenates all 49 migration SQLs into a single batch the first time
+/// Concatenates all migration SQLs into a single batch the first time
 /// and caches the generated SQL in a `OnceLock<String>`. Subsequent calls
 /// just run `execute_batch` on the cached string — no per-test migration
 /// overhead.
@@ -432,6 +436,12 @@ mod tests {
             "workspace_screens",
             "role_workspaces",
             "user_workspaces",
+            "workspace_types",
+            "workspace_type_screens",
+            "workspace_instances",
+            "user_workspace_instances",
+            "role_workspace_types",
+            "user_store_access",
         ];
 
         for table in &expected_tables {

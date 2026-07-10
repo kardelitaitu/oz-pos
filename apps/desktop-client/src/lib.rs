@@ -301,9 +301,14 @@ pub fn run() {
             commands::tables::release_table,
             commands::tables::list_sections,
             commands::workspaces::list_workspaces,
+            commands::workspaces::get_workspace_instance,
+            commands::workspaces::create_workspace_instance,
+            commands::workspaces::list_workspace_types,
             commands::workspaces::list_all_workspaces,
             commands::workspaces::set_user_workspaces,
             commands::workspaces::get_user_workspaces,
+            commands::workspaces::set_user_workspace_instances,
+            commands::workspaces::get_user_workspace_instances,
             commands::workspaces::list_workspace_screens,
         ])
         .run(tauri::generate_context!())

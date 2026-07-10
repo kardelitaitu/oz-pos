@@ -48,6 +48,7 @@ pub mod purchase_order;
 pub mod recipe;
 pub mod refund;
 pub mod sale;
+pub mod session;
 pub mod settings;
 pub mod shift;
 pub mod sku;

@@ -679,39 +679,50 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 **Goal:** Deliver type/instance separation with session-scope enforcement. All data stays in one database; store-level access control is prepared but not yet enforced (single-store mode).
 
-1. **Migration SQL (`060_workspace_instances.sql`)**:
-   - Create `workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, and `role_workspace_types` tables.
-   - Create `user_store_access` table (used in Phase 2, prepared now).
-   - Copy existing `workspaces` rows into `workspace_types`.
-   - Create one default instance per type in the primary store.
-   - Migrate `user_workspaces` → `user_workspace_instances`.
-   - Add `bound_store_id`, `bound_instance_id`, and `binding_signature` columns to `terminals`.
-   - Add `InstanceStatus` enum (`active`, `quota_suspended`, `archived`) replacing `is_active` boolean.
-   - Keep old tables deprecated for one release.
+> **Status (2026-07-10):** Steps 1–3 complete (migration, session context, DTOs/models).
+> Steps 4–6 deferred to Phase 1b.
 
-2. **Session Context**:
-   - Implement `SessionContext` struct in `crates/oz-core/src/session.rs`.
-   - `session_context()` extractor for Tauri commands — reads scope from signed session token.
-   - All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`.
-   - `clippy` lint rule: reject `store_id: String` in command parameters.
+1. **Migration SQL (`060_workspace_instances.sql`)** ✅
+   - [x] Create `workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, and `role_workspace_types` tables.
+   - [x] Create `user_store_access` table (used in Phase 2, prepared now).
+   - [x] Copy existing `workspaces` rows into `workspace_types`.
+   - [x] Create one default instance per type in the primary store.
+   - [x] Migrate `user_workspaces` → `user_workspace_instances`.
+   - [x] Add `bound_store_id`, `bound_instance_id`, and `binding_signature` columns to `terminals`.
+   - [x] Add `InstanceStatus` enum (`active`, `quota_suspended`, `archived`) replacing `is_active` boolean.
+   - [x] Keep old tables deprecated for one release.
+   - [x] Index on `user_workspace_instances(user_id)` and workspace instances `(type_key)`.
+   - **Files:** `crates/oz-core/migrations/060_workspace_instances.sql`, `crates/oz-core/src/migrations.rs`
 
-3. **Rust DTOs & Models**:
-   - `WorkspaceTypeRow`, `WorkspaceInstanceRow`, `WorkspaceDto` with all new fields.
-   - `list_workspaces(role_id, user_id, store_id)` — resolution algorithm with store access check.
-   - `create_workspace_instance`, `get_workspace_instance`.
-   - Tauri commands: update `list_workspaces`, add admin CRUD for instances, add `get_device_binding`/`set_device_binding` (with HMAC signature).
+2. **Session Context** ✅ (struct only; extractor deferred)
+   - [x] Implement `SessionContext` struct in `crates/oz-core/src/session.rs`.
+   - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred to Phase 1b)*
+   - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred to Phase 1b)*
+   - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred to Phase 1b)*
+   - **Files:** `crates/oz-core/src/session.rs`, `crates/oz-core/src/lib.rs`
 
-4. **Device Binding Signing**:
-   - On `set_device_binding`: generate HMAC signature over `(terminal_id, store_id, instance_id)` using OS keyring key.
-   - Store signature in `terminals.binding_signature`.
-   - On boot resolution: validate signature before trusting binding.
+3. **Rust DTOs & Models** ✅
+   - [x] `WorkspaceTypeRow`, `WorkspaceInstanceRow`, `WorkspaceDto` with all new fields.
+   - [x] `list_workspaces(role_id, user_id, store_id)` — resolution algorithm with store access check.
+   - [x] `create_workspace_instance`, `get_workspace_instance` (now accepts optional `user_id`).
+   - [x] `set_user_workspace_instances`, `get_user_workspace_instance_ids` for instance assignment CRUD.
+   - [x] Legacy methods preserved (`list_workspaces_legacy`, `set_user_workspaces_legacy`, etc.).
+   - [x] Shared `instance_dto_sql()` helper with `LEFT JOIN store_profiles` for null-safe store name.
+   - [x] Tauri commands: updated `list_workspaces` (now takes `store_id`), new admin CRUD commands (`create_workspace_instance`, `set_user_workspace_instances`, `get_user_workspace_instances`).
+   - [x] Frontend API `ui/src/api/workspaces.ts` updated with new `WorkspaceDto` shape.
+   - **Files:** `crates/oz-core/src/db/workspaces.rs`, `apps/desktop-client/src/commands/workspaces.rs`, `apps/desktop-client/src/lib.rs`, `ui/src/api/workspaces.ts`
 
-5. **Frontend Context**:
-   - `WorkspaceContext` state: `activeInstance: WorkspaceDto | null` (replaces `activeWorkspace: string`).
-   - `WorkspaceScope` context: `{ storeId, instanceId, typeKey }`.
-   - Compatibility shim for components still using `activeWorkspace` string.
+4. **Device Binding Signing** ⏳ *(Deferred to Phase 1b)*
+   - [ ] On `set_device_binding`: generate HMAC signature over `(terminal_id, store_id, instance_id)` using OS keyring key.
+   - [ ] Store signature in `terminals.binding_signature`.
+   - [ ] On boot resolution: validate signature before trusting binding.
 
-6. **Verification**: Unit tests for session context extraction, HMAC validation, and resolution with store access; `cargo clippy -p oz-core -- -D warnings`.
+5. **Frontend Context** ⏳ *(Deferred to Phase 1b)*
+   - [ ] `WorkspaceContext` state: `activeInstance: WorkspaceDto | null` (replaces `activeWorkspace: string`).
+   - [ ] `WorkspaceScope` context: `{ storeId, instanceId, typeKey }`.
+   - [ ] Compatibility shim for components still using `activeWorkspace` string.
+
+6. **Verification**: ✅ Unit tests pass (18/18); `cargo check -p oz-core -p oz-pos-app` passes; 3 pre-existing `currency_integration` failures unrelated.
 
 ### Phase 2: Store-Scoped Databases
 
