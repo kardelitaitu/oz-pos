@@ -106,9 +106,10 @@ impl AppState {
     /// resolved scope.
     /// Returns `AppError::InvalidSession` if the token is unknown.
     pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
-        let store = self.session_store.read().map_err(|e| {
-            AppError::Internal(format!("session store lock poisoned: {e}"))
-        })?;
+        let store = self
+            .session_store
+            .read()
+            .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
         store.get(token).cloned().ok_or(AppError::InvalidSession)
     }
 }

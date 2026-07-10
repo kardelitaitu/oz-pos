@@ -135,9 +135,10 @@ pub async fn create_session(
     let token = uuid::Uuid::new_v4().to_string();
 
     {
-        let mut store = state.session_store.write().map_err(|e| {
-            AppError::Internal(format!("session store lock poisoned: {e}"))
-        })?;
+        let mut store = state
+            .session_store
+            .write()
+            .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
 
         if store.contains_key(&token) {
             tracing::warn!(token = %token, "session token collision detected — overwriting");
@@ -187,9 +188,10 @@ pub async fn destroy_session(
     state: State<'_, AppState>,
     session_token: String,
 ) -> Result<(), AppError> {
-    let mut store = state.session_store.write().map_err(|e| {
-        AppError::Internal(format!("session store lock poisoned: {e}"))
-    })?;
+    let mut store = state
+        .session_store
+        .write()
+        .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
     store.remove(&session_token);
     tracing::info!("session destroyed");
     Ok(())

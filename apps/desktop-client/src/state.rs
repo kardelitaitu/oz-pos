@@ -21,8 +21,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use notify::Watcher as _;
@@ -254,9 +254,10 @@ impl AppState {
     /// resolved scope (store, instance, type, user, role, terminal).
     /// Returns `AppError::InvalidSession` if the token is unknown.
     pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
-        let store = self.session_store.read().map_err(|e| {
-            AppError::Internal(format!("session store lock poisoned: {e}"))
-        })?;
+        let store = self
+            .session_store
+            .read()
+            .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
         store.get(token).cloned().ok_or(AppError::InvalidSession)
     }
 }
@@ -369,7 +370,11 @@ mod tests {
             "i1".into(),
             "type1".into(),
         );
-        state.session_store.write().unwrap().insert("tok-abc".into(), ctx.clone());
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("tok-abc".into(), ctx.clone());
 
         let resolved = state.resolve_session("tok-abc").unwrap();
         assert_eq!(resolved.store_id, "s1");

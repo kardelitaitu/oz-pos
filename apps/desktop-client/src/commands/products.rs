@@ -780,7 +780,11 @@ mod tests {
             "default-restaurant-pos".into(),
             "restaurant-pos".into(),
         );
-        state.session_store.write().unwrap().insert("tok-valid".into(), ctx);
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("tok-valid".into(), ctx);
 
         let session = state.resolve_session("tok-valid").unwrap();
         assert_eq!(session.store_id, "default");

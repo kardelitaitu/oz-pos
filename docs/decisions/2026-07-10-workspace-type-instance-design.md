@@ -706,6 +706,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] `sessionToken` lifecycle in `WorkspaceContext`: auto-created on workspace selection, auto-destroyed on logout/store-switch, token rotation on `switchStore()`.
    - [x] `WorkspaceContextValue` exposes `sessionToken: string | null` for commands to pass to backend.
    - [x] **End-to-end pattern demonstration:** `list_products_scoped` command implements the canonical session token pattern (resolve session → open store DB → query). Registered in `lib.rs`. Old `list_products` preserved for backward compatibility, marked deprecated for multi-store.
+   - [x] **Final comprehensive verification (2026-07-10):** `cargo fmt --all` ✅, `cargo clippy -p oz-core -p platform-core` ✅ zero warnings, `cargo check --lib -p oz-pos-app -p oz-pos-tablet` ✅ clean, `cargo test -p oz-core -p platform-core` ✅ 1,029/1,032 pass (3 pre-existing `currency_integration` failures unrelated).
    - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
