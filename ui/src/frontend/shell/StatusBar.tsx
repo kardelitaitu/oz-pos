@@ -8,6 +8,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useGatewayStatus } from '@/hooks/useGatewayStatus';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import ThemeToggle from './ThemeToggle';
+import Tooltip from './Tooltip';
 import './StatusBar.css';
 
 /**
@@ -37,28 +38,32 @@ export default function StatusBar() {
     <footer className="app-statusbar" role="status" aria-label="Application status">
       {/* ── Left segment: connection + version ── */}
       <div className="statusbar-left">
-        <div className="statusbar-segment" title={connectionLabel}>
-          <span className={`statusbar-dot ${connectionDotClass}`} aria-hidden="true" />
-          <span className="statusbar-version">OZ-POS Enterprise v0.0.4</span>
-        </div>
+        <Tooltip content={connectionLabel} position="top">
+          <div className="statusbar-segment">
+            <span className={`statusbar-dot ${connectionDotClass}`} aria-hidden="true" />
+            <span className="statusbar-version">OZ-POS Enterprise v0.0.4</span>
+          </div>
+        </Tooltip>
 
         {/* Gateway status pill */}
         {stripeStatus.configured && (
-          <div className="statusbar-segment statusbar-gateway">
-            <span
-              className={`statusbar-dot ${stripeStatus.online ? 'statusbar-dot--online' : 'statusbar-dot--offline'}`}
-              aria-hidden="true"
-            />
-            <span
-              className="statusbar-gateway-name"
-              title={stripeStatus.online
-                ? l10n.getString('gateway-status-online-aria', { name: 'Stripe' })
-                : l10n.getString('gateway-status-offline-aria', { name: 'Stripe' })
-              }
-            >
-              Stripe
-            </span>
-          </div>
+          <Tooltip
+            content={stripeStatus.online
+              ? l10n.getString('gateway-status-online-aria', { name: 'Stripe' })
+              : l10n.getString('gateway-status-offline-aria', { name: 'Stripe' })
+            }
+            position="top"
+          >
+            <div className="statusbar-segment statusbar-gateway">
+              <span
+                className={`statusbar-dot ${stripeStatus.online ? 'statusbar-dot--online' : 'statusbar-dot--offline'}`}
+                aria-hidden="true"
+              />
+              <span className="statusbar-gateway-name">
+                Stripe
+              </span>
+            </div>
+          </Tooltip>
         )}
 
         <span className="statusbar-divider" aria-hidden="true" />
@@ -67,13 +72,13 @@ export default function StatusBar() {
 
       {/* ── Right segment: workspace + theme ── */}
       <div className="statusbar-right">
-        <button
-          type="button"
-          className="statusbar-btn"
-          onClick={goToWorkspacePicker}
-          aria-label={l10n.getString('nav-switch-workspace')}
-          title={l10n.getString('nav-switch-workspace')}
-        >
+        <Tooltip content={l10n.getString('nav-switch-workspace')} position="top">
+          <button
+            type="button"
+            className="statusbar-btn"
+            onClick={goToWorkspacePicker}
+            aria-label={l10n.getString('nav-switch-workspace')}
+          >
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -93,6 +98,7 @@ export default function StatusBar() {
             <span>Workspace</span>
           </Localized>
         </button>
+        </Tooltip>
 
         <span className="statusbar-divider" aria-hidden="true" />
 
