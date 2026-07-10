@@ -10,8 +10,8 @@
 .tooltip-content {
   position: absolute;
   padding: var(--space-1_5) var(--space-2_5);
-  background: var(--color-fg);
-  color: var(--color-fg-inverse);
+  background: var(--tooltip-bg, var(--neutral-800));
+  color: var(--tooltip-fg, #ffffff);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   line-height: 1.5;
@@ -28,6 +28,21 @@
     opacity var(--duration-150) var(--ease-out),
     transform var(--duration-150) var(--ease-out);
   transform-origin: var(--tooltip-origin, left center);
+}
+
+/* In light mode: --neutral-800 = #262626 (dark gray) → white text ✓ */
+/* In dark  mode: --neutral-800 = #e5e5e5 (light) — wrong for tooltip.
+   Override with a proper dark shade for the tooltip bubble. */
+[data-theme='dark'] .tooltip-content {
+  --tooltip-bg: #2a2a3e;
+  --tooltip-fg: #f0f0f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tooltip-content {
+    --tooltip-bg: #2a2a3e;
+    --tooltip-fg: #f0f0f0;
+  }
 }
 
 .tooltip-content--visible {
@@ -96,7 +111,7 @@
   left: -9px;
   top: 50%;
   transform: translateY(-50%);
-  border-right-color: var(--color-fg);
+  border-right-color: var(--tooltip-bg, var(--neutral-800));
 }
 
 /* Left-positioned arrow points right */
@@ -104,7 +119,7 @@
   right: -9px;
   top: 50%;
   transform: translateY(-50%);
-  border-left-color: var(--color-fg);
+  border-left-color: var(--tooltip-bg, var(--neutral-800));
 }
 
 /* Top-positioned arrow points up */
@@ -112,7 +127,7 @@
   bottom: -9px;
   left: 50%;
   transform: translateX(-50%);
-  border-top-color: var(--color-fg);
+  border-top-color: var(--tooltip-bg, var(--neutral-800));
 }
 
 /* Bottom-positioned arrow points down */
@@ -120,7 +135,7 @@
   top: -9px;
   left: 50%;
   transform: translateX(-50%);
-  border-bottom-color: var(--color-fg);
+  border-bottom-color: var(--tooltip-bg, var(--neutral-800));
 }
 
 /* ── Reduced motion ─────────────────────────────── */
