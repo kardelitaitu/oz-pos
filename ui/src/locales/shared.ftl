@@ -166,6 +166,7 @@ nav-dashboard-report = Dashboard
 nav-sales-report = Sales Report
 nav-inventory-report = Inventory Report
 nav-design-system = Design System
+nav-tooltip-preview = Tooltip Preview
 nav-kiosk = Kiosk
 nav-tables = Tables
 nav-promotions = Promotions
