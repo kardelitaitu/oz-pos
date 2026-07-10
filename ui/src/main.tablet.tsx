@@ -4,6 +4,7 @@ import { LocalizationProvider } from '@fluent/react';
 import { createEnUsLocalization } from './locales';
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import TabletAppShell from '@/frontend/shell/tablet/TabletAppShell';
 import { registerPage } from '@/platform/ui/page-registry';
@@ -101,9 +102,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <LocalizationProvider l10n={l10n}>
       <ThemeProvider>
         <AuthProvider>
-          <ToastProvider>
-            <TabletAppShell />
-          </ToastProvider>
+          <WorkspaceProvider>
+            <ToastProvider>
+              <TabletAppShell />
+            </ToastProvider>
+          </WorkspaceProvider>
         </AuthProvider>
       </ThemeProvider>
     </LocalizationProvider>

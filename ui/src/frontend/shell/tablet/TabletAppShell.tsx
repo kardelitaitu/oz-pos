@@ -1,20 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import TabletAppLayout from './TabletAppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
+import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
 import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
 import type { WizardState } from '@/features/setup/SetupWizard';
+import RetailPosScreen from '@/features/retail/RetailPosScreen';
+import PosScreen from '@/features/sales/PosScreen';
+import KdsScreen from '@/features/kds/KdsScreen';
 
 /**
  * Tablet-optimised application shell.
  *
- * Same logic as AppShell but renders TabletAppLayout (bottom tab bar
- * with larger touch targets) instead of the desktop sidebar layout.
+ * ADR #4 Phase 3b: Uses WorkspaceContext for device-bound auto-boot
+ * and dynamic tab bar from workspace_type_screens. Falls back to
+ * workspace picker when no instance is selected.
  */
 export default function TabletAppShell() {
   const [loading, setLoading] = useState(true);
@@ -22,6 +28,27 @@ export default function TabletAppShell() {
   const [currentRoute, setCurrentRoute] = useState('pos');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session } = useAuth();
+  // ADR #4 Phase 3b: use WorkspaceContext for device-bound auto-boot.
+  const {
+    activeWorkspace,
+    workspaceScreens,
+  } = useWorkspace();
+
+  // Navigate to workspace-appropriate route on selection.
+  const prevWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => {
+    if (prevWorkspaceRef.current !== undefined && prevWorkspaceRef.current !== activeWorkspace) {
+      const workspaceRoute: Record<string, string> = {
+        'restaurant-pos': 'pos',
+        'store-pos': 'pos',
+        kds: 'kds',
+        inventory: 'products',
+        admin: 'settings',
+      };
+      setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'pos');
+    }
+    prevWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
 
   // On mount, check if setup was already completed.
   useEffect(() => {
@@ -103,7 +130,45 @@ export default function TabletAppShell() {
     return <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />;
   }
 
-  // Render the current page from the registry, or null if not found.
+  // ADR #4 Phase 3b: Workspace routing — same pattern as desktop AppShell.
+  // If no workspace is active, show the picker. Fullscreen types render
+  // directly. Sidebar types use TabletAppLayout with dynamic tabs.
+
+  if (!activeWorkspace) {
+    return (
+      <div className="workspace-home-wrapper">
+        <WorkspaceHome />
+      </div>
+    );
+  }
+
+  // Fullscreen workspaces — render without the tab bar.
+  if (activeWorkspace === 'restaurant-pos') {
+    return (
+      <div className="workspace-fullscreen">
+        <PosScreen onNavigate={handleNavigate} />
+      </div>
+    );
+  }
+
+  if (activeWorkspace === 'store-pos') {
+    return (
+      <div className="workspace-fullscreen">
+        <RetailPosScreen onNavigate={handleNavigate} />
+      </div>
+    );
+  }
+
+  if (activeWorkspace === 'kds') {
+    return (
+      <div className="workspace-fullscreen">
+        <KdsScreen />
+      </div>
+    );
+  }
+
+  // Sidebar-type workspaces (inventory, admin) — use TabletAppLayout
+  // with a dynamic bottom tab bar from workspace_type_screens.
   const pageRegistration = getPage(currentRoute);
   const PageComponent = pageRegistration?.component ?? null;
   const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole);
@@ -113,6 +178,7 @@ export default function TabletAppShell() {
       route={currentRoute}
       onNavigate={handleNavigate}
       {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
+      workspaceScreens={workspaceScreens.length > 0 ? workspaceScreens : undefined}
     >
       {pageDenied ? (
         <PermissionDenied

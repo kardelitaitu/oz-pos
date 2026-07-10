@@ -675,7 +675,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 ## Phased Implementation & Migration Guide
 
-> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher).</toml>
+> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅.</toml>
 
 ### Phase 1: Workspace Types + Default Instances + Session Context
 
@@ -785,12 +785,17 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] `WorkspaceContext.tsx` calls `resolveBootStore()` on mount, uses resolved `storeId` for `listWorkspaces`.
    - **Files:** `apps/desktop-client/src/commands/workspaces.rs`, `apps/desktop-client/src/lib.rs`, `ui/src/api/workspaces.ts`, `ui/src/contexts/WorkspaceContext.tsx`
 
-3. **Tablet Shell Redesign**:
-   - `TabletAppShell.tsx` currently uses a hardcoded tab bar (`pos`, `products`, `sales-history`, `kds`) with no `WorkspaceContext`. This is replaced with the same device-binding resolution as the desktop shell.
-   - On boot, the tablet resolves its bound store + instance and renders the appropriate UI (POS screen, KDS, etc.) with the correct nav tabs from `workspace_type_screens`.
-   - The bottom tab bar is dynamically generated from the instance's type screens, not hardcoded.
-   - A single-purpose tablet (e.g., a kitchen KDS display) is bound to `(store_id, kds_instance_id)` and boots directly into `<KdsScreen />` with no tab bar.
-   - A multi-purpose tablet (e.g., a server tablet) is bound to `(store_id, restaurant_pos_instance_id)` and boots into `<PosScreen />` with tabs from `workspace_type_screens`.
+3. **Tablet Shell Redesign** ✅ (ADR #4 Phase 3b)
+   - [x] `main.tablet.tsx` wraps app with `WorkspaceProvider`.
+   - [x] `TabletAppShell.tsx` uses `useWorkspace()` for device-bound auto-boot:
+     - `!activeWorkspace` → shows `WorkspaceHome` picker.
+     - Fullscreen types (`restaurant-pos`, `store-pos`, `kds`) → render directly without tab bar.
+     - Sidebar types (`inventory`, `admin`) → render with `TabletAppLayout` + dynamic tabs from `workspaceScreens`.
+   - [x] `TabletAppLayout.tsx` accepts optional `workspaceScreens` prop:
+     - When provided, filters nav items to only matching `workspace_type_screens`.
+     - When omitted, falls back to full menu registry (backward compatible).
+   - [x] Dynamic tab bar: a KDS tablet boots directly into `<KdsScreen />` with no tab bar; a server tablet boots into `<PosScreen />` with tabs from `workspace_type_screens`.
+   - **Files:** `ui/src/main.tablet.tsx`, `ui/src/frontend/shell/tablet/TabletAppShell.tsx`, `ui/src/frontend/shell/tablet/TabletAppLayout.tsx`
 
 4. **Verification**: `./scripts/check.sh` full matrix; integration tests for device binding.
 
