@@ -529,6 +529,13 @@ mod tests {
     }
 
     #[test]
+    fn shifts_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
     fn get_active_shift_nonexistent_user() {
         let conn = fresh_conn();
         let store = Store::new(&conn);

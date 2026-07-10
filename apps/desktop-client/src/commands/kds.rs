@@ -40,9 +40,13 @@ pub async fn list_kds_orders_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
     let orders = store.list_kds_orders(status.as_deref())?;
@@ -73,9 +77,13 @@ pub async fn get_kds_queue_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
     let orders = store.get_kds_queue()?;
@@ -110,9 +118,13 @@ pub async fn update_kds_status_scoped(
     state: State<'_, AppState>,
 ) -> Result<KdsOrder, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
     let order = store.update_kds_status(&id, &status)?;
@@ -145,9 +157,13 @@ pub async fn create_kds_order_from_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
     let order = store.complete_sale_to_kds(&sale_id)?;
@@ -180,12 +196,28 @@ pub async fn get_kds_order_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
     let order = store.get_kds_order(&id)?;
     drop(db);
     Ok(order)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kds_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
 }

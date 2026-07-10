@@ -126,6 +126,13 @@ mod tests {
         assert!(debug.contains("percentage"));
         assert!(debug.contains("2026-07-01"));
     }
+
+    #[test]
+    fn promotions_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
 }
 /// List all promotions.
 ///
@@ -144,7 +151,9 @@ pub async fn list_promotions_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<Promotion>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let promos = store.list_promotions()?;
     drop(db);
@@ -172,7 +181,9 @@ pub async fn get_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<Promotion>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let promo = store.get_promotion(&id)?;
     drop(db);
@@ -223,7 +234,9 @@ pub async fn create_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<Promotion, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
 
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -246,9 +259,15 @@ pub async fn create_promotion_scoped(
         updated_at: now,
     };
 
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, oz_core::permissions::PROMOTIONS_CREATE)?;
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::PROMOTIONS_CREATE,
+    )?;
     let result = store.create_promotion(&promo)?;
     drop(db);
     Ok(result)
@@ -281,15 +300,23 @@ pub async fn update_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<Promotion, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
 
     let mut p = promotion;
     p.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, oz_core::permissions::PROMOTIONS_EDIT)?;
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::PROMOTIONS_EDIT,
+    )?;
     let result = store.update_promotion(&p)?;
     drop(db);
     Ok(result)
@@ -319,12 +346,20 @@ pub async fn delete_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
 
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, oz_core::permissions::PROMOTIONS_DELETE)?;
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::PROMOTIONS_DELETE,
+    )?;
     store.delete_promotion(&id)?;
     drop(db);
     Ok(())
@@ -353,10 +388,14 @@ pub async fn apply_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<PromotionApplication, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state.db_manager.open_store(&session.store_id)
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
 
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     run_apply_promotion(&db, &sale_id, &promotion_id, &session.user_id)
 }
 
@@ -483,7 +522,9 @@ pub async fn get_sale_promotions_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<PromotionApplication>, AppError> {
     let conn = state.resolve_store(&session_token)?;
-    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let apps = store.get_promotion_applications_for_sale(&sale_id)?;
     drop(db);

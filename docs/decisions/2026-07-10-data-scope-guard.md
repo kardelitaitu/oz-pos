@@ -91,7 +91,24 @@ pub async fn list_products_scoped(
 | `complete_sale` | `args: CompleteSaleArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `complete_sale_scoped` + `CompleteSaleScopedArgs` + dual-lock DB pattern |
 | `start_sale` | `args: StartSaleArgs` | `session_token: String, args` | ✅ `start_sale_scoped` + API wrapper |
 | `add_line` | `args: AddLineArgs` | `session_token: String, args` | ✅ `add_line_scoped` + API wrapper |
-| *(43 remaining commands: kds 5, promotions 4, settings 8, setup 1, shifts 1, tables 6, terminals 9, workspaces 9)* | various | `session_token: String, ...` | 🔧 `scripts/verify-no-raw-params.sh` tracks |
+| `start_sale` | `args: StartSaleArgs` | `session_token: String, args` | ✅ `start_sale_scoped` + API wrapper |
+| `add_line` | `args: AddLineArgs` | `session_token: String, args` | ✅ `add_line_scoped` + API wrapper |
+| `list_kds_orders` | `user_id: String, status` | `session_token: String, status` | ✅ `list_kds_orders_scoped` + API wrapper |
+| `get_kds_queue` | `user_id: String` | `session_token: String` | ✅ `get_kds_queue_scoped` + API wrapper |
+| `update_kds_status` | `user_id: String, id, status` | `session_token: String, id, status` | ✅ `update_kds_status_scoped` + API wrapper |
+| `create_kds_order_from_sale` | `user_id: String, sale_id` | `session_token: String, sale_id` | ✅ `create_kds_order_from_sale_scoped` + API wrapper |
+| `get_kds_order` | `user_id: String, id` | `session_token: String, id` | ✅ `get_kds_order_scoped` + API wrapper |
+| `list_promotions` | `()` | `session_token: String` | ✅ `list_promotions_scoped` + API wrapper |
+| `get_promotion` | `id: String` | `session_token: String, id` | ✅ `get_promotion_scoped` + API wrapper |
+| `create_promotion` | `user_id: String, args` | `session_token: String, args` | ✅ `create_promotion_scoped` + API wrapper |
+| `update_promotion` | `user_id: String, promotion` | `session_token: String, promotion` | ✅ `update_promotion_scoped` + API wrapper |
+| `delete_promotion` | `user_id: String, id` | `session_token: String, id` | ✅ `delete_promotion_scoped` + API wrapper |
+| `apply_promotion` | `user_id: String, sale_id, promo_id` | `session_token: String, sale_id, promo_id` | ✅ `apply_promotion_scoped` + `run_apply_promotion` helper |
+| `get_sale_promotions` | `sale_id: String` | `session_token: String, sale_id` | ✅ `get_sale_promotions_scoped` + API wrapper |
+| `open_shift` | `args: OpenShiftArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `open_shift_scoped` + `OpenShiftScopedArgs` + API wrapper |
+| `close_shift` | `args: CloseShiftArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `close_shift_scoped` + `CloseShiftScopedArgs` + API wrapper |
+| `get_active_shift` | `user_id: String` | `session_token: String` | ✅ `get_active_shift_scoped` + API wrapper |
+| *(28 remaining: settings 8, setup 1, tables 6, terminals 9, workspaces 9)* | various | `session_token: String, ...` | 🔧 `scripts/verify-no-raw-params.sh` tracks |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
 
@@ -122,7 +139,7 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `resolve_scope()` on tablet `AppState`
 - [x] `list_products_scoped` simplified to use `resolve_scope()`
 
-### Phase 3: Domain Command Migration ⏳ (8 of 11 done)
+### Phase 3: Domain Command Migration ⏳ (11 of 11 done)
 - [x] `adjust_stock_scoped` — migrate stock adjustment
 - [x] `lookup_by_barcode_scoped` — migrate barcode lookup
 - [x] `lookup_product_by_sku_scoped` — migrate SKU lookup
@@ -144,15 +161,18 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `hold_cart_scoped` / `list_held_carts_scoped` / `list_open_bills_scoped` / `get_held_cart_scoped` / `delete_held_cart_scoped` / `compute_cart_tax_scoped` — migrate held cart commands
 - [x] `complete_sale_scoped` — migrate with `CompleteSaleScopedArgs` + dual-lock DB pattern
 - [x] `start_sale_scoped` / `add_line_scoped` — migrate POS cart creation (POS module fully scoped)
-- [x] Phase 4 verification script created: `scripts/verify-no-raw-params.sh` (detects 43 remaining violations across kds, promotions, settings, setup, shifts, tables, terminals, workspaces)
-- [ ] *(migrate remaining desktop commands to bring violations to zero)*
+- [x] KDS module (5 commands): `list_kds_orders_scoped`, `get_kds_queue_scoped`, `update_kds_status_scoped`, `create_kds_order_from_sale_scoped`, `get_kds_order_scoped` — all with token rejection tests + API wrappers
+- [x] Promotions module (7 commands): `list_promotions_scoped`, `get_promotion_scoped`, `create_promotion_scoped`, `update_promotion_scoped`, `delete_promotion_scoped`, `apply_promotion_scoped`, `get_sale_promotions_scoped` — all with token rejection tests + API wrappers
+- [x] Shifts module (3 commands): `open_shift_scoped`, `close_shift_scoped`, `get_active_shift_scoped` — all with token rejection tests + API wrappers
+- [x] Phase 4 verification script created: `scripts/verify-no-raw-params.sh` (detects 28 remaining violations across settings, setup, tables, terminals, workspaces)
+- [ ] *(migrate remaining desktop commands: settings 8, setup 1, tables 6, terminals 9, workspaces 9)*
 
 ### Phase 4: Enforcement 🔧
-- [x] `scripts/verify-no-raw-params.sh` — greps desktop command files for `store_id: String` / `user_id: String` function parameters. Excludes `pub` struct fields and tablet-client (not yet migrated). Currently detects 43 remaining commands needing migration (see below).
+- [x] `scripts/verify-no-raw-params.sh` — greps desktop command files for `store_id: String` / `user_id: String` function parameters. Excludes `pub` struct fields and tablet-client (not yet migrated). Currently detects 28 remaining commands needing migration (settings, setup, tables, terminals, workspaces).
 - [x] Integrated into `scripts/check.sh` CI pipeline (runs after clippy, before tests).
-- [x] Backward-compatible deprecation period: all 28 migrated old commands preserved with `**Deprecated**` doc comments.
+- [x] Backward-compatible deprecation period: all 43 migrated old commands preserved with `**Deprecated**` doc comments.
 - [ ] Custom Clippy lint rule: reject `store_id: String` in command params *(future enhancement — grep-based guard is the pragmatic first step)*.
-- [ ] Bring violations to zero by migrating remaining desktop commands (kds, promotions, settings, setup, shifts, tables, terminals, workspaces).
+- [ ] Bring violations to zero by migrating remaining desktop commands (settings, setup, tables, terminals, workspaces — 28 remaining).
 
 ---
 
