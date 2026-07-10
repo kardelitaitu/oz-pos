@@ -696,11 +696,11 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] Index on `user_workspace_instances(user_id)` and workspace instances `(type_key)`.
    - **Files:** `crates/oz-core/migrations/060_workspace_instances.sql`, `crates/oz-core/src/migrations.rs`
 
-2. **Session Context** ✅ (struct only; extractor deferred)
+2. **Session Context** ✅ (struct only; extractor deferred to ADR #7)
    - [x] Implement `SessionContext` struct in `crates/oz-core/src/session.rs`.
-   - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred to Phase 1b)*
-   - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred to Phase 1b)*
-   - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred to Phase 1b)*
+   - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
+   - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
+   - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - **Files:** `crates/oz-core/src/session.rs`, `crates/oz-core/src/lib.rs`
 
 3. **Rust DTOs & Models** ✅
