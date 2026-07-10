@@ -111,6 +111,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-1".into(),
+            store_id: None,
             line_items: vec![SaleCompletedLine {
                 sku: "COFFEE".into(),
                 qty: 2,
@@ -152,6 +153,7 @@ mod tests {
 
         let event1 = SaleCompleted {
             sale_id: "sale-a".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 100,
             currency: "USD".into(),
@@ -160,6 +162,7 @@ mod tests {
 
         let event2 = SaleCompleted {
             sale_id: "sale-b".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 200,
             currency: "EUR".into(),
@@ -185,6 +188,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-3".into(),
+            store_id: None,
             line_items: vec![SaleCompletedLine {
                 sku: "TEA".into(),
                 qty: 1,
@@ -222,6 +226,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-4".into(),
+            store_id: None,
             line_items: vec![
                 SaleCompletedLine {
                     sku: "BURGER".into(),

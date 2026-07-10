@@ -359,6 +359,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-1".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 1000,
             currency: "USD".into(),
@@ -381,6 +382,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-2".into(),
+            store_id: None,
             line_items: vec![oz_core::events::SaleCompletedLine {
                 sku: "COFFEE".into(),
                 qty: 2,
@@ -410,6 +412,7 @@ mod tests {
 
         let event = CourseFired {
             sale_id: "sale-42".into(),
+            store_id: None,
             course_id: "main".into(),
             display_number: Some(101),
             items: vec![oz_core::events::CourseItem {
@@ -435,6 +438,7 @@ mod tests {
 
         let event = CourseFired {
             sale_id: "sale-3".into(),
+            store_id: None,
             course_id: "drinks".into(),
             display_number: None,
             items: vec![],

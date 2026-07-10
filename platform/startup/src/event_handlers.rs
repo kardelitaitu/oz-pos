@@ -402,6 +402,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-1".into(),
+            store_id: None,
             line_items: vec![SaleCompletedLine {
                 sku: "COFFEE".into(),
                 qty: 2,
@@ -436,6 +437,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-2".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 0,
             currency: "USD".into(),
@@ -507,6 +509,7 @@ mod tests {
 
         let event1 = SaleCompleted {
             sale_id: "sale-a".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 100,
             currency: "USD".into(),
@@ -514,6 +517,7 @@ mod tests {
         };
         let event2 = SaleCompleted {
             sale_id: "sale-b".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 200,
             currency: "USD".into(),
@@ -622,6 +626,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-sync-1".into(),
+            store_id: None,
             line_items: vec![SaleCompletedLine {
                 sku: "COFFEE".into(),
                 qty: 2,
@@ -654,6 +659,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-bus-1".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 0,
             currency: "USD".into(),
@@ -676,6 +682,7 @@ mod tests {
 
         let event1 = SaleCompleted {
             sale_id: "sale-queue-1".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 100,
             currency: "USD".into(),
@@ -683,6 +690,7 @@ mod tests {
         };
         let event2 = SaleCompleted {
             sale_id: "sale-queue-2".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 200,
             currency: "USD".into(),
@@ -710,6 +718,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-no-cust".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 500,
             currency: "USD".into(),
@@ -757,6 +766,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-loyal-1".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 1000,
             currency: "USD".into(),

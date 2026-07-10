@@ -666,7 +666,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 | **Subscription tier & entitlement enforcement** | Business-model decision; instance status enum (Active/QuotaSuspended/Archived) is defined here but quota logic is separate. | ADR #5 |
 | **CRDT delta ledger & offline UUIDv7 sync** | Major data-model change for inventory. | ADR #6 |
 | **Hard `ScopeGuard` compile-time enforcement** | Follow-up to soft scoping; the `SessionContext` pattern described in Security Architecture is the soft version. ADR #7 completed the migration — all 84 desktop commands use `session_token` + `resolve_session()`, enforced by `scripts/verify-no-raw-params.sh` in CI. | ADR #7 ✅ |
-| **Scoped real-time event bus** | Depends on stable workspace scope model; events must only broadcast to terminals in the same store. | ADR #8 |
+| **Scoped real-time event bus** | Events carry `store_id`; LAN forwarder is inherently store-scoped since each POS terminal is device-bound to one store. KDS tablets filter by store. | ADR #8 ✅ |
 | **Cross-store sync protocol** | The sync layer (`platform/sync/`) already exists; cross-store sync is an extension. | Future ADR |
 | **SQLCipher / at-rest database encryption** | Defense-in-depth; encrypts per-store SQLite files and the global DB. | Future ADR |
 | **Hardware-backed device attestation (TPM/Secure Enclave)** | Stronger device binding beyond HMAC; requires TPM/SE integration. | Future ADR |

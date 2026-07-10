@@ -131,6 +131,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-1".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 1500,
             currency: "USD".into(),
@@ -156,6 +157,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-2".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 500,
             currency: "USD".into(),
@@ -180,6 +182,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-3".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 2000,
             currency: "USD".into(),
@@ -202,6 +205,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-4".into(),
+            store_id: None,
             line_items: vec![],
             total_minor: 500,
             currency: "USD".into(),
@@ -225,6 +229,7 @@ mod tests {
         handler
             .handle(&SaleCompleted {
                 sale_id: "sale-a".into(),
+                store_id: None,
                 line_items: vec![],
                 total_minor: 1000,
                 currency: "USD".into(),
@@ -235,6 +240,7 @@ mod tests {
         handler
             .handle(&SaleCompleted {
                 sale_id: "sale-b".into(),
+                store_id: None,
                 line_items: vec![],
                 total_minor: 700,
                 currency: "USD".into(),

@@ -183,6 +183,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-1".into(),
+            store_id: None,
             line_items: vec![oz_core::events::SaleCompletedLine {
                 sku: "COFFEE".into(),
                 qty: 3,
@@ -219,6 +220,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-2".into(),
+            store_id: None,
             line_items: vec![oz_core::events::SaleCompletedLine {
                 sku: "COFFEE".into(),
                 qty: 1,
@@ -247,6 +249,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-3".into(),
+            store_id: None,
             line_items: vec![oz_core::events::SaleCompletedLine {
                 sku: "UNKNOWN".into(),
                 qty: 1,
@@ -297,6 +300,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-bom-1".into(),
+            store_id: None,
             line_items: vec![oz_core::events::SaleCompletedLine {
                 sku: "BURGER".into(),
                 qty: 3,
@@ -337,6 +341,7 @@ mod tests {
         // Selling a simple product (BUN has no recipe) should deduct directly.
         let event = SaleCompleted {
             sale_id: "sale-simple-1".into(),
+            store_id: None,
             line_items: vec![oz_core::events::SaleCompletedLine {
                 sku: "BUN".into(),
                 qty: 5,
@@ -369,6 +374,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-mixed-1".into(),
+            store_id: None,
             line_items: vec![
                 oz_core::events::SaleCompletedLine {
                     sku: "BURGER".into(),
@@ -417,6 +423,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-bus-1".into(),
+            store_id: None,
             line_items: vec![oz_core::events::SaleCompletedLine {
                 sku: "BURGER".into(),
                 qty: 1,
@@ -456,6 +463,7 @@ mod tests {
 
         let event = SaleCompleted {
             sale_id: "sale-4".into(),
+            store_id: None,
             line_items: vec![
                 oz_core::events::SaleCompletedLine {
                     sku: "COFFEE".into(),
