@@ -76,6 +76,20 @@ export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
 export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale', { args });
 
+/** ADR #7: Complete a sale in the store resolved from a session token — `userId` is read from session, not args. */
+export interface CompleteSaleScopedArgs {
+  cartId: string;
+  paymentMethod: string;
+  tenderedMinor: number | null;
+  customerId?: string;
+  paymentSplits?: PaymentSplitArg[];
+  customerName?: string;
+  serialNumbers?: SerialNumberArg[];
+}
+
+export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
+  invoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
+
 export const getProductTrackSerial = (sku: string): Promise<boolean> =>
   invoke<boolean>('get_product_track_serial', { sku });
 

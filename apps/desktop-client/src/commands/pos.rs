@@ -376,6 +376,17 @@ pub struct CompleteSaleArgs {
     pub serial_numbers: Option<Vec<SerialNumberArg>>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CompleteSaleScopedArgs {
+    pub cart_id: CartId,
+    pub payment_method: String,
+    pub tendered_minor: Option<i64>,
+    pub customer_id: Option<String>,
+    pub payment_splits: Option<Vec<PaymentSplitArg>>,
+    pub customer_name: Option<String>,
+    pub serial_numbers: Option<Vec<SerialNumberArg>>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct CompleteSaleResult {
     pub sale_id: String,
@@ -383,6 +394,11 @@ pub struct CompleteSaleResult {
     pub line_count: usize,
 }
 
+/// Complete a sale using the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `complete_sale_scoped`
+/// with a `session_token` instead. The `user_id` is read from the
+/// resolved `SessionContext`.
 #[command]
 pub async fn complete_sale(
     args: CompleteSaleArgs,
@@ -584,6 +600,260 @@ pub async fn complete_sale(
         let bus = kernel.event_bus();
         if let Err(e) = bus.publish(&event) {
             // Logged by the bus; do not fail the command.
+            tracing::warn!(%sale_id, error = %e, "event bus publish failed");
+        }
+    }
+
+    Ok(CompleteSaleResult {
+        sale_id: updated.id,
+        total,
+        line_count,
+    })
+}
+
+/// Complete a sale within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `complete_sale`. The `user_id` for
+/// permission checks, the sale audit trail, and plugin hooks is read
+/// from the resolved `SessionContext`. Uses the store-scoped database
+/// with two sequential locks (cart removal then sale creation) while
+/// plugin hooks and event publishing run without holding any DB lock.
+#[command]
+pub async fn complete_sale_scoped(
+    session_token: String,
+    args: CompleteSaleScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<CompleteSaleResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    // ── Lock 1: Load and remove the cart ──────────────────────────
+    let mut cart = {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+
+        require_permission_for_user(
+            &store,
+            &session.user_id,
+            oz_core::permissions::SALES_PROCESS,
+        )?;
+
+        let cart = store
+            .load_active_cart(&args.cart_id)?
+            .ok_or_else(|| {
+                AppError::Invalid(format!("cart not found: {}", args.cart_id))
+            })?;
+        store.delete_active_cart(&args.cart_id)?;
+        cart // db lock dropped here
+    };
+
+    let line_count = cart.line_count();
+
+    // ── Plugin business-rule hooks (no DB lock held) ──────────────
+    {
+        let plugins = state.plugins.lock().await;
+        if let Some(ref plugins) = *plugins {
+            let lines: Vec<oz_lua::CartLineData> = cart
+                .lines()
+                .iter()
+                .map(|cl| oz_lua::CartLineData {
+                    sku: cl.sku.as_str().to_owned(),
+                    qty: cl.qty,
+                    unit_price_minor: cl.unit_price.minor_units,
+                    currency: String::from_utf8_lossy(&cl.unit_price.currency.0)
+                        .into_owned(),
+                })
+                .collect();
+
+            let errors = plugins
+                .validate_order(
+                    &lines,
+                    cart.total().map(|m| m.minor_units).unwrap_or(0),
+                    &String::from_utf8_lossy(&cart.currency().0),
+                )
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            if !errors.is_empty() {
+                return Err(AppError::Invalid(format!(
+                    "order validation failed: {}",
+                    errors.join("; ")
+                )));
+            }
+
+            if let Some(discount) = plugins
+                .apply_discount(&lines)
+                .map_err(|e| AppError::Internal(e.to_string()))?
+            {
+                let label = discount
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| "Lua Rule".into());
+                if !(0..=100).contains(&discount.percent) {
+                    return Err(AppError::Invalid(format!(
+                        "Lua returned invalid discount percent: {}",
+                        discount.percent
+                    )));
+                }
+                // SAFETY: discount.percent is validated 0..=100 above.
+                let lua_pct = Percentage::new(discount.percent as u8).unwrap();
+                cart.set_discount(lua_pct, Some(label));
+            }
+
+            let currency =
+                String::from_utf8_lossy(&cart.currency().0).into_owned();
+            let total_minor =
+                cart.total().map(|m| m.minor_units).unwrap_or(0);
+            plugins
+                .fire_sale_before_complete(
+                    &lines,
+                    total_minor,
+                    &currency,
+                    &session.user_id,
+                )
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+
+            if let Some(pd) =
+                plugins.drain_pending_discounts().into_iter().next()
+            {
+                if !(0..=100).contains(&pd.percent) {
+                    return Err(AppError::Invalid(format!(
+                        "Plugin returned invalid discount percent: {}",
+                        pd.percent
+                    )));
+                }
+                let pct = Percentage::new(pd.percent as u8).unwrap();
+                cart.set_discount(pct, Some(pd.target));
+            }
+        }
+    }
+
+    let mut sale =
+        oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
+            .ok_or_else(|| {
+                AppError::Invalid("cart total overflowed i64".into())
+            })?;
+    let has_splits = args
+        .payment_splits
+        .as_ref()
+        .is_some_and(|s| !s.is_empty());
+    sale.payment_method = Some(if has_splits {
+        "split".to_string()
+    } else {
+        args.payment_method.clone()
+    });
+    sale.tendered_minor = args.tendered_minor;
+    sale.customer_id = args.customer_id.clone();
+
+    // ── Apply Lua calc_line_tax overrides (no DB lock) ────────────
+    let mut lua_overrides: Vec<(String, i64, bool)> = Vec::new();
+    {
+        let plugins = state.plugins.lock().await;
+        if let Some(ref plugins) = *plugins {
+            for cl in cart.lines() {
+                let currency_str =
+                    String::from_utf8_lossy(&cl.unit_price.currency.0)
+                        .into_owned();
+                if let Some(override_) = plugins
+                    .calc_line_tax(
+                        cl.sku.as_str(),
+                        cl.qty,
+                        cl.unit_price.minor_units,
+                        &currency_str,
+                    )
+                    .map_err(|e| AppError::Internal(e.to_string()))?
+                {
+                    lua_overrides.push((
+                        cl.sku.as_str().to_owned(),
+                        override_.rate_bps,
+                        override_.is_inclusive,
+                    ));
+                }
+            }
+        }
+    }
+
+    let sale_id = sale.id.clone();
+
+    // ── Lock 2: Compute tax and create sale ───────────────────────
+    let updated = {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        store.compute_sale_tax(&mut sale, &lua_overrides)?;
+
+        if let Some(ref serial_numbers) = args.serial_numbers {
+            for sn in serial_numbers {
+                if let Some(line) =
+                    sale.lines.iter_mut().find(|l| l.sku == sn.sku)
+                {
+                    line.serial_number = Some(sn.serial.clone());
+                }
+            }
+        }
+
+        store.create_sale(&sale)?;
+
+        if let Some(ref splits) = args.payment_splits {
+            if !splits.is_empty() {
+                store.create_payments(
+                    &sale_id,
+                    splits,
+                    &sale.currency,
+                    &sale.created_at,
+                )?;
+            }
+        } else {
+            let single_split = vec![PaymentSplitArg {
+                method: args.payment_method.clone(),
+                amount_minor: sale.total.minor_units,
+                gateway_reference: args.customer_name.clone(),
+                gateway_status: None,
+                gateway_response: None,
+            }];
+            store.create_payments(
+                &sale_id,
+                &single_split,
+                &sale.currency,
+                &sale.created_at,
+            )?;
+        }
+
+        store.update_sale_status(&sale_id, SaleStatus::Completed)?
+    };
+
+    let total = cart.total();
+    tracing::info!(%sale_id, ?total, line_count, store_id = %session.store_id, "sale completed (scoped)");
+
+    // ── Event publishing (no DB lock held) ────────────────────────
+    {
+        let line_items: Vec<SaleCompletedLine> = sale
+            .lines
+            .iter()
+            .map(|l| SaleCompletedLine {
+                sku: l.sku.clone(),
+                qty: l.qty,
+                unit_price_minor: l.unit_price.minor_units,
+                tax_minor: l.tax_amount.minor_units,
+                tax_rate_id: l.tax_rate_id.clone(),
+            })
+            .collect();
+
+        let event = SaleCompleted {
+            sale_id: sale_id.clone(),
+            line_items,
+            total_minor: total.map(|m| m.minor_units).unwrap_or(0),
+            currency: String::from_utf8_lossy(&sale.currency.0).into_owned(),
+            customer_id: args.customer_id.clone(),
+        };
+
+        let kernel = state.kernel.lock().await;
+        let bus = kernel.event_bus();
+        if let Err(e) = bus.publish(&event) {
             tracing::warn!(%sale_id, error = %e, "event bus publish failed");
         }
     }
@@ -942,6 +1212,13 @@ mod tests {
     fn pos_scoped_rejects_invalid_token() {
         let state = AppState::for_test();
         let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn complete_sale_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("bad-token");
         assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }
