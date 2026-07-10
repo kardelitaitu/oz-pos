@@ -712,15 +712,24 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] Frontend API `ui/src/api/workspaces.ts` updated with new `WorkspaceDto` shape.
    - **Files:** `crates/oz-core/src/db/workspaces.rs`, `apps/desktop-client/src/commands/workspaces.rs`, `apps/desktop-client/src/lib.rs`, `ui/src/api/workspaces.ts`
 
-4. **Device Binding Signing** ⏳ *(Deferred to Phase 1b)*
-   - [ ] On `set_device_binding`: generate HMAC signature over `(terminal_id, store_id, instance_id)` using OS keyring key.
-   - [ ] Store signature in `terminals.binding_signature`.
-   - [ ] On boot resolution: validate signature before trusting binding.
+4. **Device Binding Signing** ✅
+   - [x] `set_device_binding` Tauri command: generates HMAC-SHA256 signature via OS keyring.
+   - [x] `get_device_binding` Tauri command: returns binding + validates signature.
+   - [x] `clear_device_binding` Tauri command: removes binding.
+   - [x] `update_terminal_binding`/`get_terminal_binding`/`clear_terminal_binding` DB methods.
+   - [x] `sign_binding`/`verify_binding` helpers with keyring secret auto-generation.
+   - **Files:** `crates/oz-core/src/db/terminals.rs`, `apps/desktop-client/src/commands/terminals.rs`, `apps/desktop-client/Cargo.toml`
 
-5. **Frontend Context** ⏳ *(Deferred to Phase 1b)*
-   - [ ] `WorkspaceContext` state: `activeInstance: WorkspaceDto | null` (replaces `activeWorkspace: string`).
-   - [ ] `WorkspaceScope` context: `{ storeId, instanceId, typeKey }`.
-   - [ ] Compatibility shim for components still using `activeWorkspace` string.
+5. **Frontend Context** ✅
+   - [x] `activeInstance: WorkspaceDto | null` + `setActiveInstance` in WorkspaceContext.
+   - [x] `activeWorkspace` kept as standalone state synced via useEffect (no race condition).
+   - [x] `useWorkspaceScope()` hook returning `{ storeId, instanceId, typeKey }`.
+   - [x] `availableWorkspaces` preserves old field name for backward compat.
+   - [x] `WorkspaceHome.tsx` updated: `ws.key` → `ws.type_key` for new DTO shape.
+   - [x] `AppShell.tsx` unchanged — `activeWorkspace` derived from `activeInstance.type_key`.
+   - **Files:** `ui/src/contexts/WorkspaceContext.tsx`, `ui/src/features/workspaces/WorkspaceHome.tsx`, `ui/src/api/workspaces.ts`
+
+6. **Verification**: ✅ `cargo check -p oz-core -p oz-pos-app` passes; `cargo test -p oz-core -- db::terminals` passes (17/17).
 
 6. **Verification**: ✅ Unit tests pass (18/18); `cargo check -p oz-core -p oz-pos-app` passes; 3 pre-existing `currency_integration` failures unrelated.
 

@@ -169,7 +169,7 @@ export default function WorkspaceHome() {
   const sortedWorkspaces = useMemo(
     () =>
       [...availableWorkspaces].sort(
-        (a, b) => (WS_ORDER[a.key] ?? 99) - (WS_ORDER[b.key] ?? 99),
+        (a, b) => (WS_ORDER[a.type_key] ?? 99) - (WS_ORDER[b.type_key] ?? 99),
       ),
     [availableWorkspaces],
   );
@@ -657,16 +657,16 @@ export default function WorkspaceHome() {
       ) : (
         <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
           {sortedWorkspaces.map((ws, idx) => {
-            const disabled = !canAccess(ws.key);
-            const colorClass = WS_COLORS[ws.key] ?? '';
-            const isActive = ws.key === lastWorkspace && !disabled;
+            const disabled = !canAccess(ws.type_key);
+            const colorClass = WS_COLORS[ws.type_key] ?? '';
+            const isActive = ws.type_key === lastWorkspace && !disabled;
             return (
               <button
-                key={ws.key}
+                key={ws.type_key}
                 type="button"
                 aria-current={isActive ? 'true' : undefined}
-                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.key ? ' workspace-card--exiting' : ''}`}
-                onClick={(e) => handleCardClick(ws.key, e)}
+                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
+                onClick={(e) => handleCardClick(ws.type_key, e)}
                 disabled={disabled || exitingWorkspace !== null}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
@@ -685,7 +685,7 @@ export default function WorkspaceHome() {
                   </div>
                 )}
                 <div className="workspace-card-icon">
-                  {getIcon(ws.key)}
+                  {getIcon(ws.type_key)}
                 </div>
                 <div className="workspace-card-body">
                   <h2 className="workspace-card-name">{ws.name}</h2>

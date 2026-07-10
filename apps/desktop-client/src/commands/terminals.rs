@@ -6,6 +6,9 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
 use oz_core::{Store, Terminal, TerminalFeatureOverride, TerminalProfile};
 
 use foundation::validate_not_empty;
@@ -13,6 +16,50 @@ use foundation::validate_not_empty;
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
+
+type HmacSha256 = Hmac<Sha256>;
+
+/// Keyring name for the device binding HMAC secret.
+const DEVICE_BINDING_KEYRING_NAME: &str = "oz-pos/device-binding-hmac-key";
+
+/// Compute an HMAC-SHA256 signature for a device binding.
+///
+/// The signature covers `{terminal_id}:{bound_store_id}:{bound_instance_id}`
+/// using a secret stored in the OS keyring. If no secret exists yet, one is
+/// generated and stored.
+fn sign_binding(keyring: &dyn oz_security::Keyring, terminal_id: &str, store_id: &str, instance_id: &str) -> Result<String, AppError> {
+    let secret = keyring
+        .get_secret(DEVICE_BINDING_KEYRING_NAME)
+        .map_err(|e| AppError::Internal(format!("keyring read failed: {e}")))?;
+
+    let secret = match secret {
+        Some(s) => s,
+        None => {
+            let new_secret = uuid::Uuid::new_v4().to_string();
+            keyring
+                .set_secret(DEVICE_BINDING_KEYRING_NAME, &new_secret)
+                .map_err(|e| AppError::Internal(format!("keyring write failed: {e}")))?;
+            new_secret
+        }
+    };
+
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .map_err(|e| AppError::Internal(format!("HMAC init failed: {e}")))?;
+    mac.update(terminal_id.as_bytes());
+    mac.update(b":");
+    mac.update(store_id.as_bytes());
+    mac.update(b":");
+    mac.update(instance_id.as_bytes());
+
+    let result = mac.finalize();
+    Ok(hex::encode(result.into_bytes()))
+}
+
+/// Verify a device binding HMAC signature.
+fn verify_binding(keyring: &dyn oz_security::Keyring, terminal_id: &str, store_id: &str, instance_id: &str, signature: &str) -> Result<bool, AppError> {
+    let expected = sign_binding(keyring, terminal_id, store_id, instance_id)?;
+    Ok(expected == signature)
+}
 
 // ── DTOs ──────────────────────────────────────────────────────────────
 
@@ -371,6 +418,145 @@ pub async fn delete_terminal_profile(
     drop(db);
 
     tracing::info!(terminal_id, "terminal profile deleted");
+    Ok(())
+}
+
+// ── Device Binding Commands (ADR #4 Phase 1b) ─────────────────────
+
+/// Arguments for setting a device binding.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetDeviceBindingArgs {
+    pub terminal_id: String,
+    pub bound_store_id: String,
+    pub bound_instance_id: String,
+}
+
+/// Set (or update) a terminal's device binding with HMAC signature.
+///
+/// The binding directs the terminal to boot directly into a specific
+/// store + workspace instance, skipping all pickers. The HMAC signature
+/// makes tampering detectable (not impossible — see ADR #4 §2).
+#[command]
+pub async fn set_device_binding(
+    user_id: String,
+    args: SetDeviceBindingArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &args.terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("bound_store_id", &args.bound_store_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("bound_instance_id", &args.bound_instance_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    // Sign the binding BEFORE acquiring the db lock — keyring is not Send.
+    // Use a block so keyring goes out of scope before the .await.
+    let signature = {
+        let keyring = oz_security::default_keyring()
+            .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+        sign_binding(
+            keyring.as_ref(),
+            &args.terminal_id,
+            &args.bound_store_id,
+            &args.bound_instance_id,
+        )?
+    };
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.update_terminal_binding(
+        &args.terminal_id,
+        &args.bound_store_id,
+        &args.bound_instance_id,
+        &signature,
+    )?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id = %args.terminal_id,
+        store_id = %args.bound_store_id,
+        instance_id = %args.bound_instance_id,
+        "device binding set"
+    );
+    Ok(())
+}
+
+/// DTO for device binding info.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceBindingDto {
+    pub bounded: bool,
+    pub bound_store_id: Option<String>,
+    pub bound_instance_id: Option<String>,
+    pub signature_valid: bool,
+}
+
+/// Get a terminal's device binding and validate its HMAC signature.
+///
+/// Returns the binding info with `signature_valid` indicating whether
+/// the HMAC signature matches (false = tampered or no keyring secret).
+#[command]
+pub async fn get_device_binding(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<DeviceBindingDto, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let binding = store.get_terminal_binding(&terminal_id)?;
+    drop(db);
+
+    match binding {
+        None => Ok(DeviceBindingDto {
+            bounded: false,
+            bound_store_id: None,
+            bound_instance_id: None,
+            signature_valid: false,
+        }),
+        Some((store_id, instance_id, signature)) => {
+            // Verify signature outside the db lock — keyring is not Send.
+            let keyring = oz_security::default_keyring()
+                .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+            let valid = verify_binding(
+                keyring.as_ref(),
+                &terminal_id,
+                &store_id,
+                &instance_id,
+                &signature,
+            )
+            .unwrap_or(false);
+
+            Ok(DeviceBindingDto {
+                bounded: true,
+                bound_store_id: Some(store_id),
+                bound_instance_id: Some(instance_id),
+                signature_valid: valid,
+            })
+        }
+    }
+}
+
+/// Clear a terminal's device binding.
+#[command]
+pub async fn clear_device_binding(
+    user_id: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.clear_terminal_binding(&terminal_id)?;
+    drop(db);
+
+    tracing::info!(terminal_id, "device binding cleared");
     Ok(())
 }
 
