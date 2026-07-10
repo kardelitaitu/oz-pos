@@ -447,6 +447,7 @@ mod tests {
         let args = CompleteSetupArgs {
             preset: "custom".into(),
             features: vec![],
+            default_currency: "IDR".into(),
         };
         let d = format!("{args:?}");
         assert!(d.contains("custom"));
