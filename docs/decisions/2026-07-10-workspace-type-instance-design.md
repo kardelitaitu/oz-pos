@@ -12,35 +12,48 @@
 Use this master checklist to track execution progress across backend crates (`crates/oz-core`), security layers, Tauri IPC bridges, and frontend React components (`ui/src/`).
 
 ### Phase 1: Database Schema & Core Backend Rust Models (`crates/oz-core`)
-- [ ] **SQL Migration Script (`create_workspace_types_and_instances.sql`)**: Create `workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, and `role_workspace_types` tables.
-- [ ] **Automated Seed & Default Instances**: Write SQL logic to copy existing keys into `workspace_types`, generate `default-<key>` instances (`store_id = NULL`), and migrate `user_workspaces` rows to `user_workspace_instances`.
-- [ ] **Rust Domain Models & DTOs**: Define `WorkspaceTypeRow`, `WorkspaceInstanceRow`, and `WorkspaceDto` (including `instance_id`, `type_key`, `name`, `description`, `icon`, `colour`, `render_mode`, and `store_id`) in `crates/oz-core/src/db/workspaces.rs`.
-- [ ] **Resolution Precedence Method**: Implement `list_workspaces(&self, role_id: &str, user_id: Option<&str>) -> Result<Vec<WorkspaceDto>>` enforcing: `role-owner` bypass → `user_workspace_instances` specific assignments → fallback to `role_workspace_types`.
+- [ ] **Step 1.1**: Create SQL migration script (`crates/oz-core/migrations/004_workspace_instances.sql`) defining tables: `workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, and `role_workspace_types`.
+- [ ] **Step 1.2**: Add SQL seed & backward-compatibility migration script to insert base templates (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`), auto-generate `default-<key>` instances (`store_id = NULL`), and migrate existing `user_workspaces` rows to `user_workspace_instances`.
+- [ ] **Step 1.3**: Define Rust DTOs and structs (`WorkspaceTypeRow`, `WorkspaceInstanceRow`, `WorkspaceDto`) in `crates/oz-core/src/db/workspaces.rs` with fields for `instance_id`, `type_key`, `name`, `description`, `icon`, `colour`, `render_mode`, and `store_id`.
+- [ ] **Step 1.4**: Implement core backend queries in `crates/oz-core/src/db/workspaces.rs`:
+  - `list_workspaces(&self, role_id: &str, user_id: Option<&str>) -> Result<Vec<WorkspaceDto>>` with exact precedence (`role-owner` bypass → assigned `user_workspace_instances` → fallback to `role_workspace_types`).
+  - `get_workspace_instance(&self, instance_id: &str) -> Result<WorkspaceDto>`
+  - `create_workspace_instance(&self, req: &CreateInstanceRequest) -> Result<WorkspaceDto>`
+- [ ] **Step 1.V1 (Verification - Unit Test)**: Write comprehensive unit test `test_workspace_instance_migration_and_resolution` in `crates/oz-core/src/db/workspaces.rs` using an in-memory SQLite database (`Store::open_in_memory()`) verifying migration execution, `default-<key>` creation, and `list_workspaces()` access precedence.
+- [ ] **Step 1.V2 (Verification - Quality Check)**: Run `cargo clippy -p oz-core -- -D warnings` and `cargo test -p oz-core db::workspaces` ensuring zero compilation warnings and 100% test pass rate.
 
 ### Phase 2: Data Scoping Layer, Security Guard & Indexing (`crates/oz-core` / `oz-security`)
-- [ ] **Schema Scope Columns**: Add `store_id` (TEXT NULL) to `products`, `orders`, `order_lines`, and `customers`; add `warehouse_id` (TEXT NULL) to `stock` and `stock_counts`.
-- [ ] **Prefix Compound B-Tree Indexes**: Create high-performance indexes: `idx_orders_store_status (store_id, status, created_at DESC)`, `idx_order_lines_store_order (store_id, order_id)`, `idx_products_store_active (store_id, is_active, category_id)`, and `idx_stock_warehouse_item (warehouse_id, item_id)`.
-- [ ] **Type-Safe `ScopeGuard` Token**: Create `ScopeGuard` struct requiring validated `(user_id + terminal_id + instance_id)` credentials before constructing.
-- [ ] **Compile-Time Scoped Queries**: Update `Store` CRUD operations (`get_products`, `list_orders`, `get_stock`) to mandate `&ScopeGuard` and append `WHERE (store_id = ? OR store_id IS NULL)` to queries.
-- [ ] **Offline UUIDv7 / ULID Generation**: Ensure all newly created transactions generate time-ordered UUIDv7 keys (`version` + LSN tracking) to prevent offline register ID collisions.
+- [ ] **Step 2.1**: Add data scoping columns via schema migration: `store_id` (TEXT NULL) on `products`, `orders`, `order_lines`, and `customers`; `warehouse_id` (TEXT NULL) on `stock` and `stock_counts`.
+- [ ] **Step 2.2**: Create prefix compound B-Tree indexes: `idx_orders_store_status (store_id, status, created_at DESC)`, `idx_order_lines_store_order (store_id, order_id)`, `idx_products_store_active (store_id, is_active, category_id)`, and `idx_stock_warehouse_item (warehouse_id, item_id)`.
+- [ ] **Step 2.3**: Implement type-safe `ScopeGuard` struct in `crates/oz-core/src/scope.rs` requiring cryptographic session `(user_id + terminal_id + instance_id)` validation via `oz-security` before construction.
+- [ ] **Step 2.4**: Refactor domain `Store` CRUD methods (`get_products`, `list_orders`, `get_stock`, `create_order`) across all db modules (`sales.rs`, `products.rs`, `stock_counts.rs`) to mandate `&ScopeGuard` and append `WHERE (store_id = ? OR store_id IS NULL)`.
+- [ ] **Step 2.5**: Integrate time-ordered `UUIDv7` / `ULID` ID generation and optimistic concurrency fields (`version INTEGER`, `updated_at TEXT`) across all transaction tables (`orders`, `payments`, `stock_transfers`).
+- [ ] **Step 2.V1 (Verification - Scope & Index Test)**: Write automated test `test_scope_guard_enforcement_and_indexing` verifying that cross-store access attempts throw `CoreError::UnauthorizedScope` and confirm B-Tree index hit via `EXPLAIN QUERY PLAN`.
+- [ ] **Step 2.V2 (Verification - Quality Check)**: Run `cargo clippy -p oz-core -- -D warnings` and `cargo test -p oz-core` across all modified database modules.
 
 ### Phase 3: Subscription Tier & Entitlement Enforcement (`crates/oz-core`)
-- [ ] **Subscription Tier Definitions**: Define `SubscriptionTier` quotas (`max_stores`, `max_pos_instances`, `allowed_workspace_types`).
-- [ ] **Runtime Quantity Quota Validation**: Implement instance count verification inside `create_workspace_instance()`, throwing `CoreError::SubscriptionLimitExceeded` when a merchant reaches register capacity.
-- [ ] **Workspace Type Entitlements**: Add `tier.allows_workspace_type()` checks when booting specialized screens (`kds`, `analytics-pro`) returning `CoreError::SubscriptionUpgradeRequired` if locked.
-- [ ] **Safe Downgrade Lifecycle**: Ensure subscription downgrades transition surplus register instances to `is_active = false` safely without deleting historical order data or audit logs.
+- [ ] **Step 3.1**: Define `SubscriptionTier` enum/struct (`Free`, `Pro`, `Premium`, `Enterprise`) in `crates/oz-core/src/subscription.rs` with exact quotas (`max_stores`, `max_pos_instances`, `allowed_workspace_types`).
+- [ ] **Step 3.2**: Integrate runtime quantity validation in `create_workspace_instance()`, querying active instances by type and returning `CoreError::SubscriptionLimitExceeded` when tier capacity is reached.
+- [ ] **Step 3.3**: Implement `tier.allows_workspace_type(&instance.type_key)` entitlement checks at workspace boot time, returning `CoreError::SubscriptionUpgradeRequired` if specialized templates (`kds`, `analytics-pro`) are locked.
+- [ ] **Step 3.4**: Implement safe downgrade handling logic transitioning surplus instances (`active_pos_count > max_pos_instances`) to `is_active = false` without deleting audit logs or historical data.
+- [ ] **Step 3.V1 (Verification - Tier Unit Test)**: Write `test_subscription_tier_quotas_and_entitlements` in `crates/oz-core/src/db/workspaces.rs` testing creation limits across `Free`, `Pro`, `Premium`, and `Enterprise` tiers and entitlement locking.
+- [ ] **Step 3.V2 (Verification - Quality Check)**: Run `cargo test -p oz-core test_subscription` and verify all error messages format cleanly.
 
 ### Phase 4: Tauri IPC Bridge & Front-End API (`apps/` & `ui/src/api/`)
-- [ ] **Tauri Command Registration (`apps/desktop-client/src/commands/workspaces.rs`)**: Update `get_workspaces` command to return `Vec<WorkspaceDto>` matching the new DTO payload.
-- [ ] **Admin Management Commands**: Register `create_workspace_instance`, `update_workspace_instance`, `delete_workspace_instance`, and `assign_user_workspace_instance`.
-- [ ] **TypeScript API Adapter (`ui/src/api/workspaces.ts`)**: Update TypeScript definitions (`WorkspaceDto`, `WorkspaceScope`, `CreateInstanceRequest`) and ensure components never invoke raw Tauri commands directly.
-- [ ] **Scoped Real-Time Event Bus**: Implement `self.event_bus.emit_scoped` across Tauri channels so table updates and kitchen orders only broadcast to registers assigned to the target `store_id`.
+- [ ] **Step 4.1**: Update Tauri `get_workspaces` command in `apps/desktop-client/src/commands/workspaces.rs` and `apps/tablet-client/src/commands/workspaces.rs` to return `Vec<WorkspaceDto>` with full instance and scope attributes.
+- [ ] **Step 4.2**: Register new admin Tauri commands in `lib.rs`: `create_workspace_instance`, `update_workspace_instance`, `delete_workspace_instance`, and `assign_user_workspace_instance`.
+- [ ] **Step 4.3**: Update TypeScript interfaces (`WorkspaceDto`, `WorkspaceScope`, `CreateInstanceRequest`) and implement clean async wrapper functions in `ui/src/api/workspaces.ts`.
+- [ ] **Step 4.4**: Implement scoped event emission (`self.event_bus.emit_scoped(scope.store_id(), ...)` across Tauri IPC channels (`StoreEvent::OrderCompleted`, `StoreEvent::TableStatusChanged`) so table updates broadcast strictly by `store_id`.
+- [ ] **Step 4.V1 (Verification - API & IPC Test)**: Write integration tests `ui/src/__tests__/api/workspaces.test.ts` verifying `api/workspaces.ts` correctly deserializes `WorkspaceDto` and transmits `WorkspaceScope` headers.
+- [ ] **Step 4.V2 (Verification - Quality Check)**: Run `cargo clippy -p desktop-client -p tablet-client -- -D warnings` and verify zero Tauri IPC command registration or serialization errors.
 
 ### Phase 5: Front-End State, Routing & UI Components (`ui/src/`)
-- [ ] **Workspace Context Refactor (`ui/src/context/WorkspaceContext.tsx`)**: Update state from `activeWorkspace: string` (flat key) to `activeInstance: WorkspaceDto | null` and provide `WorkspaceScope ({ storeId, warehouseId })` across hooks.
-- [ ] **Type-Based Routing (`ui/src/components/AppShell.tsx`)**: Refactor routing logic to switch on `activeInstance.type_key` (`restaurant-pos` → `<PosScreen />`, `store-pos` → `<RetailPosScreen />`, `kds` → `<KdsScreen />`, fallback → `<AppLayout />`).
-- [ ] **Instance Picker UI (`ui/src/components/WorkspaceHome.tsx`)**: Update `WorkspaceCard` rendering to list distinct instances grouped by `type_key` or location, displaying badges (`Downtown`, `Mall`, `Airport`) and instance accent colors.
-- [ ] **Full Automated Verification**: Run `scripts/check.sh`, verify `cargo clippy`, `cargo fmt`, ARIA compliance (`eslint-plugin-jsx-a11y`), Vitest unit tests, and pre-commit Fluent bundle parity checks.
+- [ ] **Step 5.1**: Refactor `WorkspaceContext.tsx` (`WorkspaceProvider`) state from `activeWorkspace: string` (flat key) to `activeInstance: WorkspaceDto | null` and expose `useWorkspaceScope()` context (`{ storeId: activeInstance?.store_id, warehouseId: activeInstance?.warehouse_id }`).
+- [ ] **Step 5.2**: Update all data-fetching hooks (`useProducts`, `useOrders`, `useStock`) across `ui/src/features/` to extract `storeId` from `useWorkspaceScope()` and pass it to API adapters.
+- [ ] **Step 5.3**: Refactor `AppShell.tsx` routing logic to switch on `activeInstance.type_key` (`restaurant-pos` → `<PosScreen />`, `store-pos` → `<RetailPosScreen />`, `kds` → `<KdsScreen />`, fallback → `<AppLayout />`).
+- [ ] **Step 5.4**: Update `WorkspaceHome.tsx` (`WorkspaceCard`) to render grouped instances (`Downtown - Cashier 1`, `Mall - Cashier 1`), displaying location badges (`Downtown`, `Mall`, `Airport`), instance colors, and active status.
+- [ ] **Step 5.V1 (Verification - UI Component Tests)**: Create/update Vitest tests `ui/src/__tests__/WorkspaceHome.test.tsx` and `ui/src/__tests__/AppShell.test.tsx` verifying instance card rendering, group labels, ARIA compliance, and `type_key` routing.
+- [ ] **Step 5.V2 (Verification - Full Pre-Commit & CI Matrix Gate)**: Run `./scripts/check.sh` confirming `cargo fmt --all`, `i18n lint`, `bundle-parity`, `FTL dedupe`, `cargo clippy -- -D warnings`, and the complete front-end test suite pass with zero errors across the entire codebase.
 
 ---
 
