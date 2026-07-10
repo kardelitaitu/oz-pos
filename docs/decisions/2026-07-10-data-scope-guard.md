@@ -1,6 +1,6 @@
 # ADR #7: Data Scope Guard & Query Enforcement
 
-**Status:** In Progress (2026-07-10)
+**Status:** Implemented (2026-07-10)
 **Date:** 2026-07-10
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** security, session, scope, database, enforcement, ADR #4 follow-up
@@ -139,7 +139,7 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `resolve_scope()` on tablet `AppState`
 - [x] `list_products_scoped` simplified to use `resolve_scope()`
 
-### Phase 3: Domain Command Migration ⏳ (14 of 14 done)
+### Phase 3: Domain Command Migration ✅ (all 14 modules complete)
 - [x] `adjust_stock_scoped` — migrate stock adjustment
 - [x] `lookup_by_barcode_scoped` — migrate barcode lookup
 - [x] `lookup_product_by_sku_scoped` — migrate SKU lookup
@@ -170,10 +170,10 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] Phase 4 verification script — `scripts/verify-no-raw-params.sh` updated with portable ERE grep, `_scoped$` self-skip, and deprecated-variant matching. Reports 0 violations.
 - [x] **ALL 84 DESKTOP COMMANDS MIGRATED. 47 deprecated commands coexist with _scoped variants. Migration complete.**
 
-### Phase 4: Enforcement 🔧
-- [x] `scripts/verify-no-raw-params.sh` — greps desktop command files for `store_id: String` / `user_id: String` function parameters. Excludes `pub` struct fields and tablet-client (not yet migrated). Currently detects 28 remaining commands needing migration (settings, setup, tables, terminals, workspaces).
+### Phase 4: Enforcement ✅
+- [x] `scripts/verify-no-raw-params.sh` — portable ERE grep-based guard that scans desktop command files for `store_id: String` / `user_id: String` function parameters without a corresponding `_scoped` variant. Excludes struct fields, comments, and tablet-client (not yet migrated). **0 violations.**
 - [x] Integrated into `scripts/check.sh` CI pipeline (runs after clippy, before tests).
-- [x] **All 84 desktop commands migrated — 47 deprecated commands coexist with _scoped variants, 0 violations.** `scripts/verify-no-raw-params.sh` returns clean.
+- [x] **All 84 desktop commands migrated — 47 deprecated commands coexist with `_scoped` variants, 0 violations.** `scripts/verify-no-raw-params.sh` returns clean.
 - [x] Backward-compatible deprecation period: all 84 migrated old commands preserved with `**Deprecated**` doc comments.
 - [ ] Custom Clippy lint rule: reject `store_id: String` in command params *(future enhancement — grep-based guard is the pragmatic first step)*.
 

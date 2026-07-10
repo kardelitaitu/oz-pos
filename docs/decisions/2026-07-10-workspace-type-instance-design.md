@@ -1,6 +1,6 @@
 # ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture
 
-**Status:** Accepted (Updated 2026-07-10)
+**Status:** Implemented (2026-07-10)
 **Date:** 2026-07-10
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** architecture, tenancy, workspaces, multi-store, data-isolation, device-binding
@@ -665,17 +665,17 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 |---|---|---|
 | **Subscription tier & entitlement enforcement** | Business-model decision; instance status enum (Active/QuotaSuspended/Archived) is defined here but quota logic is separate. | ADR #5 |
 | **CRDT delta ledger & offline UUIDv7 sync** | Major data-model change for inventory. | ADR #6 |
-| **Hard `ScopeGuard` compile-time enforcement** | Follow-up to soft scoping; the `SessionContext` pattern described in Security Architecture is the soft version. | ADR #7 |
+| **Hard `ScopeGuard` compile-time enforcement** | Follow-up to soft scoping; the `SessionContext` pattern described in Security Architecture is the soft version. ADR #7 completed the migration — all 84 desktop commands use `session_token` + `resolve_session()`, enforced by `scripts/verify-no-raw-params.sh` in CI. | ADR #7 ✅ |
 | **Scoped real-time event bus** | Depends on stable workspace scope model; events must only broadcast to terminals in the same store. | ADR #8 |
 | **Cross-store sync protocol** | The sync layer (`platform/sync/`) already exists; cross-store sync is an extension. | Future ADR |
-| **SQLCipher / at-rest database encryption** | Defense-in-depth; encrypts per-store SQLite files and the global DB. | ADR #7 |
+| **SQLCipher / at-rest database encryption** | Defense-in-depth; encrypts per-store SQLite files and the global DB. | Future ADR |
 | **Hardware-backed device attestation (TPM/Secure Enclave)** | Stronger device binding beyond HMAC; requires TPM/SE integration. | Future ADR |
 
 ---
 
 ## Phased Implementation & Migration Guide
 
-> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅, Session Token Infrastructure ✅, Frontend Token Integration ✅, End-to-End Pattern Demo ✅.</toml>
+> **Status (2026-07-10):** All phases complete. Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅, ADR #7 ✅ (all 84 desktop commands migrated to session token pattern).</toml>
 
 ### Phase 1: Workspace Types + Default Instances + Session Context
 
@@ -696,7 +696,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] Index on `user_workspace_instances(user_id)` and workspace instances `(type_key)`.
    - **Files:** `crates/oz-core/migrations/060_workspace_instances.sql`, `crates/oz-core/src/migrations.rs`
 
-2. **Session Context** ✅ (struct only; extractor deferred to ADR #7)
+2. **Session Context** ✅
    - [x] Implement `SessionContext` struct in `crates/oz-core/src/session.rs`.
    - [x] `session_store` in-memory `HashMap<String, SessionContext>` with `resolve_session()` — foundational token infrastructure.
    - [x] `create_session` and `destroy_session` Tauri commands with opaque UUID v4 tokens, input validation, and max-session eviction.
@@ -705,12 +705,10 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] Frontend `createSession`/`destroySession` API wrappers in `ui/src/api/staff.ts`.
    - [x] `sessionToken` lifecycle in `WorkspaceContext`: auto-created on workspace selection, auto-destroyed on logout/store-switch, token rotation on `switchStore()`.
    - [x] `WorkspaceContextValue` exposes `sessionToken: string | null` for commands to pass to backend.
-   - [x] **ADR #7 migration underway:** `list_products_scoped` ✅, `adjust_stock_scoped` ✅, `lookup_by_barcode_scoped` ✅, `lookup_product_by_sku_scoped` ✅, `create_product_scoped` ✅, `update_product_scoped` ✅, `delete_product_scoped` ✅, `list_sales_scoped` ✅, `get_sale_scoped` ✅, `export_daily_summary_scoped` ✅, `export_sales_by_hour_scoped` ✅, `export_eod_report_scoped` ✅ — all with frontend API wrappers. Additionally: `void_sale_scoped` ✅, `process_refund_scoped` ✅, `lookup_sale_by_receipt_barcode_scoped` ✅, `list_refunds_scoped` ✅. Additionally: `set_cart_discount_scoped` ✅, `override_line_price_scoped` ✅, `list_active_carts_scoped` ✅, `get_active_cart_scoped` ✅, `hold_cart_scoped` ✅, `list_held_carts_scoped` ✅, `list_open_bills_scoped` ✅, `get_held_cart_scoped` ✅, `compute_cart_tax_scoped` ✅, `delete_held_cart_scoped` ✅, `complete_sale_scoped` ✅, `start_sale_scoped` ✅, `add_line_scoped` ✅. The POS module is fully scoped. Additionally: fixed 14 pre-existing `WorkspaceTypeDto` deprecation clippy warnings — `cargo clippy -p oz-pos-app -- -D warnings` now passes clean. Remaining domain commands (customers, staff, etc.) deferred.
-   - [x] **Final comprehensive verification (2026-07-10):** `cargo fmt --all` ✅, `cargo clippy -p oz-core -p platform-core` ✅ zero warnings, `cargo check --lib -p oz-pos-app -p oz-pos-tablet` ✅ clean, `cargo test -p oz-core -p platform-core` ✅ 1,029/1,032 pass (3 pre-existing `currency_integration` failures unrelated).
-   - [x] **ADR #7 created (2026-07-10):** `docs/decisions/2026-07-10-data-scope-guard.md` — defines `resolve_scope()` helper, domain command migration plan, and clippy lint enforcement. `resolve_scope()` implemented on both desktop and tablet `AppState`. `list_products_scoped` simplified to use it.
-   - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
-   - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
-   - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
+   - [x] **ADR #7 — ALL 84 desktop commands migrated to session token pattern** (see `docs/decisions/2026-07-10-data-scope-guard.md` for full migration table). `scripts/verify-no-raw-params.sh` enforces 0 violations. 47 deprecated commands coexist with `_scoped` variants during backward-compat period.
+   - [x] `session_context()` extractor: `resolve_session()` on `AppState` validates opaque tokens and returns `SessionContext` — implemented as convenience method, not Tauri middleware (Tauri v2 has none).
+   - [x] All 84 domain commands (`list_orders`, `get_products`, `adjust_stock`, etc.) have `_scoped` variants accepting `session_token: String` instead of raw `store_id`/`user_id`.
+   - [x] `clippy` lint rule: `scripts/verify-no-raw-params.sh` grep-based guard enforces no new raw `store_id`/`user_id` params in CI. Custom Clippy plugin tracked as future enhancement.
    - **Files:** `crates/oz-core/src/session.rs`, `crates/oz-core/src/lib.rs`
 
 3. **Rust DTOs & Models** ✅
