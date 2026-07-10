@@ -46,6 +46,19 @@ export interface UpdateProductArgs {
 export const listProducts = (): Promise<ProductDto[]> =>
   invoke<ProductDto[]>('list_products');
 
+/**
+ * Fetch products scoped to the store resolved from a session token.
+ *
+ * ADR #4 / ADR #7 canonical pattern: The backend resolves the opaque
+ * `sessionToken` to a `SessionContext` (containing `store_id`), opens
+ * the store-scoped database, and returns only that store's products.
+ *
+ * Prefer this over the unscoped `listProducts()` in multi-store
+ * deployments.
+ */
+export const listProductsScoped = (sessionToken: string): Promise<ProductDto[]> =>
+  invoke<ProductDto[]>('list_products_scoped', { sessionToken });
+
 export const createProduct = (args: CreateProductArgs): Promise<{ sku: string }> =>
   invoke('create_product', { args });
 
