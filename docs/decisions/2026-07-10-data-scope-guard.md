@@ -75,7 +75,7 @@ pub async fn list_products_scoped(
 | `create_product` | `args: CreateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `create_product_scoped` + `CreateProductScopedArgs` + API wrapper |
 | `update_product` | `args: UpdateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `update_product_scoped` + `UpdateProductScopedArgs` + API wrapper |
 | `delete_product` | `args: DeleteProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `delete_product_scoped` + `DeleteProductScopedArgs` + API wrapper |
-| `list_orders` | (needs investigation) | `session_token: String, ...` | ⏳ |
+| `list_sales` | `()` | `session_token: String` | ✅ `list_sales_scoped` + API wrapper |
 | *(all other domain commands)* | various | `session_token: String, ...` | ⏳ |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
@@ -114,7 +114,7 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `create_product_scoped` — remove `user_id` from args, use session token
 - [x] `update_product_scoped` — remove `user_id` from args
 - [x] `delete_product_scoped` — remove `user_id` from args
-- [ ] `list_orders_scoped` — migrate order listing
+- [x] `list_sales_scoped` — migrate sales history listing
 - [ ] *(remaining domain commands)*
 
 ### Phase 4: Enforcement ⏳

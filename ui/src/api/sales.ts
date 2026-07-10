@@ -132,6 +132,10 @@ export interface SaleDetail {
 export const listSales = (): Promise<SaleListItem[]> =>
   invoke<SaleListItem[]>('list_sales');
 
+/** ADR #7: List sales scoped to the store resolved from a session token. */
+export const listSalesScoped = (sessionToken: string): Promise<SaleListItem[]> =>
+  invoke<SaleListItem[]>('list_sales_scoped', { sessionToken });
+
 export const getSale = (id: string): Promise<SaleDetail | null> =>
   invoke<SaleDetail | null>('get_sale', { id });
 

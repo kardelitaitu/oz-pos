@@ -189,6 +189,7 @@ pub fn run() {
             commands::kds::create_kds_order_from_sale,
             commands::kds::get_kds_order,
             commands::history::list_sales,
+            commands::history::list_sales_scoped,
             commands::history::get_sale,
             commands::history::export_daily_summary,
             commands::history::export_sales_by_hour,

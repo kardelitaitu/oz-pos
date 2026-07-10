@@ -26,24 +26,50 @@ pub struct SaleListItem {
     pub created_at: String,
 }
 
+/// List all sales from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_sales_scoped`
+/// with a `session_token` to list sales from the store-scoped database.
 #[command]
 pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let sales = store.list_sales()?;
     drop(db);
-    Ok(sales
-        .into_iter()
-        .map(|s| SaleListItem {
-            id: s.id,
-            total: s.total,
-            line_count: s.line_count,
-            status: format!("{:?}", s.status),
-            payment_method: s.payment_method,
-            user_id: s.user_id,
-            created_at: s.created_at,
-        })
-        .collect())
+    Ok(sales.into_iter().map(map_sale_to_item).collect())
+}
+
+/// List all sales for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `list_sales`. The backend resolves the
+/// opaque `session_token` to a `SessionContext`, opens the store-scoped
+/// database, and returns only that store's completed sales.
+#[command]
+pub async fn list_sales_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SaleListItem>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let sales = store.list_sales()?;
+    drop(db);
+    Ok(sales.into_iter().map(map_sale_to_item).collect())
+}
+
+/// Shared mapping from `oz_core::Sale` to `SaleListItem`.
+fn map_sale_to_item(s: oz_core::Sale) -> SaleListItem {
+    SaleListItem {
+        id: s.id,
+        total: s.total,
+        line_count: s.line_count,
+        status: format!("{:?}", s.status),
+        payment_method: s.payment_method,
+        user_id: s.user_id,
+        created_at: s.created_at,
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -386,5 +412,14 @@ mod tests {
         assert_eq!(json["total_sales"], 50);
         assert_eq!(json["currency"], "USD");
         assert!(!json["payment_breakdown"].as_array().unwrap().is_empty());
+    }
+
+    // ── Session token rejection tests ─────────────────────────────────
+
+    #[test]
+    fn list_sales_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }
