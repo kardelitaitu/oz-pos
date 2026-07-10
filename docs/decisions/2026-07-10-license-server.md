@@ -691,16 +691,16 @@ The `api_key` is stored once on activation and reused for all subsequent renew a
 
 ### Phase 1: PocketBase Collections & Go Binary
 
-- [ ] **Step 1.1**: Create `apps/license-server/` directory with `main.go` (custom PocketBase binary).
-- [ ] **Step 1.2**: Define collections (`license_keys`, `tenants`, `subscriptions`, `tenant_machines`) and export as `pb_schema.json`.
-- [ ] **Step 1.3**: Implement RSA private key loading from `OZ_LICENSE_PRIVATE_KEY` env var.
-- [ ] **Step 1.4**: Implement `signSubscription()` helper in Go.
-- [ ] **Step 1.5**: Implement `POST /api/v1/license/activate` Go hook — validates key, creates tenant, registers machine, signs subscription.
-- [ ] **Step 1.6**: Implement `POST /api/v1/license/renew` Go hook — re-signs with updated expiry.
-- [ ] **Step 1.7**: Implement `GET /api/v1/license/status/:tenant_id` Go hook — public status.
-- [ ] **Step 1.8**: Add simple in-memory rate limiter for the activate endpoint.
-- [ ] **Step 1.V1 (Verification)**: Run `go build` and `go test ./...` in `apps/license-server/`.
-- [ ] **Step 1.V2 (Verification)**: Start locally with `OZ_LICENSE_PRIVATE_KEY=<test-key>` and test activate/renew/status via curl.
+- [x] **Step 1.1**: Create `apps/license-server/` directory with `main.go` (custom PocketBase binary).
+- [x] **Step 1.2**: Define collections (`license_keys`, `tenants`, `subscriptions`, `tenant_machines`) and export as `pb_schema.json`.
+- [x] **Step 1.3**: Implement RSA private key loading from `OZ_LICENSE_PRIVATE_KEY` env var.
+- [x] **Step 1.4**: Implement `signSubscription()` helper in Go.
+- [x] **Step 1.5**: Implement `POST /api/v1/license/activate` Go hook — validates key, creates tenant, registers machine, signs subscription.
+- [x] **Step 1.6**: Implement `POST /api/v1/license/renew` Go hook — re-signs with updated expiry.
+- [x] **Step 1.7**: Implement `GET /api/v1/license/status/:tenant_id` Go hook — public status.
+- [x] **Step 1.8**: Add simple in-memory rate limiter for the activate endpoint (IP token bucket + per-key brute-force protection).
+- [x] **Step 1.V1 (Verification)**: Run `go build` and `go test ./...` in `apps/license-server/` — **13 tests pass**.
+- [x] **Step 1.V2 (Verification)**: Start locally with `OZ_LICENSE_PRIVATE_KEY=<test-key>` and test activate/renew/status via curl.
 
 ### Phase 2: POS Client (Rust)
 
