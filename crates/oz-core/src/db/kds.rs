@@ -192,8 +192,16 @@ impl Store<'_> {
     /// Complete a sale to a KDS order: creates a KDS ticket from a completed sale
     /// for items whose product type is `restaurant` or `both`.
     ///
+    /// When `store_id` is provided (from the caller's `SessionContext`), the
+    /// resulting KDS order is tagged with that store for defense-in-depth
+    /// filtering on KDS tablets (ADR #8).
+    ///
     /// Returns `Ok(None)` when the sale has no restaurant-eligible items.
-    pub fn complete_sale_to_kds(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
+    pub fn complete_sale_to_kds(
+        &self,
+        sale_id: &str,
+        store_id: Option<&str>,
+    ) -> Result<Option<KdsOrder>, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
             id: sale_id.to_owned(),
@@ -238,7 +246,7 @@ impl Store<'_> {
 
         self.create_kds_order(CreateKdsOrderInput {
             sale_id: sale_id.to_owned(),
-            store_id: None, // Populated when caller has session context (ADR #8)
+            store_id: store_id.map(|s| s.to_owned()),
             items_summary,
             item_count,
             notes,
@@ -657,7 +665,7 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        let order = s.complete_sale_to_kds(&sale.id).unwrap().unwrap();
+        let order = s.complete_sale_to_kds(&sale.id, None).unwrap().unwrap();
         assert_eq!(order.sale_id, sale.id);
         assert_eq!(order.status, "pending");
         assert!(order.items_summary.contains("Coffee"));

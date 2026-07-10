@@ -144,12 +144,15 @@ pub async fn create_kds_order_from_sale(
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
-    let order = store.complete_sale_to_kds(&sale_id)?;
+    let order = store.complete_sale_to_kds(&sale_id, None)?;
     drop(db);
     Ok(order)
 }
 
 /// Create a KDS order in the store resolved from a session token. ADR #7.
+///
+/// Passes the session's `store_id` so the KDS order carries store identity
+/// for defense-in-depth filtering on KDS tablets (ADR #8).
 #[command]
 pub async fn create_kds_order_from_sale_scoped(
     session_token: String,
@@ -166,7 +169,7 @@ pub async fn create_kds_order_from_sale_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
-    let order = store.complete_sale_to_kds(&sale_id)?;
+    let order = store.complete_sale_to_kds(&sale_id, Some(&session.store_id))?;
     drop(db);
     Ok(order)
 }
