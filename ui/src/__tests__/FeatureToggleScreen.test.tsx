@@ -22,16 +22,23 @@ const mockFeatures = [
 let currentFeatures = [...mockFeatures];
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn((cmd: string, args?: { args: { key: string; enabled: boolean } }) => {
+  invoke: vi.fn((cmd: string, args?: { args: Record<string, unknown> }) => {
     if (cmd === 'list_all_features') {
       return Promise.resolve({ features: currentFeatures });
     }
     if (cmd === 'set_feature' && args?.args) {
-      const { key, enabled } = args.args;
+      const { key, enabled } = args.args as { key: string; enabled: boolean };
       currentFeatures = currentFeatures.map((f) =>
         f.key === key ? { ...f, enabled } : f,
       );
       return Promise.resolve({ success: true, features: currentFeatures, auto_enabled: [] });
+    }
+    if (cmd === 'set_features_bulk' && args?.args) {
+      const { keys, enabled } = args.args as { keys: string[]; enabled: boolean };
+      currentFeatures = currentFeatures.map((f) =>
+        keys.includes(f.key) ? { ...f, enabled } : f,
+      );
+      return Promise.resolve({ features: currentFeatures });
     }
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   }),

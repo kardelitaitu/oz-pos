@@ -220,6 +220,30 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
               );
             })}
           </nav>
+
+          {/* ── Sidebar collapse button ──────────────── */}
+          <Tooltip content={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')} showDelay={800}>
+            <button
+              type="button"
+              className="sidebar-collapse-btn"
+              onClick={toggleSidebar}
+              aria-label={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="16"
+                height="16"
+                aria-hidden="true"
+              >
+                <polyline points={sidebarCollapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
+              </svg>
+            </button>
+          </Tooltip>
         </aside>
 
         {/* ── Content area ─────────────────────────── */}
