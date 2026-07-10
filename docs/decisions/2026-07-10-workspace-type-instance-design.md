@@ -767,15 +767,21 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 **Goal:** Tablets and fixed terminals boot directly into their workspace without showing any picker.
 
-1. **Device Registration**:
-   - On first boot, a terminal registers itself (writes to the `terminals` table in the global DB).
-   - Admin UI allows binding a terminal to a store + instance.
-   - Boot-time validation: if `bound_instance_id` is set, open the bound store's database and verify the instance exists and is active.
+> **Status (2026-07-10):** Step 1 (Device Registration infrastructure) complete. Step 2 (Boot Resolution) complete.
+> Steps 3 (Tablet Shell Redesign) deferred.
 
-2. **Boot Resolution**:
-   - `bound_store_id` + `bound_instance_id` → auto-boot, no picker.
-   - `bound_store_id` only → auto-select store, show instance picker within store.
-   - Neither bound → fall through to user-based resolution.
+1. **Device Registration**:
+   - [x] Backend: `set_device_binding`, `get_device_binding`, `clear_device_binding` Tauri commands with HMAC signing (Phase 1b).
+   - [ ] Admin UI for binding a terminal to a store + instance (deferred — frontend task).
+   - [x] Boot-time validation: `resolve_boot_store` opens the bound store's database and verifies the instance exists and is active.
+
+2. **Boot Resolution** ✅
+   - [x] `resolve_boot_store` Tauri command: resolves device binding → verifies HMAC → validates instance in store DB → returns `(store_id, instance_id, is_bound)`.
+   - [x] Falls back to primary store when: terminal not found, no binding, HMAC invalid, or instance doesn't exist/is not active.
+   - [x] Server-side device_id resolution (from `COMPUTERNAME`/`HOSTNAME` env vars) — frontend doesn't need to know hostname.
+   - [x] Frontend `resolveBootStore()` API wrapper in `ui/src/api/workspaces.ts`.
+   - [x] `WorkspaceContext.tsx` calls `resolveBootStore()` on mount, uses resolved `storeId` for `listWorkspaces`.
+   - **Files:** `apps/desktop-client/src/commands/workspaces.rs`, `apps/desktop-client/src/lib.rs`, `ui/src/api/workspaces.ts`, `ui/src/contexts/WorkspaceContext.tsx`
 
 3. **Tablet Shell Redesign**:
    - `TabletAppShell.tsx` currently uses a hardcoded tab bar (`pos`, `products`, `sales-history`, `kds`) with no `WorkspaceContext`. This is replaced with the same device-binding resolution as the desktop shell.

@@ -45,6 +45,34 @@ export interface WorkspaceTypeDto {
   icon: string;
 }
 
+// ── Boot Resolution (ADR #4 Phase 3) ──────────────────────────────────
+
+/** DTO returned by resolve_boot_store. */
+export interface BootResolution {
+  is_bound: boolean;
+  store_id: string;
+  instance_id: string | null;
+}
+
+/**
+ * Resolve the active store and instance from device binding at boot time.
+ *
+ * Called once before authentication to determine which store database
+ * to open and whether to skip the workspace picker.
+ *
+ * Resolution:
+ * 1. Looks up terminal by device_id (hostname).
+ * 2. If terminal has valid HMAC-signed device binding:
+ *    - If bound to both store + instance → returns both (skip pickers).
+ *    - If bound to store only → returns store (skip store picker).
+ * 3. Otherwise → returns the primary store.
+ */
+export async function resolveBootStore(
+  deviceId?: string,
+): Promise<BootResolution> {
+  return invoke<BootResolution>('resolve_boot_store', { deviceId: deviceId ?? null });
+}
+
 // ── Instance Commands (ADR #4 Phase 1) ─────────────────────────────────
 
 /**

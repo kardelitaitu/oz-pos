@@ -312,6 +312,7 @@ pub fn run() {
             commands::workspaces::get_user_workspaces,
             commands::workspaces::set_user_workspace_instances,
             commands::workspaces::get_user_workspace_instances,
+            commands::workspaces::resolve_boot_store,
             commands::workspaces::list_workspace_screens,
         ])
         .run(tauri::generate_context!())

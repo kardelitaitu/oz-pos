@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
-import { listWorkspaces, listWorkspaceScreens, type WorkspaceDto } from '@/api/workspaces';
+import { listWorkspaces, listWorkspaceScreens, resolveBootStore, type WorkspaceDto } from '@/api/workspaces';
 import { useAuth } from '@/contexts/AuthContext';
 
 // ── Fallback workspaces for development (ADR #4 shape) ──────────────
@@ -53,7 +53,8 @@ export interface WorkspaceContextValue {
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 /** Default store ID for Phase 1 (single-store mode).
- *  TODO(ADR #4 Phase 2): Derive from device binding or user preference. */
+ *  ADR #4 Phase 3: Replaced by dynamic resolution via resolveBootStore().
+ *  Kept as fallback when boot resolution fails. */
 const DEFAULT_STORE_ID = 'default';
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
@@ -69,6 +70,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const roleId = session?.role_id ?? '';
   const userId = session?.user_id ?? '';
+
+  // ADR #4 Phase 3: Dynamically resolved store ID from device binding or primary store.
+  const [resolvedStoreId, setResolvedStoreId] = useState<string>(DEFAULT_STORE_ID);
+  const [isBootResolved, setIsBootResolved] = useState(false);
 
   // Reset workspace selection on login/logout so the user always
   // sees the workspace picker after authentication.
@@ -89,32 +94,70 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [activeWorkspace, availableWorkspaces]);
 
+  // ADR #4 Phase 3: Resolve the boot store first, then load workspaces.
+  // This is called once on mount (or when roleId changes).
   useEffect(() => {
     if (!roleId) {
       setAvailableWorkspaces([]);
       setWorkspaceScreensState([]);
       setLoading(false);
+      setIsBootResolved(false);
       return;
     }
-    setLoading(true);
-    setError(null);
-    // ADR #4: listWorkspaces now requires storeId. Phase 1 uses 'default'.
-    listWorkspaces(roleId, DEFAULT_STORE_ID, userId || undefined)
-      .then((workspaces) => {
-        if (workspaces.length > 0) {
-          setAvailableWorkspaces(workspaces);
-          setError(null);
-        } else {
-          setAvailableWorkspaces(FALLBACK_WORKSPACES);
-          setError(null);
+
+    let cancelled = false;
+
+    async function boot() {
+      setLoading(true);
+      setError(null);
+
+      // Step 1: Resolve the store from device binding or primary store.
+      let storeId = DEFAULT_STORE_ID;
+      try {
+        const resolution = await resolveBootStore();
+        storeId = resolution.store_id;
+        if (!cancelled) {
+          setResolvedStoreId(storeId);
+          setIsBootResolved(true);
         }
-      })
-      .catch((err) => {
-        console.warn('WorkspaceContext: failed to list workspaces, using fallback', err);
-        setAvailableWorkspaces(FALLBACK_WORKSPACES);
-        setError('Failed to load workspaces from server. Using demo workspaces.');
-      })
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.warn('WorkspaceContext: boot store resolution failed, using default', err);
+        if (!cancelled) {
+          setResolvedStoreId(DEFAULT_STORE_ID);
+          setIsBootResolved(true);
+        }
+      }
+
+      // Step 2: Load workspace instances for the resolved store.
+      try {
+        const workspaces = await listWorkspaces(roleId, storeId, userId || undefined);
+        if (!cancelled) {
+          if (workspaces.length > 0) {
+            setAvailableWorkspaces(workspaces);
+            setError(null);
+          } else {
+            setAvailableWorkspaces(FALLBACK_WORKSPACES);
+            setError(null);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('WorkspaceContext: failed to list workspaces, using fallback', err);
+          setAvailableWorkspaces(FALLBACK_WORKSPACES);
+          setError('Failed to load workspaces from server. Using demo workspaces.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    boot();
+
+    return () => {
+      cancelled = true;
+    };
   }, [roleId, userId]);
 
   useEffect(() => {
@@ -159,7 +202,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!roleId) return;
     setLoading(true);
     setError(null);
-    listWorkspaces(roleId, DEFAULT_STORE_ID, userId || undefined)
+    listWorkspaces(roleId, resolvedStoreId, userId || undefined)
       .then((workspaces) => {
         if (workspaces.length > 0) {
           setAvailableWorkspaces(workspaces);
@@ -174,7 +217,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setError('Failed to load workspaces from server. Using demo workspaces.');
       })
       .finally(() => setLoading(false));
-  }, [roleId, userId]);
+  }, [roleId, userId, resolvedStoreId]);
 
   // Derived scope from active instance
   const scope: WorkspaceScope | null = useMemo(

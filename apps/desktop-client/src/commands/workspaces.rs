@@ -8,6 +8,9 @@
 use serde::Serialize;
 use tauri::{State, command};
 
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
 use oz_core::db::Store;
 use oz_core::db::workspaces::WorkspaceDto;
 use oz_core::permissions;
@@ -15,6 +18,8 @@ use oz_core::permissions;
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
+
+type HmacSha256 = Hmac<Sha256>;
 
 /// Legacy workspace DTO (pre-ADR #4).
 /// Kept for backward compatibility with existing frontend code.
@@ -251,6 +256,189 @@ pub async fn get_user_workspace_instances(
     let ids = store.get_user_workspace_instance_ids(&user_id)?;
     drop(db);
     Ok(ids)
+}
+
+// ── Boot Resolution (ADR #4 Phase 3) ────────────────────────────────
+
+/// DTO returned by `resolve_boot_store`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BootResolution {
+    /// Whether the terminal is device-bound (HMAC-validated).
+    pub is_bound: bool,
+    /// The resolved store ID (always present — falls back to primary store).
+    pub store_id: String,
+    /// The bound instance ID, if the terminal is bound to a specific instance.
+    pub instance_id: Option<String>,
+}
+
+/// Resolve the active store and instance from device binding.
+///
+/// This is called once at boot time (before authentication) to determine
+/// which store database to open and whether to skip the workspace picker.
+///
+/// Resolution order:
+/// 1. Look up terminal by `device_id` (hostname).
+/// 2. If terminal has a device binding with valid HMAC signature:
+///    a. If both `bound_store_id` and `bound_instance_id` are set:
+///       → Open the store's database, verify the instance exists and is active.
+///       → Return `(store_id, instance_id, is_bound: true)` — skip picker.
+///    b. If only `bound_store_id` is set:
+///       → Return `(store_id, null, is_bound: true)` — skip store picker, show instance picker.
+/// 3. Otherwise:
+///    → Return the primary store with `is_bound: false`.
+///
+/// # Thread Safety
+///
+/// All non-`Send` values (`Keyring`, `Store`, `MutexGuard`)
+/// are confined to blocks that never cross an `.await` boundary.
+#[command]
+pub async fn resolve_boot_store(
+    state: State<'_, AppState>,
+    device_id: Option<String>,
+) -> Result<BootResolution, AppError> {
+    // Resolve device_id from param or system hostname.
+    let device_id = device_id
+        .filter(|d| !d.is_empty())
+        .or_else(|| {
+            std::env::var("COMPUTERNAME")
+                .or_else(|_| std::env::var("HOSTNAME"))
+                .ok()
+        })
+        .unwrap_or_default();
+
+    if device_id.is_empty() {
+        // No device identity — fall straight to primary store.
+        let primary_id = {
+            let db = state.db.lock().await;
+            let store = Store::new(&db);
+            let primary = store
+                .get_primary_store()?
+                .ok_or_else(|| AppError::Internal("no primary store found".into()))?;
+            primary.id
+        };
+        tracing::info!(
+            store_id = %primary_id,
+            "boot resolution: no device_id available, using primary store"
+        );
+        return Ok(BootResolution {
+            is_bound: false,
+            store_id: primary_id,
+            instance_id: None,
+        });
+    }
+
+    // Step 1: Look up terminal by device_id and capture (terminal_id, binding).
+    // Confined to a block so Store borrow doesn't cross .await.
+    let binding_info: Option<(String, String, String, String)> = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        store
+            .get_terminal_by_device_id(&device_id)?
+            .and_then(|terminal| {
+                let tid = terminal.id;
+                store
+                    .get_terminal_binding(&tid)
+                    .ok()
+                    .flatten()
+                    .map(|(s, i, sig)| (tid, s, i, sig))
+            })
+    };
+
+    // Step 2: Validate HMAC signature and verify the bound instance.
+    if let Some((terminal_id, bound_store_id, bound_instance_id, signature)) = binding_info {
+        // ── Phase 2a: HMAC verification ──
+        // Keyring is !Send — must drop before any .await.
+        let signature_valid = {
+            let keyring = oz_security::default_keyring()
+                .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+            let secret = keyring
+                .get_secret(crate::commands::terminals::DEVICE_BINDING_KEYRING_NAME)
+                .map_err(|e| AppError::Internal(format!("keyring read failed: {e}")))?;
+
+            match secret {
+                Some(secret) => {
+                    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+                        .map_err(|e| AppError::Internal(format!("HMAC init failed: {e}")))?;
+                    mac.update(terminal_id.as_bytes());
+                    mac.update(b":");
+                    mac.update(bound_store_id.as_bytes());
+                    mac.update(b":");
+                    mac.update(bound_instance_id.as_bytes());
+                    hex::encode(mac.finalize().into_bytes()) == signature
+                }
+                None => false,
+            }
+        };
+
+        if !signature_valid {
+            tracing::warn!(
+                terminal_id = %terminal_id,
+                bound_store_id = %bound_store_id,
+                "device binding HMAC validation failed — falling back to primary store"
+            );
+        } else {
+            // ── Phase 2b: Verify instance exists in store DB ──
+            // Store borrows from MutexGuard — must be confined to a block.
+            let instance_exists = {
+                state
+                    .db_manager
+                    .open_store(&bound_store_id)
+                    .ok()
+                    .and_then(|db_arc| {
+                        let db = db_arc.lock().ok()?;
+                        let store = Store::new(&db);
+                        // get_workspace_instance already filters for status='active'.
+                        store
+                            .get_workspace_instance(&bound_instance_id, None)
+                            .ok()
+                            .map(|_| true)
+                    })
+                    .unwrap_or(false)
+            };
+
+            if !instance_exists {
+                tracing::warn!(
+                    terminal_id = %terminal_id,
+                    bound_store_id = %bound_store_id,
+                    bound_instance_id = %bound_instance_id,
+                    "bound instance not found or not active — falling back to primary store"
+                );
+            } else {
+                tracing::info!(
+                    terminal_id = %terminal_id,
+                    store_id = %bound_store_id,
+                    instance_id = %bound_instance_id,
+                    "device binding resolved — auto-booting into bound workspace"
+                );
+                return Ok(BootResolution {
+                    is_bound: true,
+                    store_id: bound_store_id,
+                    instance_id: Some(bound_instance_id),
+                });
+            }
+        }
+    }
+
+    // Step 3: Fallback — return the primary store.
+    let primary_id = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let primary = store
+            .get_primary_store()?
+            .ok_or_else(|| AppError::Internal("no primary store found".into()))?;
+        primary.id
+    };
+
+    tracing::info!(
+        store_id = %primary_id,
+        "boot resolution fell back to primary store"
+    );
+    Ok(BootResolution {
+        is_bound: false,
+        store_id: primary_id,
+        instance_id: None,
+    })
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

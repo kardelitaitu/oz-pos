@@ -20,7 +20,7 @@ use crate::state::AppState;
 type HmacSha256 = Hmac<Sha256>;
 
 /// Keyring name for the device binding HMAC secret.
-const DEVICE_BINDING_KEYRING_NAME: &str = "oz-pos/device-binding-hmac-key";
+pub const DEVICE_BINDING_KEYRING_NAME: &str = "oz-pos/device-binding-hmac-key";
 
 /// Compute an HMAC-SHA256 signature for a device binding.
 ///
