@@ -60,12 +60,24 @@ pub struct CreateInstanceRequest {
 // ── Scoped Commands (ADR #7) ────────────────────────────────────────
 
 /// List workspace instances accessible to the session user within their store. ADR #7.
+///
+/// ADR #5: Filters results by subscription tier entitlement.
 #[command]
 pub async fn list_workspaces_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceDto>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    // ADR #5: Load subscription from global DB for entitlement filtering.
+    let tier = {
+        let global_db = state.db.lock().await;
+        TenantSubscription::load(&global_db, "default")?
+            .map(|sub| sub.tier)
+            .unwrap_or_else(|| {
+                tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
+                oz_core::SubscriptionTier::Free
+            })
+    };
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -74,8 +86,12 @@ pub async fn list_workspaces_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let rows =
-        store.list_workspaces(&session.role_id, Some(&session.user_id), &session.store_id)?;
+    let rows = store.list_workspaces_with_entitlement(
+        &session.role_id,
+        Some(&session.user_id),
+        &session.store_id,
+        &tier,
+    )?;
     drop(db);
     Ok(rows)
 }

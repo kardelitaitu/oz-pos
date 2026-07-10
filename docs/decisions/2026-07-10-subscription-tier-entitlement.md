@@ -143,9 +143,9 @@ pub enum InstanceStatus {
 - [x] Add `last_accessed_at` column to `workspace_instances` for recovery ordering.
 - [x] Add `count_active_instances()`, `enforce_instance_quota()`, and `touch_instance_access()` methods to `Store`.
 - [x] Wire quota enforcement into `create_workspace_instance_scoped` Tauri command.
-- [x] Add 4 new `CoreError` variants: `SubscriptionLimitExceeded`, `InvalidSubscriptionSignature`, `SubscriptionUpgradeRequired`, `SystemClockTampered`.
-- [x] Write tests (14 subscription + 15 workspace = 29/29 pass).
-- [ ] Implement entitlement check during session resolution (filter `list_workspaces` by tier-allowed types).
+- [x] Wire entitlement filtering into `list_workspaces_scoped` Tauri command (filters by `tier.allows_workspace_type()`).
+- [x] Write tests (14 subscription + 22 workspace = 36/36 pass).
+- [x] Implement entitlement check during session resolution (filter `list_workspaces` by tier-allowed types via `list_workspaces_with_entitlement()`).
 - [ ] Implement 14-day offline grace and monotonic clock rollback detection.
 - [ ] Implement automatic instance recovery on tier upgrade (iterates all store DBs).
 - [ ] Run `cargo clippy -p oz-core -- -D warnings` and full test suite.

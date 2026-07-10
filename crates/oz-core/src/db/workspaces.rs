@@ -307,7 +307,39 @@ impl Store<'_> {
     /// 2. If `user_id` has `user_workspace_instances` rows → only those
     /// 3. Otherwise → fall back to `role_workspace_types` → instances of
     ///    allowed types in this store
+    ///
+    /// When `tier` is provided (ADR #5), results are additionally filtered
+    /// to only include instances whose `type_key` is allowed by the
+    /// subscription tier.
     pub fn list_workspaces(
+        &self,
+        role_id: &str,
+        user_id: Option<&str>,
+        store_id: &str,
+    ) -> Result<Vec<WorkspaceDto>, CoreError> {
+        let results = self.list_workspaces_inner(role_id, user_id, store_id)?;
+        Ok(results)
+    }
+
+    /// List workspace instances with subscription tier entitlement
+    /// filtering (ADR #5).
+    ///
+    /// Same resolution as [`list_workspaces`] but additionally filters
+    /// out instances whose `type_key` is not allowed by the given tier.
+    pub fn list_workspaces_with_entitlement(
+        &self,
+        role_id: &str,
+        user_id: Option<&str>,
+        store_id: &str,
+        tier: &SubscriptionTier,
+    ) -> Result<Vec<WorkspaceDto>, CoreError> {
+        let mut results = self.list_workspaces_inner(role_id, user_id, store_id)?;
+        results.retain(|dto| tier.allows_workspace_type(&dto.type_key));
+        Ok(results)
+    }
+
+    /// Inner resolution without entitlement filtering.
+    fn list_workspaces_inner(
         &self,
         role_id: &str,
         user_id: Option<&str>,
@@ -926,5 +958,101 @@ mod tests {
         let instances = store.list_all_instances("default").unwrap();
         assert_eq!(instances.len(), 5);
         assert!(instances.iter().any(|i| i.id == "default-kds"));
+    }
+
+    // ── Entitlement tests (ADR #5) ───────────────────────────────
+
+    #[test]
+    fn list_workspaces_with_entitlement_filters_by_tier() {
+        let (store, _) = fresh();
+        // Free tier only allows restaurant-pos, store-pos, admin
+        let free_tier = SubscriptionTier::Free;
+        let dto = store
+            .list_workspaces_with_entitlement("role-owner", None, "default", &free_tier)
+            .unwrap();
+        // KDS and inventory should be filtered out
+        assert!(
+            dto.iter()
+                .all(|w| free_tier.allows_workspace_type(&w.type_key))
+        );
+        assert!(!dto.iter().any(|w| w.type_key == "kds"));
+        assert!(!dto.iter().any(|w| w.type_key == "inventory"));
+        // restaurant-pos, store-pos, admin should remain
+        assert!(dto.iter().any(|w| w.type_key == "restaurant-pos"));
+        assert!(dto.iter().any(|w| w.type_key == "store-pos"));
+        assert!(dto.iter().any(|w| w.type_key == "admin"));
+    }
+
+    #[test]
+    fn list_workspaces_with_entitlement_premium_sees_kds() {
+        let (store, _) = fresh();
+        // Premium tier includes KDS
+        let premium = SubscriptionTier::Premium;
+        let dto = store
+            .list_workspaces_with_entitlement("role-owner", None, "default", &premium)
+            .unwrap();
+        assert!(dto.iter().any(|w| w.type_key == "kds"));
+        assert!(dto.iter().any(|w| w.type_key == "inventory"));
+        // All 5 types should be present
+        assert_eq!(dto.len(), 5);
+    }
+
+    #[test]
+    fn list_workspaces_with_entitlement_enterprise_sees_all() {
+        let (store, _) = fresh();
+        let enterprise = SubscriptionTier::Enterprise;
+        let dto = store
+            .list_workspaces_with_entitlement("role-owner", None, "default", &enterprise)
+            .unwrap();
+        assert_eq!(dto.len(), 5);
+    }
+
+    #[test]
+    fn list_workspaces_without_entitlement_sees_all() {
+        let (store, _) = fresh();
+        // Original list_workspaces without tier filtering should return all 5
+        let dto = store
+            .list_workspaces("role-owner", None, "default")
+            .unwrap();
+        assert_eq!(dto.len(), 5);
+        assert!(dto.iter().any(|w| w.type_key == "kds"));
+    }    #[test]
+    fn count_active_instances_excludes_suspended() {
+        let (store, _) = fresh();
+        let initial = store.count_active_instances("default").unwrap();
+        assert_eq!(initial, 5);
+        // Archive one instance.
+        // TODO(ADR #5): Add a public archive_instance() method to Store
+        // for proper encapsulation.
+        store.conn.execute(
+                "UPDATE workspace_instances SET status = 'archived' WHERE id = 'default-kds'",
+                [],
+            )
+            .unwrap();
+        let after = store.count_active_instances("default").unwrap();
+        assert_eq!(after, 4);
+    }
+
+    #[test]
+    fn enforce_instance_quota_rejects_disallowed_type() {
+        let (store, _) = fresh();
+        let free = SubscriptionTier::Free;
+        let result = store.enforce_instance_quota(&free, "kds", "default");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("kds"));
+        assert!(err.contains("Free"));
+    }
+
+    #[test]
+    fn enforce_instance_quota_allows_type_but_fails_on_count() {
+        let (store, _) = fresh();
+        let free = SubscriptionTier::Free;
+        // Free tier allows restaurant-pos but we have 5 active instances.
+        // Free tier allows 1 max, so this should fail on count, not type.
+        let result = store.enforce_instance_quota(&free, "restaurant-pos", "default");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("1 registers"));
     }
 }
