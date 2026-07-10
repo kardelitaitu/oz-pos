@@ -69,7 +69,7 @@
 
 .sales-report-view-btn.active {
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
 }
 
 .sales-report-error {

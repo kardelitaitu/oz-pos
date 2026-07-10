@@ -1,7 +1,7 @@
 .payment-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 100);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11,11 +11,11 @@
 /* ── Entrance/exit animations ────────────────────────── */
 
 .payment-overlay--enter {
-  animation: payment-overlay-in var(--duration-200, 200ms) var(--ease-out, ease-out);
+  animation: payment-overlay-in var(--duration-200, 200ms) var(--ease-out);
 }
 
 .payment-overlay--exit {
-  animation: payment-overlay-out var(--duration-200, 200ms) var(--ease-in, ease-in);
+  animation: payment-overlay-out var(--duration-200, 200ms) var(--ease-in);
   pointer-events: none;
 }
 
@@ -36,16 +36,16 @@
   max-width: 92vw;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl, 0 8px 32px rgba(0, 0, 0, 0.2));
+  box-shadow: var(--shadow-xl));
   overflow: hidden;
 }
 
 .payment-modal--enter {
-  animation: payment-modal-slide-up var(--duration-200, 200ms) var(--ease-out, ease-out);
+  animation: payment-modal-slide-up var(--duration-200, 200ms) var(--ease-out);
 }
 
 .payment-modal--exit {
-  animation: payment-modal-out var(--duration-200, 200ms) var(--ease-in, ease-in);
+  animation: payment-modal-out var(--duration-200, 200ms) var(--ease-in);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -605,7 +605,7 @@
   font-family: var(--font-sans);
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   background: var(--color-accent);
   border: none;
   border-radius: var(--radius-lg);
@@ -712,7 +712,7 @@
   transition: background 0.15s;
 }
 .payment-customer-select-btn:hover {
-  background: var(--color-bg-elevated, #e2e8f0);
+  background: var(--color-bg-elevated);
 }
 
 .payment-customer-badge {
@@ -751,22 +751,22 @@
 .payment-customer-search-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 100);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.4);
-  animation: payment-overlay-in var(--duration-200, 200ms) var(--ease-out, ease-out);
+  animation: payment-overlay-in var(--duration-200, 200ms) var(--ease-out);
 }
 .payment-customer-search-modal {
-  background: var(--color-bg-elevated, #fff);
-  border-radius: var(--radius-xl, 12px);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
   width: 380px;
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.2));
-  animation: payment-modal-slide-up var(--duration-200, 200ms) var(--ease-out, ease-out);
+  box-shadow: var(--shadow-lg));
+  animation: payment-modal-slide-up var(--duration-200, 200ms) var(--ease-out);
 }
 .payment-customer-search-heading {
   margin: 0;
@@ -828,7 +828,7 @@
   text-align: center;
 }
 .payment-customer-search-close:hover {
-  background: var(--color-bg-elevated, #e2e8f0);
+  background: var(--color-bg-elevated);
 }
 
 .payment-loyalty-section {
@@ -866,7 +866,7 @@
   justify-content: center;
   padding: 4px 12px;
   background: var(--color-warning-5, #f39c12);
-  color: var(--color-bg-primary, #fff);
+  color: var(--color-bg-primary);
   border: none;
   border-radius: 4px;
   font-size: 12px;
@@ -931,7 +931,7 @@
   border: 1px solid var(--color-warning-3, #f9e79f);
   border-radius: 4px;
   text-align: center;
-  background: var(--color-bg-primary, #fff);
+  background: var(--color-bg-primary);
   color: var(--color-text-1, #333);
   outline: none;
 }

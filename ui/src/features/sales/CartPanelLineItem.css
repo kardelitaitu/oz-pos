@@ -39,15 +39,15 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .pos-cart-line-wrap--exiting {
-    animation: pos-cart-line-out var(--duration-200, 200ms) var(--ease-in, ease-in) forwards;
+    animation: pos-cart-line-out var(--duration-200, 200ms) var(--ease-in) forwards;
   }
 
   .pos-cart-line-wrap--qty-flash {
-    animation: pos-cart-line-flash 350ms var(--ease-out, ease-out);
+    animation: pos-cart-line-flash 350ms var(--ease-out);
   }
 
   .pos-cart-line-wrap--qty-flash .pos-cart-qty-value {
-    animation: pos-cart-qty-bounce 350ms var(--ease-out, ease-out);
+    animation: pos-cart-qty-bounce 350ms var(--ease-out);
   }
 
   .pos-cart-line {
@@ -304,7 +304,7 @@
 }
 
 .pos-cart-line-remove:hover {
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   background: var(--color-danger, #ef4444);
 }
 
@@ -343,7 +343,7 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   background: var(--color-danger, #ef4444);
   border: none;
   cursor: pointer;
@@ -378,7 +378,7 @@
 
 .pos-cart-line-override:hover {
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
 }
 
 /* ── Responsive: tablet thumbnail shrink ────────────────────

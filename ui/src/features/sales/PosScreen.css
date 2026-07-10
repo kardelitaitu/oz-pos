@@ -90,7 +90,7 @@
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   background: var(--color-accent, #2563eb);
   border: none;
   border-radius: var(--radius-md);
@@ -185,9 +185,9 @@
 
 .pos-hold-modal {
   width: min(440px, 100%);
-  background: var(--color-bg-elevated, #ffffff);
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl, 16px);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
   padding: var(--space-5);
   display: flex;
@@ -304,7 +304,7 @@
 
 .pos-hold-confirm-btn {
   background: var(--color-accent, #2563eb);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border: none;
 }
 
@@ -323,9 +323,9 @@
 .pos-held-list-modal {
   width: min(560px, 100%);
   max-height: min(80vh, 720px);
-  background: var(--color-bg-elevated, #ffffff);
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl, 16px);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
@@ -423,7 +423,7 @@
 .pos-held-item-resume {
   padding: var(--space-2) var(--space-4);
   background: var(--color-accent, #2563eb);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border: 0;
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
@@ -446,9 +446,9 @@
 
 .pos-close-shift-modal {
   width: min(480px, 100%);
-  background: var(--color-bg-elevated, #ffffff);
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl, 16px);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
   padding: var(--space-5);
   display: flex;
@@ -552,7 +552,7 @@
 
 .pos-close-shift-confirm-btn {
   background: var(--color-danger, #ef4444);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border: none;
 }
 
@@ -641,7 +641,7 @@
 .pos-close-shift-dismiss-btn {
   align-self: flex-end;
   background: var(--color-accent, #2563eb);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border: none;
 }
 

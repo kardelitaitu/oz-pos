@@ -322,7 +322,7 @@
   align-items: center;
   justify-content: center;
   background: var(--color-bg-overlay);
-  z-index: var(--z-modal, 100);
+  z-index: var(--z-modal);
   padding: var(--space-4);
 }
 

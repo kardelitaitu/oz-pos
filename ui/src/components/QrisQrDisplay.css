@@ -1,7 +1,7 @@
 .qris-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 200);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14,9 +14,9 @@
   position: relative;
   width: 100%;
   max-width: 420px;
-  background: var(--color-bg-elevated, #fff);
-  border-radius: var(--radius-xl, 16px);
-  box-shadow: var(--shadow-xl, 0 8px 32px rgba(0, 0, 0, 0.25));
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl));
   padding: var(--space-6);
   display: flex;
   flex-direction: column;
@@ -72,7 +72,7 @@
   padding: var(--space-3);
   background: var(--color-bg, #fff);
   border: 2px solid var(--color-border);
-  border-radius: var(--radius-lg, 12px);
+  border-radius: var(--radius-lg);
 }
 
 .qris-qr-wrapper.qris-pulse {}
@@ -161,7 +161,7 @@
   gap: var(--space-2);
   padding: var(--space-3);
   background: var(--color-bg-surface);
-  border-radius: var(--radius-lg, 12px);
+  border-radius: var(--radius-lg);
 }
 
 .qris-detail-row {

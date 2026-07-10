@@ -298,7 +298,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-modal, 100);
+  z-index: var(--z-modal);
   animation: sales-history-overlay-in var(--duration-200) var(--ease-out);
 }
 

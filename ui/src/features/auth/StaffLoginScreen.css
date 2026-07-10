@@ -13,7 +13,7 @@
 .staff-login-screen {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 400);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -244,7 +244,7 @@
   border: none;
   border-radius: var(--radius-xl);
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   cursor: pointer;
 
   transition:

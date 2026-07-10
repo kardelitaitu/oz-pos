@@ -416,7 +416,7 @@
   width: 20px;
   height: 20px;
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border-radius: var(--radius-full);
   font-size: 11px;
   z-index: 2;

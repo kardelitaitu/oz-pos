@@ -57,7 +57,7 @@
   --brand-primary:          var(--color-accent);
   --brand-primary-hover:    var(--color-accent-hover, var(--primary-600));
   --brand-primary-active:   var(--primary-700);
-  --brand-primary-fg:       var(--color-accent-fg, #ffffff);
+  --brand-primary-fg:       var(--color-accent-fg);
   --brand-gradient-from:    var(--brand-primary);
   --brand-gradient-to:      var(--brand-primary-hover);
 

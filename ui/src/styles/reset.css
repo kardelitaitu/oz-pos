@@ -32,7 +32,7 @@ html[data-font-smoothing="subpixel"] {
 
 body {
   font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
-  font-size: var(--text-base, 0.875rem);
+  font-size: var(--text-base);
   font-weight: var(--font-weight-normal, 400);
   line-height: var(--leading-normal, 1.5);
   color: var(--color-fg, #1a1a1a);
@@ -92,11 +92,11 @@ textarea {
   color: var(--color-fg, #1a1a1a);
   background: var(--color-bg-input, #ffffff);
   border: 1px solid var(--color-border, #e5e5e5);
-  border-radius: var(--radius-lg, 0.5rem);
+  border-radius: var(--radius-lg);
   padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
   outline: none;
-  transition: border-color var(--duration-150, 150ms) var(--ease-out, ease-out),
-    box-shadow var(--duration-150, 150ms) var(--ease-out, ease-out);
+  transition: border-color var(--duration-150, 150ms) var(--ease-out),
+    box-shadow var(--duration-150, 150ms) var(--ease-out);
 }
 
 input:focus,
@@ -136,7 +136,7 @@ h1, h2, h3, h4, h5, h6 {
 
 h1 { font-size: var(--text-2xl, 1.5rem); }
 h2 { font-size: var(--text-xl, 1.25rem); }
-h3 { font-size: var(--text-lg, 1.125rem); }
+h3 { font-size: var(--text-lg); }
 
 /* ── Code / pre ────────────────────────────────── */
 code,
@@ -148,7 +148,7 @@ pre {
 pre {
   background: var(--color-bg-surface, #f5f5f5);
   border: 1px solid var(--color-border, #e5e5e5);
-  border-radius: var(--radius-lg, 0.5rem);
+  border-radius: var(--radius-lg);
   padding: var(--space-4, 1rem);
   overflow-x: auto;
 }
