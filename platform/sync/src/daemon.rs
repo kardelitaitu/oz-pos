@@ -215,7 +215,11 @@ impl SyncDaemon {
                                 let conn = db_clone.blocking_lock();
                                 let store = Store::new(&conn);
                                 let queue = SyncQueue::new();
+                                let mut has_stock_movements = false;
                                 for item in &items {
+                                    if item.action == "stock.movement" {
+                                        has_stock_movements = true;
+                                    }
                                     if let Err(e) = queue.apply_remote(&store, item) {
                                         tracing::error!(
                                             item_id = %item.id,
@@ -224,6 +228,15 @@ impl SyncDaemon {
                                             "failed to apply remote item"
                                         );
                                     }
+                                }
+                                // ADR #6: Rebuild the materialized stock_summary
+                                // cache after applying remote stock movements.
+                                if has_stock_movements && let Err(e) = store.rebuild_stock_summary()
+                                {
+                                    tracing::error!(
+                                        error = %e,
+                                        "failed to rebuild stock summary after sync pull"
+                                    );
                                 }
                             })
                             .await;

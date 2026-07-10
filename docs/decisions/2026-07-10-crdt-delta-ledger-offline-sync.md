@@ -142,7 +142,7 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 - [x] Add `version` and `updated_at` optimistic concurrency fields to synced entities — migration 065 adds `version INTEGER NOT NULL DEFAULT 1` to both `products` and `sales`. `update_product` accepts `Option<i64>` for gradual adoption. `update_sale_status` and `void_sale` increment version on UPDATE. All struct literals and row mappers updated across the workspace.
 - [x] Implement `FastPINOverlay.tsx` for shared touchscreen user switching — two-step overlay (username → PIN pad) wired into StatusBar. AuthContext gains `swapSession`, WorkspaceContext gains `swapSessionToken` with race-condition guard. Added 3 i18n keys (en + id). 19 tests (2026-07-11).
 - [x] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database — migration 066 adds FK to `workspace_instances.store_id` and changes `user_store_access.store_id` from CASCADE to RESTRICT.
-- [ ] Cross-store delta routing via `platform/sync/`.
+- [x] Cross-store delta routing via `platform/sync/` — migration 067 adds `store_id` to `stock_movements`. `SyncQueue::apply_remote` handles `stock.movement` action (inserts raw delta). `SyncDaemon` rebuilds `stock_summary` after pull. 3 new tests (2026-07-11).
 
 ---
 

@@ -41,7 +41,7 @@ fn row_to_product_with_details(row: &rusqlite::Row) -> rusqlite::Result<ProductW
 /// all rows for a given `item_id`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StockMovement {
-    /// Unique UUID v4 identifier.
+    /// Unique UUID v7 identifier.
     pub id: String,
     /// Product ID this movement applies to.
     pub item_id: String,
@@ -53,6 +53,8 @@ pub struct StockMovement {
     pub source_terminal_id: Option<String>,
     /// User who performed the operation (for audit/sync).
     pub source_user_id: Option<String>,
+    /// Store where the movement originated (ADR #6 cross-store routing).
+    pub store_id: String,
     /// ISO-8601 timestamp of the movement.
     pub created_at: String,
 }
@@ -271,6 +273,7 @@ impl Store<'_> {
     /// modified the product concurrently. When `None`, the update is
     /// performed unconditionally (backward-compat for callers that do
     /// not track versions).
+    #[allow(clippy::too_many_arguments)]
     pub fn update_product(
         &self,
         sku: &str,
@@ -612,6 +615,45 @@ impl Store<'_> {
         }
     }
 
+    /// Insert a stock movement delta row directly into the ledger.
+    ///
+    /// This is the low-level insert used by the sync layer to apply
+    /// incoming remote deltas without triggering inventory or stock_summary
+    /// updates (those are reconciled later via [`rebuild_stock_summary`]).
+    ///
+    /// The `store_id` identifies which store the delta originated from
+    /// for cross-store routing (ADR #6).
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_stock_movement(
+        &self,
+        id: &str,
+        item_id: &str,
+        delta: i64,
+        reason: Option<&str>,
+        source_terminal_id: Option<&str>,
+        source_user_id: Option<&str>,
+        store_id: &str,
+        created_at: &str,
+    ) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id,
+                                          store_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                id,
+                item_id,
+                delta,
+                reason,
+                source_terminal_id,
+                source_user_id,
+                store_id,
+                created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Adjust stock for a product by SKU inside a transaction.
     ///
     /// Writes a delta row to the `stock_movements` ledger (ADR #6)
@@ -792,7 +834,8 @@ impl Store<'_> {
         offset: i64,
     ) -> Result<Vec<StockMovement>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, item_id, delta, reason, source_terminal_id, source_user_id, created_at
+            "SELECT id, item_id, delta, reason, source_terminal_id, source_user_id,
+                    store_id, created_at
              FROM stock_movements
              WHERE item_id = ?1
              ORDER BY created_at DESC
@@ -806,7 +849,8 @@ impl Store<'_> {
                 reason: row.get(3)?,
                 source_terminal_id: row.get(4)?,
                 source_user_id: row.get(5)?,
-                created_at: row.get(6)?,
+                store_id: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
