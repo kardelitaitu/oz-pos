@@ -73,8 +73,16 @@ export const deleteProduct = (args: { userId: string; sku: string }): Promise<vo
 export const lookupByBarcode = (barcode: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_by_barcode', { barcode });
 
+/** ADR #7: Scoped barcode lookup using session token. */
+export const lookupByBarcodeScoped = (sessionToken: string, barcode: string): Promise<ProductDto | null> =>
+  invoke<ProductDto | null>('lookup_by_barcode_scoped', { sessionToken, barcode });
+
 export const lookupProductBySku = (sku: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_product_by_sku', { sku });
+
+/** ADR #7: Scoped SKU lookup using session token. */
+export const lookupProductBySkuScoped = (sessionToken: string, sku: string): Promise<ProductDto | null> =>
+  invoke<ProductDto | null>('lookup_product_by_sku_scoped', { sessionToken, sku });
 
 // ── Inventory Adjustment ──────────────────────────────────────────
 

@@ -705,7 +705,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] Frontend `createSession`/`destroySession` API wrappers in `ui/src/api/staff.ts`.
    - [x] `sessionToken` lifecycle in `WorkspaceContext`: auto-created on workspace selection, auto-destroyed on logout/store-switch, token rotation on `switchStore()`.
    - [x] `WorkspaceContextValue` exposes `sessionToken: string | null` for commands to pass to backend.
-   - [x] **End-to-end pattern demonstration:** `list_products_scoped` + `adjust_stock_scoped` backend commands + `listProductsScoped`/`adjustStockScoped` frontend API wrappers. Both use `resolve_scope()` helper. ADR #7 migration underway.
+   - [x] **ADR #7 migration underway:** `list_products_scoped` ✅, `adjust_stock_scoped` ✅, `lookup_by_barcode_scoped` ✅, `lookup_product_by_sku_scoped` ✅ — all with frontend API wrappers. Remaining product CRUD commands deferred.
    - [x] **Final comprehensive verification (2026-07-10):** `cargo fmt --all` ✅, `cargo clippy -p oz-core -p platform-core` ✅ zero warnings, `cargo check --lib -p oz-pos-app -p oz-pos-tablet` ✅ clean, `cargo test -p oz-core -p platform-core` ✅ 1,029/1,032 pass (3 pre-existing `currency_integration` failures unrelated).
    - [x] **ADR #7 created (2026-07-10):** `docs/decisions/2026-07-10-data-scope-guard.md` — defines `resolve_scope()` helper, domain command migration plan, and clippy lint enforcement. `resolve_scope()` implemented on both desktop and tablet `AppState`. `list_products_scoped` simplified to use it.
    - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*

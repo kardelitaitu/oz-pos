@@ -70,8 +70,8 @@ pub async fn list_products_scoped(
 |---|---|---|---|
 | `list_products` | `()` | `session_token: String` | ✅ `list_products_scoped` added, old preserved |
 | `adjust_stock` | `args: AdjustStockArgs` | `session_token: String, args: AdjustStockArgs` | ✅ `adjust_stock_scoped` added, API wrapper `adjustStockScoped` |
-| `lookup_by_barcode` | `barcode: String` | `session_token: String, barcode: String` | ⏳ |
-| `lookup_product_by_sku` | `sku: String` | `session_token: String, sku: String` | ⏳ |
+| `lookup_by_barcode` | `barcode: String` | `session_token: String, barcode: String` | ✅ `lookup_by_barcode_scoped` + API wrapper |
+| `lookup_product_by_sku` | `sku: String` | `session_token: String, sku: String` | ✅ `lookup_product_by_sku_scoped` + API wrapper |
 | `create_product` | `args: CreateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ⏳ |
 | `update_product` | `args: UpdateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ⏳ |
 | `delete_product` | `args: DeleteProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ⏳ |

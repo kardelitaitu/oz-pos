@@ -237,6 +237,8 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
 ///
 /// Returns the product DTO or `null` when no match is found.
 /// Returns validation error for empty barcodes.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `lookup_by_barcode_scoped`.
 #[command]
 pub async fn lookup_by_barcode(
     barcode: String,
@@ -244,10 +246,23 @@ pub async fn lookup_by_barcode(
 ) -> Result<Option<ProductDto>, AppError> {
     validate_not_empty("barcode", &barcode).map_err(|e| AppError::Invalid(e.to_string()))?;
     let db = state.db.lock().await;
-    let _store = Store::new(&db);
     let result = run_lookup_by_barcode(&db, &barcode);
     drop(db);
     result
+}
+
+/// Look up a product by barcode for the store resolved from a
+/// session token. ADR #7 scoped variant.
+#[command]
+pub async fn lookup_by_barcode_scoped(
+    session_token: String,
+    barcode: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ProductDto>, AppError> {
+    validate_not_empty("barcode", &barcode).map_err(|e| AppError::Invalid(e.to_string()))?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_lookup_by_barcode(&db, &barcode)
 }
 
 /// Business logic for barcode lookup (extracted for testing).
@@ -263,6 +278,8 @@ fn run_lookup_by_barcode(
 /// Look up a single product by SKU.
 ///
 /// Returns the product DTO or `null` when no match is found.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `lookup_product_by_sku_scoped`.
 #[command]
 pub async fn lookup_product_by_sku(
     sku: String,
@@ -270,10 +287,23 @@ pub async fn lookup_product_by_sku(
 ) -> Result<Option<ProductDto>, AppError> {
     validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
     let db = state.db.lock().await;
-    let _store = Store::new(&db);
     let result = run_lookup_product_by_sku(&db, &sku);
     drop(db);
     result
+}
+
+/// Look up a product by SKU for the store resolved from a
+/// session token. ADR #7 scoped variant.
+#[command]
+pub async fn lookup_product_by_sku_scoped(
+    session_token: String,
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ProductDto>, AppError> {
+    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_lookup_product_by_sku(&db, &sku)
 }
 
 /// Business logic for SKU lookup (extracted for testing).
