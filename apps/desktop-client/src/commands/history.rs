@@ -87,6 +87,10 @@ pub struct SaleDetail {
     pub lines: Vec<oz_core::SaleLine>,
 }
 
+/// Fetch a single sale by ID from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_sale_scoped`
+/// with a `session_token` to look up the sale in the store-scoped database.
 #[command]
 pub async fn get_sale(
     id: String,
@@ -96,7 +100,33 @@ pub async fn get_sale(
     let store = Store::new(&db);
     let sale = store.get_sale(&id)?;
     drop(db);
-    Ok(sale.map(|s| SaleDetail {
+    Ok(sale.map(map_sale_to_detail))
+}
+
+/// Fetch a single sale by ID from the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `get_sale`. The backend resolves the
+/// session token to open the store-scoped database and looks up the
+/// sale within that store only.
+#[command]
+pub async fn get_sale_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<SaleDetail>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let sale = store.get_sale(&id)?;
+    drop(db);
+    Ok(sale.map(map_sale_to_detail))
+}
+
+/// Shared mapping from `oz_core::Sale` to `SaleDetail`.
+fn map_sale_to_detail(s: oz_core::Sale) -> SaleDetail {
+    SaleDetail {
         id: s.id,
         total: s.total,
         subtotal: s.subtotal,
@@ -108,7 +138,7 @@ pub async fn get_sale(
         user_id: s.user_id,
         created_at: s.created_at,
         lines: s.lines,
-    }))
+    }
 }
 
 // ── Dashboard / Export ───────────────────────────────────────────────
@@ -420,6 +450,13 @@ mod tests {
     fn list_sales_scoped_rejects_invalid_token() {
         let state = AppState::for_test();
         let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn get_sale_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("bad-token");
         assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }

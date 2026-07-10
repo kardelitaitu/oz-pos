@@ -191,6 +191,7 @@ pub fn run() {
             commands::history::list_sales,
             commands::history::list_sales_scoped,
             commands::history::get_sale,
+            commands::history::get_sale_scoped,
             commands::history::export_daily_summary,
             commands::history::export_sales_by_hour,
             commands::history::export_eod_report,

@@ -139,6 +139,10 @@ export const listSalesScoped = (sessionToken: string): Promise<SaleListItem[]> =
 export const getSale = (id: string): Promise<SaleDetail | null> =>
   invoke<SaleDetail | null>('get_sale', { id });
 
+/** ADR #7: Fetch a sale by ID from the store resolved from a session token. */
+export const getSaleScoped = (sessionToken: string, id: string): Promise<SaleDetail | null> =>
+  invoke<SaleDetail | null>('get_sale_scoped', { sessionToken, id });
+
 // ── Void Sale ─────────────────────────────────────────────────────
 
 export interface VoidSaleArgs {
