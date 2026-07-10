@@ -243,6 +243,10 @@ pub const ALL: &[Migration] = &[
         id: "060_workspace_instances.sql",
         sql: include_str!("../migrations/060_workspace_instances.sql"),
     },
+    Migration {
+        id: "061_tenant_subscription.sql",
+        sql: include_str!("../migrations/061_tenant_subscription.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around

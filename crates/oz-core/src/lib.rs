@@ -55,6 +55,7 @@ pub mod sku;
 pub mod stock_count;
 pub mod stock_transfer;
 pub mod store_profile;
+pub mod subscription;
 pub mod supplier;
 pub mod sync;
 pub mod sync_client;
@@ -113,6 +114,7 @@ pub use sku::{LineId, Sku};
 pub use stock_count::{CountType, StockAdjustment, StockCount, StockCountLine, StockCountStatus};
 pub use stock_transfer::{StockTransfer, StockTransferLine};
 pub use store_profile::StoreProfile;
+pub use subscription::{InstanceStatus, SubscriptionTier, TenantSubscription};
 pub use supplier::Supplier;
 pub use sync_client::{
     PullResult, SyncAttemptResult, SyncConfig, pull_snapshot, sync_pending, sync_pending_async,

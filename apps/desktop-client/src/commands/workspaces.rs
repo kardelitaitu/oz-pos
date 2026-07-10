@@ -17,6 +17,7 @@ use sha2::Sha256;
 use oz_core::db::Store;
 use oz_core::db::workspaces::WorkspaceDto;
 use oz_core::permissions;
+use oz_core::subscription::TenantSubscription;
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
@@ -101,6 +102,8 @@ pub async fn get_workspace_instance_scoped(
 }
 
 /// Create a new workspace instance (admin). Permission from session. ADR #7.
+///
+/// ADR #5: Enforces subscription tier quota before creating.
 #[command]
 pub async fn create_workspace_instance_scoped(
     session_token: String,
@@ -108,6 +111,17 @@ pub async fn create_workspace_instance_scoped(
     state: State<'_, AppState>,
 ) -> Result<WorkspaceDto, AppError> {
     let session = state.resolve_session(&session_token)?;
+
+    // ADR #5: Load subscription from the GLOBAL database first.
+    // This must happen before opening the store DB to avoid holding
+    // a std::sync::MutexGuard across an .await boundary.
+    let sub = {
+        let global_db = state.db.lock().await;
+        TenantSubscription::load(&global_db, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
+    };
+    sub.verify_signature("")?;
+
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -117,6 +131,7 @@ pub async fn create_workspace_instance_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+    store.enforce_instance_quota(&sub.tier, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance(
         &req.id,
         &req.type_key,

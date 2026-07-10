@@ -30,6 +30,14 @@ pub enum CoreErrorKind {
     Validation,
     /// Unexpected internal error.
     Internal,
+    /// Subscription limit exceeded (ADR #5).
+    SubscriptionLimitExceeded,
+    /// Invalid subscription signature (ADR #5).
+    InvalidSubscriptionSignature,
+    /// Workspace type requires a higher subscription tier (ADR #5).
+    SubscriptionUpgradeRequired,
+    /// System clock tampering detected (ADR #5).
+    SystemClockTampered,
 }
 
 /// Errors that can originate in `oz-core` domain logic.
@@ -89,6 +97,22 @@ pub enum CoreError {
     /// An unexpected internal error (serialization, crypto, I/O, etc.).
     #[error("internal error: {0}")]
     Internal(String),
+
+    /// A subscription limit was exceeded (ADR #5).
+    #[error("subscription limit exceeded: {0}")]
+    SubscriptionLimitExceeded(String),
+
+    /// The subscription signature is invalid or tampered (ADR #5).
+    #[error("invalid subscription signature: {0}")]
+    InvalidSubscriptionSignature(String),
+
+    /// The workspace type requires a higher subscription tier (ADR #5).
+    #[error("subscription upgrade required: {0}")]
+    SubscriptionUpgradeRequired(String),
+
+    /// System clock rollback detected — possible tampering (ADR #5).
+    #[error("system clock tampered: {0}")]
+    SystemClockTampered(String),
 }
 
 impl CoreError {
@@ -103,6 +127,12 @@ impl CoreError {
             CoreError::Conflict { .. } => CoreErrorKind::Conflict,
             CoreError::Validation { .. } => CoreErrorKind::Validation,
             CoreError::Internal(_) => CoreErrorKind::Internal,
+            CoreError::SubscriptionLimitExceeded(_) => CoreErrorKind::SubscriptionLimitExceeded,
+            CoreError::InvalidSubscriptionSignature(_) => {
+                CoreErrorKind::InvalidSubscriptionSignature
+            }
+            CoreError::SubscriptionUpgradeRequired(_) => CoreErrorKind::SubscriptionUpgradeRequired,
+            CoreError::SystemClockTampered(_) => CoreErrorKind::SystemClockTampered,
         }
     }
 }

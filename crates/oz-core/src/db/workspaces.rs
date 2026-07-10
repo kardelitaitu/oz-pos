@@ -12,6 +12,7 @@ use rusqlite::params;
 use serde::Serialize;
 
 use crate::error::CoreError;
+use crate::subscription::{QuotaError, SubscriptionTier};
 
 use super::Store;
 
@@ -485,10 +486,63 @@ impl Store<'_> {
         .map_err(CoreError::from)
     }
 
+    /// Count active (non-archived, non-suspended) workspace instances
+    /// in the given store.
+    pub fn count_active_instances(&self, store_id: &str) -> Result<i64, CoreError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM workspace_instances
+             WHERE store_id = ?1 AND status NOT IN ('archived', 'quota_suspended')",
+            params![store_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    /// Enforce subscription quota before creating a workspace instance.
+    ///
+    /// Checks:
+    /// 1. Tier allows this workspace type
+    /// 2. Per-store register count is within tier limit
+    ///
+    /// Called by Tauri commands before delegating to `create_workspace_instance`.
+    pub fn enforce_instance_quota(
+        &self,
+        tier: &SubscriptionTier,
+        type_key: &str,
+        store_id: &str,
+    ) -> Result<(), CoreError> {
+        // 1. Workspace type must be allowed by this tier.
+        if !tier.allows_workspace_type(type_key) {
+            return Err(QuotaError::TypeNotAllowed {
+                tier: tier.name().into(),
+                type_key: type_key.into(),
+            }
+            .into());
+        }
+
+        // 2. Per-store register limit.
+        if let Some(limit) = tier.max_pos_instances() {
+            let current = self.count_active_instances(store_id)?;
+            if current >= limit {
+                return Err(QuotaError::RegisterLimit {
+                    tier: tier.name().into(),
+                    limit,
+                    current,
+                }
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
     /// Create a new workspace instance.
     ///
-    /// Returns `CoreError::AlreadyExists` if an instance with the given
+    /// Returns `CoreError::Conflict` if an instance with the given
     /// ID already exists.
+    ///
+    /// **Note:** Callers must verify subscription quota via
+    /// `enforce_instance_quota()` before calling this method.
     pub fn create_workspace_instance(
         &self,
         id: &str,
@@ -543,6 +597,20 @@ impl Store<'_> {
         )?;
 
         Ok(row)
+    }
+
+    /// Touch `last_accessed_at` for a workspace instance (ADR #5).
+    ///
+    /// Called during session resolution to track most-recently-used
+    /// ordering for automatic quota recovery.
+    pub fn touch_instance_access(&self, instance_id: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "UPDATE workspace_instances
+             SET last_accessed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            params![instance_id],
+        )?;
+        Ok(())
     }
 
     /// List all workspace instances in a store (admin use, no access control).
