@@ -12,7 +12,7 @@
 Use this master checklist to track execution progress across backend crates (`crates/oz-core`), security layers, Tauri IPC bridges, and frontend React components (`ui/src/`).
 
 ### Phase 1: Database Schema & Core Backend Rust Models (`crates/oz-core`)
-- [ ] **Step 1.1**: Create SQL migration script (`crates/oz-core/migrations/004_workspace_instances.sql`) defining tables: `workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, and `role_workspace_types`.
+- [ ] **Step 1.1**: Create SQL migration script (`crates/oz-core/migrations/004_workspace_instances.sql`) defining tables (`workspace_types`, `workspace_type_screens`, `workspace_instances`, `user_workspace_instances`, `role_workspace_types`) with explicit `FOREIGN KEY (store_id) REFERENCES store_profiles(id) ON DELETE RESTRICT ON UPDATE CASCADE` constraints to prevent orphaned register crashes.
 - [ ] **Step 1.2**: Add SQL seed & backward-compatibility migration script to insert base templates (`restaurant-pos`, `store-pos`, `kds`, `inventory`, `admin`), auto-generate `default-<key>` instances (`store_id = NULL`), and migrate existing `user_workspaces` rows to `user_workspace_instances`.
 - [ ] **Step 1.3**: Define Rust DTOs and structs (`WorkspaceTypeRow`, `WorkspaceInstanceRow`, `WorkspaceDto`) in `crates/oz-core/src/db/workspaces.rs` with fields for `instance_id`, `type_key`, `name`, `description`, `icon`, `colour`, `render_mode`, and `store_id`.
 - [ ] **Step 1.4**: Implement core backend queries in `crates/oz-core/src/db/workspaces.rs`:
@@ -25,18 +25,18 @@ Use this master checklist to track execution progress across backend crates (`cr
 ### Phase 2: Data Scoping Layer, Security Guard & Indexing (`crates/oz-core` / `oz-security`)
 - [ ] **Step 2.1**: Add data scoping columns via schema migration: `store_id` (TEXT NULL) on `products`, `orders`, `order_lines`, and `customers`; `warehouse_id` (TEXT NULL) on `stock` and `stock_counts`.
 - [ ] **Step 2.2**: Create prefix compound B-Tree indexes: `idx_orders_store_status (store_id, status, created_at DESC)`, `idx_order_lines_store_order (store_id, order_id)`, `idx_products_store_active (store_id, is_active, category_id)`, and `idx_stock_warehouse_item (warehouse_id, item_id)`.
-- [ ] **Step 2.3**: Implement type-safe `ScopeGuard` struct in `crates/oz-core/src/scope.rs` requiring cryptographic session `(user_id + terminal_id + instance_id)` validation via `oz-security` before construction.
-- [ ] **Step 2.4**: Refactor domain `Store` CRUD methods (`get_products`, `list_orders`, `get_stock`, `create_order`) across all db modules (`sales.rs`, `products.rs`, `stock_counts.rs`) to mandate `&ScopeGuard` and append `WHERE (store_id = ? OR store_id IS NULL)`.
-- [ ] **Step 2.5**: Integrate time-ordered `UUIDv7` / `ULID` ID generation and optimistic concurrency fields (`version INTEGER`, `updated_at TEXT`) across all transaction tables (`orders`, `payments`, `stock_transfers`).
-- [ ] **Step 2.V1 (Verification - Scope & Index Test)**: Write automated test `test_scope_guard_enforcement_and_indexing` verifying that cross-store access attempts throw `CoreError::UnauthorizedScope` and confirm B-Tree index hit via `EXPLAIN QUERY PLAN`.
+- [ ] **Step 2.3**: Implement type-safe `ScopeGuard` struct in `crates/oz-core/src/scope.rs` utilizing `ScopeMode` (`SingleStore`, `MultiStore`, `ChainGlobal`) and requiring cryptographic session `(user_id + terminal_id + instance_id)` validation via `oz-security`.
+- [ ] **Step 2.4**: Refactor domain `Store` CRUD methods (`get_products`, `list_orders`, `get_stock`, `create_order`) across all db modules (`sales.rs`, `products.rs`, `stock_counts.rs`) to mandate `&ScopeGuard` and dynamically expand query scoping (e.g. `WHERE store_id IN (...)` or bypass for `ChainGlobal`).
+- [ ] **Step 2.5**: Integrate time-ordered `UUIDv7` / `ULID` ID generation, optimistic concurrency fields (`version INTEGER`, `updated_at TEXT`), and the **CRDT Delta Ledger pattern** (`stock_movements` delta inserts instead of absolute quantity overwrites) to eliminate offline inventory race conditions.
+- [ ] **Step 2.V1 (Verification - Scope & Index Test)**: Write automated test `test_scope_guard_enforcement_and_indexing` verifying that cross-store access attempts throw `CoreError::UnauthorizedScope`, chain-wide aggregation succeeds for `ChainGlobal`, and confirm B-Tree index hits via `EXPLAIN QUERY PLAN`.
 - [ ] **Step 2.V2 (Verification - Quality Check)**: Run `cargo clippy -p oz-core -- -D warnings` and `cargo test -p oz-core` across all modified database modules.
 
 ### Phase 3: Subscription Tier & Entitlement Enforcement (`crates/oz-core`)
 - [ ] **Step 3.1**: Create `tenant_subscription` table schema (`tenant_id`, `tier_key`, `status`, `expires_at`, `max_stores`, `max_pos_instances`, `allowed_types_json`, `signature`) and `SubscriptionTier` Rust struct in `crates/oz-core/src/subscription.rs` with RSA/HMAC anti-tamper signature validation.
 - [ ] **Step 3.2**: Integrate runtime quantity validation inside `create_workspace_instance()`, querying active instances by type and returning `CoreError::SubscriptionLimitExceeded` when tier register quota is reached.
 - [ ] **Step 3.3**: Implement `tier.allows_workspace_type(&instance.type_key)` entitlement checks at workspace boot time, returning `CoreError::SubscriptionUpgradeRequired` if specialized templates (`kds`, `analytics-pro`) are locked.
-- [ ] **Step 3.4**: Implement 14-day offline grace window (allowing paid tiers to run offline for 14 days before reverting to Free rules) and safe downgrade handling (`is_active = false` without deleting historical data).
-- [ ] **Step 3.V1 (Verification - Tier & Signature Test)**: Write automated test `test_tenant_subscription_anti_tamper_and_quotas` in `crates/oz-core/src/db/workspaces.rs` testing creation quotas across tiers and asserting `CoreError::InvalidSubscriptionSignature` when local SQLite data is manually tampered.
+- [ ] **Step 3.4**: Implement 14-day offline grace window with **Monotonic Ledger Clock Check** (`MAX(orders.created_at, audit_logs.created_at)`) to detect OS clock rollbacks (`CoreError::SystemClockTampered`), and safe downgrade handling (`is_active = false` without data loss).
+- [ ] **Step 3.V1 (Verification - Tier & Signature Test)**: Write automated test `test_tenant_subscription_anti_tamper_and_quotas` in `crates/oz-core/src/db/workspaces.rs` testing creation quotas across tiers, verifying clock drift detection (`SystemClockTampered`), and asserting `CoreError::InvalidSubscriptionSignature` when local SQLite data is manually tampered.
 - [ ] **Step 3.V2 (Verification - Quality Check)**: Run `cargo test -p oz-core test_subscription` and verify clean formatting across error types.
 
 ### Phase 4: Tauri IPC Bridge & Front-End API (`apps/` & `ui/src/api/`)
@@ -48,7 +48,7 @@ Use this master checklist to track execution progress across backend crates (`cr
 - [ ] **Step 4.V2 (Verification - Quality Check)**: Run `cargo clippy -p desktop-client -p tablet-client -- -D warnings` and verify zero Tauri IPC command registration or serialization errors.
 
 ### Phase 5: Front-End State, Routing & UI Components (`ui/src/`)
-- [ ] **Step 5.1**: Refactor `WorkspaceContext.tsx` (`WorkspaceProvider`) state from `activeWorkspace: string` (flat key) to `activeInstance: WorkspaceDto | null` and expose `useWorkspaceScope()` context (`{ storeId: activeInstance?.store_id, warehouseId: activeInstance?.warehouse_id }`).
+- [ ] **Step 5.1**: Refactor `WorkspaceContext.tsx` (`WorkspaceProvider`) state from `activeWorkspace: string` (flat key) to `activeInstance: WorkspaceDto | null`, expose `useWorkspaceScope()` (`{ storeId, warehouseId }`), and implement **Fast-Switch Staff PIN Overlay (`FastPINOverlay.tsx`)** + `ScopeGuard.user_id` hot-swapping for shared touchscreens without session hijacking.
 - [ ] **Step 5.2**: Update all data-fetching hooks (`useProducts`, `useOrders`, `useStock`) across `ui/src/features/` to extract `storeId` from `useWorkspaceScope()` and pass it to API adapters.
 - [ ] **Step 5.3**: Refactor `AppShell.tsx` routing logic to switch on `activeInstance.type_key` (`restaurant-pos` → `<PosScreen />`, `store-pos` → `<RetailPosScreen />`, `kds` → `<KdsScreen />`, fallback → `<AppLayout />`).
 - [ ] **Step 5.4**: Update `WorkspaceHome.tsx` (`WorkspaceCard`) to render grouped instances (`Downtown - Cashier 1`, `Mall - Cashier 1`), displaying location badges (`Downtown`, `Mall`, `Airport`), instance colors, and active status.
@@ -348,27 +348,44 @@ To prevent developers from accidentally omitting `WHERE store_id = ?` in backend
 - If the frontend sends a tampered `store_id` payload, the verification fails (`CoreError::UnauthorizedScope`). If a backend developer forgets to scope a query, the Rust compiler (`rustc`) rejects the method signature.
 
 ```rust
+pub enum ScopeMode {
+    SingleStore(String),       // Regular Cashier / Stock Manager (1 store)
+    MultiStore(Vec<String>),   // Area Manager (assigned to specific stores)
+    ChainGlobal,               // Owner / Admin (chain-wide consolidated views)
+}
+
 pub struct ScopeGuard {
-    store_id: Option<String>,
-    warehouse_id: Option<String>,
-    terminal_id: String,
+    pub mode: ScopeMode,
+    pub warehouse_id: Option<String>,
+    pub terminal_id: String,
+    pub user_id: String,
 }
 
 impl Store<'_> {
     // This will NOT compile or execute without passing a cryptographically verified ScopeGuard
     pub fn list_orders(&self, scope: &ScopeGuard, status: &str) -> Result<Vec<Order>> {
-        let mut stmt = self.conn.prepare("SELECT * FROM orders WHERE (store_id = ? OR store_id IS NULL) AND status = ?")?;
-        let rows = stmt.query_map(params![scope.store_id, status], |row| { ... })?;
+        let (sql_filter, params) = match &scope.mode {
+            ScopeMode::SingleStore(store_id) => ("(store_id = ? OR store_id IS NULL)", vec![store_id.clone()]),
+            ScopeMode::MultiStore(stores) => {
+                let placeholders = vec!["?"; stores.len()].join(", ");
+                // Builds `(store_id IN (?, ?) OR store_id IS NULL)`
+                // ...
+            },
+            ScopeMode::ChainGlobal => ("1=1", vec![]), // Owner accesses all stores across the chain
+        };
         // ...
     }
 }
 ```
 
-#### Pillar 2: Cryptographic Terminal Binding & Offline UUIDv7 Sync
-In multi-register environments, offline connectivity must not cause ID collisions or cross-store data overwrites:
+#### Pillar 2: Cryptographic Terminal Binding, CRDT Stock Ledger & Offline UUIDv7 Sync
+In multi-register environments, offline connectivity must not cause ID collisions, inventory race conditions, or cross-store data overwrites:
 - **Zero Auto-Increment IDs**: All entity primary keys (`orders`, `order_lines`, `payments`, `stock_transfers`) use time-ordered **UUIDv7 / ULID** keys (`01F8MECH...`), eliminating ID conflicts when multiple registers operate offline locally.
+- **CRDT Delta Ledger for Inventory (`stock_movements`)**: Offline registers never overwrite absolute `quantity` columns directly (`last-write-wins`). They only insert immutable delta ledger rows into `stock_movements` (`+5` or `-2`). When registers reconnect and sync, deltas sum up deterministically across `(store_id, item_id)` with zero race conditions or missing stock.
 - **Terminal Keyring Binding (`oz-security`)**: Every POS hardware device holds a cryptographic profile (`terminal_id` bound via OS keyring). Sessions require `(user_id + terminal_id + instance_id)` validation.
+- **Shared Touchscreen Fast-Switching (`ScopeGuard.user_id` Hot-Swapping)**: To prevent session hijacking on shared touchscreens without slowing service down, the frontend overlays a **Quick Staff PIN Pad (`FastPINOverlay.tsx`)**. Upon PIN verification, the backend dynamically hot-swaps `ScopeGuard.user_id` while keeping `terminal_id` and `instance_id` invariant, ensuring perfect audit logs and cash drawer accountability per operator.
 - **Immutable Transaction Clock (`version` + LSN)**: Every record tracks `version INTEGER` and `updated_at TEXT` so when offline registers reconnect to each other or `cloud-server`, optimistic concurrency checks prevent ghost overwrites.
+- **Orphan Prevention (`ON DELETE RESTRICT`)**: All foreign keys to `store_profiles` explicitly enforce `ON DELETE RESTRICT ON UPDATE CASCADE`, making it impossible to delete a location while it has active registers, open shifts, or historical transactions.
 
 #### Pillar 3: Prefix Compound B-Tree Indexing `(store_id, ...)`
 To maintain sub-millisecond query performance across large-scale multi-store databases:
@@ -414,7 +431,9 @@ CREATE TABLE tenant_subscription (
 
 **Security & Offline Rules:**
 - **Signature Verification**: On startup and prior to quota checks, the backend verifies `signature` against the public key (`oz-pos-updater.key.pub`). If tampered, the backend raises `CoreError::InvalidSubscriptionSignature`.
-- **14-Day Offline Grace Period**: When offline (`offline.rs`), registers evaluate `expires_at`. Paid tiers (`Pro`, `Premium`, `Enterprise`) continue operating for up to 14 days offline. If 14 days elapse without syncing, the system gracefully reverts to `Free` tier quotas until connectivity returns.
+- **14-Day Offline Grace & Monotonic Ledger Clock Check**: When offline (`offline.rs`), registers evaluate `expires_at`. To prevent users from rolling back their Windows/iPad OS System Clock to bypass expiration indefinitely, the backend computes:
+  $$\text{Effective Time} = \max\Big(\mathtt{Utc::now()},\; \max_{r \in \text{orders}}(\mathtt{r.created\_at}),\; \max_{l \in \text{audit\_logs}}(\mathtt{l.created\_at})\Big)$$
+  If `MAX(orders.created_at)` exceeds `Utc::now()`, the system detects clock rollback (`CoreError::SystemClockTampered`) and immediately locks the register until an online cloud sync occurs. Paid tiers (`Pro`, `Premium`, `Enterprise`) continue operating for up to 14 days offline. If 14 days elapse without syncing, the system gracefully reverts to `Free` tier quotas until connectivity returns.
 
 #### 2. Subscription Tier Enforcement Matrix
 
