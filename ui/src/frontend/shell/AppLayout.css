@@ -345,6 +345,13 @@
 
 .app-content-inner {
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Pages rendered inside .app-content-inner get consistent spacing. */
+.app-content-inner > * {
+  flex: 1;
 }
 
 /* Tablet: collapse sidebar to icon-only */

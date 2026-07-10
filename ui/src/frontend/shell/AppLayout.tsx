@@ -70,12 +70,12 @@ export interface AppLayoutProps {
  * `registerNavItem()`. The sidebar renders them dynamically
  * instead of using a hardcoded list.
  */
+/** Routes that render without the top bar (hamburger + store switcher). */
 const ADMIN_ROUTES = new Set(['settings', 'features', 'data-management']);
 
 export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole }: AppLayoutProps) {
   const { l10n } = useLocalization();
   const { settings: brandSettings } = useBrand();
-  const showTopbar = !ADMIN_ROUTES.has(route);
   const navItems = getNavItems(enabledFeatures, userRole);
 
   // ── Sidebar collapse state (persisted to localStorage) ─────
@@ -200,7 +200,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
 
         {/* ── Content area ─────────────────────────── */}
         <main className="app-content">
-          {showTopbar && (
+          {!ADMIN_ROUTES.has(route) && (
             <div className="app-topbar" role="banner">
               <div className="app-topbar-left">
                 <button
