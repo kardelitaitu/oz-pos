@@ -704,13 +704,14 @@ The `api_key` is stored once on activation and reused for all subsequent renew a
 
 ### Phase 2: POS Client (Rust)
 
-- [ ] **Step 2.1**: Confirm `oz-pos-updater.key.pub` is embedded in the binary (already exists via build script).
-- [ ] **Step 2.2**: Implement `verify_subscription()` in `crates/oz-core/src/subscription.rs` using the RSA public key.
-- [ ] **Step 2.3**: Implement `activate_license()` HTTP client in `crates/oz-core` — POSTs to license server, stores response.
-- [ ] **Step 2.4**: Implement `renew_license()` and `check_license_status()` HTTP clients.
-- [ ] **Step 2.5**: Add `LICENSE_SERVER_URL` constant with env var override.
-- [ ] **Step 2.V1 (Verification)**: `cargo test -p oz-core` — subscription verification, activation flow.
-- [ ] **Step 2.V2 (Verification)**: `cargo clippy -p oz-core -- -D warnings`.
+- [x] **Step 2.1**: Embed RSA public key in binary via `include_str!()` in `crates/oz-core/src/license_verification.rs` (placeholder key in `oz-license.key.pub`).
+- [x] **Step 2.2**: Implement `verify_license_signature()` using RSA-2048 PKCS1v15 with `VerifyingKey::<Sha256>`.
+- [x] **Step 2.3**: Implement `activate_license()` HTTP client — POSTs to license server, verifies returned signature, returns response.
+- [x] **Step 2.4**: Implement `renew_license()` and `check_license_status()` HTTP clients + `store_subscription()` for local persistence.
+- [x] **Step 2.5**: Add `LICENSE_SERVER_URL` constant with `OZ_LICENSE_SERVER_URL` env var override.
+- [x] **Step 2.6**: Add `signed_payload` + `api_key` columns to `tenant_subscription` table (migration 068).
+- [x] **Step 2.V1 (Verification)**: `cargo test -p oz-core -- subscription license_verification` — **30 tests pass**.
+- [x] **Step 2.V2 (Verification)**: `cargo clippy -p oz-core -- -D warnings` — **PASS**.
 
 ### Phase 3: Northflank Deployment
 

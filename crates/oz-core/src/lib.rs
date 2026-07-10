@@ -32,6 +32,8 @@ pub mod features;
 pub mod gift_card;
 pub mod inventory;
 pub mod kds;
+/// License server client — verify, activate, renew subscriptions (ADR #9).
+pub mod license_verification;
 /// Loyalty program — points, tiers, and redemption.
 pub mod loyalty;
 pub mod migrations;

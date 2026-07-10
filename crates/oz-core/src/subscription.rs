@@ -142,14 +142,27 @@ impl SubscriptionTier {
 /// A row from the `tenant_subscription` table.
 #[derive(Debug, Clone)]
 pub struct TenantSubscription {
+    /// The unique identifier of the tenant.
     pub tenant_id: String,
+    /// The subscription tier (Free, Pro, Premium, Enterprise).
     pub tier: SubscriptionTier,
+    /// The subscription status (e.g. "active", "canceled").
     pub status: String,
+    /// The optional expiration timestamp in RFC 3339 format.
     pub expires_at: Option<String>,
+    /// The maximum number of stores allowed for this tenant.
     pub max_stores: i64,
+    /// The maximum number of POS instances allowed for this tenant.
     pub max_pos_instances: i64,
+    /// A JSON string listing the workspace types allowed on this tier.
     pub allowed_types_json: String,
+    /// The cryptographic signature verifying the subscription.
     pub signature: String,
+    /// The signed subscription payload from the license server (JSON).
+    pub signed_payload: String,
+    /// The API key for subsequent renew/status calls.
+    pub api_key: String,
+    /// The timestamp of the last update in RFC 3339 format.
     pub updated_at: String,
 }
 
@@ -158,7 +171,8 @@ impl TenantSubscription {
     pub fn load(conn: &rusqlite::Connection, tenant_id: &str) -> Result<Option<Self>, CoreError> {
         let mut stmt = conn.prepare(
             "SELECT tenant_id, tier_key, status, expires_at, max_stores,
-                    max_pos_instances, allowed_types_json, signature, updated_at
+                    max_pos_instances, allowed_types_json, signature, signed_payload,
+                    api_key, updated_at
              FROM tenant_subscription
              WHERE tenant_id = ?1",
         )?;
@@ -173,7 +187,9 @@ impl TenantSubscription {
                 max_pos_instances: row.get(5)?,
                 allowed_types_json: row.get(6)?,
                 signature: row.get(7)?,
-                updated_at: row.get(8)?,
+                signed_payload: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                api_key: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                updated_at: row.get(10)?,
             })
         });
 
@@ -184,26 +200,13 @@ impl TenantSubscription {
         }
     }
 
-    /// Verify the subscription signature.
+    /// Verify the subscription signature using RSA-2048 PKCS1v15.
     ///
     /// During local development / single-store deployments, the bootstrap
     /// signature `BOOTSTRAP_FREE` is accepted. In production, the signature
-    /// must be validated against `oz-pos-updater.key.pub`.
-    pub fn verify_signature(&self, _public_key_pem: &str) -> Result<(), CoreError> {
-        // BOOTSTRAP_FREE is the sentinel value seeded by the migration
-        // for single-store deployments without a cloud-server.
-        if self.signature == "BOOTSTRAP_FREE" {
-            return Ok(());
-        }
-
-        // TODO(ADR #5): Implement real RSA/HMAC signature verification
-        // against oz-pos-updater.key.pub when apps/cloud-server is
-        // available for subscription signing.
-        //
-        // For now, any non-BOOTSTRAP signature is rejected as invalid.
-        Err(CoreError::InvalidSubscriptionSignature(
-            "Subscription signature verification is not yet implemented. Connect to cloud-server to validate your subscription.".into(),
-        ))
+    /// must be validated against the embedded RSA public key.
+    pub fn verify_signature(&self) -> Result<(), CoreError> {
+        crate::license_verification::verify_license_signature(&self.signed_payload, &self.signature)
     }
 
     /// Compute the maximum ledger timestamp across all domain tables
@@ -345,18 +348,29 @@ impl TenantSubscription {
 pub enum QuotaError {
     /// The tenant has reached their per-store register limit.
     RegisterLimit {
+        /// The subscription tier name.
         tier: String,
+        /// The maximum number allowed.
         limit: i64,
+        /// The current usage count.
         current: i64,
     },
     /// The tenant has reached their store count limit.
     StoreLimit {
+        /// The subscription tier name.
         tier: String,
+        /// The maximum number allowed.
         limit: i64,
+        /// The current usage count.
         current: i64,
     },
     /// The workspace type is not available on this tier.
-    TypeNotAllowed { tier: String, type_key: String },
+    TypeNotAllowed {
+        /// The subscription tier name.
+        tier: String,
+        /// The workspace type key that was rejected.
+        type_key: String,
+    },
 }
 
 impl std::fmt::Display for QuotaError {
@@ -517,9 +531,11 @@ mod tests {
             max_pos_instances: 1,
             allowed_types_json: "[]".into(),
             signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
-        assert!(sub.verify_signature("").is_ok());
+        assert!(sub.verify_signature().is_ok());
     }
 
     #[test]
@@ -533,9 +549,11 @@ mod tests {
             max_pos_instances: 1,
             allowed_types_json: "[]".into(),
             signature: "TAMPERED_SIGNATURE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
-        assert!(sub.verify_signature("").is_err());
+        assert!(sub.verify_signature().is_err());
     }
 
     // ── QuotaError Display ────────────────────────────────
@@ -659,6 +677,8 @@ mod tests {
             max_pos_instances: 1,
             allowed_types_json: "[]".into(),
             signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
         assert!(sub.is_within_grace_period());
@@ -676,6 +696,8 @@ mod tests {
             max_pos_instances: 3,
             allowed_types_json: "[]".into(),
             signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
         assert!(sub.is_within_grace_period());
@@ -695,6 +717,8 @@ mod tests {
             max_pos_instances: 10,
             allowed_types_json: "[]".into(),
             signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
         assert!(sub.is_within_grace_period());
@@ -714,6 +738,8 @@ mod tests {
             max_pos_instances: 10,
             allowed_types_json: "[]".into(),
             signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
         assert!(!sub.is_within_grace_period());
@@ -731,6 +757,8 @@ mod tests {
             max_pos_instances: 0,
             allowed_types_json: "[]".into(),
             signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
         assert!(sub.is_within_grace_period());
@@ -750,6 +778,8 @@ mod tests {
             max_pos_instances: 3,
             allowed_types_json: "[]".into(),
             signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
             updated_at: String::new(),
         };
         assert!(!sub.is_within_grace_period());
