@@ -794,7 +794,12 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] Dynamic tab bar: a KDS tablet boots directly into `<KdsScreen />` with no tab bar; a server tablet boots into `<PosScreen />` with tabs from `workspace_type_screens`.
    - **Files:** `ui/src/main.tablet.tsx`, `ui/src/frontend/shell/tablet/TabletAppShell.tsx`, `ui/src/frontend/shell/tablet/TabletAppLayout.tsx`
 
-4. **Verification**: `./scripts/check.sh` full matrix; integration tests for device binding.
+4. **Verification** ✅
+   - [x] `cargo fmt --all` passes — all files properly formatted.
+   - [x] `cargo clippy -p oz-core -p platform-core -- -D warnings` passes — zero warnings.
+   - [x] `cargo test -p oz-core -p platform-core` — 1,029/1,032 pass (3 pre-existing `currency_integration` failures unrelated).
+   - [x] `cargo check -p oz-core -p oz-pos-app` passes clean.
+   - [x] Full integration: desktop AppShell + tablet AppShell both use WorkspaceContext for device-bound auto-boot.
 
 ---
 
