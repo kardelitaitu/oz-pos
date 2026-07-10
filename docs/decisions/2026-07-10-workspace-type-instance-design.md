@@ -32,12 +32,12 @@ Use this master checklist to track execution progress across backend crates (`cr
 - [ ] **Step 2.V2 (Verification - Quality Check)**: Run `cargo clippy -p oz-core -- -D warnings` and `cargo test -p oz-core` across all modified database modules.
 
 ### Phase 3: Subscription Tier & Entitlement Enforcement (`crates/oz-core`)
-- [ ] **Step 3.1**: Define `SubscriptionTier` enum/struct (`Free`, `Pro`, `Premium`, `Enterprise`) in `crates/oz-core/src/subscription.rs` with exact quotas (`max_stores`, `max_pos_instances`, `allowed_workspace_types`).
-- [ ] **Step 3.2**: Integrate runtime quantity validation in `create_workspace_instance()`, querying active instances by type and returning `CoreError::SubscriptionLimitExceeded` when tier capacity is reached.
+- [ ] **Step 3.1**: Create `tenant_subscription` table schema (`tenant_id`, `tier_key`, `status`, `expires_at`, `max_stores`, `max_pos_instances`, `allowed_types_json`, `signature`) and `SubscriptionTier` Rust struct in `crates/oz-core/src/subscription.rs` with RSA/HMAC anti-tamper signature validation.
+- [ ] **Step 3.2**: Integrate runtime quantity validation inside `create_workspace_instance()`, querying active instances by type and returning `CoreError::SubscriptionLimitExceeded` when tier register quota is reached.
 - [ ] **Step 3.3**: Implement `tier.allows_workspace_type(&instance.type_key)` entitlement checks at workspace boot time, returning `CoreError::SubscriptionUpgradeRequired` if specialized templates (`kds`, `analytics-pro`) are locked.
-- [ ] **Step 3.4**: Implement safe downgrade handling logic transitioning surplus instances (`active_pos_count > max_pos_instances`) to `is_active = false` without deleting audit logs or historical data.
-- [ ] **Step 3.V1 (Verification - Tier Unit Test)**: Write `test_subscription_tier_quotas_and_entitlements` in `crates/oz-core/src/db/workspaces.rs` testing creation limits across `Free`, `Pro`, `Premium`, and `Enterprise` tiers and entitlement locking.
-- [ ] **Step 3.V2 (Verification - Quality Check)**: Run `cargo test -p oz-core test_subscription` and verify all error messages format cleanly.
+- [ ] **Step 3.4**: Implement 14-day offline grace window (allowing paid tiers to run offline for 14 days before reverting to Free rules) and safe downgrade handling (`is_active = false` without deleting historical data).
+- [ ] **Step 3.V1 (Verification - Tier & Signature Test)**: Write automated test `test_tenant_subscription_anti_tamper_and_quotas` in `crates/oz-core/src/db/workspaces.rs` testing creation quotas across tiers and asserting `CoreError::InvalidSubscriptionSignature` when local SQLite data is manually tampered.
+- [ ] **Step 3.V2 (Verification - Quality Check)**: Run `cargo test -p oz-core test_subscription` and verify clean formatting across error types.
 
 ### Phase 4: Tauri IPC Bridge & Front-End API (`apps/` & `ui/src/api/`)
 - [ ] **Step 4.1**: Update Tauri `get_workspaces` command in `apps/desktop-client/src/commands/workspaces.rs` and `apps/tablet-client/src/commands/workspaces.rs` to return `Vec<WorkspaceDto>` with full instance and scope attributes.
@@ -395,7 +395,28 @@ To ensure cashier screens update instantaneously without receiving unrelated cro
 
 Separating `WorkspaceType` from `WorkspaceInstance` unlocks granular, backend-enforced subscription tiering across three monetization dimensions: physical locations (`store_profiles`), concurrent cashier registers (`workspace_instances`), and specialized UI templates (`workspace_types`).
 
-#### 1. Subscription Tier Enforcement Matrix
+#### 1. Signed Tenant Subscription Schema (Anti-Tamper & Offline Grace)
+Because `oz-pos` stores data locally in SQLite (`rusqlite`), subscription limits must be cryptographically signed (`RSA/HMAC`) to prevent users from opening `POS.sqlite` locally and modifying their tier. The active subscription is stored with a signature issued by `apps/cloud-server`:
+
+```sql
+CREATE TABLE tenant_subscription (
+    tenant_id          TEXT PRIMARY KEY,
+    tier_key           TEXT NOT NULL,        -- 'free', 'pro', 'premium', 'enterprise'
+    status             TEXT NOT NULL,        -- 'active', 'past_due', 'canceled'
+    expires_at         TEXT NULL,            -- ISO timestamp (NULL = lifetime/free)
+    max_stores         INTEGER NOT NULL,
+    max_pos_instances  INTEGER NOT NULL,
+    allowed_types_json TEXT NOT NULL,        -- '["restaurant-pos", "store-pos", "admin"]'
+    signature          TEXT NOT NULL,        -- RSA/HMAC signature from apps/cloud-server
+    updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+```
+
+**Security & Offline Rules:**
+- **Signature Verification**: On startup and prior to quota checks, the backend verifies `signature` against the public key (`oz-pos-updater.key.pub`). If tampered, the backend raises `CoreError::InvalidSubscriptionSignature`.
+- **14-Day Offline Grace Period**: When offline (`offline.rs`), registers evaluate `expires_at`. Paid tiers (`Pro`, `Premium`, `Enterprise`) continue operating for up to 14 days offline. If 14 days elapse without syncing, the system gracefully reverts to `Free` tier quotas until connectivity returns.
+
+#### 2. Subscription Tier Enforcement Matrix
 
 | Tier | Store Quota (`store_profiles`) | POS Register Quota (`workspace_instances`) | Allowed Workspace Types (`workspace_types`) | Advanced Features & Hardware |
 | :--- | :--- | :--- | :--- | :--- |
@@ -404,11 +425,12 @@ Separating `WorkspaceType` from `WorkspaceInstance` unlocks granular, backend-en
 | **Premium** | **Up to 5 Stores** | **Up to 10 Registers / Store** | + `kds` (Kitchen Display System), `analytics-pro` | Multi-store cloud sync (`apps/cloud-server`), Advanced recipe costing. |
 | **Enterprise** | **Unlimited (`N`)** | **Unlimited Registers** | + All types + Custom Plugin Workspaces (`oz-plugin`) | Multi-warehouse routing, Custom Lua scripts (`oz-lua`), Dedicated API access. |
 
-#### 2. Runtime Quota Validation (`create_workspace_instance`)
+#### 3. Runtime Quota Validation (`create_workspace_instance`)
 When an administrator attempts to create a new register instance or add a location, the backend evaluates active instance counts against `SubscriptionTier` limits inside a database transaction:
 
 ```rust
 pub fn create_workspace_instance(&self, req: &CreateInstanceRequest, tier: &SubscriptionTier) -> Result<WorkspaceDto> {
+    self.verify_subscription_signature()?; // Ensures local database was not tampered with
     let active_pos_count = self.count_active_instances_by_type(&req.type_key)?;
     if active_pos_count >= tier.max_pos_instances() {
         return Err(CoreError::SubscriptionLimitExceeded(
@@ -419,7 +441,7 @@ pub fn create_workspace_instance(&self, req: &CreateInstanceRequest, tier: &Subs
 }
 ```
 
-#### 3. Workspace Boot Entitlement Check (`allows_workspace_type`)
+#### 4. Workspace Boot Entitlement Check (`allows_workspace_type`)
 When a user attempts to open an advanced workspace (`kds` or `analytics-pro`), the backend verifies template entitlements before issuing session scope credentials:
 
 ```rust
@@ -430,7 +452,7 @@ if !tier.allows_workspace_type(&instance.type_key) {
 }
 ```
 
-#### 4. Graceful Upgrades & Downgrades
+#### 5. Graceful Upgrades & Downgrades
 - **Upgrades**: Raising a tier instantly increases `max_pos_instances` and adds allowed `workspace_types`. No database migration or client restart is required.
 - **Downgrading (Safe Archiving)**: If a client downgrades below their current register count, excess instances transition to `is_active = false`. Historical audit logs and orders (`WHERE store_id = ...`) are preserved, while only quota-compliant instances remain openable for new sales.
 
