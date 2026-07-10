@@ -80,7 +80,15 @@ pub async fn list_products_scoped(
 | `export_daily_summary` | `()` | `session_token: String` | ✅ `export_daily_summary_scoped` + API wrapper |
 | `export_sales_by_hour` | `()` | `session_token: String` | ✅ `export_sales_by_hour_scoped` + API wrapper |
 | `export_eod_report` | `()` | `session_token: String` | ✅ `export_eod_report_scoped` + `build_eod_report` helper |
-| *(all other domain commands)* | various | `session_token: String, ...` | ⏳ |
+| `void_sale` | `args: VoidSaleArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `void_sale_scoped` + `VoidSaleScopedArgs` + API wrapper |
+| `process_refund` | `args: ProcessRefundArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `process_refund_scoped` + `run_process_refund` helper |
+| `lookup_sale_by_receipt_barcode` | `barcode: String` | `session_token: String, barcode: String` | ✅ + API wrapper |
+| `list_refunds` | `sale_id: String` | `session_token: String, sale_id: String` | ✅ + API wrapper |
+| `set_cart_discount` | `args: SetCartDiscountArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ + `SetCartDiscountScopedArgs` |
+| `override_line_price` | `args: OverrideLinePriceArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ + `run_override_line_price` helper |
+| `list_active_carts` / `get_active_cart` | various | `session_token: String, ...` | ✅ + API wrappers |
+| `hold_cart` / `list_held_carts` / `list_open_bills` / `get_held_cart` / `delete_held_cart` / `compute_cart_tax` | various | `session_token: String, ...` | ✅ + API wrappers |
+| *(remaining domain commands)* | various | `session_token: String, ...` | ⏳ |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
 
@@ -127,6 +135,10 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `process_refund_scoped` — migrate refund processing with `run_process_refund` helper
 - [x] `lookup_sale_by_receipt_barcode_scoped` — migrate receipt barcode lookup
 - [x] `list_refunds_scoped` — migrate refund listing
+- [x] `set_cart_discount_scoped` — migrate with `SetCartDiscountScopedArgs`
+- [x] `override_line_price_scoped` — migrate with `run_override_line_price` helper
+- [x] `list_active_carts_scoped` / `get_active_cart_scoped` — migrate cart queries
+- [x] `hold_cart_scoped` / `list_held_carts_scoped` / `list_open_bills_scoped` / `get_held_cart_scoped` / `delete_held_cart_scoped` / `compute_cart_tax_scoped` — migrate held cart commands
 - [ ] *(remaining domain commands)*
 
 ### Phase 4: Enforcement ⏳

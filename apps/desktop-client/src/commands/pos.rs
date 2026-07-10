@@ -33,11 +33,10 @@ pub struct SetCartDiscountArgs {
     pub user_id: String,
 }
 
-/// Set or clear a cart-level percentage discount.
+/// Set or clear a cart-level percentage discount using the global database.
 ///
-/// The discount is applied when the cart total is computed and when
-/// the sale is completed. Pass `percent = 0` to clear any existing
-/// discount.
+/// **Deprecated for multi-store (ADR #7):** Use `set_cart_discount_scoped`
+/// with a `session_token` instead.
 #[command]
 pub async fn set_cart_discount(
     args: SetCartDiscountArgs,
@@ -64,6 +63,55 @@ pub async fn set_cart_discount(
     store.save_active_cart(&cart)?;
     drop(db);
     tracing::info!(cart_id = %args.cart_id, percent = %args.percent, "cart discount set");
+    Ok(())
+}
+
+/// Args for `set_cart_discount_scoped` — without `user_id`.
+#[derive(Debug, Deserialize)]
+pub struct SetCartDiscountScopedArgs {
+    pub cart_id: CartId,
+    pub percent: i64,
+    pub label: Option<String>,
+}
+
+/// Set a cart discount within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `set_cart_discount`. The `user_id` for
+/// permission checks is read from the resolved `SessionContext`.
+#[command]
+pub async fn set_cart_discount_scoped(
+    session_token: String,
+    args: SetCartDiscountScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    if !(0..=100).contains(&args.percent) {
+        return Err(AppError::Invalid(format!(
+            "discount percent must be between 0 and 100, got {}",
+            args.percent
+        )));
+    }
+    let percent = Percentage::new(args.percent as u8).unwrap();
+
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, oz_core::permissions::SALES_DISCOUNT)?;
+
+    let mut cart = store
+        .load_active_cart(&args.cart_id)?
+        .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
+    cart.set_discount(percent, args.label);
+    store.save_active_cart(&cart)?;
+    drop(db);
+    tracing::info!(cart_id = %args.cart_id, percent = %args.percent, "cart discount set (scoped)");
     Ok(())
 }
 
@@ -107,8 +155,9 @@ pub async fn start_sale(
 
 // ── List Active Carts ────────────────────────────────────────────────
 
-/// Return all active cart IDs so the front-end can restore carts
-/// after a restart.
+/// Return all active cart IDs from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_active_carts_scoped`.
 #[command]
 pub async fn list_active_carts(state: State<'_, AppState>) -> Result<Vec<CartId>, AppError> {
     let db = state.db.lock().await;
@@ -118,16 +167,46 @@ pub async fn list_active_carts(state: State<'_, AppState>) -> Result<Vec<CartId>
     Ok(ids)
 }
 
+/// List active carts for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_active_carts_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CartId>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let ids = store.list_active_carts()?;
+    drop(db);
+    Ok(ids)
+}
+
 // ── Get Active Cart ──────────────────────────────────────────────────
 
-/// Load and return the full cart state (lines, discount) by id.
-/// The front end uses this to restore a cart after restart or navigation.
+/// Load a full cart from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_active_cart_scoped`.
 #[command]
 pub async fn get_active_cart(
     cart_id: CartId,
     state: State<'_, AppState>,
 ) -> Result<Option<Cart>, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let cart = store.load_active_cart(&cart_id)?;
+    drop(db);
+    Ok(cart)
+}
+
+/// Load a cart from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn get_active_cart_scoped(
+    session_token: String,
+    cart_id: CartId,
+    state: State<'_, AppState>,
+) -> Result<Option<Cart>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let cart = store.load_active_cart(&cart_id)?;
     drop(db);
@@ -193,44 +272,80 @@ pub struct OverrideLinePriceArgs {
     pub user_id: String,
 }
 
-/// Override the unit price of a cart line, authorised by a manager PIN.
+/// Override the unit price of a cart line using the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `override_line_price_scoped`.
 #[command]
 pub async fn override_line_price(
     args: OverrideLinePriceArgs,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let mut cart = store
-        .load_active_cart(&args.cart_id)?
-        .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
+    run_override_line_price(&db, &args.cart_id, &args.line_id, args.new_price_minor, &args.user_id)
+}
 
-    // Permission check: the user authorising the override must have SALES_OVERRIDE_PRICE.
-    require_permission_for_user(
-        &store,
-        &args.user_id,
-        oz_core::permissions::SALES_OVERRIDE_PRICE,
-    )?;
+/// Args for `override_line_price_scoped` — without `user_id`.
+#[derive(Debug, Deserialize)]
+pub struct OverrideLinePriceScopedArgs {
+    pub cart_id: CartId,
+    pub line_id: LineId,
+    pub new_price_minor: i64,
+}
+
+/// Override a line price within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `override_line_price`. The `user_id` for
+/// permission checks is read from the resolved `SessionContext`.
+#[command]
+pub async fn override_line_price_scoped(
+    session_token: String,
+    args: OverrideLinePriceScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_override_line_price(&db, &args.cart_id, &args.line_id, args.new_price_minor, &session.user_id)
+}
+
+/// Shared business logic for overriding a line price.
+fn run_override_line_price(
+    db: &rusqlite::Connection,
+    cart_id: &CartId,
+    line_id: &LineId,
+    new_price_minor: i64,
+    user_id: &str,
+) -> Result<(), AppError> {
+    let store = Store::new(db);
+    let mut cart = store
+        .load_active_cart(cart_id)?
+        .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", cart_id)))?;
+
+    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_OVERRIDE_PRICE)?;
 
     let currency = cart.currency();
     let new_price = Money {
-        minor_units: args.new_price_minor,
+        minor_units: new_price_minor,
         currency,
     };
 
-    // Find the line and set the override
     let line = cart
         .lines_mut()
         .iter_mut()
-        .find(|l| l.id == args.line_id)
-        .ok_or_else(|| AppError::Invalid(format!("line not found: {}", args.line_id)))?;
+        .find(|l| l.id == *line_id)
+        .ok_or_else(|| AppError::Invalid(format!("line not found: {}", line_id)))?;
 
     line.set_overridden_price(new_price);
 
     store.save_active_cart(&cart)?;
-    drop(db);
 
-    tracing::info!(cart_id = %args.cart_id, line_id = %args.line_id, new_price_minor = args.new_price_minor, "line price overridden");
+    tracing::info!(%cart_id, %line_id, new_price_minor, "line price overridden");
     Ok(())
 }
 
@@ -482,7 +597,9 @@ pub async fn complete_sale(
 
 // ── Compute Cart Tax ──────────────────────────────────────────────────
 
-/// Compute the total tax for a live cart (front-end preview).
+/// Compute tax for a live cart from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `compute_cart_tax_scoped`.
 #[command]
 pub async fn compute_cart_tax(
     lines: Vec<oz_core::db::CartLineTaxInput>,
@@ -493,6 +610,25 @@ pub async fn compute_cart_tax(
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let tax = store.compute_cart_tax(&lines, parsed)?;
+    drop(db);
+    Ok(tax.minor_units)
+}
+
+/// Compute cart tax for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn compute_cart_tax_scoped(
+    session_token: String,
+    lines: Vec<oz_core::db::CartLineTaxInput>,
+    currency: String,
+    state: State<'_, AppState>,
+) -> Result<i64, AppError> {
+    let parsed: oz_core::Currency = currency
+        .parse()
+        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let tax = store.compute_cart_tax(&lines, parsed)?;
     drop(db);
@@ -522,7 +658,9 @@ pub struct HoldCartResult {
     pub id: String,
 }
 
-/// Park the current sale as a held order.
+/// Park the current sale as a held order in the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `hold_cart_scoped`.
 #[command]
 pub async fn hold_cart(
     args: HoldCartArgs,
@@ -544,7 +682,28 @@ pub async fn hold_cart(
     Ok(HoldCartResult { id })
 }
 
-/// List all held (parked) orders, most recent first.
+/// Hold a cart in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn hold_cart_scoped(
+    session_token: String,
+    args: HoldCartArgs,
+    state: State<'_, AppState>,
+) -> Result<HoldCartResult, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let id = store.hold_cart(
+        &args.label, &args.cart_data, args.item_count, args.total_minor,
+        &args.currency, &args.bill_type, args.customer_name.as_deref(),
+    )?;
+    drop(db);
+    tracing::info!(held_cart_id = %id, label = %args.label, "cart held (scoped)");
+    Ok(HoldCartResult { id })
+}
+
+/// List all held carts from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_held_carts_scoped`.
 #[command]
 pub async fn list_held_carts(
     state: State<'_, AppState>,
@@ -556,7 +715,23 @@ pub async fn list_held_carts(
     Ok(carts)
 }
 
-/// List open bills (bill_type = 'open_bill'), most recent first.
+/// List held carts for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_held_carts_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let carts = store.list_held_carts()?;
+    drop(db);
+    Ok(carts)
+}
+
+/// List open bills from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_open_bills_scoped`.
 #[command]
 pub async fn list_open_bills(
     state: State<'_, AppState>,
@@ -568,7 +743,23 @@ pub async fn list_open_bills(
     Ok(carts)
 }
 
-/// Resume a held cart by id.
+/// List open bills for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_open_bills_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let carts = store.list_open_bills()?;
+    drop(db);
+    Ok(carts)
+}
+
+/// Resume a held cart from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_held_cart_scoped`.
 #[command]
 pub async fn get_held_cart(
     id: String,
@@ -581,7 +772,24 @@ pub async fn get_held_cart(
     Ok(cart)
 }
 
-/// Delete a held cart by id.
+/// Get a held cart from the store resolved from a session token. ADR #7.
+#[command]
+pub async fn get_held_cart_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<oz_core::db::HeldCartFull>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let cart = store.get_held_cart(&id)?;
+    drop(db);
+    Ok(cart)
+}
+
+/// Delete a held cart from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `delete_held_cart_scoped`.
 #[command]
 pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
@@ -589,6 +797,22 @@ pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<
     store.delete_held_cart(&id)?;
     drop(db);
     tracing::info!(held_cart_id = %id, "held cart deleted");
+    Ok(())
+}
+
+/// Delete a held cart in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn delete_held_cart_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn.lock().map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    store.delete_held_cart(&id)?;
+    drop(db);
+    tracing::info!(held_cart_id = %id, "held cart deleted (scoped)");
     Ok(())
 }
 
@@ -710,5 +934,14 @@ mod tests {
         let debug = format!("{result:?}");
         assert!(debug.contains("sale-1"));
         assert!(debug.contains("1000"));
+    }
+
+    // ── Scoped command token rejection tests ───────────────────────
+
+    #[test]
+    fn pos_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }

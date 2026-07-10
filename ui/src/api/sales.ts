@@ -82,6 +82,16 @@ export const getProductTrackSerial = (sku: string): Promise<boolean> =>
 export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
   invoke<void>('set_cart_discount', { args });
 
+/** ADR #7: Scoped cart discount — `userId` is read from session. */
+export interface SetCartDiscountScopedArgs {
+  cartId: string;
+  percent: number;
+  label?: string | null;
+}
+
+export const setCartDiscountScoped = (sessionToken: string, args: SetCartDiscountScopedArgs): Promise<void> =>
+  invoke<void>('set_cart_discount_scoped', { sessionToken, args });
+
 export interface OverrideLinePriceArgs {
   cartId: string;
   lineId: string;
@@ -91,6 +101,10 @@ export interface OverrideLinePriceArgs {
 
 export const overrideLinePrice = (args: OverrideLinePriceArgs): Promise<void> =>
   invoke<void>('override_line_price', { args });
+
+/** ADR #7: Scoped line price override — `userId` is read from session. */
+export const overrideLinePriceScoped = (sessionToken: string, cartId: string, lineId: string, newPriceMinor: number): Promise<void> =>
+  invoke<void>('override_line_price_scoped', { sessionToken, args: { cartId, lineId, newPriceMinor } });
 
 // ── Sales History ─────────────────────────────────────────────────
 
@@ -204,17 +218,37 @@ export interface HeldCartFull {
 export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
   invoke<{ id: string }>('hold_cart', { args });
 
+/** ADR #7: Hold a cart in the store resolved from a session token. */
+export const holdCartScoped = (sessionToken: string, args: HoldCartArgs): Promise<{ id: string }> =>
+  invoke<{ id: string }>('hold_cart_scoped', { sessionToken, args });
+
 export const listHeldCarts = (): Promise<HeldCartRow[]> =>
   invoke<HeldCartRow[]>('list_held_carts');
+
+/** ADR #7: Scoped held carts listing. */
+export const listHeldCartsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
+  invoke<HeldCartRow[]>('list_held_carts_scoped', { sessionToken });
 
 export const listOpenBills = (): Promise<HeldCartRow[]> =>
   invoke<HeldCartRow[]>('list_open_bills');
 
+/** ADR #7: Scoped open bills listing. */
+export const listOpenBillsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
+  invoke<HeldCartRow[]>('list_open_bills_scoped', { sessionToken });
+
 export const getHeldCart = (id: string): Promise<HeldCartFull | null> =>
   invoke<HeldCartFull | null>('get_held_cart', { id });
 
+/** ADR #7: Scoped held cart retrieval. */
+export const getHeldCartScoped = (sessionToken: string, id: string): Promise<HeldCartFull | null> =>
+  invoke<HeldCartFull | null>('get_held_cart_scoped', { sessionToken, id });
+
 export const deleteHeldCart = (id: string): Promise<void> =>
   invoke('delete_held_cart', { id });
+
+/** ADR #7: Scoped held cart deletion. */
+export const deleteHeldCartScoped = (sessionToken: string, id: string): Promise<void> =>
+  invoke('delete_held_cart_scoped', { sessionToken, id });
 
 // ── Refunds ───────────────────────────────────────────────────────
 
