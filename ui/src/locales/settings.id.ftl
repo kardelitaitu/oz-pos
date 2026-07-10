@@ -134,6 +134,8 @@ setup-review-disabled = Fitur Dinonaktifkan ({ $count })
 setup-review-none = Tidak Ada
 setup-review-all-on = Semuanya aktif!
 setup-review-more = +{ $count } lagi
+setup-default-currency-label = Mata Uang Default
+
 setup-complete-title = Siap!
 setup-complete-desc = { $preset } POS Anda telah dikonfigurasi dan siap digunakan. Anda dapat menyesuaikan pengaturan kapan saja.
 setup-launch = Luncurkan OZ-POS
@@ -225,6 +227,7 @@ settings-btn-save-aria =
        *[save] Simpan pengaturan
     }
 settings-save-error = Gagal menyimpan pengaturan. Silakan coba lagi.
+settings-retry = Coba Lagi
 settings-sync-not-configured = Sinkronisasi belum dikonfigurasi. Masukkan URL server dan aktifkan sinkronisasi.
 settings-appearance = Tampilan
 appearance-primary-colour = Warna Utama
@@ -564,6 +567,14 @@ settings-sync-toast-test-fail = Tidak dapat menjangkau server
 settings-sync-pull-toast-success = { $products } produk, { $tax_rates } tarif pajak, { $users } pengguna ditarik dari server
 settings-sync-pull-toast-empty = Snapshot server kosong — tidak ada yang ditarik
 settings-sync-pull-toast-fail = Penarikan gagal — periksa URL server dan token
+
+# ── System & License ──
+settings-system-license-header = Sistem & Kepemilikan Lisensi
+settings-software-edition = Edisi Perangkat Lunak
+settings-license-type = Tipe Lisensi
+settings-copyright-notice = Pemberitahuan Hak Cipta
+settings-commercial-contact = Kontak Komersial
+settings-app-version = OZ-POS Enterprise v{ $version }
 
 # ── Toast messages ──
 settings-toast-failed-tax-rates = Gagal memuat tarif pajak

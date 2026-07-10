@@ -57,7 +57,8 @@ interface ImportState {
   selectedFile: string | null;
   metadata: { name: string; version: string; types: string[]; created: string } | null;
   password: string;
-  step: 'select' | 'preview' | 'importing' | 'done';
+  step: 'select' | 'analysing' | 'preview' | 'importing' | 'done';
+  analysing: boolean;
   progress: number;
   error: string | null;
   dryRun: { added: number; updated: number; skipped: number } | null;
@@ -88,6 +89,7 @@ const INITIAL_IMPORT: ImportState = {
   metadata: null,
   password: '',
   step: 'select',
+  analysing: false,
   progress: 0,
   error: null,
   dryRun: null,
@@ -232,17 +234,16 @@ export default function DataManagementScreen() {
         ...prev,
         selectedFile: filePath,
         metadata: null,
-        step: 'preview',
+        error: null,
+        password: '',
+        step: 'analysing',
       }));
-
-      // Preview the file (requires password — skip for now, user enters it later)
-      // We just set the file path and let the user enter the password.
     } catch {
       addToast({ message: l10n.getString('data-mgmt-toast-file-picker-fail'), type: 'error' });
     }
   }, [addToast, l10n]);
 
-  const startImport = useCallback(async () => {
+  const handleAnalyse = useCallback(async () => {
     if (!importState.password) {
       addToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), type: 'error' });
       return;
@@ -252,13 +253,14 @@ export default function DataManagementScreen() {
       return;
     }
 
-    setImportState((prev) => ({ ...prev, step: 'importing', progress: 10, error: null }));
+    setImportState((prev) => ({ ...prev, progress: 10, error: null, analysing: true }));
 
     try {
-      // Preview first
       const preview = await importPreview(importState.selectedFile, importState.password);
       setImportState((prev) => ({
         ...prev,
+        analysing: false,
+        step: 'preview',
         progress: 30,
         metadata: {
           name: preview.storeName,
@@ -278,10 +280,25 @@ export default function DataManagementScreen() {
           skipped: 0,
         },
       }));
+    } catch (err) {
+      setImportState((prev) => ({
+        ...prev,
+        analysing: false,
+        error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
+      }));
+    }
+  }, [addToast, importState.password, importState.selectedFile, l10n]);
 
-      setImportState((prev) => ({ ...prev, progress: 50 }));
+  const startImport = useCallback(async () => {
+    if (!importState.selectedFile || !importState.password) {
+      addToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), type: 'error' });
+      return;
+    }
 
-      // Execute import
+    setImportState((prev) => ({ ...prev, step: 'importing', progress: 50, error: null }));
+
+    try {
+      // Execute import (preview already done in analyse step)
       const result = await importData(importState.selectedFile, importState.password);
 
       setImportState((prev) => ({
@@ -304,12 +321,12 @@ export default function DataManagementScreen() {
     } catch (err) {
       setImportState((prev) => ({
         ...prev,
-        step: 'select',
+        step: 'preview',
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
       }));
       addToast({ message: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), type: 'error' });
     }
-  }, [addToast, importState.password, importState.selectedFile, l10n]);
+  }, [addToast, importState.selectedFile, importState.password, l10n]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
@@ -557,11 +574,11 @@ export default function DataManagementScreen() {
             </Card>
           )}
 
-          {importState.step === 'preview' && (
+          {importState.step === 'analysing' && (
             <Card shadow="sm">
               <div className="data-mgmt-section">
                 <Localized id="data-mgmt-import-preview-title">
-                  <h2 className="data-mgmt-section-title">Preview import</h2>
+                  <h2 className="data-mgmt-section-title">Analyse backup file</h2>
                 </Localized>
 
                 <div className="data-mgmt-meta">
@@ -569,36 +586,8 @@ export default function DataManagementScreen() {
                     <Localized id="data-mgmt-import-meta-file">
                       <span className="data-mgmt-meta-label">File</span>
                     </Localized>
-                    <span className="data-mgmt-meta-value">{importState.selectedFile ?? l10n.getString('data-mgmt-import-meta-not-selected')}</span>
+                    <span className="data-mgmt-meta-value">{importState.selectedFile}</span>
                   </div>
-                  {importState.metadata && (
-                    <>
-                      <div className="data-mgmt-meta-row">
-                        <Localized id="data-mgmt-import-meta-store">
-                          <span className="data-mgmt-meta-label">Store</span>
-                        </Localized>
-                        <span>{importState.metadata.name}</span>
-                      </div>
-                      <div className="data-mgmt-meta-row">
-                        <Localized id="data-mgmt-import-meta-version">
-                          <span className="data-mgmt-meta-label">Version</span>
-                        </Localized>
-                        <span>{importState.metadata.version}</span>
-                      </div>
-                      <div className="data-mgmt-meta-row">
-                        <Localized id="data-mgmt-import-meta-created">
-                          <span className="data-mgmt-meta-label">Created</span>
-                        </Localized>
-                        <span>{new Date(importState.metadata.created).toLocaleString()}</span>
-                      </div>
-                      <div className="data-mgmt-meta-row">
-                        <Localized id="data-mgmt-import-meta-contains">
-                          <span className="data-mgmt-meta-label">Contains</span>
-                        </Localized>
-                        <span>{importState.metadata.types.join(', ')}</span>
-                      </div>
-                    </>
-                  )}
                 </div>
 
                 <div className="data-mgmt-field">
@@ -615,11 +604,67 @@ export default function DataManagementScreen() {
                   />
                 </div>
 
+                {importState.error && (
+                  <div className="data-mgmt-error" role="alert">{importState.error}</div>
+                )}
+
+                <div className="data-mgmt-actions">
+                  <Button variant="ghost" onClick={resetImport} disabled={importState.analysing}>
+                    <Localized id="data-mgmt-import-cancel">Cancel</Localized>
+                  </Button>
+                  <Button variant="primary" loading={importState.analysing} onClick={handleAnalyse} disabled={!importState.password}>
+                    <Localized id="data-mgmt-analyse-file">Analyse file</Localized>
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {importState.step === 'preview' && importState.metadata && (
+            <Card shadow="sm">
+              <div className="data-mgmt-section">
+                <Localized id="data-mgmt-import-preview-title">
+                  <h2 className="data-mgmt-section-title">Preview import</h2>
+                </Localized>
+
+                <div className="data-mgmt-meta">
+                  <div className="data-mgmt-meta-row">
+                    <Localized id="data-mgmt-import-meta-file">
+                      <span className="data-mgmt-meta-label">File</span>
+                    </Localized>
+                    <span className="data-mgmt-meta-value">{importState.selectedFile}</span>
+                  </div>
+                  <div className="data-mgmt-meta-row">
+                    <Localized id="data-mgmt-import-meta-store">
+                      <span className="data-mgmt-meta-label">Store</span>
+                    </Localized>
+                    <span>{importState.metadata.name}</span>
+                  </div>
+                  <div className="data-mgmt-meta-row">
+                    <Localized id="data-mgmt-import-meta-version">
+                      <span className="data-mgmt-meta-label">Version</span>
+                    </Localized>
+                    <span>{importState.metadata.version}</span>
+                  </div>
+                  <div className="data-mgmt-meta-row">
+                    <Localized id="data-mgmt-import-meta-created">
+                      <span className="data-mgmt-meta-label">Created</span>
+                    </Localized>
+                    <span>{new Date(importState.metadata.created).toLocaleString()}</span>
+                  </div>
+                  <div className="data-mgmt-meta-row">
+                    <Localized id="data-mgmt-import-meta-contains">
+                      <span className="data-mgmt-meta-label">Contains</span>
+                    </Localized>
+                    <span>{importState.metadata.types.join(', ')}</span>
+                  </div>
+                </div>
+
                 <div className="data-mgmt-actions">
                   <Button variant="ghost" onClick={resetImport}>
                     <Localized id="data-mgmt-import-cancel">Cancel</Localized>
                   </Button>
-                  <Button variant="primary" onClick={startImport} disabled={!importState.password}>
+                  <Button variant="primary" onClick={startImport}>
                     <Localized id="data-mgmt-import-start">Start import</Localized>
                   </Button>
                 </div>

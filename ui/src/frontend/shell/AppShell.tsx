@@ -112,6 +112,7 @@ export default function AppShell() {
       features: Object.keys(state.features).filter(
         (k) => state.features[k],
       ),
+      default_currency: state.default_currency,
     });
     setHasCompletedSetup(true);
   }, []);

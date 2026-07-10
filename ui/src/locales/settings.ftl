@@ -143,6 +143,8 @@ setup-review-none = None
 setup-review-all-on = Everything on!
 setup-review-more = +{ $count } more
 
+setup-default-currency-label = Default Currency
+
 setup-complete-title = All Set!
 setup-complete-desc = Your { $preset } POS is configured and ready. You can adjust settings anytime.
 setup-launch = Launch OZ-POS
@@ -234,9 +236,18 @@ settings-btn-save-aria =
        *[save] Save settings
     }
 settings-save-error = Failed to save settings. Please try again.
+settings-retry = Retry
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
 settings-font-smoothing-antialiased = Antialiased (crisp)
 settings-font-smoothing-subpixel = Subpixel (smooth)
+
+# ── System & License ──
+settings-system-license-header = System & License Ownership
+settings-software-edition = Software Edition
+settings-license-type = License Type
+settings-copyright-notice = Copyright Notice
+settings-commercial-contact = Commercial Contact
+settings-app-version = OZ-POS Enterprise v{ $version }
 
 # Appearance / Brand settings
 settings-appearance = Appearance

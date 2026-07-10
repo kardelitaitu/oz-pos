@@ -21,6 +21,13 @@ pub struct CompleteSetupArgs {
     pub preset: String,
     /// Enabled feature keys (kebab-case, e.g. `"cash-payment"`).
     pub features: Vec<String>,
+    /// ISO-4217 default currency code (e.g. `"IDR"`, `"USD"`).
+    #[serde(default = "default_currency")]
+    pub default_currency: String,
+}
+
+fn default_currency() -> String {
+    "IDR".to_string()
 }
 
 // ── Response types ───────────────────────────────────────────────────
@@ -104,7 +111,10 @@ pub async fn complete_setup(
         // 5. Mark setup as complete.
         Settings::set(&tx, oz_core::settings::keys::SETUP_COMPLETE, "1")?;
 
-        // 6. Dismiss the wizard so it doesn't show on next launch.
+        // 6. Set default currency.
+        Settings::set_default_currency(&tx, &args.default_currency)?;
+
+        // 7. Dismiss the wizard so it doesn't show on next launch.
         Settings::set(&tx, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false")?;
     }
     tx.commit()?;

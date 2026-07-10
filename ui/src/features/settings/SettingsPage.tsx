@@ -25,6 +25,7 @@ import {
   type SyncSettingsDto,
   type SyncAttemptResult,
 } from '@/api/offline';
+import { getVersion } from '@/api/system';
 import {
   getBrandSettings,
   setBrandPrimaryColour,
@@ -51,8 +52,11 @@ import './SettingsPage.css';
  */
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const [appVersion, setAppVersion] = useState('');
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
@@ -105,45 +109,45 @@ export default function SettingsPage() {
     document.documentElement.setAttribute('data-font-smoothing', displayFontSmoothing);
   }, [displayFontSmoothing]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [r, s, currenciesData, defaultCurrencyData, syncData, prefs, brand] = await Promise.all([
-          getReceiptSettings(),
-          getStoreSettings(),
-          listCurrencies(),
-          getDefaultCurrency(),
-          getSyncSettings(),
-          getUserPreferences(userId),
-          getBrandSettings(),
-        ]);
-        if (!cancelled) {
-          setReceipt(r);
-          setStore(s);
-          setDecimalSep(r.decimalSeparator);
-          setCurrencies(currenciesData);
-          setDefaultCurrencyState(defaultCurrencyData ?? 'USD');
-          setSync(syncData);
-          setSyncServerUrl(syncData.serverUrl ?? '');
-          const cs = prefs['cardsize'];
-          if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
-          const fs = prefs['fontsize'];
-          if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
-          if (prefs['font-smoothing'] !== undefined) setDisplayFontSmoothing(prefs['font-smoothing']);
-          setBrandColour(brand.primary_colour);
-          setBrandStoreName(brand.store_name);
-          const palette = deriveAccentPalette(brand.primary_colour);
-          applyAccentPalette(palette);
-        }
-      } catch {
-        // IPC unavailable — use defaults.
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [r, s, currenciesData, defaultCurrencyData, syncData, prefs, brand, ver] = await Promise.all([
+        getReceiptSettings(),
+        getStoreSettings(),
+        listCurrencies(),
+        getDefaultCurrency(),
+        getSyncSettings(),
+        getUserPreferences(userId),
+        getBrandSettings(),
+        getVersion(),
+      ]);
+      setReceipt(r);
+      setStore(s);
+      setDecimalSep(r.decimalSeparator);
+      setCurrencies(currenciesData);
+      setDefaultCurrencyState(defaultCurrencyData ?? 'USD');
+      setSync(syncData);
+      setSyncServerUrl(syncData.serverUrl ?? '');
+      const cs = prefs['cardsize'];
+      if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
+      const fs = prefs['fontsize'];
+      if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
+      if (prefs['font-smoothing'] !== undefined) setDisplayFontSmoothing(prefs['font-smoothing']);
+      setBrandColour(brand.primary_colour);
+      setBrandStoreName(brand.store_name);
+      setAppVersion(ver.version);
+      const palette = deriveAccentPalette(brand.primary_colour);
+      applyAccentPalette(palette);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
+    } finally {
+      setLoading(false);
+    }
   }, [userId]);
+
+  useEffect(() => { load(); }, [load]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -180,6 +184,19 @@ export default function SettingsPage() {
 
   if (loading) {
     return <div className="settings-page"><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="settings-page">
+        <div className="settings-error" role="alert">
+          <p>{loadError}</p>
+          <Button variant="secondary" onClick={() => { setLoadError(null); setLoading(true); load(); }}>
+            <Localized id="settings-retry"><span>Retry</span></Localized>
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -574,14 +591,19 @@ export default function SettingsPage() {
               </div>
 
               {syncResult && (
-                <p className="settings-hint">
-                  <Localized
-                    id="settings-sync-result"
-                    vars={{ synced: syncResult.synced, failed: syncResult.failed }}
-                  >
-                    <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
-                  </Localized>
-                </p>
+                <div className="settings-sync-result-block">
+                  <p className="settings-hint">
+                    <Localized
+                      id="settings-sync-result"
+                      vars={{ synced: syncResult.synced, failed: syncResult.failed }}
+                    >
+                      <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
+                    </Localized>
+                  </p>
+                  {syncResult.error && (
+                    <p className="settings-hint settings-hint--error">{syncResult.error}</p>
+                  )}
+                </div>
               )}
             </>
           )}
@@ -591,24 +613,34 @@ export default function SettingsPage() {
       {/* ── System & License Ownership ───────────────────────── */}
       <Card
         shadow="sm"
-        header={<h2 className="settings-section-title">System & License Ownership</h2>}
+        header={
+          <Localized id="settings-system-license-header">
+            <h2 className="settings-section-title">System &amp; License Ownership</h2>
+          </Localized>
+        }
       >
-        <div className="settings-form" style={{ gap: '0.65rem', fontSize: 'var(--text-sm)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
-            <span style={{ color: 'var(--color-fg-tertiary)' }}>Software Edition</span>
-            <span style={{ fontWeight: 600 }}>OZ-POS Enterprise v0.0.4</span>
+        <div className="settings-form settings-license-section">
+          <div className="settings-license-row">
+            <Localized id="settings-software-edition"><span className="settings-license-label">Software Edition</span></Localized>
+            <Localized id="settings-app-version" vars={{ version: appVersion }}>
+              <span className="settings-license-value">OZ-POS Enterprise v{appVersion}</span>
+            </Localized>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
-            <span style={{ color: 'var(--color-fg-tertiary)' }}>License Type</span>
-            <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>Proprietary Commercial License</span>
+          <div className="settings-license-row">
+            <Localized id="settings-license-type"><span className="settings-license-label">License Type</span></Localized>
+            <Localized id="settings-license-type-value">
+              <span className="settings-license-value settings-license-value--warning">Proprietary Commercial License</span>
+            </Localized>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
-            <span style={{ color: 'var(--color-fg-tertiary)' }}>Copyright Notice</span>
-            <span style={{ fontWeight: 500 }}>© 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
+          <div className="settings-license-row">
+            <Localized id="settings-copyright-notice"><span className="settings-license-label">Copyright Notice</span></Localized>
+            <Localized id="settings-copyright-notice-value">
+              <span className="settings-license-value settings-license-value--medium">&copy; 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
+            </Localized>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--color-fg-tertiary)' }}>Commercial Contact</span>
-            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>adikaradwiatmaja@gmail.com</span>
+          <div className="settings-license-row settings-license-row--last">
+            <Localized id="settings-commercial-contact"><span className="settings-license-label">Commercial Contact</span></Localized>
+            <span className="settings-license-value settings-license-value--mono">adikaradwiatmaja@gmail.com</span>
           </div>
         </div>
       </Card>

@@ -91,6 +91,7 @@ export const setHardwareSettings = (args: HardwareSettingsDto, userId: string): 
 export interface CompleteSetupArgs {
   preset: string;
   features: string[];
+  default_currency?: string;
 }
 
 export interface SetupStatus {

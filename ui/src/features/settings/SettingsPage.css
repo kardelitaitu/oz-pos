@@ -132,6 +132,73 @@
   color: var(--color-fg);
 }
 
+.settings-license-section {
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.settings-license-row {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.settings-license-row--last {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-license-label {
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-sm);
+}
+
+.settings-license-value {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+}
+
+.settings-license-value--mono {
+  font-family: monospace;
+}
+
+.settings-license-value--warning {
+  color: var(--color-warning);
+}
+
+.settings-license-value--medium {
+  font-weight: 500;
+}
+
+.settings-error {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--color-fg-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.settings-error p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
+
+.settings-sync-result-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.settings-hint--error {
+  color: var(--color-danger) !important;
+  font-size: var(--text-xs);
+}
+
 @media (max-width: 768px) {
   .settings-page {
     padding: 12px;
