@@ -145,11 +145,11 @@ pub async fn create_session(
         }
 
         const MAX_SESSIONS: usize = 256;
-        if store.len() >= MAX_SESSIONS {
-            if let Some(old_token) = store.keys().next().cloned() {
-                store.remove(&old_token);
-                tracing::warn!(old_token = %old_token, "session store full — evicted oldest session");
-            }
+        if store.len() >= MAX_SESSIONS
+            && let Some(old_token) = store.keys().next().cloned()
+        {
+            store.remove(&old_token);
+            tracing::warn!(old_token = %old_token, "session store full — evicted oldest session");
         }
 
         let context = SessionContext::new(

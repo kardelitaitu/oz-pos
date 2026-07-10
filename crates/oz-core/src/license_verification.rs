@@ -9,9 +9,9 @@
 //! The server URL is [`LICENSE_SERVER_URL`] with env var override.
 
 use base64::Engine;
+use rsa::RsaPublicKey;
 use rsa::pkcs1v15::VerifyingKey;
 use rsa::signature::Verifier;
-use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
@@ -343,9 +343,9 @@ pub fn store_subscription(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rsa::RsaPrivateKey;
     use rsa::pkcs8::{DecodePublicKey, EncodePublicKey};
     use rsa::signature::SignatureEncoding;
-    use rsa::RsaPrivateKey;
 
     /// Generate a test RSA key pair and return (private, public_pem).
     fn generate_test_keypair() -> (RsaPrivateKey, String) {
