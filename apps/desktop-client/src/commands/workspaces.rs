@@ -141,7 +141,7 @@ pub async fn create_workspace_instance_scoped(
         TenantSubscription::load(&global_db, "default")?
             .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
     };
-    sub.verify_signature("")?;
+    sub.verify_signature()?;
 
     let conn = state
         .db_manager
@@ -190,7 +190,7 @@ pub async fn recover_workspace_instances_scoped(
         TenantSubscription::load(&global_db, "default")?
             .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
     };
-    sub.verify_signature("")?;
+    sub.verify_signature()?;
 
     let conn = state
         .db_manager
@@ -230,7 +230,7 @@ pub async fn suspend_surplus_workspace_instances_scoped(
         TenantSubscription::load(&global_db, "default")?
             .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
     };
-    sub.verify_signature("")?;
+    sub.verify_signature()?;
 
     let conn = state
         .db_manager
