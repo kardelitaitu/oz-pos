@@ -114,4 +114,10 @@ staff-ws-section-label = Akses Ruang Kerja
 staff-ws-role-defaults = Gunakan default peran
 staff-ws-custom = Kustom
 
+# ── Fast User Switching (ADR #6) ──────────────────────────────────────────
+
+fastpin-switch-user = Ganti Pengguna
+fastpin-active-user = Aktif: { $name }
+fastpin-enter-pin = Masukkan PIN untuk { $user }
+
 # ── Product Management ──

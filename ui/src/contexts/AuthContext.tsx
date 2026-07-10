@@ -1,6 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { staffLogin, type LoginSessionDto } from '@/api/staff';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react";
+import { staffLogin, type LoginSessionDto } from "@/api/staff";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -24,6 +31,12 @@ export interface AuthContextValue extends AuthState {
   isManager: boolean;
   /** Whether the current user has owner-level access. */
   isOwner: boolean;
+  /**
+   * ADR #6: Hot-swap the session to a different user without triggering
+   * the full login/logout lifecycle (no workspace reset). Used by
+   * FastPINOverlay for shared touchscreen operator switching.
+   */
+  swapSession: (session: LoginSessionDto) => void;
 }
 
 // ── Context ─────────────────────────────────────────────────────────
@@ -49,20 +62,23 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const login = useCallback(async (username: string, pin: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await staffLogin({ username, pin });
-      setSession(result.session);
-      onLogin?.();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [onLogin]);
+  const login = useCallback(
+    async (username: string, pin: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await staffLogin({ username, pin });
+        setSession(result.session);
+        onLogin?.();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Login failed";
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onLogin],
+  );
 
   const logout = useCallback(() => {
     setSession(null);
@@ -73,8 +89,19 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
     setError(null);
   }, []);
 
-  const isManager = session?.role_name === 'manager' || session?.role_name === 'owner';
-  const isOwner = session?.role_name === 'owner';
+  /**
+   * ADR #6: Replace the current session with a new user's session
+   * without triggering the login flow (no loading/error reset, no onLogin).
+   * This is the hot-swap path used by FastPINOverlay.
+   */
+  const swapSession = useCallback((newSession: LoginSessionDto) => {
+    setSession(newSession);
+    setError(null);
+  }, []);
+
+  const isManager =
+    session?.role_name === "manager" || session?.role_name === "owner";
+  const isOwner = session?.role_name === "owner";
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -84,17 +111,24 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
       login,
       logout,
       clearError,
+      swapSession,
       isManager,
       isOwner,
     }),
-    [session, loading, error, login, logout, clearError, isManager, isOwner],
+    [
+      session,
+      loading,
+      error,
+      login,
+      logout,
+      clearError,
+      swapSession,
+      isManager,
+      isOwner,
+    ],
   );
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // ── Hook ────────────────────────────────────────────────────────────
@@ -111,7 +145,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    throw new Error('useAuth must be used within an <AuthProvider>');
+    throw new Error("useAuth must be used within an <AuthProvider>");
   }
   return ctx;
 }

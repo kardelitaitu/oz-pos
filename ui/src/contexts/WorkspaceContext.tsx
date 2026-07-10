@@ -1,17 +1,91 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { listWorkspaces, listWorkspaceScreens, resolveBootStore, type WorkspaceDto } from '@/api/workspaces';
-import { createSession, destroySession } from '@/api/staff';
-import { useAuth } from '@/contexts/AuthContext';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
+import {
+  listWorkspaces,
+  listWorkspaceScreens,
+  resolveBootStore,
+  type WorkspaceDto,
+} from "@/api/workspaces";
+import { createSession, destroySession } from "@/api/staff";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ── Fallback workspaces for development (ADR #4 shape) ──────────────
 
 // eslint-disable-next-line react-refresh/only-export-components
 const FALLBACK_WORKSPACES: WorkspaceDto[] = [
-  { instance_id: 'default-restaurant-pos', type_key: 'restaurant-pos', store_id: 'default', store_name: 'Main Store', name: 'Restaurant POS', description: 'Cashier terminal for restaurant ordering with menu categories and table management', icon: 'restaurant', layout_mode: 'fullscreen', colour: null, is_default: false },
-  { instance_id: 'default-store-pos', type_key: 'store-pos', store_id: 'default', store_name: 'Main Store', name: 'Store POS', description: 'Cashier terminal for retail with product lookup, customer management, and loyalty', icon: 'store', layout_mode: 'fullscreen', colour: null, is_default: false },
-  { instance_id: 'default-kds', type_key: 'kds', store_id: 'default', store_name: 'Main Store', name: 'Kitchen Display', description: 'Order queue display for the kitchen — tap tickets to advance their status', icon: 'kds', layout_mode: 'fullscreen', colour: null, is_default: false },
-  { instance_id: 'default-inventory', type_key: 'inventory', store_id: 'default', store_name: 'Main Store', name: 'Inventory Management', description: 'Manage products, stock levels, bundles, categories, and inventory reports', icon: 'inventory', layout_mode: 'sidebar', colour: null, is_default: false },
-  { instance_id: 'default-admin', type_key: 'admin', store_id: 'default', store_name: 'Main Store', name: 'Admin', description: 'System settings, staff management, reports, audit logs, and configuration', icon: 'admin', layout_mode: 'sidebar', colour: null, is_default: false },
+  {
+    instance_id: "default-restaurant-pos",
+    type_key: "restaurant-pos",
+    store_id: "default",
+    store_name: "Main Store",
+    name: "Restaurant POS",
+    description:
+      "Cashier terminal for restaurant ordering with menu categories and table management",
+    icon: "restaurant",
+    layout_mode: "fullscreen",
+    colour: null,
+    is_default: false,
+  },
+  {
+    instance_id: "default-store-pos",
+    type_key: "store-pos",
+    store_id: "default",
+    store_name: "Main Store",
+    name: "Store POS",
+    description:
+      "Cashier terminal for retail with product lookup, customer management, and loyalty",
+    icon: "store",
+    layout_mode: "fullscreen",
+    colour: null,
+    is_default: false,
+  },
+  {
+    instance_id: "default-kds",
+    type_key: "kds",
+    store_id: "default",
+    store_name: "Main Store",
+    name: "Kitchen Display",
+    description:
+      "Order queue display for the kitchen — tap tickets to advance their status",
+    icon: "kds",
+    layout_mode: "fullscreen",
+    colour: null,
+    is_default: false,
+  },
+  {
+    instance_id: "default-inventory",
+    type_key: "inventory",
+    store_id: "default",
+    store_name: "Main Store",
+    name: "Inventory Management",
+    description:
+      "Manage products, stock levels, bundles, categories, and inventory reports",
+    icon: "inventory",
+    layout_mode: "sidebar",
+    colour: null,
+    is_default: false,
+  },
+  {
+    instance_id: "default-admin",
+    type_key: "admin",
+    store_id: "default",
+    store_name: "Main Store",
+    name: "Admin",
+    description:
+      "System settings, staff management, reports, audit logs, and configuration",
+    icon: "admin",
+    layout_mode: "sidebar",
+    colour: null,
+    is_default: false,
+  },
 ];
 
 // ── Workspace scope context (ADR #4) ────────────────────────────────
@@ -55,6 +129,14 @@ export interface WorkspaceContextValue {
   resolvedStoreId: string;
   /** ADR #4 / ADR #7: opaque session token for scoped command authorization. */
   sessionToken: string | null;
+  /**
+   * ADR #6: Hot-swap the session token to a new user without resetting
+   * the active workspace/instance. Used by FastPINOverlay for shared
+   * touchscreen operator switching. Destroys the old token and creates
+   * a new one with the same scope (storeId, instanceId, typeKey, terminalId)
+   * but the new user's identity.
+   */
+  swapSessionToken: (newUserId: string, newRoleId: string) => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -62,24 +144,29 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 /** Default store ID for Phase 1 (single-store mode).
  *  ADR #4 Phase 3: Replaced by dynamic resolution via resolveBootStore().
  *  Kept as fallback when boot resolution fails. */
-const DEFAULT_STORE_ID = 'default';
+const DEFAULT_STORE_ID = "default";
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   // Standalone state — not derived from activeInstance, so it works
   // even before availableWorkspaces is loaded (no race condition).
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
-  const [activeInstance, setActiveInstance] = useState<WorkspaceDto | null>(null);
-  const [availableWorkspaces, setAvailableWorkspaces] = useState<WorkspaceDto[]>([]);
+  const [activeInstance, setActiveInstance] = useState<WorkspaceDto | null>(
+    null,
+  );
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<
+    WorkspaceDto[]
+  >([]);
   const [workspaceScreens, setWorkspaceScreensState] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const roleId = session?.role_id ?? '';
-  const userId = session?.user_id ?? '';
+  const roleId = session?.role_id ?? "";
+  const userId = session?.user_id ?? "";
 
   // ADR #4 Phase 3: Dynamically resolved store ID from device binding or primary store.
-  const [resolvedStoreId, setResolvedStoreId] = useState<string>(DEFAULT_STORE_ID);
+  const [resolvedStoreId, setResolvedStoreId] =
+    useState<string>(DEFAULT_STORE_ID);
   const [isBootResolved, setIsBootResolved] = useState(false);
 
   // ADR #4 / ADR #7: Opaque session token created by create_session command.
@@ -87,12 +174,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const sessionTokenRef = useRef(sessionToken);
   sessionTokenRef.current = sessionToken;
 
+  // ADR #6: Stable ref for the active instance so swapSessionToken
+  // can read it without depending on the state (keeps the callback
+  // reference stable).
+  const activeInstanceRef = useRef(activeInstance);
+  activeInstanceRef.current = activeInstance;
+
+  // ADR #6: Guard to prevent the token-creation effect from also
+  // creating a token during a hot-swap (swapSessionToken handles it).
+  const isHotSwappingRef = useRef(false);
+
   // Reset workspace selection on login/logout so the user always
   // sees the workspace picker after authentication.
   // Uses a ref for sessionToken to avoid the effect re-firing when
   // sessionToken changes (which would clear the workspace immediately
   // after selection).
+  //
+  // ADR #6: Only reset on null↔non-null transitions (login/logout),
+  // not on value-to-value changes (hot-swap via FastPINOverlay).
+  const prevSessionRef = useRef(session);
   useEffect(() => {
+    const prev = prevSessionRef.current;
+    prevSessionRef.current = session;
+
+    // Hot-swap: session changed from one user to another — don't reset.
+    if (prev && session) return;
+
+    // Fresh login (null → session) or logout (session → null): reset.
     setActiveWorkspace(null);
     setActiveInstance(null);
     const token = sessionTokenRef.current;
@@ -107,7 +215,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // setActiveWorkspace is called before the async list resolves.
   useEffect(() => {
     if (activeWorkspace && availableWorkspaces.length > 0) {
-      const instance = availableWorkspaces.find((i) => i.type_key === activeWorkspace);
+      const instance = availableWorkspaces.find(
+        (i) => i.type_key === activeWorkspace,
+      );
       setActiveInstance(instance ?? null);
     } else if (!activeWorkspace) {
       setActiveInstance(null);
@@ -119,7 +229,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const fetchWorkspaces = useCallback(
     async (storeId: string, cancelled: () => boolean) => {
       try {
-        const workspaces = await listWorkspaces(roleId, storeId, userId || undefined);
+        const workspaces = await listWorkspaces(
+          roleId,
+          storeId,
+          userId || undefined,
+        );
         if (!cancelled()) {
           if (workspaces.length > 0) {
             setAvailableWorkspaces(workspaces);
@@ -131,9 +245,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         if (!cancelled()) {
-          console.warn('WorkspaceContext: failed to list workspaces, using fallback', err);
+          console.warn(
+            "WorkspaceContext: failed to list workspaces, using fallback",
+            err,
+          );
           setAvailableWorkspaces(FALLBACK_WORKSPACES);
-          setError('Failed to load workspaces from server. Using demo workspaces.');
+          setError(
+            "Failed to load workspaces from server. Using demo workspaces.",
+          );
         }
       }
     },
@@ -159,6 +278,49 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       fetchWorkspaces(storeId, () => false).finally(() => setLoading(false));
     },
     [fetchWorkspaces],
+  );
+
+  // ADR #6: Hot-swap the session token to a new user without resetting
+  // the workspace. Used by FastPINOverlay for shared touchscreen
+  // operator switching.
+  //
+  // Destroys the old token and creates a new one with the same scope
+  // (storeId, instanceId, typeKey, terminalId) but the new user's
+  // identity. The active workspace and instance are preserved.
+  //
+  // Sets isHotSwappingRef to prevent the [activeInstance, session]
+  // effect from also creating a token during the swap (race condition).
+  const swapSessionToken = useCallback(
+    async (newUserId: string, newRoleId: string) => {
+      const instance = activeInstanceRef.current;
+      if (!instance) return;
+
+      isHotSwappingRef.current = true;
+      try {
+        // Destroy the old token.
+        const prev = sessionTokenRef.current;
+        if (prev) {
+          await destroySession(prev).catch(() => {});
+          setSessionToken(null);
+        }
+
+        // Create a new token with the same scope but new user.
+        const result = await createSession({
+          user_id: newUserId,
+          role_id: newRoleId,
+          store_id: instance.store_id,
+          instance_id: instance.instance_id,
+          type_key: instance.type_key,
+          // TODO(#ADR7): Resolve terminal_id from device binding.
+          terminal_id: "",
+        });
+
+        setSessionToken(result.session_token);
+      } finally {
+        isHotSwappingRef.current = false;
+      }
+    },
+    [], // stable — reads from refs
   );
 
   // ADR #4 Phase 3: Resolve the boot store first, then load workspaces.
@@ -188,7 +350,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           setIsBootResolved(true);
         }
       } catch (err) {
-        console.warn('WorkspaceContext: boot store resolution failed, using default', err);
+        console.warn(
+          "WorkspaceContext: boot store resolution failed, using default",
+          err,
+        );
         if (!cancelled) {
           setResolvedStoreId(DEFAULT_STORE_ID);
           setIsBootResolved(true);
@@ -231,8 +396,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // ADR #4 / ADR #7: Create a session token when an instance is activated.
   // This effect fires after activeInstance changes (set by handleSetActiveInstance
   // or the useEffect that syncs from activeWorkspace).
+  //
+  // ADR #6: Skips token creation when isHotSwappingRef is set, because
+  // swapSessionToken handles token lifecycle during a hot-swap.
   useEffect(() => {
     if (!activeInstance || !session?.user_id) return;
+    if (isHotSwappingRef.current) return; // ADR #6: swapSessionToken handles this
 
     let cancelled = false;
 
@@ -251,7 +420,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       type_key: activeInstance.type_key,
       // TODO(#ADR7): Resolve terminal_id from device binding or system hostname.
       // Currently hardcoded as empty; ADR #7 will add a get_device_id() Tauri command.
-      terminal_id: '',
+      terminal_id: "",
     })
       .then((result) => {
         if (!cancelled) {
@@ -260,7 +429,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       })
       .catch((err) => {
         if (!cancelled) {
-          console.warn('WorkspaceContext: failed to create session token', err);
+          console.warn("WorkspaceContext: failed to create session token", err);
         }
       });
 
@@ -279,21 +448,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ADR #4: set active instance directly.
-  const handleSetActiveInstance = useCallback((instance: WorkspaceDto | null) => {
-    if (instance) {
-      setLastWorkspace(instance.type_key);
-      setActiveWorkspace(instance.type_key);
-    } else {
-      setActiveWorkspace(null);
-    }
-    setActiveInstance(instance);
-  }, []);
+  const handleSetActiveInstance = useCallback(
+    (instance: WorkspaceDto | null) => {
+      if (instance) {
+        setLastWorkspace(instance.type_key);
+        setActiveWorkspace(instance.type_key);
+      } else {
+        setActiveWorkspace(null);
+      }
+      setActiveInstance(instance);
+    },
+    [],
+  );
 
   const retry = useCallback(() => {
     if (!roleId) return;
     setLoading(true);
     setError(null);
-    fetchWorkspaces(resolvedStoreId, () => false).finally(() => setLoading(false));
+    fetchWorkspaces(resolvedStoreId, () => false).finally(() =>
+      setLoading(false),
+    );
   }, [roleId, resolvedStoreId, fetchWorkspaces]);
 
   // Derived scope from active instance
@@ -325,6 +499,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           switchStore,
           resolvedStoreId,
           sessionToken,
+          swapSessionToken,
         }}
       >
         {children}
@@ -336,6 +511,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext);
-  if (!ctx) throw new Error('useWorkspace must be used within a WorkspaceProvider');
+  if (!ctx)
+    throw new Error("useWorkspace must be used within a WorkspaceProvider");
   return ctx;
 }
