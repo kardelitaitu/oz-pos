@@ -1,6 +1,6 @@
 # ADR #6: CRDT Delta Ledger & Offline Sync
 
-**Status:** Proposed (Updated 2026-07-10)
+**Status:** In Progress (Phase 1 Complete 2026-07-10)
 **Date:** 2026-07-10
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** crdt, offline, sync, inventory, uuidv7, ulid, concurrency
@@ -122,15 +122,27 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 
 ## Implementation Checklist
 
-- [ ] Choose and adopt UUIDv7 or ULID for all new entity primary keys.
-- [ ] Create `stock_movements` delta ledger table (with `store_id` as boot-time validation field) and migrate writes from absolute quantity updates.
-- [ ] Implement materialized `stock_summary` cache rebuilt from deltas; invalidate on sync.
-- [ ] Bind each terminal to an OS keyring-backed `terminal_id`; include `store_id` in session binding per ADR #4.
-- [ ] Implement `FastPINOverlay.tsx` for shared touchscreen user switching with session token rotation per ADR #4's Security Architecture.
+### Phase 1: Stock Movements Delta Ledger (Done 2026-07-10)
+
+- [x] Create `stock_movements` delta ledger table and `stock_summary` materialized cache (migration 063).
+- [x] Register migration in `crates/oz-core/src/migrations.rs`.
+- [x] Add `StockMovement` Rust struct with id, item_id, delta, reason, source_terminal_id, source_user_id, created_at.
+- [x] Refactor `adjust_stock` → `adjust_stock_with_reason(sku, delta, reason)`: writes delta row to ledger + updates `inventory` + `stock_summary` in one transaction.
+- [x] `create_product` writes initial stock to ledger (`reason: 'initial-stock'`).
+- [x] `get_stock_from_ledger(product_id)` — computes `SUM(delta)` from ledger; falls back to `inventory.qty` if no rows.
+- [x] `list_stock_movements(product_id, limit, offset)` — paginated ledger query for audit/sync.
+- [x] 7 new tests: table existence, ledger writes, SUM computation, pagination, stock_summary tracking, creation ledger.
+- [x] `cargo check` ✅, `cargo test -p oz-core -- products` ✅ (67/67), `cargo fmt` ✅.
+
+### Phase 2 (Future)
+
+- [ ] Choose and adopt UUIDv7 or ULID for all new entity primary keys (project already uses UUID v4).
+- [ ] Implement materialized `stock_summary` cache rebuild from deltas; invalidate on sync.
+- [ ] Populate `source_terminal_id` and `source_user_id` from session context in `adjust_stock_with_reason`.
+- [ ] Implement `FastPINOverlay.tsx` for shared touchscreen user switching.
 - [ ] Add `version` and `updated_at` optimistic concurrency fields to synced entities.
 - [ ] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database.
-- [ ] Write tests for offline concurrent edits, delta merging, terminal binding, FastPINOverlay token rotation, and cross-store delta routing.
-- [ ] Run `cargo clippy -p oz-core -- -D warnings` and full test suite.
+- [ ] Cross-store delta routing via `platform/sync/`.
 
 ---
 

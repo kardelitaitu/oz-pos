@@ -664,7 +664,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 | Concern | Reason | Tracking |
 |---|---|---|
 | **Subscription tier & entitlement enforcement** | Business-model decision; instance status enum (Active/QuotaSuspended/Archived) is defined here but quota logic is separate. | ADR #5 |
-| **CRDT delta ledger & offline UUIDv7 sync** | Major data-model change for inventory. | ADR #6 |
+| **CRDT delta ledger & offline UUIDv7 sync** | Phase 1 complete: `stock_movements` delta ledger table + `stock_summary` cache + `adjust_stock_with_reason`. Remaining: UUIDv7, cross-store sync, FastPINOverlay. | ADR #6 🔄 |
 | **Hard `ScopeGuard` compile-time enforcement** | Follow-up to soft scoping; the `SessionContext` pattern described in Security Architecture is the soft version. ADR #7 completed the migration — all 84 desktop commands use `session_token` + `resolve_session()`, enforced by `scripts/verify-no-raw-params.sh` in CI. | ADR #7 ✅ |
 | **Scoped real-time event bus** | Events carry `store_id`; LAN forwarder is inherently store-scoped since each POS terminal is device-bound to one store. KDS tablets filter by store. | ADR #8 ✅ |
 | **Cross-store sync protocol** | The sync layer (`platform/sync/`) already exists; cross-store sync is an extension. | Future ADR |

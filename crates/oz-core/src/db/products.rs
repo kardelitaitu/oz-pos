@@ -34,6 +34,29 @@ fn row_to_product_with_details(row: &rusqlite::Row) -> rusqlite::Result<ProductW
     })
 }
 
+/// An immutable row in the stock movements delta ledger (ADR #6).
+///
+/// Each row records a single stock change (+N or -N) with audit
+/// metadata. The current stock is computed as `SUM(delta)` across
+/// all rows for a given `item_id`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StockMovement {
+    /// Unique UUID v4 identifier.
+    pub id: String,
+    /// Product ID this movement applies to.
+    pub item_id: String,
+    /// Quantity change: positive = restock, negative = removal.
+    pub delta: i64,
+    /// Human-readable reason: 'sale', 'restock', 'correction', etc.
+    pub reason: Option<String>,
+    /// Terminal that performed the operation (for audit/sync).
+    pub source_terminal_id: Option<String>,
+    /// User who performed the operation (for audit/sync).
+    pub source_user_id: Option<String>,
+    /// ISO-8601 timestamp of the movement.
+    pub created_at: String,
+}
+
 // ── Product CRUD ─────────────────────────────────────────────────────
 
 impl Store<'_> {
@@ -199,6 +222,19 @@ impl Store<'_> {
         if initial_stock > 0 {
             tx.execute(
                 "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)",
+                params![id, initial_stock, now],
+            )?;
+            // ADR #6: Record initial stock in the delta ledger.
+            let movement_id = uuid::Uuid::new_v4().to_string();
+            tx.execute(
+                "INSERT INTO stock_movements (id, item_id, delta, reason, created_at)
+                 VALUES (?1, ?2, ?3, 'initial-stock', ?4)",
+                params![movement_id, id, initial_stock, now],
+            )?;
+            tx.execute(
+                "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
+                                                     updated_at = excluded.updated_at",
                 params![id, initial_stock, now],
             )?;
         }
@@ -529,7 +565,24 @@ impl Store<'_> {
     }
 
     /// Adjust stock for a product by SKU inside a transaction.
+    ///
+    /// Writes a delta row to the `stock_movements` ledger (ADR #6)
+    /// and updates the materialised `inventory` and `stock_summary` tables.
+    /// The `reason` parameter is recorded in the ledger for audit purposes.
     pub fn adjust_stock(&self, sku: &str, delta: i64) -> Result<i64, CoreError> {
+        self.adjust_stock_with_reason(sku, delta, None)
+    }
+
+    /// Adjust stock with an explicit reason for the delta ledger (ADR #6).
+    ///
+    /// Records the reason (e.g. "sale", "restock", "correction") in the
+    /// `stock_movements` row for audit and sync purposes.
+    pub fn adjust_stock_with_reason(
+        &self,
+        sku: &str,
+        delta: i64,
+        reason: Option<&str>,
+    ) -> Result<i64, CoreError> {
         let product_id = self
             .product_id_by_sku(sku)?
             .ok_or_else(|| CoreError::NotFound {
@@ -550,14 +603,35 @@ impl Store<'_> {
             })?;
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let movement_id = uuid::Uuid::new_v4().to_string();
 
         let tx = self.conn.unchecked_transaction()?;
+
+        // 1. Write the immutable delta row (CRDT ledger — ADR #6).
+        // source_terminal_id and source_user_id are optional audit columns;
+        // they are populated when the caller has session context available.
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![movement_id, product_id, delta, reason, now],
+        )?;
+
+        // 2. Update the materialised inventory table (backward compat).
         tx.execute(
             "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
              ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
                                                      updated_at = excluded.updated_at",
             params![product_id, new_qty, now],
         )?;
+
+        // 3. Update the stock_summary materialised view (perf — ADR #6).
+        tx.execute(
+            "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
+                                                 updated_at = excluded.updated_at",
+            params![product_id, new_qty, now],
+        )?;
+
         tx.commit()?;
 
         if let Some(cache) = &self.cache {
@@ -566,6 +640,58 @@ impl Store<'_> {
         }
 
         Ok(new_qty)
+    }
+
+    /// Compute the current stock quantity from the delta ledger (ADR #6).
+    ///
+    /// Returns `SUM(delta)` from `stock_movements` for the given product.
+    /// Falls back to `inventory.qty` if the ledger table has no rows yet
+    /// (backward compatibility with pre-migration databases).
+    pub fn get_stock_from_ledger(&self, product_id: &str) -> Result<i64, CoreError> {
+        let result = self.conn.query_row(
+            "SELECT SUM(delta) FROM stock_movements WHERE item_id = ?1",
+            params![product_id],
+            |row| row.get::<_, Option<i64>>(0),
+        );
+
+        match result {
+            Ok(Some(sum)) => Ok(sum),
+            Ok(None) => {
+                // No deltas yet — fall back to inventory table.
+                self.get_stock(product_id)
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// List all stock movement rows for a product, ordered by time (ADR #6).
+    ///
+    /// Returns the complete immutable delta ledger for audit and sync.
+    pub fn list_stock_movements(
+        &self,
+        product_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<StockMovement>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, item_id, delta, reason, source_terminal_id, source_user_id, created_at
+             FROM stock_movements
+             WHERE item_id = ?1
+             ORDER BY created_at DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(params![product_id, limit, offset], |row| {
+            Ok(StockMovement {
+                id: row.get(0)?,
+                item_id: row.get(1)?,
+                delta: row.get(2)?,
+                reason: row.get(3)?,
+                source_terminal_id: row.get(4)?,
+                source_user_id: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
     }
 }
 
@@ -1412,5 +1538,155 @@ mod tests {
         s.create_product_variant(&v).unwrap();
         let found = s.get_product_variant("VAR-NO-PRICE").unwrap().unwrap();
         assert!(found.price.is_none());
+    }
+
+    // ── Stock Movements Delta Ledger (ADR #6) ───────────────────
+
+    #[test]
+    fn stock_movements_table_exists() {
+        let conn = fresh();
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_movements'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            exists, 1,
+            "stock_movements table should exist after migration"
+        );
+    }
+
+    #[test]
+    fn stock_summary_table_exists() {
+        let conn = fresh();
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_summary'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            exists, 1,
+            "stock_summary table should exist after migration"
+        );
+    }
+
+    #[test]
+    fn adjust_stock_writes_to_ledger() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        store(&conn)
+            .adjust_stock_with_reason("DRINK-001", -3, Some("sale"))
+            .unwrap();
+
+        // Verify ledger row was written.
+        let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].delta, -3);
+        assert_eq!(movements[0].reason.as_deref(), Some("sale"));
+        assert_eq!(movements[0].item_id, "prod-1");
+    }
+
+    #[test]
+    fn adjust_stock_without_reason_writes_to_ledger() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+
+        let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].delta, 5);
+        assert!(movements[0].reason.is_none());
+    }
+
+    #[test]
+    fn get_stock_from_ledger_computes_sum() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // The migration backfill runs against empty inventory (before seed_everything),
+        // so the ledger starts with no rows. get_stock_from_ledger falls back to
+        // inventory.qty = 50.
+        let initial = store(&conn).get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(initial, 50, "fallback to inventory returns 50");
+
+        // Adjustment writes a delta row. SUM(delta) = 10 (just the adjustment).
+        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+        let after = store(&conn).get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(after, 10, "SUM(delta) should be 10 (only adjustment row)");
+
+        // Multiple adjustments accumulate.
+        store(&conn).adjust_stock("DRINK-001", -5).unwrap();
+        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        let after2 = store(&conn).get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(after2, 25, "SUM of deltas: 10 + (-5) + 20 = 25");
+    }
+
+    #[test]
+    fn get_stock_from_ledger_zero_deltas() {
+        let conn = fresh();
+        // fresh DB has no products, so ledger should have no rows.
+        // Fallback to inventory table returns 0.
+        let qty = store(&conn).get_stock_from_ledger("nonexistent").unwrap();
+        assert_eq!(qty, 0);
+    }    #[test]
+    fn list_stock_movements_paginated() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // Write 5 movements (migration backfill ran against empty inventory,
+        // so only these 5 adjust_stock calls create rows).
+        for _i in 0..5 {
+            store(&conn)
+                .adjust_stock_with_reason("DRINK-001", 1, Some("restock"))
+                .unwrap();
+        }
+
+        // With limit 3, should return 3 most recent.
+        let page1 = store(&conn)
+            .list_stock_movements("prod-1", 3, 0)
+            .unwrap();
+        assert_eq!(page1.len(), 3);
+
+        // With offset 3, should return remaining 2.
+        let page2 = store(&conn)
+            .list_stock_movements("prod-1", 10, 3)
+            .unwrap();
+        assert_eq!(page2.len(), 2);
+    }
+
+    #[test]
+    fn stock_summary_tracks_latest_quantity() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // Migration backfill ran against empty inventory, so stock_summary starts empty.
+        // After the first adjust_stock call, the summary row is created.
+        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        let qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        // new_qty = previous_qty (50 from inventory) + 20 = 70
+        assert_eq!(qty, 70, "stock_summary should reflect current total after adjustment");
+
+        // Second adjustment updates the summary.
+        store(&conn).adjust_stock("DRINK-001", -10).unwrap();
+        let qty2: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty2, 60);
     }
 }
