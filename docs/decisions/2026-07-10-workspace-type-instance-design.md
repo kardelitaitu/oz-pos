@@ -675,7 +675,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 ## Phased Implementation & Migration Guide
 
-> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅, Session Token Infrastructure ✅, Frontend Token Integration ✅.</toml>
+> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅, Session Token Infrastructure ✅, Frontend Token Integration ✅, End-to-End Pattern Demo ✅.</toml>
 
 ### Phase 1: Workspace Types + Default Instances + Session Context
 
@@ -705,6 +705,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] Frontend `createSession`/`destroySession` API wrappers in `ui/src/api/staff.ts`.
    - [x] `sessionToken` lifecycle in `WorkspaceContext`: auto-created on workspace selection, auto-destroyed on logout/store-switch, token rotation on `switchStore()`.
    - [x] `WorkspaceContextValue` exposes `sessionToken: string | null` for commands to pass to backend.
+   - [x] **End-to-end pattern demonstration:** `list_products_scoped` command implements the canonical session token pattern (resolve session → open store DB → query). Registered in `lib.rs`. Old `list_products` preserved for backward compatibility, marked deprecated for multi-store.
    - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*

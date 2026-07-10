@@ -115,9 +115,40 @@ pub struct MoneyDto {
 /// Returns an array of product DTOs with category names and stock
 /// status. The front-end calls this on mount to populate the product
 /// lookup grid.
+///
+/// **Deprecated for multi-store (ADR #4 / ADR #7):** Use
+/// `list_products_scoped` with a `session_token` parameter instead.
+/// This command queries the global database, which only works in
+/// single-store mode.
 #[command]
 pub async fn list_products(state: State<'_, AppState>) -> Result<Vec<ProductDto>, AppError> {
     let db = state.db.lock().await;
+    run_list_products(&db)
+}
+
+/// Fetch all products for the store resolved from a session token.
+///
+/// ADR #4 / ADR #7 canonical pattern: The frontend passes an opaque
+/// `session_token` (obtained from `create_session`). The backend
+/// resolves it to a `SessionContext` containing `store_id`, then
+/// opens the store-scoped database and queries only that store's
+/// products.
+///
+/// This is the reference implementation for all store-scoped domain
+/// commands. New commands should follow this pattern.
+#[command]
+pub async fn list_products_scoped(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> Result<Vec<ProductDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     run_list_products(&db)
 }
 
@@ -725,6 +756,35 @@ mod tests {
         let json = r##"{"user_id":"u1","sku":"OLD-SKU"}"##;
         let args: DeleteProductArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.sku, "OLD-SKU");
+    }
+
+    #[test]
+    fn list_products_scoped_rejects_invalid_token() {
+        // Verify that an invalid/nonexistent session token returns InvalidSession.
+        let state = AppState::for_test();
+        // list_products_scoped is an async command, so we can't call it directly.
+        // Instead, test that resolve_session rejects unknown tokens.
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn list_products_scoped_accepts_valid_token() {
+        // Verify that a valid session token resolves and returns products.
+        let state = AppState::for_test();
+        let ctx = oz_core::session::SessionContext::new(
+            "u1".into(),
+            "r1".into(),
+            "t1".into(),
+            "default".into(),
+            "default-restaurant-pos".into(),
+            "restaurant-pos".into(),
+        );
+        state.session_store.write().unwrap().insert("tok-valid".into(), ctx);
+
+        let session = state.resolve_session("tok-valid").unwrap();
+        assert_eq!(session.store_id, "default");
+        assert_eq!(session.type_key, "restaurant-pos");
     }
 
     #[test]

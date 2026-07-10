@@ -212,6 +212,7 @@ pub fn run() {
             commands::setup::complete_setup,
             commands::setup::dismiss_setup_wizard,
             commands::products::list_products,
+            commands::products::list_products_scoped,
             commands::products::create_product,
             commands::products::update_product,
             commands::products::delete_product,
