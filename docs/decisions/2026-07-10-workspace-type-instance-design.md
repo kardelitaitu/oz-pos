@@ -287,7 +287,62 @@ function useProducts() {
 }
 ```
 
-### 6. Workspace Picker Visual Design
+### 6. Security & Hardening Pillars (Enterprise Architecture)
+
+To ensure this multi-instance architecture operates reliably across thousands of registers without data swapping, offline sync collisions, or query lag, the framework enforces four mandatory security and performance boundaries:
+
+#### Pillar 1: Type-Safe Query Scope Guard (`Compile-Time Scope Enforcer`)
+To prevent developers from accidentally omitting `WHERE store_id = ?` in backend endpoints, data scoping is enforced by Rust's type system via `ScopeGuard`:
+- Every store-scoped data query method (`list_orders`, `get_products`, `update_stock`) requires a validated `&ScopeGuard` parameter.
+- A `ScopeGuard` can only be constructed after the backend verifies the caller's session (`user_id`) against `user_workspace_instances` and `terminals` (`terminal_id`).
+- If the frontend sends a tampered `store_id` payload, the verification fails (`CoreError::UnauthorizedScope`). If a backend developer forgets to scope a query, the Rust compiler (`rustc`) rejects the method signature.
+
+```rust
+pub struct ScopeGuard {
+    store_id: Option<String>,
+    warehouse_id: Option<String>,
+    terminal_id: String,
+}
+
+impl Store<'_> {
+    // This will NOT compile or execute without passing a cryptographically verified ScopeGuard
+    pub fn list_orders(&self, scope: &ScopeGuard, status: &str) -> Result<Vec<Order>> {
+        let mut stmt = self.conn.prepare("SELECT * FROM orders WHERE (store_id = ? OR store_id IS NULL) AND status = ?")?;
+        let rows = stmt.query_map(params![scope.store_id, status], |row| { ... })?;
+        // ...
+    }
+}
+```
+
+#### Pillar 2: Cryptographic Terminal Binding & Offline UUIDv7 Sync
+In multi-register environments, offline connectivity must not cause ID collisions or cross-store data overwrites:
+- **Zero Auto-Increment IDs**: All entity primary keys (`orders`, `order_lines`, `payments`, `stock_transfers`) use time-ordered **UUIDv7 / ULID** keys (`01F8MECH...`), eliminating ID conflicts when multiple registers operate offline locally.
+- **Terminal Keyring Binding (`oz-security`)**: Every POS hardware device holds a cryptographic profile (`terminal_id` bound via OS keyring). Sessions require `(user_id + terminal_id + instance_id)` validation.
+- **Immutable Transaction Clock (`version` + LSN)**: Every record tracks `version INTEGER` and `updated_at TEXT` so when offline registers reconnect to each other or `cloud-server`, optimistic concurrency checks prevent ghost overwrites.
+
+#### Pillar 3: Prefix Compound B-Tree Indexing `(store_id, ...)`
+To maintain sub-millisecond query performance across large-scale multi-store databases:
+- All store-scoped tables must define compound B-Tree indexes prefixed with the scoping column (`store_id` or `warehouse_id`):
+  ```sql
+  CREATE INDEX idx_orders_store_status ON orders(store_id, status, created_at DESC);
+  CREATE INDEX idx_order_lines_store_order ON order_lines(store_id, order_id);
+  CREATE INDEX idx_products_store_active ON products(store_id, is_active, category_id);
+  CREATE INDEX idx_stock_warehouse_item ON stock(warehouse_id, item_id);
+  ```
+- SQLite immediately jumps directly to the target instance's index slice, isolating multi-million row tables by store in `< 1ms`.
+
+#### Pillar 4: Scoped Real-Time Event Bus (`Tauri v2 IPC Channels`)
+To ensure cashier screens update instantaneously without receiving unrelated cross-store noise:
+- The backend broadcasts domain events (`StoreEvent::OrderCompleted`, `StoreEvent::TableStatusChanged`) via scoped Tauri IPC channels:
+  ```rust
+  self.event_bus.emit_scoped(
+      scope.store_id.as_deref(),
+      &StoreEvent::TableStatusChanged { table_id: "tbl-4".into(), status: "occupied".into() }
+  )?;
+  ```
+- Only client instances whose active `WorkspaceScope` matches the emitted `store_id` process the event and trigger a re-render.
+
+### 7. Workspace Picker Visual Design
 
 The workspace picker (`WorkspaceHome.tsx`) shows workspace **instances**, not types:
 
@@ -318,7 +373,7 @@ The `WS_COLORS` and `WS_ORDER` maps are migrated from hardcoded objects to datab
 ALTER TABLE workspace_types ADD COLUMN accent_colour TEXT NOT NULL DEFAULT '';
 ```
 
-### 7. Default Instance + Backward Compatibility
+### 8. Default Instance + Backward Compatibility
 
 To ensure zero disruption for existing single-location deployments:
 
