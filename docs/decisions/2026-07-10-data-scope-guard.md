@@ -91,7 +91,7 @@ pub async fn list_products_scoped(
 | `complete_sale` | `args: CompleteSaleArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `complete_sale_scoped` + `CompleteSaleScopedArgs` + dual-lock DB pattern |
 | `start_sale` | `args: StartSaleArgs` | `session_token: String, args` | ✅ `start_sale_scoped` + API wrapper |
 | `add_line` | `args: AddLineArgs` | `session_token: String, args` | ✅ `add_line_scoped` + API wrapper |
-| *(remaining domain commands)* | various | `session_token: String, ...` | ⏳ |
+| *(43 remaining commands: kds 5, promotions 4, settings 8, setup 1, shifts 1, tables 6, terminals 9, workspaces 9)* | various | `session_token: String, ...` | 🔧 `scripts/verify-no-raw-params.sh` tracks |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
 
@@ -143,13 +143,16 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `list_active_carts_scoped` / `get_active_cart_scoped` — migrate cart queries
 - [x] `hold_cart_scoped` / `list_held_carts_scoped` / `list_open_bills_scoped` / `get_held_cart_scoped` / `delete_held_cart_scoped` / `compute_cart_tax_scoped` — migrate held cart commands
 - [x] `complete_sale_scoped` — migrate with `CompleteSaleScopedArgs` + dual-lock DB pattern
-- [x] `start_sale_scoped` / `add_line_scoped` — migrate POS cart creation
-- [ ] *(remaining domain commands)*
+- [x] `start_sale_scoped` / `add_line_scoped` — migrate POS cart creation (POS module fully scoped)
+- [x] Phase 4 verification script created: `scripts/verify-no-raw-params.sh` (detects 43 remaining violations across kds, promotions, settings, setup, shifts, tables, terminals, workspaces)
+- [ ] *(migrate remaining desktop commands to bring violations to zero)*
 
-### Phase 4: Enforcement ⏳
-- [ ] Custom Clippy lint rule: reject `store_id: String` in command params
-- [ ] CI integration: lint runs on PRs
-- [ ] Backward-compatible deprecation period (old commands preserved)
+### Phase 4: Enforcement 🔧
+- [x] `scripts/verify-no-raw-params.sh` — greps desktop command files for `store_id: String` / `user_id: String` function parameters. Excludes `pub` struct fields and tablet-client (not yet migrated). Currently detects 43 remaining commands needing migration (see below).
+- [x] Integrated into `scripts/check.sh` CI pipeline (runs after clippy, before tests).
+- [x] Backward-compatible deprecation period: all 28 migrated old commands preserved with `**Deprecated**` doc comments.
+- [ ] Custom Clippy lint rule: reject `store_id: String` in command params *(future enhancement — grep-based guard is the pragmatic first step)*.
+- [ ] Bring violations to zero by migrating remaining desktop commands (kds, promotions, settings, setup, shifts, tables, terminals, workspaces).
 
 ---
 

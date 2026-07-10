@@ -60,6 +60,9 @@ for pkg in "${packages[@]}"; do
     step "clippy $pkg" "cargo clippy -p $pkg --all-targets --all-features -- -D warnings" cargo clippy -p "$pkg" --all-targets --all-features -- -D warnings
 done
 
+# ── ADR #7 Phase 4: no raw store_id/user_id in command signatures ───────
+step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bash scripts/verify-no-raw-params.sh
+
 for pkg in "${packages[@]}"; do
     step "test $pkg" "cargo test -p $pkg --all-features" cargo test -p "$pkg" --all-features
 done
