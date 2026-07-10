@@ -124,7 +124,7 @@
 .sc-add-line-item:last-child { border-bottom: none; }
 .sc-add-line-item--sel { background: var(--color-accent-dim); }
 .sc-add-line-name { font-weight: 500; }
-.sc-add-line-sku { color: var(--text-muted, #666); }
+.sc-add-line-sku { color: var(--color-fg-tertiary); }
 .sc-add-line-stock { text-align: right; }
 
 .sc-add-line-form {
@@ -184,7 +184,7 @@
 }
 
 .sc-lines-header {
-  background: var(--bg-muted, #f3f4f6);
+  background: var(--color-bg-surface);
   font-weight: 600;
   font-size: 0.8rem;
 }
@@ -194,7 +194,7 @@
 }
 
 .sc-lines-total {
-  background: var(--bg-muted, #f9fafb);
+  background: var(--color-bg-surface);
   font-weight: 600;
 }
 

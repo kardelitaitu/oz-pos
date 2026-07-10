@@ -18,12 +18,19 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TOKENS_FILE = PROJECT_ROOT / "ui" / "src" / "styles" / "tokens.css"
+THEME_TOKENS_FILE = PROJECT_ROOT / "ui" / "src" / "frontend" / "themes" / "tokens.css"
 UI_SRC_DIR = PROJECT_ROOT / "ui" / "src"
 EXCLUDE_DIRS = {"node_modules"}
 
 # ── 1. Parse tokens.css: extract token name -> value mappings ─────────────
 
-TOKEN_DEF_RE = re.compile(r"^\s{2}--([a-zA-Z0-9_/-]+):\s*(.+?);\s*$")
+# Matches token definitions that may span multiple lines.
+# First line: "  --token-name: value_start"
+# Subsequent lines: "    value_continuation"
+# Terminated by a semicolon at end of a line.
+SINGLE_LINE_TOKEN_RE = re.compile(r"^\s{2}--([a-zA-Z0-9_/-]+):\s*(.+?);\s*$")
+MULTI_LINE_TOKEN_START_RE = re.compile(r"^\s{2}--([a-zA-Z0-9_/-]+):\s*(.+?)$")
+CONTINUATION_LINE_RE = re.compile(r"^\s+(.+?)$")
 VAR_REF_RE = re.compile(r"var\(--([a-zA-Z0-9_/-]+)\s*(?:,\s*(.*?))?\)")
 COMMENT_BLOCK_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 
@@ -35,22 +42,71 @@ def parse_tokens(filepath: Path) -> dict[str, str]:
     tokens: dict[str, str] = {}
     in_root = False
     brace_depth = 0
+    current_token_name: str | None = None
+    current_token_value: list[str] = []
+
+    def flush_token() -> None:
+        """If a multi-line token is being accumulated, save it."""
+        nonlocal current_token_name, current_token_value
+        if current_token_name is not None:
+            value = " ".join(current_token_value).strip()
+            tokens[current_token_name] = value
+            current_token_name = None
+            current_token_value = []
 
     for line in text.splitlines():
         stripped = line.strip()
+
         if stripped == ":root {":
             in_root = True
             brace_depth = 1
             continue
-        if in_root:
-            brace_depth += stripped.count("{")
-            brace_depth -= stripped.count("}")
-            if brace_depth <= 0:
-                break
-            m = TOKEN_DEF_RE.match(line)
-            if m:
-                name, value = m.group(1), m.group(2).strip()
-                tokens[name] = value
+
+        if not in_root:
+            continue
+
+        brace_depth += stripped.count("{")
+        brace_depth -= stripped.count("}")
+        if brace_depth <= 0:
+            flush_token()
+            break
+
+        # Check if this is a single-line token definition
+        m = SINGLE_LINE_TOKEN_RE.match(line)
+        if m:
+            flush_token()  # flush any pending multi-line token
+            name, value = m.group(1), m.group(2).strip()
+            tokens[name] = value
+            continue
+
+        # Check if this is the start of a multi-line token definition
+        m = MULTI_LINE_TOKEN_START_RE.match(line)
+        if m:
+            flush_token()
+            current_token_name = m.group(1)
+            current_token_value = [m.group(2).strip()]
+            # Check if the value ends with ';' on this line (unusual but possible)
+            if current_token_value[-1].endswith(";"):
+                current_token_value[-1] = current_token_value[-1][:-1].strip()
+                flush_token()
+            continue
+
+        # Check if this is a continuation of a multi-line token
+        if current_token_name is not None:
+            cm = CONTINUATION_LINE_RE.match(line)
+            if cm:
+                val = cm.group(1).strip()
+                if val.endswith(";"):
+                    val = val[:-1].strip()
+                    current_token_value.append(val)
+                    flush_token()
+                else:
+                    current_token_value.append(val)
+            else:
+                # Not a continuation — flush with what we have
+                flush_token()
+
+    flush_token()
     return tokens
 
 
@@ -90,21 +146,33 @@ def main():
     print("=" * 72)
     print()
 
-    # Parse tokens
+    # Parse tokens from all token sources
     if not TOKENS_FILE.exists():
         print(f"ERROR: tokens.css not found at {TOKENS_FILE}")
         sys.exit(1)
 
     tokens = parse_tokens(TOKENS_FILE)
-    print(f"[TOKENS] Definitive tokens defined in tokens.css: {len(tokens)}")
+    print(f"[TOKENS] Tokens from styles/tokens.css: {len(tokens)}")
+
+    # Also parse frontend/themes/tokens.css (has POS-domain additions)
+    if THEME_TOKENS_FILE.exists():
+        theme_tokens = parse_tokens(THEME_TOKENS_FILE)
+        # Merge theme tokens (they may add new ones or override existing)
+        before = len(tokens)
+        tokens.update(theme_tokens)
+        added = len(tokens) - before
+        print(f"[TOKENS] Tokens from frontend/themes/tokens.css: {len(theme_tokens)} ({added} new, rest overlap)")
+        print(f"[TOKENS] Total merged unique tokens: {len(tokens)}")
+    else:
+        print(f"[TOKENS] frontend/themes/tokens.css not found, skipping")
     print()
 
     known_tokens = set(tokens.keys())
 
     # Find all CSS files
     css_files = find_all_css_files(UI_SRC_DIR)
-    css_files = [f for f in css_files if f.resolve() != TOKENS_FILE.resolve()]
-    print(f"[FILES] CSS files scanned (excluding tokens.css): {len(css_files)}")
+    css_files = [f for f in css_files if f.resolve() != TOKENS_FILE.resolve() and f.resolve() != THEME_TOKENS_FILE.resolve()]
+    print(f"[FILES] CSS files scanned (excluding both tokens.css files): {len(css_files)}")
     print()
 
     # Scan for var() references

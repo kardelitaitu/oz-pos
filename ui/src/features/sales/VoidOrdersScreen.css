@@ -22,7 +22,7 @@
   border: none;
   padding: var(--space-1) var(--space-1);
   cursor: pointer;
-  color: var(--color-fg-link);
+  color: var(--color-link);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   border-radius: var(--radius-md);

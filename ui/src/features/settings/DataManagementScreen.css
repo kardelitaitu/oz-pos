@@ -1,10 +1,10 @@
 .data-mgmt {
-  padding: var(--space-lg);
+  padding: var(--space-6);
   max-width: 700px;
 }
 
 .data-mgmt-header {
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-6);
 }
 
 .data-mgmt-title {
@@ -18,14 +18,14 @@
 
 .data-mgmt-tabs {
   display: flex;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-xl);
+  gap: var(--space-1);
+  margin-bottom: var(--space-8);
   border-bottom: 1px solid var(--color-border, rgba(128, 128, 128, 0.15));
-  padding-bottom: var(--space-xs);
+  padding-bottom: var(--space-1);
 }
 
 .data-mgmt-tab {
-  padding: var(--space-sm) var(--space-lg);
+  padding: var(--space-2) var(--space-6);
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-fg-secondary);
@@ -52,7 +52,7 @@
 .data-mgmt-section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-4);
 }
 
 .data-mgmt-section-title {
@@ -74,14 +74,14 @@
 .data-mgmt-types {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-2);
 }
 
 .data-mgmt-type-checkbox {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-md);
-  padding: var(--space-sm);
+  gap: var(--space-4);
+  padding: var(--space-2);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s ease;
@@ -93,8 +93,8 @@
 
 .data-mgmt-type-checkbox--all {
   border-bottom: 1px solid var(--color-border, rgba(128, 128, 128, 0.15));
-  padding-bottom: var(--space-md);
-  margin-bottom: var(--space-xs);
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-1);
 }
 
 .data-mgmt-type-checkbox input[type='checkbox'] {
@@ -125,7 +125,7 @@
 
 .data-mgmt-date-range {
   display: flex;
-  gap: var(--space-md);
+  gap: var(--space-4);
 }
 
 .data-mgmt-date-range .data-mgmt-field {
@@ -137,7 +137,7 @@
 .data-mgmt-field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--space-1);
 }
 
 .data-mgmt-label {
@@ -152,7 +152,7 @@
 }
 
 .data-mgmt-input {
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-2) var(--space-4);
   font-size: var(--text-sm);
   color: var(--color-fg-primary);
   background: var(--color-bg-surface);
@@ -170,7 +170,7 @@
 .data-mgmt-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-4);
 }
 
 /* ── Actions ─────────────────────────────────────────────────────── */
@@ -178,14 +178,14 @@
 .data-mgmt-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-sm);
-  padding-top: var(--space-sm);
+  gap: var(--space-2);
+  padding-top: var(--space-2);
 }
 
 /* ── Error ───────────────────────────────────────────────────────── */
 
 .data-mgmt-error {
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-2) var(--space-4);
   background: var(--color-danger-bg);
   border: 1px solid var(--color-danger-dim);
   border-radius: var(--radius-sm);
@@ -199,7 +199,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: var(--space-md) 0;
+  padding: var(--space-4) 0;
 }
 
 .data-mgmt-progress-done {
@@ -227,15 +227,15 @@
 /* ── File picker ─────────────────────────────────────────────────── */
 
 .data-mgmt-file-picker {
-  margin-top: var(--space-sm);
+  margin-top: var(--space-2);
 }
 
 .data-mgmt-file-dropzone {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-2xl);
+  gap: var(--space-2);
+  padding: var(--space-12);
   border: 2px dashed var(--color-border, rgba(128, 128, 128, 0.25));
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
@@ -263,8 +263,8 @@
 .data-mgmt-meta {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-md);
+  gap: var(--space-1);
+  padding: var(--space-4);
   background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
 }
@@ -294,7 +294,7 @@
 /* ── Dry-run ─────────────────────────────────────────────────────── */
 
 .data-mgmt-dry-run {
-  padding: var(--space-md);
+  padding: var(--space-4);
   background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
 }
@@ -303,12 +303,12 @@
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-fg-primary);
-  margin: 0 0 var(--space-sm);
+  margin: 0 0 var(--space-2);
 }
 
 .data-mgmt-dry-run-grid {
   display: flex;
-  gap: var(--space-lg);
+  gap: var(--space-6);
 }
 
 .data-mgmt-dry-run-item {
@@ -331,8 +331,8 @@
 .data-mgmt-backup-status {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-md);
+  gap: var(--space-1);
+  padding: var(--space-4);
   background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
 }

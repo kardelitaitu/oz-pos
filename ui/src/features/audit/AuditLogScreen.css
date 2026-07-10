@@ -289,7 +289,7 @@
   padding: var(--space-2) var(--space-4);
   cursor: pointer;
   font-size: var(--text-sm);
-  color: var(--color-fg-link);
+  color: var(--color-link);
   transition: background 0.15s;
 }
 

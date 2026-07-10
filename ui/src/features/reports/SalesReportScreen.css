@@ -193,7 +193,7 @@
 .sales-report-heatmap-cell {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-sm);
   cursor: default;
 }
 

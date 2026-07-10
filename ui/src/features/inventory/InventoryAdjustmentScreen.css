@@ -218,7 +218,7 @@
   border-radius: var(--radius-md);
   font-size: var(--text-xs);
   cursor: pointer;
-  color: var(--color-fg-link);
+  color: var(--color-link);
   transition: all var(--duration-150) var(--ease-out);
 }
 

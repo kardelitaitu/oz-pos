@@ -213,7 +213,7 @@
   border: 1px solid var(--color-border, #e2e8f0);
   border-radius: 6px;
   font-size: 0.9rem;
-  background: var(--color-surface, #fff);
+  background: var(--color-bg-elevated);
 }
 
 .promo-mgmt-field input:focus,
