@@ -675,6 +675,8 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 ## Phased Implementation & Migration Guide
 
+> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 (step 1) ✅.
+
 ### Phase 1: Workspace Types + Default Instances + Session Context
 
 **Goal:** Deliver type/instance separation with session-scope enforcement. All data stays in one database; store-level access control is prepared but not yet enforced (single-store mode).
@@ -737,21 +739,29 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 **Goal:** Enable true multi-store isolation. Each additional store gets its own SQLite file.
 
-1. **Database Manager** (`platform/core/`):
-   - `StoreDatabaseManager` — creates, migrates, opens per-store SQLite files.
-   - Lazy creation: second store's DB is created when the store is added.
-   - Connection pool: one open connection per active store, idle stores closed.
+> **Status (2026-07-10):** Step 1 (StoreDatabaseManager) complete. Steps 2–4 deferred to Phase 2b.
 
-2. **Store Switcher Enhancement**:
-   - Switching stores triggers a database connection switch.
-   - Active instance is re-resolved from the new store's database.
-   - In-memory caches are invalidated on store switch.
+> **Status (2026-07-10):** Step 1 (StoreDatabaseManager) complete. Steps 2–4 deferred to Phase 2b.
 
-3. **Migration Tooling**:
-   - Migrations run on all store databases, not just the primary.
-   - New migrations are applied to each store database on startup.
+1. **Database Manager** (`platform/core/`) ✅
+   - [x] `StoreDatabaseManager` — creates, migrates, opens per-store SQLite files (`store-<id>.sqlite`).
+   - [x] Lazy creation: second store's DB is created when the store is added.
+   - [x] Connection pool: one open connection per active store, idle stores can be closed.
+   - [x] Integrated into `AppState` — `db_manager` field alongside existing `db`.
+   - [x] Hooked into `create_store_profile` Tauri command — store DB created on store creation.
+   - [x] 11 unit tests including data isolation between stores.
+   - **Files:** `platform/core/src/database/manager.rs`, `platform/core/src/database/mod.rs`, `platform/core/src/lib.rs`, `apps/desktop-client/src/state.rs`, `apps/desktop-client/src/commands/store_profiles.rs`
 
-4. **Verification**: Integration tests for store creation, switching, and cross-store data isolation.
+2. **Store Switcher Enhancement** ⏳ *(Deferred to Phase 2b)*
+   - [ ] Switching stores triggers a database connection switch.
+   - [ ] Active instance is re-resolved from the new store's database.
+   - [ ] In-memory caches are invalidated on store switch.
+
+3. **Migration Tooling** ⏳ *(Deferred to Phase 2b)*
+   - [ ] Migrations run on all store databases, not just the primary.
+   - [ ] New migrations are applied to each store database on startup.
+
+4. **Verification**: ✅ `cargo check -p platform-core -p oz-pos-app` passes; `cargo test -p platform-core -- database::manager` passes (11/11).
 
 ### Phase 3: Device Binding + Tablet Boot Flow
 

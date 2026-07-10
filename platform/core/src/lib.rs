@@ -15,4 +15,5 @@ pub mod error;
 pub mod rbac;
 pub mod settings;
 
+pub use database::StoreDatabaseManager;
 pub use error::PlatformError;

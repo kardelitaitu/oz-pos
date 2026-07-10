@@ -39,6 +39,7 @@ modules-reporting = { workspace = true }
 modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
 oz-reporting = { workspace = true }
+platform-core = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
 platform-sync = { workspace = true }

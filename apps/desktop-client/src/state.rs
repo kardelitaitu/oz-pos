@@ -34,6 +34,7 @@ use tokio::sync::{Mutex, oneshot};
 
 use oz_core::migrations;
 use oz_hal::DriverRegistry;
+use platform_core::StoreDatabaseManager;
 use platform_kernel::Kernel;
 use platform_sync::daemon::SyncDaemon;
 
@@ -79,6 +80,13 @@ pub struct AppState {
     /// Caching layer (Redis-backed when configured, no-op otherwise).
     /// Shared across all `Store` instances via `Arc`.
     pub cache: Arc<dyn Cache>,
+
+    /// Store-scoped database manager (ADR #4 Phase 2).
+    ///
+    /// Manages per-store SQLite files created when additional stores
+    /// are added. The global database (store_profiles, users, terminals)
+    /// is accessed via `db_manager.global()`.
+    pub db_manager: StoreDatabaseManager,
 
     /// Shutdown sender for the inventory pub/sub background listener.
     /// Dropped on app shutdown to stop the listener thread gracefully.
@@ -147,6 +155,17 @@ impl AppState {
         }
 
         let db = Arc::new(Mutex::new(conn));
+
+        // ── Store-scoped database manager (ADR #4 Phase 2) ────────
+        let db_dir = db_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let db_manager = StoreDatabaseManager::new(
+            db_dir,
+            oz_core::migrations::ALL,
+        );
+
         let registry = Arc::new(DriverRegistry::default());
 
         // Load plugins from <app_data_dir>/plugins/.
@@ -179,6 +198,7 @@ impl AppState {
 
         Ok(Self {
             db,
+            db_manager,
             registry,
             app: Some(app.clone()),
             db_path,
@@ -295,26 +315,13 @@ impl AppState {
     /// Construct an `AppState` suitable for unit tests.
     /// Creates a lightweight Tauri app handle via `tauri::test::mock_builder`.
     pub fn for_test() -> Self {
+        let db = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
         Self {
-            db: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            registry: Arc::new(DriverRegistry::default()),
-            app: None,
-            db_path: ":memory:".into(),
-            scanner_cancel: Mutex::new(None),
-            kernel: Mutex::new(Kernel::new()),
-            plugins: Arc::new(Mutex::new(None)),
-            plugin_watcher: None,
-            sync_daemon: SyncDaemon::new(),
-            cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
-            inventory_pubsub_shutdown: None,
-        }
-    }
-
-    /// Construct an `AppState` with a pre-configured connection (migrations
-    /// already run). Used by integration tests that need a seeded database.
-    pub fn for_test_with_conn(conn: Connection) -> Self {
-        Self {
-            db: Arc::new(Mutex::new(conn)),
+            db,
+            db_manager: StoreDatabaseManager::new(
+                std::env::temp_dir(),
+                oz_core::migrations::ALL,
+            ),
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
