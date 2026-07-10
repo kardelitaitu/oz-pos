@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { listWorkspaces, listWorkspaceScreens, resolveBootStore, type WorkspaceDto } from '@/api/workspaces';
+import { createSession, destroySession } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 
 // ── Fallback workspaces for development (ADR #4 shape) ──────────────
@@ -52,6 +53,8 @@ export interface WorkspaceContextValue {
   switchStore: (storeId: string) => void;
   /** ADR #4 Phase 2b: the currently resolved store ID. */
   resolvedStoreId: string;
+  /** ADR #4 / ADR #7: opaque session token for scoped command authorization. */
+  sessionToken: string | null;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -79,11 +82,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [resolvedStoreId, setResolvedStoreId] = useState<string>(DEFAULT_STORE_ID);
   const [isBootResolved, setIsBootResolved] = useState(false);
 
+  // ADR #4 / ADR #7: Opaque session token created by create_session command.
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const sessionTokenRef = useRef(sessionToken);
+  sessionTokenRef.current = sessionToken;
+
   // Reset workspace selection on login/logout so the user always
   // sees the workspace picker after authentication.
+  // Uses a ref for sessionToken to avoid the effect re-firing when
+  // sessionToken changes (which would clear the workspace immediately
+  // after selection).
   useEffect(() => {
     setActiveWorkspace(null);
     setActiveInstance(null);
+    const token = sessionTokenRef.current;
+    if (token) {
+      destroySession(token).catch(() => {});
+      setSessionToken(null);
+    }
   }, [session]);
 
   // Sync activeInstance from activeWorkspace whenever the list changes
@@ -125,9 +141,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   // ADR #4 Phase 2b: Switch to a different store.
-  // Clears the active workspace and re-resolves instances for the new store.
+  // Destroys the current session token, clears workspace, re-resolves for new store.
+  // Uses sessionTokenRef to keep the callback reference stable.
   const switchStore = useCallback(
     (storeId: string) => {
+      const token = sessionTokenRef.current;
+      if (token) {
+        destroySession(token).catch(() => {});
+        setSessionToken(null);
+      }
       setActiveWorkspace(null);
       setActiveInstance(null);
       setWorkspaceScreensState([]);
@@ -206,6 +228,47 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
 
+  // ADR #4 / ADR #7: Create a session token when an instance is activated.
+  // This effect fires after activeInstance changes (set by handleSetActiveInstance
+  // or the useEffect that syncs from activeWorkspace).
+  useEffect(() => {
+    if (!activeInstance || !session?.user_id) return;
+
+    let cancelled = false;
+
+    // Destroy any previous token before creating a new one.
+    const prev = sessionTokenRef.current;
+    if (prev) {
+      destroySession(prev).catch(() => {});
+      setSessionToken(null);
+    }
+
+    createSession({
+      user_id: session.user_id,
+      role_id: session.role_id,
+      store_id: activeInstance.store_id,
+      instance_id: activeInstance.instance_id,
+      type_key: activeInstance.type_key,
+      // TODO(#ADR7): Resolve terminal_id from device binding or system hostname.
+      // Currently hardcoded as empty; ADR #7 will add a get_device_id() Tauri command.
+      terminal_id: '',
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setSessionToken(result.session_token);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn('WorkspaceContext: failed to create session token', err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeInstance, session]);
+
   // Backward-compat: sets the type_key string directly.
   const handleSetActive = useCallback((key: string | null) => {
     if (key) {
@@ -261,6 +324,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           retry,
           switchStore,
           resolvedStoreId,
+          sessionToken,
         }}
       >
         {children}
