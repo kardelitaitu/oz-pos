@@ -516,4 +516,44 @@ mod tests {
         assert!(req.description.is_none());
         assert!(req.colour.is_none());
     }
+
+    // ── BootResolution (ADR #4 Phase 3) ─────────────────────────────────
+
+    #[test]
+    fn boot_resolution_dto_serialize_bound() {
+        let res = BootResolution {
+            is_bound: true,
+            store_id: "store-downtown".into(),
+            instance_id: Some("ws-dt-cashier-1".into()),
+        };
+        let json = serde_json::to_value(&res).unwrap();
+        assert_eq!(json["isBound"], true);
+        assert_eq!(json["storeId"], "store-downtown");
+        assert_eq!(json["instanceId"], "ws-dt-cashier-1");
+    }
+
+    #[test]
+    fn boot_resolution_dto_serialize_unbound() {
+        let res = BootResolution {
+            is_bound: false,
+            store_id: "default".into(),
+            instance_id: None,
+        };
+        let json = serde_json::to_value(&res).unwrap();
+        assert_eq!(json["isBound"], false);
+        assert_eq!(json["storeId"], "default");
+        assert!(json["instanceId"].is_null());
+    }
+
+    #[test]
+    fn boot_resolution_dto_debug() {
+        let res = BootResolution {
+            is_bound: false,
+            store_id: "default".into(),
+            instance_id: None,
+        };
+        let d = format!("{res:?}");
+        assert!(d.contains("default"));
+        assert!(d.contains("false"));
+    }
 }

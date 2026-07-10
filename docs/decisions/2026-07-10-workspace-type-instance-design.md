@@ -800,6 +800,11 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] `cargo test -p oz-core -p platform-core` — 1,029/1,032 pass (3 pre-existing `currency_integration` failures unrelated).
    - [x] `cargo check -p oz-core -p oz-pos-app` passes clean.
    - [x] Full integration: desktop AppShell + tablet AppShell both use WorkspaceContext for device-bound auto-boot.
+   - [x] New unit tests added:
+     - `BootResolution` DTO serialization (bound + unbound variants, debug fmt).
+     - `StoreSwitcher` test updated with `WorkspaceContext` mock and `switchStore` integration test.
+     - `WorkspaceHome` mock updated with new context fields (`switchStore`, `resolvedStoreId`, `activeInstance`, `setActiveInstance`).
+   - **Files:** `apps/desktop-client/src/commands/workspaces.rs`, `ui/src/__tests__/StoreSwitcher.test.tsx`, `ui/src/__tests__/WorkspaceHome.test.tsx`
 
 ---
 

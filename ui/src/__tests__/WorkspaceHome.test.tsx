@@ -105,14 +105,18 @@ describe('WorkspaceHome', () => {
   describe('loading state', () => {
     it('shows skeleton grid while loading', async () => {
       mockWorkspaceValue.mockReturnValue({
-        availableWorkspaces: [],
-        loading: true,
-        error: null,
-        retry: vi.fn(),
-        setActiveWorkspace: mockSetActiveWorkspace,
-        activeWorkspace: null,
-        workspaceScreens: [],
-        lastWorkspace: null,
+  availableWorkspaces: [],
+  loading: true,
+  error: null,
+  retry: vi.fn(),
+  setActiveWorkspace: mockSetActiveWorkspace,
+  setActiveInstance: vi.fn(),
+  activeInstance: null,
+  activeWorkspace: null,
+  workspaceScreens: [],
+  lastWorkspace: null,
+  switchStore: vi.fn(),
+  resolvedStoreId: 'default',
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
@@ -705,14 +709,18 @@ describe('WorkspaceHome', () => {
 
     it('renders fullscreen button in loading state with F11 tooltip', async () => {
       mockWorkspaceValue.mockReturnValue({
-        availableWorkspaces: [],
-        loading: true,
-        error: null,
-        retry: vi.fn(),
-        setActiveWorkspace: mockSetActiveWorkspace,
-        activeWorkspace: null,
-        workspaceScreens: [],
-        lastWorkspace: null,
+  availableWorkspaces: [],
+  loading: true,
+  error: null,
+  retry: vi.fn(),
+  setActiveWorkspace: mockSetActiveWorkspace,
+  setActiveInstance: vi.fn(),
+  activeInstance: null,
+  activeWorkspace: null,
+  workspaceScreens: [],
+  lastWorkspace: null,
+  switchStore: vi.fn(),
+  resolvedStoreId: 'default',
       });
 
       await renderInAct(wrap(<WorkspaceHome />));
