@@ -27,7 +27,12 @@ pub const DEVICE_BINDING_KEYRING_NAME: &str = "oz-pos/device-binding-hmac-key";
 /// The signature covers `{terminal_id}:{bound_store_id}:{bound_instance_id}`
 /// using a secret stored in the OS keyring. If no secret exists yet, one is
 /// generated and stored.
-fn sign_binding(keyring: &dyn oz_security::Keyring, terminal_id: &str, store_id: &str, instance_id: &str) -> Result<String, AppError> {
+fn sign_binding(
+    keyring: &dyn oz_security::Keyring,
+    terminal_id: &str,
+    store_id: &str,
+    instance_id: &str,
+) -> Result<String, AppError> {
     let secret = keyring
         .get_secret(DEVICE_BINDING_KEYRING_NAME)
         .map_err(|e| AppError::Internal(format!("keyring read failed: {e}")))?;
@@ -56,7 +61,13 @@ fn sign_binding(keyring: &dyn oz_security::Keyring, terminal_id: &str, store_id:
 }
 
 /// Verify a device binding HMAC signature.
-fn verify_binding(keyring: &dyn oz_security::Keyring, terminal_id: &str, store_id: &str, instance_id: &str, signature: &str) -> Result<bool, AppError> {
+fn verify_binding(
+    keyring: &dyn oz_security::Keyring,
+    terminal_id: &str,
+    store_id: &str,
+    instance_id: &str,
+    signature: &str,
+) -> Result<bool, AppError> {
     let expected = sign_binding(keyring, terminal_id, store_id, instance_id)?;
     Ok(expected == signature)
 }

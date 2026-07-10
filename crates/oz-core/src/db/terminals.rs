@@ -149,7 +149,12 @@ impl Store<'_> {
                 binding_signature = ?3,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE id = ?4",
-            params![bound_store_id, bound_instance_id, binding_signature, terminal_id],
+            params![
+                bound_store_id,
+                bound_instance_id,
+                binding_signature,
+                terminal_id
+            ],
         )?;
         if affected == 0 {
             return Err(CoreError::NotFound {

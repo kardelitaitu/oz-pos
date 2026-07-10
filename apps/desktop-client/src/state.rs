@@ -161,10 +161,7 @@ impl AppState {
             .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| PathBuf::from("."));
-        let db_manager = StoreDatabaseManager::new(
-            db_dir,
-            oz_core::migrations::ALL,
-        );
+        let db_manager = StoreDatabaseManager::new(db_dir, oz_core::migrations::ALL);
 
         let registry = Arc::new(DriverRegistry::default());
 
@@ -318,10 +315,7 @@ impl AppState {
         let db = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
         Self {
             db,
-            db_manager: StoreDatabaseManager::new(
-                std::env::temp_dir(),
-                oz_core::migrations::ALL,
-            ),
+            db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),

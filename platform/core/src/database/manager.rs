@@ -64,25 +64,18 @@ impl StoreDatabaseManager {
     /// If the file doesn't exist, creates it with all migrations applied.
     /// Migrations are always run on open to recover from partial failures.
     /// Uses `entry().or_insert_with()` to prevent TOCTOU races.
-    pub fn open_store(
-        &self,
-        store_id: &str,
-    ) -> Result<Arc<Mutex<Connection>>, PlatformError> {
+    pub fn open_store(&self, store_id: &str) -> Result<Arc<Mutex<Connection>>, PlatformError> {
         let mut store_dbs = self
             .store_dbs
             .lock()
             .map_err(|e| PlatformError::Internal(format!("store db lock poisoned: {e}")))?;
         let conn_arc = store_dbs
             .entry(store_id.to_owned())
-            .or_insert_with(|| {
-                match self.open_or_create_connection(store_id) {
-                    Ok(conn) => Arc::new(Mutex::new(conn)),
-                    Err(e) => {
-                        tracing::error!(store_id, error = %e, "failed to open store database");
-                        Arc::new(Mutex::new(
-                            Connection::open_in_memory().unwrap(),
-                        ))
-                    }
+            .or_insert_with(|| match self.open_or_create_connection(store_id) {
+                Ok(conn) => Arc::new(Mutex::new(conn)),
+                Err(e) => {
+                    tracing::error!(store_id, error = %e, "failed to open store database");
+                    Arc::new(Mutex::new(Connection::open_in_memory().unwrap()))
                 }
             })
             .clone();
@@ -93,10 +86,7 @@ impl StoreDatabaseManager {
     ///
     /// Migrations are always run on open — this recovers from
     /// partially-failed previous creations (the runner is idempotent).
-    fn open_or_create_connection(
-        &self,
-        store_id: &str,
-    ) -> Result<Connection, PlatformError> {
+    fn open_or_create_connection(&self, store_id: &str) -> Result<Connection, PlatformError> {
         let path = self.store_db_path(store_id);
 
         if let Some(parent) = path.parent() {
@@ -106,9 +96,8 @@ impl StoreDatabaseManager {
         }
 
         let is_new = !path.exists();
-        let mut conn = Connection::open(&path).map_err(|e| {
-            PlatformError::Internal(format!("opening store db {:?}: {e}", path))
-        })?;
+        let mut conn = Connection::open(&path)
+            .map_err(|e| PlatformError::Internal(format!("opening store db {:?}: {e}", path)))?;
         conn.pragma_update(None, "foreign_keys", "ON")
             .map_err(|e| PlatformError::Internal(format!("enabling FK on {:?}: {e}", path)))?;
 
@@ -341,7 +330,11 @@ mod tests {
         let arc = manager.open_store("store-recover").unwrap();
         let conn = arc.lock().unwrap();
         let exists: i64 = conn
-            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='test_table'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='test_table'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(exists, 1);
     }

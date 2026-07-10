@@ -7,6 +7,7 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { BrandProvider } from '@/contexts/BrandContext';
+import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { getAvailableLocales, getLocaleLabel } from '@/i18n';
 
@@ -52,6 +53,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 beforeEach(() => {
+  localStorage.clear();
   invokeMock.mockClear();
 });
 
@@ -66,7 +68,9 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
       }}
     >
       <BrandProvider>
-        <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </BrandProvider>
     </LocaleContext.Provider>,
     settingsFtl,
@@ -77,17 +81,30 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 const wrap = (children: React.ReactNode) => <TestWrapper>{children}</TestWrapper>;
 
 describe('SettingsPage', () => {
-  it('renders the settings title and receipt section', async () => {
+  it('renders the general section by default and has sidebar categories', async () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /general/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
     });
-    expect(screen.getByRole('heading', { name: /receipt/i })).toBeInTheDocument();
+    // Sidebar has the Business category expanded and Operations category available
+    expect(screen.getByRole('button', { name: /business/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
   });
 
   it('loads receipt settings and populates the form', async () => {
     render(wrap(<SettingsPage />));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    // Expand Operations category, then navigate to Receipt section
+    await userEvent.click(screen.getByRole('button', { name: /operations/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /receipt/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /receipt/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/show currency symbol/i)).not.toBeChecked();
@@ -100,6 +117,16 @@ describe('SettingsPage', () => {
 
   it('toggles show-currency and show-tax checkboxes', async () => {
     render(wrap(<SettingsPage />));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    // Expand Operations category, then navigate to Receipt section
+    await userEvent.click(screen.getByRole('button', { name: /operations/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /receipt/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /receipt/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/show currency symbol/i)).toBeInTheDocument();
@@ -119,6 +146,16 @@ describe('SettingsPage', () => {
     render(wrap(<SettingsPage />));
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    // Expand Operations category, then navigate to Receipt section
+    await userEvent.click(screen.getByRole('button', { name: /operations/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /receipt/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /receipt/i }));
+
+    await waitFor(() => {
       expect(screen.getByLabelText(/decimal separator/i)).toBeInTheDocument();
     });
 
@@ -134,6 +171,16 @@ describe('SettingsPage', () => {
 
   it('updates footer input', async () => {
     render(wrap(<SettingsPage />));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    // Expand Operations category, then navigate to Receipt section
+    await userEvent.click(screen.getByRole('button', { name: /operations/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /receipt/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /receipt/i }));
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/thank you/i)).toBeInTheDocument();
