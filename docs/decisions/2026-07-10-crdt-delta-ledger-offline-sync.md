@@ -141,7 +141,7 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 - [x] Populate `source_terminal_id` and `source_user_id` from session context — `adjust_stock_with_reason` now accepts optional audit params. Scoped `adjust_stock_scoped` Tauri command passes `session.terminal_id` and `session.user_id`. Backward-compat `adjust_stock` passes `None`. Added 2 new tests verifying audit field persistence.
 - [x] Add `version` and `updated_at` optimistic concurrency fields to synced entities — migration 065 adds `version INTEGER NOT NULL DEFAULT 1` to both `products` and `sales`. `update_product` accepts `Option<i64>` for gradual adoption. `update_sale_status` and `void_sale` increment version on UPDATE. All struct literals and row mappers updated across the workspace.
 - [ ] Implement `FastPINOverlay.tsx` for shared touchscreen user switching.
-- [ ] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database.
+- [x] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database — migration 066 adds FK to `workspace_instances.store_id` and changes `user_store_access.store_id` from CASCADE to RESTRICT.
 - [ ] Cross-store delta routing via `platform/sync/`.
 
 ---

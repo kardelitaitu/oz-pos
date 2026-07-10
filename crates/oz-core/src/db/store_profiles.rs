@@ -347,4 +347,88 @@ mod tests {
         let err = store.delete_store_profile("nonexistent").unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
+
+    /// ADR #6: Deleting a store that has workspace instances must be rejected
+    /// by the ON DELETE RESTRICT foreign key constraint.
+    #[test]
+    fn delete_store_with_workspace_instances_rejected() {
+        let (store, _) = setup();
+        let second = StoreProfile {
+            id: "store-branch".into(),
+            name: "Branch".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-06-30T13:00:00Z".into(),
+            updated_at: "2026-06-30T13:00:00Z".into(),
+        };
+        store.create_store_profile(&second).unwrap();
+
+        // Create a workspace instance referencing this store.
+        store.conn.execute(
+            "INSERT INTO workspace_instances (id, type_key, store_id, name) VALUES (?1, 'store-pos', ?2, 'Branch POS')",
+            rusqlite::params!["wi-branch-pos", "store-branch"],
+        ).unwrap();
+
+        // Attempt to delete the store — must fail due to FK RESTRICT.
+        let err = store.delete_store_profile("store-branch").unwrap_err();
+        assert!(
+            matches!(err, CoreError::Db(_)),
+            "expected DB error from FK constraint, got: {err:?}"
+        );
+
+        // Clean up the workspace instance first, then deletion works.
+        store
+            .conn
+            .execute(
+                "DELETE FROM workspace_instances WHERE id = ?1",
+                rusqlite::params!["wi-branch-pos"],
+            )
+            .unwrap();
+        store.delete_store_profile("store-branch").unwrap();
+    }
+
+    /// ADR #6: user_store_access FK also enforces ON DELETE RESTRICT.
+    #[test]
+    fn delete_store_with_user_access_rejected() {
+        let (store, _) = setup();
+        let second = StoreProfile {
+            id: "store-b2".into(),
+            name: "Branch 2".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-06-30T14:00:00Z".into(),
+            updated_at: "2026-06-30T14:00:00Z".into(),
+        };
+        store.create_store_profile(&second).unwrap();
+
+        // Seed a user and assign store access.
+        store.conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-cashier', 'Cashier', '', '[]');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('u-cashier', 'cash', 'hash', 'Cash', 'r-cashier');
+             INSERT INTO user_store_access (user_id, store_id, access_level) VALUES ('u-cashier', 'store-b2', 'operator');"
+        ).unwrap();
+
+        // Attempt to delete the store — must fail due to FK RESTRICT.
+        let err = store.delete_store_profile("store-b2").unwrap_err();
+        assert!(
+            matches!(err, CoreError::Db(_)),
+            "expected DB error from FK constraint, got: {err:?}"
+        );
+
+        // Clean up the user access, then deletion works.
+        store
+            .conn
+            .execute(
+                "DELETE FROM user_store_access WHERE store_id = ?1",
+                rusqlite::params!["store-b2"],
+            )
+            .unwrap();
+        store.delete_store_profile("store-b2").unwrap();
+    }
 }
