@@ -675,7 +675,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 ## Phased Implementation & Migration Guide
 
-> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling).</toml>
+> **Status (2026-07-10):** Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher).</toml>
 
 ### Phase 1: Workspace Types + Default Instances + Session Context
 
@@ -750,11 +750,13 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] 11 unit tests including data isolation between stores.
    - **Files:** `platform/core/src/database/manager.rs`, `platform/core/src/database/mod.rs`, `platform/core/src/lib.rs`, `apps/desktop-client/src/state.rs`, `apps/desktop-client/src/commands/store_profiles.rs`
 
-2. **Store Switcher Enhancement** ⏳ *(Deferred — infrastructure exists, UI store picker pending)*
+2. **Store Switcher Enhancement** ✅
    - [x] Database-level infrastructure: `StoreDatabaseManager::open_store(store_id)` supports per-store connections.
    - [x] Tauri commands accept `store_id` parameter for scoped workspace queries.
-   - [ ] UI Store picker component for admin users (Phase 3).
-   - [ ] Cache invalidation on store switch (Phase 3).
+   - [x] UI Store picker component (`StoreSwitcher.tsx`) already existed — enhanced with workspace re-resolution.
+   - [x] Cache invalidation on store switch: `switchStore` clears active workspace/instance, re-fetches instances for new store.
+   - [x] `WorkspaceContext` exposes `switchStore(storeId)` and `resolvedStoreId`.
+   - **Files:** `ui/src/components/StoreSwitcher.tsx`, `ui/src/contexts/WorkspaceContext.tsx`
 
 3. **Migration Tooling** ✅
    - [x] Migrations run on all store databases via `open_or_create_connection()` — always invoked on open.

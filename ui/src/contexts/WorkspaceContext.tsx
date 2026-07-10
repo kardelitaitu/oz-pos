@@ -48,6 +48,10 @@ export interface WorkspaceContextValue {
   retry: () => void;
   /** The most recently active workspace key — persists even after switching back to the picker. */
   lastWorkspace: string | null;
+  /** ADR #4 Phase 2b: switch to a different store, clearing workspace and re-resolving. */
+  switchStore: (storeId: string) => void;
+  /** ADR #4 Phase 2b: the currently resolved store ID. */
+  resolvedStoreId: string;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -94,6 +98,47 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [activeWorkspace, availableWorkspaces]);
 
+  // ── Shared workspace-fetching logic ─────────────────────────────────
+
+  const fetchWorkspaces = useCallback(
+    async (storeId: string, cancelled: () => boolean) => {
+      try {
+        const workspaces = await listWorkspaces(roleId, storeId, userId || undefined);
+        if (!cancelled()) {
+          if (workspaces.length > 0) {
+            setAvailableWorkspaces(workspaces);
+            setError(null);
+          } else {
+            setAvailableWorkspaces(FALLBACK_WORKSPACES);
+            setError(null);
+          }
+        }
+      } catch (err) {
+        if (!cancelled()) {
+          console.warn('WorkspaceContext: failed to list workspaces, using fallback', err);
+          setAvailableWorkspaces(FALLBACK_WORKSPACES);
+          setError('Failed to load workspaces from server. Using demo workspaces.');
+        }
+      }
+    },
+    [roleId, userId],
+  );
+
+  // ADR #4 Phase 2b: Switch to a different store.
+  // Clears the active workspace and re-resolves instances for the new store.
+  const switchStore = useCallback(
+    (storeId: string) => {
+      setActiveWorkspace(null);
+      setActiveInstance(null);
+      setWorkspaceScreensState([]);
+      setResolvedStoreId(storeId);
+      setLoading(true);
+      setError(null);
+      fetchWorkspaces(storeId, () => false).finally(() => setLoading(false));
+    },
+    [fetchWorkspaces],
+  );
+
   // ADR #4 Phase 3: Resolve the boot store first, then load workspaces.
   // This is called once on mount (or when roleId changes).
   useEffect(() => {
@@ -129,27 +174,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
 
       // Step 2: Load workspace instances for the resolved store.
-      try {
-        const workspaces = await listWorkspaces(roleId, storeId, userId || undefined);
-        if (!cancelled) {
-          if (workspaces.length > 0) {
-            setAvailableWorkspaces(workspaces);
-            setError(null);
-          } else {
-            setAvailableWorkspaces(FALLBACK_WORKSPACES);
-            setError(null);
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.warn('WorkspaceContext: failed to list workspaces, using fallback', err);
-          setAvailableWorkspaces(FALLBACK_WORKSPACES);
-          setError('Failed to load workspaces from server. Using demo workspaces.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      await fetchWorkspaces(storeId, () => cancelled);
+
+      if (!cancelled) {
+        setLoading(false);
       }
     }
 
@@ -158,7 +186,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [roleId, userId]);
+  }, [roleId, userId, fetchWorkspaces]);
 
   useEffect(() => {
     if (!activeInstance) {
@@ -202,22 +230,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!roleId) return;
     setLoading(true);
     setError(null);
-    listWorkspaces(roleId, resolvedStoreId, userId || undefined)
-      .then((workspaces) => {
-        if (workspaces.length > 0) {
-          setAvailableWorkspaces(workspaces);
-        } else {
-          setAvailableWorkspaces(FALLBACK_WORKSPACES);
-        }
-        setError(null);
-      })
-      .catch((err) => {
-        console.warn('WorkspaceContext: retry failed', err);
-        setAvailableWorkspaces(FALLBACK_WORKSPACES);
-        setError('Failed to load workspaces from server. Using demo workspaces.');
-      })
-      .finally(() => setLoading(false));
-  }, [roleId, userId, resolvedStoreId]);
+    fetchWorkspaces(resolvedStoreId, () => false).finally(() => setLoading(false));
+  }, [roleId, resolvedStoreId, fetchWorkspaces]);
 
   // Derived scope from active instance
   const scope: WorkspaceScope | null = useMemo(
@@ -245,7 +259,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           loading,
           error,
           retry,
-          lastWorkspace,
+          switchStore,
+          resolvedStoreId,
         }}
       >
         {children}
