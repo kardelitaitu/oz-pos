@@ -35,30 +35,77 @@ pub struct ProcessRefundArgs {
     pub lines: Vec<RefundLineArg>,
 }
 
+/// Args for `process_refund_scoped` — identical to `ProcessRefundArgs`
+/// but without `user_id` (read from the session token instead).
+#[derive(Debug, Deserialize)]
+pub struct ProcessRefundScopedArgs {
+    pub sale_id: String,
+    pub reason: String,
+    pub note: Option<String>,
+    pub lines: Vec<RefundLineArg>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ProcessRefundResult {
     pub refund_id: String,
     pub total_minor: i64,
 }
 
-/// Process a refund against a completed sale.
+/// Process a refund against a completed sale using the global database.
 ///
-/// Requires `sales:refund` permission.
+/// **Deprecated for multi-store (ADR #7):** Use `process_refund_scoped`
+/// with a `session_token` instead. The `user_id` is read from the
+/// resolved session.
 #[command]
 pub async fn process_refund(
     args: ProcessRefundArgs,
     state: State<'_, AppState>,
 ) -> Result<ProcessRefundResult, AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    run_process_refund(&db, &args.sale_id, &args.reason, args.note.as_deref(), &args.user_id, &args.lines)
+}
 
-    // Permission check: caller must have sales:refund (derived from user_id).
-    require_permission_for_user(&store, &args.user_id, permissions::SALES_REFUND)?;
+/// Process a refund within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `process_refund`. The `user_id` for
+/// permission checks and the refund record is read from the resolved
+/// `SessionContext`.
+#[command]
+pub async fn process_refund_scoped(
+    session_token: String,
+    args: ProcessRefundScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<ProcessRefundResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_process_refund(&db, &args.sale_id, &args.reason, args.note.as_deref(), &session.user_id, &args.lines)
+}
+
+/// Shared business logic for processing a refund.
+fn run_process_refund(
+    db: &rusqlite::Connection,
+    sale_id: &str,
+    reason: &str,
+    note: Option<&str>,
+    user_id: &str,
+    lines: &[RefundLineArg],
+) -> Result<ProcessRefundResult, AppError> {
+    let store = Store::new(db);
+
+    // Permission check: caller must have sales:refund.
+    require_permission_for_user(&store, user_id, permissions::SALES_REFUND)?;
 
     // Verify the sale exists and is completed.
     let sale = store
-        .get_sale(&args.sale_id)?
-        .ok_or_else(|| AppError::Invalid(format!("sale {} not found", args.sale_id)))?;
+        .get_sale(sale_id)?
+        .ok_or_else(|| AppError::Invalid(format!("sale {} not found", sale_id)))?;
     if sale.status != oz_core::SaleStatus::Completed {
         return Err(AppError::Invalid(format!(
             "cannot refund a sale with status {:?}; only completed sales can be refunded",
@@ -67,8 +114,7 @@ pub async fn process_refund(
     }
 
     // Build refund domain objects.
-    let refund_lines: Vec<RefundLine> = args
-        .lines
+    let refund_lines: Vec<RefundLine> = lines
         .iter()
         .map(|l| {
             let currency: oz_core::Currency = l.currency.parse().unwrap_or(sale.currency);
@@ -91,22 +137,21 @@ pub async fn process_refund(
     };
 
     let refund = Refund::new(
-        &args.sale_id,
+        sale_id,
         total,
-        &args.reason,
-        args.note.as_deref().unwrap_or(""),
-        &args.user_id,
+        reason,
+        note.unwrap_or(""),
+        user_id,
         refund_lines,
     );
 
     store.create_refund(&refund)?;
-    drop(db);
 
     tracing::info!(
         refund_id = %refund.id,
-        sale_id = %args.sale_id,
+        sale_id,
         total_minor,
-        reason = %args.reason,
+        reason,
         "refund processed"
     );
 
@@ -116,7 +161,9 @@ pub async fn process_refund(
     })
 }
 
-/// Look up a sale by its receipt barcode for quick return.
+/// Look up a sale by its receipt barcode from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `lookup_sale_by_receipt_barcode_scoped`.
 #[command]
 pub async fn lookup_sale_by_receipt_barcode(
     barcode: String,
@@ -129,13 +176,53 @@ pub async fn lookup_sale_by_receipt_barcode(
     Ok(sale)
 }
 
-/// List all refunds for a sale.
+/// Look up a sale by receipt barcode from the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `lookup_sale_by_receipt_barcode`.
+#[command]
+pub async fn lookup_sale_by_receipt_barcode_scoped(
+    session_token: String,
+    barcode: String,
+    state: State<'_, AppState>,
+) -> Result<Option<Sale>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
+    drop(db);
+    Ok(sale)
+}
+
+/// List all refunds for a sale from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_refunds_scoped`.
 #[command]
 pub async fn list_refunds(
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<Refund>, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let refunds = store.list_refunds_for_sale(&sale_id)?;
+    drop(db);
+    Ok(refunds)
+}
+
+/// List all refunds for a sale from the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `list_refunds`.
+#[command]
+pub async fn list_refunds_scoped(
+    session_token: String,
+    sale_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<Refund>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let refunds = store.list_refunds_for_sale(&sale_id)?;
     drop(db);
@@ -308,5 +395,35 @@ mod tests {
         };
         assert_eq!(result.refund_id, "ref-1");
         assert_eq!(result.total_minor, 700);
+    }
+
+    // ── Scoped struct & token tests ─────────────────────────────────
+
+    #[test]
+    fn process_refund_scoped_args_deserialize() {
+        let json = r##"{"sale_id":"sale-1","reason":"Changed mind","note":null,"lines":[]}"##;
+        let args: ProcessRefundScopedArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sale_id, "sale-1");
+        assert_eq!(args.reason, "Changed mind");
+        assert!(args.note.is_none());
+    }
+
+    #[test]
+    fn process_refund_scoped_args_debug() {
+        let args = ProcessRefundScopedArgs {
+            sale_id: "sale-1".into(),
+            reason: "Changed mind".into(),
+            note: Some("Note".into()),
+            lines: vec![],
+        };
+        let debug = format!("{args:?}");
+        assert!(debug.contains("sale-1"));
+    }
+
+    #[test]
+    fn process_refund_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }

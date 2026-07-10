@@ -123,6 +123,10 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `export_daily_summary_scoped` — migrate daily summary report
 - [x] `export_sales_by_hour_scoped` — migrate sales-by-hour report
 - [x] `export_eod_report_scoped` — migrate EOD report with extracted `build_eod_report` helper
+- [x] `void_sale_scoped` — migrate void sale with user_id from session
+- [x] `process_refund_scoped` — migrate refund processing with `run_process_refund` helper
+- [x] `lookup_sale_by_receipt_barcode_scoped` — migrate receipt barcode lookup
+- [x] `list_refunds_scoped` — migrate refund listing
 - [ ] *(remaining domain commands)*
 
 ### Phase 4: Enforcement ⏳
