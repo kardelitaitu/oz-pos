@@ -707,6 +707,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
    - [x] `WorkspaceContextValue` exposes `sessionToken: string | null` for commands to pass to backend.
    - [x] **End-to-end pattern demonstration:** `list_products_scoped` backend command + `listProductsScoped` frontend API wrapper in `ui/src/api/products.ts`. Implements the canonical session token pattern (resolve session → open store DB → query). Old `list_products` preserved for backward compatibility.
    - [x] **Final comprehensive verification (2026-07-10):** `cargo fmt --all` ✅, `cargo clippy -p oz-core -p platform-core` ✅ zero warnings, `cargo check --lib -p oz-pos-app -p oz-pos-tablet` ✅ clean, `cargo test -p oz-core -p platform-core` ✅ 1,029/1,032 pass (3 pre-existing `currency_integration` failures unrelated).
+   - [x] **ADR #7 created (2026-07-10):** `docs/decisions/2026-07-10-data-scope-guard.md` — defines `resolve_scope()` helper, domain command migration plan, and clippy lint enforcement. `resolve_scope()` implemented on both desktop and tablet `AppState`. `list_products_scoped` simplified to use it.
    - [ ] `session_context()` extractor for Tauri commands — reads scope from signed session token. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] All domain commands (`list_orders`, `get_products`, etc.) accept `SessionContext`, not `store_id`. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*
    - [ ] `clippy` lint rule: reject `store_id: String` in command parameters. *(Deferred → ADR #7: Data Scope Guard & Query Enforcement)*

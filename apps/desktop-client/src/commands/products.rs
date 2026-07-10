@@ -141,11 +141,7 @@ pub async fn list_products_scoped(
     state: State<'_, AppState>,
     session_token: String,
 ) -> Result<Vec<ProductDto>, AppError> {
-    let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let (_session, conn) = state.resolve_scope(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

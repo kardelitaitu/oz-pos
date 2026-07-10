@@ -260,6 +260,27 @@ impl AppState {
             .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
         store.get(token).cloned().ok_or(AppError::InvalidSession)
     }
+
+    /// Resolve a session token and open the store-scoped database.
+    ///
+    /// ADR #7: Convenience method combining `resolve_session` +
+    /// `db_manager.open_store` in one call. Most domain commands
+    /// should use this instead of the global `db` field.
+    ///
+    /// Returns the resolved [`SessionContext`] and an [`Arc`]`<Mutex<Connection>>`
+    /// for the store-scoped SQLite database. The caller must call `.lock()` on
+    /// the returned connection before querying.
+    pub fn resolve_scope(
+        &self,
+        token: &str,
+    ) -> Result<(SessionContext, Arc<std::sync::Mutex<Connection>>), AppError> {
+        let session = self.resolve_session(token)?;
+        let conn = self
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        Ok((session, conn))
+    }
 }
 
 /// Start a background file watcher that hot-reloads plugins when
