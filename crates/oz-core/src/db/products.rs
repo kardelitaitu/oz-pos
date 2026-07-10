@@ -227,8 +227,9 @@ impl Store<'_> {
             // ADR #6: Record initial stock in the delta ledger.
             let movement_id = uuid::Uuid::now_v7().to_string();
             tx.execute(
-                "INSERT INTO stock_movements (id, item_id, delta, reason, created_at)
-                 VALUES (?1, ?2, ?3, 'initial-stock', ?4)",
+                "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                              source_terminal_id, source_user_id, created_at)
+                 VALUES (?1, ?2, ?3, 'initial-stock', NULL, NULL, ?4)",
                 params![movement_id, id, initial_stock, now],
             )?;
             tx.execute(
@@ -570,18 +571,24 @@ impl Store<'_> {
     /// and updates the materialised `inventory` and `stock_summary` tables.
     /// The `reason` parameter is recorded in the ledger for audit purposes.
     pub fn adjust_stock(&self, sku: &str, delta: i64) -> Result<i64, CoreError> {
-        self.adjust_stock_with_reason(sku, delta, None)
+        self.adjust_stock_with_reason(sku, delta, None, None, None)
     }
 
     /// Adjust stock with an explicit reason for the delta ledger (ADR #6).
     ///
     /// Records the reason (e.g. "sale", "restock", "correction") in the
     /// `stock_movements` row for audit and sync purposes.
+    ///
+    /// `source_terminal_id` and `source_user_id` are audit columns
+    /// populated from the caller's `SessionContext` (ADR #6). Pass
+    /// `None` for test/deprecated callers.
     pub fn adjust_stock_with_reason(
         &self,
         sku: &str,
         delta: i64,
         reason: Option<&str>,
+        source_terminal_id: Option<&str>,
+        source_user_id: Option<&str>,
     ) -> Result<i64, CoreError> {
         let product_id = self
             .product_id_by_sku(sku)?
@@ -608,12 +615,19 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         // 1. Write the immutable delta row (CRDT ledger — ADR #6).
-        // source_terminal_id and source_user_id are optional audit columns;
-        // they are populated when the caller has session context available.
         tx.execute(
-            "INSERT INTO stock_movements (id, item_id, delta, reason, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![movement_id, product_id, delta, reason, now],
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                movement_id,
+                product_id,
+                delta,
+                reason,
+                source_terminal_id,
+                source_user_id,
+                now
+            ],
         )?;
 
         // 2. Update the materialised inventory table (backward compat).
@@ -1580,7 +1594,13 @@ mod tests {
         seed_everything(&conn);
 
         store(&conn)
-            .adjust_stock_with_reason("DRINK-001", -3, Some("sale"))
+            .adjust_stock_with_reason(
+                "DRINK-001",
+                -3,
+                Some("sale"),
+                Some("term-1"),
+                Some("user-1"),
+            )
             .unwrap();
 
         // Verify ledger row was written.
@@ -1644,7 +1664,13 @@ mod tests {
         // so only these 5 adjust_stock calls create rows).
         for _i in 0..5 {
             store(&conn)
-                .adjust_stock_with_reason("DRINK-001", 1, Some("restock"))
+                .adjust_stock_with_reason(
+                    "DRINK-001",
+                    1,
+                    Some("restock"),
+                    Some("term-1"),
+                    Some("user-1"),
+                )
                 .unwrap();
         }
 
@@ -1655,6 +1681,46 @@ mod tests {
         // With offset 3, should return remaining 2.
         let page2 = store(&conn).list_stock_movements("prod-1", 10, 3).unwrap();
         assert_eq!(page2.len(), 2);
+    }
+
+    #[test]
+    fn adjust_stock_writes_source_audit_fields() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        store(&conn)
+            .adjust_stock_with_reason(
+                "DRINK-001",
+                -5,
+                Some("sale"),
+                Some("term-kitchen"),
+                Some("user-alice"),
+            )
+            .unwrap();
+
+        let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(
+            movements[0].source_terminal_id.as_deref(),
+            Some("term-kitchen")
+        );
+        assert_eq!(movements[0].source_user_id.as_deref(), Some("user-alice"));
+        assert_eq!(movements[0].delta, -5);
+        assert_eq!(movements[0].reason.as_deref(), Some("sale"));
+    }
+
+    #[test]
+    fn adjust_stock_without_source_audit_stores_nulls() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // adjust_stock (the backward-compat wrapper) passes None for audit fields.
+        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+
+        let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].source_terminal_id, None);
+        assert_eq!(movements[0].source_user_id, None);
     }
 
     #[test]

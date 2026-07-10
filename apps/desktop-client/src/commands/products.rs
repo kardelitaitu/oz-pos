@@ -94,14 +94,24 @@ pub async fn adjust_stock_scoped(
         return Err(AppError::Invalid("delta must be non-zero".into()));
     }
 
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
 
     let new_qty = {
         let db = conn
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = oz_core::db::Store::new(&db);
-        store.adjust_stock(&args.sku, args.delta)?
+        store.adjust_stock_with_reason(
+            &args.sku,
+            args.delta,
+            Some(&args.reason),
+            Some(&session.terminal_id),
+            Some(&session.user_id),
+        )?
     };
 
     // Publish the StockAdjusted domain event.

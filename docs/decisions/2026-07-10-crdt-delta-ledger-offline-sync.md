@@ -138,7 +138,7 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 
 - [x] Choose and adopt UUIDv7 for all entity primary keys — replaced all 158 `Uuid::new_v4()` call sites with `Uuid::now_v7()` across the entire workspace. Added `v7` feature to workspace `uuid` dependency. Added `oz_core::new_id()` helper for future entity ID generation.
 - [ ] Implement materialized `stock_summary` cache rebuild from deltas; invalidate on sync.
-- [ ] Populate `source_terminal_id` and `source_user_id` from session context in `adjust_stock_with_reason`.
+- [x] Populate `source_terminal_id` and `source_user_id` from session context — `adjust_stock_with_reason` now accepts optional audit params. Scoped `adjust_stock_scoped` Tauri command passes `session.terminal_id` and `session.user_id`. Backward-compat `adjust_stock` passes `None`. Added 2 new tests verifying audit field persistence.
 - [ ] Implement `FastPINOverlay.tsx` for shared touchscreen user switching.
 - [ ] Add `version` and `updated_at` optimistic concurrency fields to synced entities.
 - [ ] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database.
