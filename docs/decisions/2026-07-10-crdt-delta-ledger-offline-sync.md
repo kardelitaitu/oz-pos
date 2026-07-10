@@ -137,7 +137,7 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 ### Phase 2 (Future)
 
 - [x] Choose and adopt UUIDv7 for all entity primary keys — replaced all 158 `Uuid::new_v4()` call sites with `Uuid::now_v7()` across the entire workspace. Added `v7` feature to workspace `uuid` dependency. Added `oz_core::new_id()` helper for future entity ID generation.
-- [ ] Implement materialized `stock_summary` cache rebuild from deltas; invalidate on sync.
+- [x] Implement materialized `stock_summary` cache rebuild from deltas — `rebuild_stock_summary()` method recomputes both `stock_summary` and `inventory` tables from `SUM(delta)` in a single transaction. Sync integration point ready but not yet wired. Added 2 new tests.
 - [x] Populate `source_terminal_id` and `source_user_id` from session context — `adjust_stock_with_reason` now accepts optional audit params. Scoped `adjust_stock_scoped` Tauri command passes `session.terminal_id` and `session.user_id`. Backward-compat `adjust_stock` passes `None`. Added 2 new tests verifying audit field persistence.
 - [ ] Implement `FastPINOverlay.tsx` for shared touchscreen user switching.
 - [ ] Add `version` and `updated_at` optimistic concurrency fields to synced entities.

@@ -678,6 +678,63 @@ impl Store<'_> {
         }
     }
 
+    /// Rebuild the materialised `stock_summary` and `inventory` tables from the
+    /// delta ledger (ADR #6).
+    ///
+    /// This is called after a sync cycle receives new deltas from other
+    /// registers or the cloud, ensuring the materialised cache is consistent
+    /// with the authoritative ledger. Runs in a single transaction for atomicity.
+    ///
+    /// Returns the number of products whose stock was rebuilt.
+    pub fn rebuild_stock_summary(&self) -> Result<usize, CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        // Clear the materialised caches.
+        tx.execute("DELETE FROM stock_summary", [])?;
+
+        // Rebuild stock_summary from the delta ledger.
+        let rebuilt = tx.execute(
+            "INSERT INTO stock_summary (item_id, qty, updated_at)
+             SELECT item_id, SUM(delta), ?1
+             FROM stock_movements
+             GROUP BY item_id",
+            params![now],
+        )?;
+
+        // Rebuild the inventory table (backward compat) to match.
+        // Upsert: set qty for products with deltas, leave others untouched.
+        tx.execute(
+            "INSERT INTO inventory (product_id, qty, updated_at)
+             SELECT item_id, SUM(delta), ?1
+             FROM stock_movements
+             GROUP BY item_id
+             ON CONFLICT(product_id) DO UPDATE SET
+                qty = excluded.qty,
+                updated_at = excluded.updated_at",
+            params![now],
+        )?;
+
+        // Zero out inventory for products whose ledger SUM is 0 or negative
+        // (e.g., all stock was sold). The INSERT … ON CONFLICT above only
+        // handles items present in stock_movements; items with net-zero deltas
+        // need explicit zeroing.
+        tx.execute(
+            "UPDATE inventory SET qty = 0, updated_at = ?1
+             WHERE product_id IN (
+                SELECT item_id FROM stock_movements
+                GROUP BY item_id
+                HAVING SUM(delta) <= 0
+             )",
+            params![now],
+        )?;
+
+        tx.commit()?;
+
+        Ok(rebuilt)
+    }
+
     /// List all stock movement rows for a product, ordered by time (ADR #6).
     ///
     /// Returns the complete immutable delta ledger for audit and sync.
@@ -1721,6 +1778,66 @@ mod tests {
         assert_eq!(movements.len(), 1);
         assert_eq!(movements[0].source_terminal_id, None);
         assert_eq!(movements[0].source_user_id, None);
+    }
+
+    #[test]
+    fn rebuild_stock_summary_from_ledger() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // Insert deltas that bypass the normal adjust_stock path
+        // (simulating external sync deltas).
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, created_at) VALUES
+                ('sm-1', 'prod-1', 50, 'migration-seed', '2025-01-01T00:00:00.000Z'),
+                ('sm-2', 'prod-1', -10, 'sale', '2025-01-02T00:00:00.000Z'),
+                ('sm-3', 'prod-2', 100, 'restock', '2025-01-01T00:00:00.000Z'),
+                ('sm-4', 'prod-2', -25, 'sale', '2025-01-02T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let count = store(&conn).rebuild_stock_summary().unwrap();
+        assert_eq!(count, 2, "should rebuild 2 product stock levels");
+
+        // Verify stock_summary was rebuilt.
+        let qty1: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty1, 40, "prod-1: 50 + (-10) = 40");
+
+        let qty2: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty2, 75, "prod-2: 100 + (-25) = 75");
+
+        // Verify inventory was synced.
+        let inv1 = store(&conn).get_stock("prod-1").unwrap();
+        assert_eq!(inv1, 40);
+        let inv2 = store(&conn).get_stock("prod-2").unwrap();
+        assert_eq!(inv2, 75);
+    }
+
+    #[test]
+    fn rebuild_stock_summary_empty_ledger() {
+        let conn = fresh();
+
+        // Rebuild on a fresh DB with no movements.
+        let count = store(&conn).rebuild_stock_summary().unwrap();
+        assert_eq!(count, 0, "no rows to rebuild");
+
+        // stock_summary should be empty.
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM stock_summary", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
     }
 
     #[test]
