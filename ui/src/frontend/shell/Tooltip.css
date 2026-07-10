@@ -1,0 +1,129 @@
+/* ── Tooltip ──────────────────────────────────────────────────────── */
+
+.tooltip-wrapper {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+/* ── Tooltip bubble ─────────────────────────────── */
+.tooltip-content {
+  position: absolute;
+  padding: var(--space-1_5) var(--space-2_5);
+  background: var(--color-fg);
+  color: var(--color-fg-inverse);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  z-index: var(--z-tooltip);
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity var(--duration-150) var(--ease-out),
+    transform var(--duration-150) var(--ease-out);
+  transform-origin: var(--tooltip-origin, left center);
+}
+
+.tooltip-content--visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ── Position: right (default for collapsed sidebar) ─ */
+.tooltip-content--right {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+  --tooltip-origin: left center;
+}
+
+.tooltip-content--right.tooltip-content--visible {
+  transform: translateY(-50%) scale(1);
+}
+
+/* ── Position: left ─────────────────────────────── */
+.tooltip-content--left {
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+  --tooltip-origin: right center;
+}
+
+.tooltip-content--left.tooltip-content--visible {
+  transform: translateY(-50%) scale(1);
+}
+
+/* ── Position: top ──────────────────────────────── */
+.tooltip-content--top {
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  --tooltip-origin: bottom center;
+}
+
+.tooltip-content--top.tooltip-content--visible {
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── Position: bottom ───────────────────────────── */
+.tooltip-content--bottom {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  --tooltip-origin: top center;
+}
+
+.tooltip-content--bottom.tooltip-content--visible {
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── Arrow ──────────────────────────────────────── */
+.tooltip-content::before {
+  content: '';
+  position: absolute;
+  border: 5px solid transparent;
+  pointer-events: none;
+}
+
+/* Right-positioned arrow points left into the trigger */
+.tooltip-content--right::before {
+  left: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: var(--color-fg);
+}
+
+/* Left-positioned arrow points right */
+.tooltip-content--left::before {
+  right: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: var(--color-fg);
+}
+
+/* Top-positioned arrow points up */
+.tooltip-content--top::before {
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: var(--color-fg);
+}
+
+/* Bottom-positioned arrow points down */
+.tooltip-content--bottom::before {
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: var(--color-fg);
+}
+
+/* ── Reduced motion ─────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-content {
+    transition: none;
+  }
+}
