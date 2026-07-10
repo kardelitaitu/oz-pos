@@ -5,6 +5,8 @@ export type KdsStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelle
 export interface KdsOrder {
   id: string;
   sale_id: string;
+  /** The store this order belongs to (ADR #8). Used for defense-in-depth filtering. */
+  store_id: string | null;
   status: KdsStatus;
   items_summary: string;
   item_count: number;

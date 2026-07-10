@@ -12,6 +12,7 @@ impl Store<'_> {
         Ok(KdsOrder {
             id: row.get("id")?,
             sale_id: row.get("sale_id")?,
+            store_id: row.get("store_id")?,
             status: row.get("status")?,
             items_summary: row.get("items_summary")?,
             item_count: row.get("item_count")?,
@@ -51,12 +52,13 @@ impl Store<'_> {
             .to_string();
 
         tx.execute(
-            "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count,
+            "INSERT INTO kds_orders (id, sale_id, store_id, status, items_summary, item_count,
                                      display_number, received_at, notes)
-             VALUES (?1, ?2, 'pending', ?3, ?4, ?5, ?6, ?7)",
+             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8)",
             params![
                 id,
                 input.sale_id,
+                input.store_id,
                 input.items_summary,
                 input.item_count,
                 display_number,
@@ -75,7 +77,7 @@ impl Store<'_> {
     /// List KDS orders, optionally filtered by status. Ordered by received_at DESC.
     pub fn list_kds_orders(&self, status_filter: Option<&str>) -> Result<Vec<KdsOrder>, CoreError> {
         let mut sql = String::from(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders",
@@ -98,7 +100,7 @@ impl Store<'_> {
     /// Get a single KDS order by its id.
     pub fn get_kds_order(&self, id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders WHERE id = ?1",
@@ -114,7 +116,7 @@ impl Store<'_> {
     /// Get a KDS order by the originating sale id.
     pub fn get_kds_order_by_sale(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders WHERE sale_id = ?1",
@@ -170,7 +172,7 @@ impl Store<'_> {
     /// ordered by received_at ASC (oldest first).
     pub fn get_kds_queue(&self) -> Result<Vec<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders
@@ -236,6 +238,7 @@ impl Store<'_> {
 
         self.create_kds_order(CreateKdsOrderInput {
             sale_id: sale_id.to_owned(),
+            store_id: None, // Populated when caller has session context (ADR #8)
             items_summary,
             item_count,
             notes,
@@ -332,6 +335,7 @@ mod tests {
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id.clone(),
+                store_id: None,
                 items_summary: "Coffee x2, Bagel".into(),
                 item_count: 3,
                 notes: "No onions".into(),
@@ -389,6 +393,7 @@ mod tests {
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id.clone(),
+                store_id: None,
                 items_summary: "Tea".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -429,6 +434,7 @@ mod tests {
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id,
+                store_id: None,
                 items_summary: "Test".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -481,6 +487,7 @@ mod tests {
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id,
+                store_id: None,
                 items_summary: "Test".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -532,6 +539,7 @@ mod tests {
 
         s.create_kds_order(CreateKdsOrderInput {
             sale_id: sale_id1,
+            store_id: None,
             items_summary: "Order 1".into(),
             item_count: 1,
             notes: String::new(),
@@ -540,6 +548,7 @@ mod tests {
 
         s.create_kds_order(CreateKdsOrderInput {
             sale_id: sale_id2,
+            store_id: None,
             items_summary: "Order 2".into(),
             item_count: 2,
             notes: String::new(),
@@ -591,6 +600,7 @@ mod tests {
         let _o1 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id1,
+                store_id: None,
                 items_summary: "Pending".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -600,6 +610,7 @@ mod tests {
         let o2 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id2,
+                store_id: None,
                 items_summary: "Preparing".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -609,6 +620,7 @@ mod tests {
         let o3 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id3,
+                store_id: None,
                 items_summary: "Served".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -687,6 +699,7 @@ mod tests {
         let o1 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id1,
+                store_id: None,
                 items_summary: "First".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -696,6 +709,7 @@ mod tests {
         let o2 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id2,
+                store_id: None,
                 items_summary: "Second".into(),
                 item_count: 1,
                 notes: String::new(),

@@ -251,6 +251,10 @@ pub const ALL: &[Migration] = &[
         id: "063_stock_movements.sql",
         sql: include_str!("../migrations/063_stock_movements.sql"),
     },
+    Migration {
+        id: "064_kds_store_id.sql",
+        sql: include_str!("../migrations/064_kds_store_id.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
