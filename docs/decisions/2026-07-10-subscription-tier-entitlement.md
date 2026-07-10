@@ -1,6 +1,6 @@
 # ADR #5: Subscription Tier & Entitlement Architecture
 
-**Status:** In Progress (Updated 2026-07-10)
+**Status:** Accepted (Updated 2026-07-10)
 **Date:** 2026-07-10
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** subscriptions, entitlements, billing, multi-store, quotas, offline-grace
@@ -147,8 +147,8 @@ pub enum InstanceStatus {
 - [x] Write tests (14 subscription + 22 workspace = 36/36 pass).
 - [x] Implement entitlement check during session resolution (filter `list_workspaces` by tier-allowed types via `list_workspaces_with_entitlement()`).
 - [x] Implement 14-day offline grace period (`is_within_grace_period()`, `effective_tier()`) and monotonic clock rollback detection (`validate_clock_rollback()`, `compute_max_ledger_timestamp()`). Wired into both `create_workspace_instance_scoped` and `list_workspaces_scoped`.
-- [ ] Implement automatic instance recovery on tier upgrade (iterates all store DBs).
-- [ ] Run `cargo clippy -p oz-core -- -D warnings` and full test suite.
+- [x] Implement automatic instance recovery on tier upgrade (`auto_recover_instances`) with transaction safety and downgrade-safe suspension (`suspend_surplus_instances`). Wired into Tauri commands (`recover_workspace_instances_scoped`, `suspend_surplus_workspace_instances_scoped`). Tests cover recovery limits, unlimited tiers, suspension, and roundtrip.
+- [x] Run `cargo clippy -p oz-core -- -D warnings` (17 pre-existing missing-docs warnings; no new warnings) and full test suite (54/54 pass).
 
 ---
 

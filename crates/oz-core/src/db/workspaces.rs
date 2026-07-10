@@ -602,8 +602,8 @@ impl Store<'_> {
         }
 
         tx.execute(
-            "INSERT INTO workspace_instances (id, type_key, store_id, name, description, colour, status)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active')",
+            "INSERT INTO workspace_instances (id, type_key, store_id, name, description, colour, status, last_accessed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
             params![id, type_key, store_id, name, description, colour],
         )?;
 
@@ -643,6 +643,155 @@ impl Store<'_> {
             params![instance_id],
         )?;
         Ok(())
+    }
+
+    /// Restore `QuotaSuspended` instances to `Active` up to the tier's
+    /// per-store limit (ADR #5 Phase 3b).
+    ///
+    /// Called when a tier is upgraded — the new tier allows more
+    /// registers per store. Instances are restored in most-recently-used
+    /// order (`last_accessed_at DESC`). Already-`Active` instances count
+    /// toward the limit. Returns the count of restored instances.
+    ///
+    /// Wrapped in a transaction to prevent race conditions between the
+    /// SELECT count and UPDATE.
+    pub fn auto_recover_instances(
+        &self,
+        store_id: &str,
+        tier: &SubscriptionTier,
+    ) -> Result<usize, CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        let limit = match tier.max_pos_instances() {
+            Some(n) => n,
+            None => {
+                // Unlimited — restore ALL QuotaSuspended instances.
+                let updated = tx.execute(
+                    "UPDATE workspace_instances
+                     SET status = 'active',
+                         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                     WHERE store_id = ?1 AND status = 'quota_suspended'",
+                    params![store_id],
+                )?;
+                tx.commit()?;
+                if updated > 0 {
+                    tracing::info!(
+                        store_id = %store_id,
+                        restored = %updated,
+                        "unlimited tier — all suspended instances restored"
+                    );
+                }
+                return Ok(updated);
+            }
+        };
+
+        // Count already-active instances (they count toward the limit).
+        let active_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM workspace_instances
+             WHERE store_id = ?1 AND status = 'active'",
+            params![store_id],
+            |row| row.get(0),
+        )?;
+
+        let slots_available = (limit - active_count).max(0);
+        if slots_available == 0 {
+            tx.commit()?;
+            return Ok(0);
+        }
+
+        // Restore the most-recently-used suspended instances.
+        let updated = tx.execute(
+            "UPDATE workspace_instances
+             SET status = 'active',
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id IN (
+                 SELECT id FROM workspace_instances
+                 WHERE store_id = ?1 AND status = 'quota_suspended'
+                 ORDER BY last_accessed_at DESC
+                 LIMIT ?2
+             )",
+            params![store_id, slots_available],
+        )?;
+
+        tx.commit()?;
+
+        if updated > 0 {
+            tracing::info!(
+                store_id = %store_id,
+                restored = %updated,
+                active = %active_count,
+                limit = %limit,
+                "suspended instances restored after tier upgrade"
+            );
+        }
+
+        Ok(updated)
+    }
+
+    /// Suspend surplus `Active` instances when a tier is downgraded
+    /// (ADR #5 Phase 3c).
+    ///
+    /// If the store has more active instances than the tier allows,
+    /// the least-recently-used instances are transitioned to
+    /// `QuotaSuspended`. Returns the count of suspended instances.
+    ///
+    /// Wrapped in a transaction to prevent race conditions between the
+    /// SELECT count and UPDATE.
+    pub fn suspend_surplus_instances(
+        &self,
+        store_id: &str,
+        tier: &SubscriptionTier,
+    ) -> Result<usize, CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        let limit = match tier.max_pos_instances() {
+            Some(n) => n,
+            None => {
+                tx.commit()?;
+                return Ok(0); // Unlimited — nothing to suspend
+            }
+        };
+
+        let active_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM workspace_instances
+             WHERE store_id = ?1 AND status = 'active'",
+            params![store_id],
+            |row| row.get(0),
+        )?;
+
+        let surplus = (active_count - limit).max(0);
+        if surplus == 0 {
+            tx.commit()?;
+            return Ok(0);
+        }
+
+        // Suspend the least-recently-used active instances.
+        let updated = tx.execute(
+            "UPDATE workspace_instances
+             SET status = 'quota_suspended',
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id IN (
+                 SELECT id FROM workspace_instances
+                 WHERE store_id = ?1 AND status = 'active'
+                 ORDER BY last_accessed_at ASC
+                 LIMIT ?2
+             )",
+            params![store_id, surplus],
+        )?;
+
+        tx.commit()?;
+
+        if updated > 0 {
+            tracing::info!(
+                store_id = %store_id,
+                suspended = %updated,
+                active_before = %active_count,
+                limit = %limit,
+                "surplus instances suspended after tier downgrade"
+            );
+        }
+
+        Ok(updated)
     }
 
     /// List all workspace instances in a store (admin use, no access control).
@@ -1016,7 +1165,8 @@ mod tests {
             .unwrap();
         assert_eq!(dto.len(), 5);
         assert!(dto.iter().any(|w| w.type_key == "kds"));
-    }    #[test]
+    }
+    #[test]
     fn count_active_instances_excludes_suspended() {
         let (store, _) = fresh();
         let initial = store.count_active_instances("default").unwrap();
@@ -1024,7 +1174,9 @@ mod tests {
         // Archive one instance.
         // TODO(ADR #5): Add a public archive_instance() method to Store
         // for proper encapsulation.
-        store.conn.execute(
+        store
+            .conn
+            .execute(
                 "UPDATE workspace_instances SET status = 'archived' WHERE id = 'default-kds'",
                 [],
             )
@@ -1054,5 +1206,119 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("1 registers"));
+    }
+
+    // ── Auto-Recovery & Suspension tests (ADR #5 Phase 3b/3c) ───────
+
+    #[test]
+    fn auto_recover_restores_suspended_to_limit() {
+        let (store, _) = fresh();
+        // Suspend two instances manually.
+        store.conn.execute(
+            "UPDATE workspace_instances SET status = 'quota_suspended' WHERE id IN ('default-kds', 'default-inventory')",
+            [],
+        ).unwrap();
+        // Now: 3 active, 2 suspended.
+        assert_eq!(store.count_active_instances("default").unwrap(), 3);
+
+        // Premium tier allows 10 per store — recover should restore both.
+        let premium = SubscriptionTier::Premium;
+        let restored = store.auto_recover_instances("default", &premium).unwrap();
+        assert_eq!(restored, 2);
+        assert_eq!(store.count_active_instances("default").unwrap(), 5);
+    }
+
+    #[test]
+    fn auto_recover_respects_tier_limit() {
+        let (store, _) = fresh();
+        // Suspend one instance.
+        store.conn.execute(
+            "UPDATE workspace_instances SET status = 'quota_suspended' WHERE id = 'default-kds'",
+            [],
+        ).unwrap();
+        // Now: 4 active, 1 suspended.
+
+        // Free tier allows 1 per store — no slots, nothing to recover.
+        let free = SubscriptionTier::Free;
+        let restored = store.auto_recover_instances("default", &free).unwrap();
+        assert_eq!(restored, 0);
+        assert_eq!(store.count_active_instances("default").unwrap(), 4);
+    }
+
+    #[test]
+    fn auto_recover_unlimited_restores_all() {
+        let (store, _) = fresh();
+        store
+            .conn
+            .execute(
+                "UPDATE workspace_instances SET status = 'quota_suspended'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(store.count_active_instances("default").unwrap(), 0);
+
+        let enterprise = SubscriptionTier::Enterprise;
+        let restored = store
+            .auto_recover_instances("default", &enterprise)
+            .unwrap();
+        assert_eq!(restored, 5);
+        assert_eq!(store.count_active_instances("default").unwrap(), 5);
+    }
+
+    #[test]
+    fn suspend_surplus_transitions_excess_to_suspended() {
+        let (store, _) = fresh();
+        // 5 active instances. Free tier allows 1. Surplus = 4.
+        let free = SubscriptionTier::Free;
+        let suspended = store.suspend_surplus_instances("default", &free).unwrap();
+        assert_eq!(suspended, 4);
+        assert_eq!(store.count_active_instances("default").unwrap(), 1);
+    }
+
+    #[test]
+    fn suspend_surplus_no_op_when_under_limit() {
+        let (store, _) = fresh();
+        // Premium allows 10, we only have 5 — nothing to suspend.
+        let premium = SubscriptionTier::Premium;
+        let suspended = store
+            .suspend_surplus_instances("default", &premium)
+            .unwrap();
+        assert_eq!(suspended, 0);
+        assert_eq!(store.count_active_instances("default").unwrap(), 5);
+    }
+
+    #[test]
+    fn suspend_surplus_unlimited_tier_no_op() {
+        let (store, _) = fresh();
+        let enterprise = SubscriptionTier::Enterprise;
+        let suspended = store
+            .suspend_surplus_instances("default", &enterprise)
+            .unwrap();
+        assert_eq!(suspended, 0);
+    }
+
+    #[test]
+    fn auto_recover_then_suspend_roundtrip() {
+        let (store, _) = fresh();
+        // Suspend all
+        store
+            .conn
+            .execute(
+                "UPDATE workspace_instances SET status = 'quota_suspended'",
+                [],
+            )
+            .unwrap();
+
+        // Recover with Pro (3 limit)
+        let pro = SubscriptionTier::Pro;
+        let restored = store.auto_recover_instances("default", &pro).unwrap();
+        assert_eq!(restored, 3);
+        assert_eq!(store.count_active_instances("default").unwrap(), 3);
+
+        // Downgrade to Free (1 limit) — should suspend 2
+        let free = SubscriptionTier::Free;
+        let suspended = store.suspend_surplus_instances("default", &free).unwrap();
+        assert_eq!(suspended, 2);
+        assert_eq!(store.count_active_instances("default").unwrap(), 1);
     }
 }

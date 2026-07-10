@@ -67,7 +67,7 @@ pub async fn list_workspaces_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceDto>, AppError> {
-    let session = state.resolve_session(&session_token)?;    // ADR #5: Load subscription from global DB for entitlement filtering.
+    let session = state.resolve_session(&session_token)?; // ADR #5: Load subscription from global DB for entitlement filtering.
     // Also validates the system clock has not been rolled back.
     let tier = {
         let global_db = state.db.lock().await;
@@ -75,7 +75,9 @@ pub async fn list_workspaces_scoped(
         TenantSubscription::load(&global_db, "default")?
             .map(|sub| sub.effective_tier())
             .unwrap_or_else(|| {
-                tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
+                tracing::warn!(
+                    "no subscription found for tenant 'default', defaulting to Free tier"
+                );
                 oz_core::SubscriptionTier::Free
             })
     };
@@ -168,6 +170,85 @@ pub async fn create_workspace_instance_scoped(
         "workspace instance created (scoped)"
     );
     Ok(dto)
+}
+
+/// Recover `QuotaSuspended` workspace instances after a tier upgrade. ADR #5 Phase 3b.
+///
+/// Iterates the target store's database, restores suspended instances up to
+/// the tier's per-store register limit, and returns the count of restored instances.
+#[command]
+pub async fn recover_workspace_instances_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<u32, AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    // Load subscription from the GLOBAL database.
+    let sub = {
+        let global_db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&global_db)?;
+        TenantSubscription::load(&global_db, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
+    };
+    sub.verify_signature("")?;
+
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let restored = store.auto_recover_instances(&session.store_id, &sub.tier)?;
+    drop(db);
+    tracing::info!(
+        store_id = %session.store_id,
+        restored = %restored,
+        tier = %sub.tier.name(),
+        "workspace instances recovered after tier upgrade"
+    );
+    Ok(restored as u32)
+}
+
+/// Suspend surplus workspace instances after a tier downgrade. ADR #5 Phase 3c.
+///
+/// If the store has more active instances than the tier allows, the
+/// least-recently-used instances are transitioned to `QuotaSuspended`.
+/// Returns the count of suspended instances.
+#[command]
+pub async fn suspend_surplus_workspace_instances_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<u32, AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    // Load subscription from the GLOBAL database.
+    let sub = {
+        let global_db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&global_db)?;
+        TenantSubscription::load(&global_db, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
+    };
+    sub.verify_signature("")?;
+
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let suspended = store.suspend_surplus_instances(&session.store_id, &sub.tier)?;
+    drop(db);
+    tracing::info!(
+        store_id = %session.store_id,
+        suspended = %suspended,
+        tier = %sub.tier.name(),
+        "surplus workspace instances suspended after tier downgrade"
+    );
+    Ok(suspended as u32)
 }
 
 /// List screens for a workspace type from the store-scoped database. ADR #7.
