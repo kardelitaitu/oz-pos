@@ -18,3 +18,12 @@ CREATE TABLE IF NOT EXISTS store_profiles (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_store_profiles_primary
     ON store_profiles(is_primary) WHERE is_primary = 1;
+
+-- Seed the default store so foreign key constraints in
+-- later migrations (066) have a valid reference. Single-store
+-- deployments use this row; multi-store deployments add more.
+-- is_primary is 0 here — the store_profiles table has a unique
+-- partial index on is_primary=1, and making this the primary
+-- would conflict with tests that create their own primary stores.
+INSERT OR IGNORE INTO store_profiles (id, name, is_primary)
+VALUES ('default', 'Default Store', 0);

@@ -188,21 +188,33 @@ mod tests {
         let conn: &'static rusqlite::Connection = Box::leak(Box::new(conn));
         let store = Store::new(conn);
 
-        // Seed the primary store (mimics what platform-startup does).
-        let primary = StoreProfile {
-            id: "default".into(),
-            name: "Main Store".into(),
-            address: "123 Main St".into(),
-            tax_id: "TAX-001".into(),
-            currency: "USD".into(),
-            timezone: "America/New_York".into(),
-            is_primary: true,
-            created_at: "2026-06-30T12:00:00Z".into(),
-            updated_at: "2026-06-30T12:00:00Z".into(),
-        };
-        store.create_store_profile(&primary).unwrap();
-        let id = primary.id;
-        (store, id)
+        // Migration 025 seeds a default store_profiles row (id='default',
+        // is_primary=0). Update it to is_primary=1 with full test data.
+        // We use UPDATE rather than INSERT OR REPLACE because the latter
+        // triggers a DELETE (blocked by ON DELETE RESTRICT from
+        // workspace_instances referencing store_profiles).
+        conn.execute(
+            "UPDATE store_profiles SET
+                name = ?1,
+                address = ?2,
+                tax_id = ?3,
+                currency = ?4,
+                timezone = ?5,
+                is_primary = 1,
+                created_at = ?6,
+                updated_at = ?7
+             WHERE id = 'default'",
+            rusqlite::params![
+                "Main Store",
+                "123 Main St",
+                "TAX-001",
+                "USD",
+                "America/New_York",
+                "2026-06-30T12:00:00Z",
+                "2026-06-30T12:00:00Z",
+            ],
+        ).unwrap();
+        (store, "default".into())
     }
 
     #[test]

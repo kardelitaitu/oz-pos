@@ -25,6 +25,7 @@ CREATE TABLE workspace_instances_new (
     description TEXT NOT NULL DEFAULT '',
     colour      TEXT,
     status      TEXT NOT NULL DEFAULT 'active',
+    last_accessed_at TEXT,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -56,7 +57,7 @@ CREATE TABLE user_store_access_new (
 -- orphaned if store_profiles hasn't been seeded yet.
 INSERT INTO workspace_instances_new
     SELECT id, type_key, store_id, name, description, colour, status,
-           created_at, updated_at
+           last_accessed_at, created_at, updated_at
     FROM workspace_instances
     WHERE store_id IN (SELECT id FROM store_profiles);
 
