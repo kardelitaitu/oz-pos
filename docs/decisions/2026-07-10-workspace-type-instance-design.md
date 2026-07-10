@@ -769,10 +769,12 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 > **Status (2026-07-10):** Steps 1–3 complete. Admin UI for binding terminals deferred (frontend task).
 
-1. **Device Registration**:
+1. **Device Registration** ✅
    - [x] Backend: `set_device_binding`, `get_device_binding`, `clear_device_binding` Tauri commands with HMAC signing (Phase 1b).
-   - [ ] Admin UI for binding a terminal to a store + instance (deferred — frontend task).
+   - [x] Admin UI: device binding section in `TerminalManagementScreen` edit modal — select store + instance, bind/clear with HMAC signing.
+   - [x] Frontend API: `getDeviceBinding`, `setDeviceBinding`, `clearDeviceBinding` wrappers in `ui/src/api/terminals.ts`.
    - [x] Boot-time validation: `resolve_boot_store` opens the bound store's database and verifies the instance exists and is active.
+   - **Files:** `ui/src/api/terminals.ts`, `ui/src/features/terminals/TerminalManagementScreen.tsx`
 
 2. **Boot Resolution** ✅
    - [x] `resolve_boot_store` Tauri command: resolves device binding → verifies HMAC → validates instance in store DB → returns `(store_id, instance_id, is_bound)`.

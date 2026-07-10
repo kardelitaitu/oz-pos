@@ -107,3 +107,35 @@ export const deleteTerminalProfile = (
   terminalId: string,
 ): Promise<void> =>
   invoke<void>('delete_terminal_profile', { userId, terminalId });
+
+// ── Device Binding (ADR #4 Phase 3) ────────────────────────────────
+
+export interface DeviceBindingDto {
+  bounded: boolean;
+  boundStoreId: string | null;
+  boundInstanceId: string | null;
+  signatureValid: boolean;
+}
+
+/** Get a terminal's device binding and validate its HMAC signature. */
+export const getDeviceBinding = (terminalId: string): Promise<DeviceBindingDto> =>
+  invoke<DeviceBindingDto>('get_device_binding', { terminalId });
+
+/** Set (or update) a terminal's device binding with HMAC signature. */
+export const setDeviceBinding = (
+  userId: string,
+  terminalId: string,
+  boundStoreId: string,
+  boundInstanceId: string,
+): Promise<void> =>
+  invoke<void>('set_device_binding', {
+    userId,
+    args: { terminalId, boundStoreId, boundInstanceId },
+  });
+
+/** Clear a terminal's device binding. */
+export const clearDeviceBinding = (
+  userId: string,
+  terminalId: string,
+): Promise<void> =>
+  invoke<void>('clear_device_binding', { userId, terminalId });

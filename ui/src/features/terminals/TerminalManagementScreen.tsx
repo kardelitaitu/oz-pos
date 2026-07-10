@@ -8,9 +8,15 @@ import {
   listTerminalOverrides,
   setTerminalOverride,
   deleteTerminalOverride,
+  getDeviceBinding,
+  setDeviceBinding,
+  clearDeviceBinding,
   type TerminalDto,
   type TerminalFeatureOverride,
+  type DeviceBindingDto,
 } from '@/api/terminals';
+import { listStores, type StoreProfile } from '@/api/stores';
+import { listWorkspaces, type WorkspaceDto } from '@/api/workspaces';
 import { FEATURES } from '@/hooks/useFeatures';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
@@ -148,6 +154,16 @@ export default function TerminalManagementScreen() {
   const [overridesLoading, setOverridesLoading] = useState(false);
   const [overridesError, setOverridesError] = useState<string | null>(null);
 
+  // Device binding (ADR #4 Phase 3)
+  const [binding, setBinding] = useState<DeviceBindingDto | null>(null);
+  const [bindingLoading, setBindingLoading] = useState(false);
+  const [bindingStores, setBindingStores] = useState<StoreProfile[]>([]);
+  const [bindingInstances, setBindingInstances] = useState<WorkspaceDto[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState('');
+  const [selectedInstanceId, setSelectedInstanceId] = useState('');
+  const [bindingSaving, setBindingSaving] = useState(false);
+  const [bindingError, setBindingError] = useState<string | null>(null);
+
   // ── Load data ──────────────────────────────────────────────────
 
   const load = useCallback(async () => {
@@ -208,12 +224,116 @@ export default function TerminalManagementScreen() {
     return () => { cancelled = true; };
   }, [editingId, l10n]);
 
+  // Load device binding + stores when the edit modal opens for a terminal.
+  useEffect(() => {
+    if (!editingId) {
+      setBinding(null);
+      setBindingStores([]);
+      setBindingInstances([]);
+      setSelectedStoreId('');
+      setSelectedInstanceId('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setBindingLoading(true);
+      setBindingError(null);
+      try {
+        const [b, stores] = await Promise.all([
+          getDeviceBinding(editingId),
+          listStores(),
+        ]);
+        if (!cancelled) {
+          setBinding(b);
+          setBindingStores(stores);
+          if (b.boundStoreId) {
+            setSelectedStoreId(b.boundStoreId);
+            // Load instances for the bound store.
+            try {
+              const instances = await listWorkspaces('role-owner', b.boundStoreId);
+              if (!cancelled) {
+                setBindingInstances(instances);
+                if (b.boundInstanceId) setSelectedInstanceId(b.boundInstanceId);
+              }
+            } catch {
+              if (!cancelled) setBindingInstances([]);
+            }
+          }
+        }
+      } catch {
+        if (!cancelled) setBindingError(l10n.getString('terminal-error-binding-load'));
+      } finally {
+        if (!cancelled) setBindingLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editingId, l10n]);
+
+  // Load instances when the selected store changes.
+  useEffect(() => {
+    if (!selectedStoreId || !editingId) {
+      setBindingInstances([]);
+      setSelectedInstanceId('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const instances = await listWorkspaces('role-owner', selectedStoreId);
+        if (!cancelled) {
+          setBindingInstances(instances);
+          setSelectedInstanceId((prev) =>
+            instances.some((i) => i.instance_id === prev) ? prev : '',
+          );
+        }
+      } catch {
+        if (!cancelled) setBindingInstances([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedStoreId, editingId]);
+
   const closeModal = useCallback(() => {
     setShowModal(false);
     setError(null);
     setOverrides([]);
     setOverridesError(null);
+    setBinding(null);
+    setBindingError(null);
   }, []);
+
+  // ── Device binding handlers (ADR #4 Phase 3) ────────────────────
+
+  const handleBind = useCallback(async () => {
+    if (!editingId || !selectedStoreId || !selectedInstanceId) return;
+    setBindingSaving(true);
+    setBindingError(null);
+    try {
+      await setDeviceBinding(session?.user_id ?? '', editingId, selectedStoreId, selectedInstanceId);
+      const b = await getDeviceBinding(editingId);
+      setBinding(b);
+    } catch {
+      setBindingError(l10n.getString('terminal-error-binding-save'));
+    } finally {
+      setBindingSaving(false);
+    }
+  }, [editingId, selectedStoreId, selectedInstanceId, session?.user_id, l10n]);
+
+  const handleClearBinding = useCallback(async () => {
+    if (!editingId) return;
+    setBindingSaving(true);
+    setBindingError(null);
+    try {
+      await clearDeviceBinding(session?.user_id ?? '', editingId);
+      setBinding({ bounded: false, boundStoreId: null, boundInstanceId: null, signatureValid: false });
+      setSelectedStoreId('');
+      setSelectedInstanceId('');
+    } catch {
+      setBindingError(l10n.getString('terminal-error-binding-clear'));
+    } finally {
+      setBindingSaving(false);
+    }
+  }, [editingId, session?.user_id, l10n]);
 
   const openDelete = useCallback((terminal: TerminalDto) => {
     setDeleteTarget(terminal);
@@ -651,6 +771,89 @@ export default function TerminalManagementScreen() {
                             Reset all overrides
                           </Button>
                         </Localized>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Device Binding (ADR #4 Phase 3) — edit mode only */}
+                {isEditing && (
+                  <div className="terminal-mgmt-feature-overrides">
+                    <h3 className="terminal-mgmt-feature-overrides-title">
+                      Device Binding
+                    </h3>
+                    {bindingLoading ? (
+                      <p className="terminal-mgmt-loading">Loading binding…</p>
+                    ) : (
+                      <>
+                        {binding?.bounded && (
+                          <div className="terminal-mgmt-binding-info">
+                            <p>
+                              Bound to store: <strong>{binding.boundStoreId}</strong>
+                              {binding.boundInstanceId && (<> &middot; instance: <strong>{binding.boundInstanceId}</strong></>)}
+                            </p>
+                            <p className={binding.signatureValid ? 'terminal-mgmt-status-active' : 'terminal-mgmt-status-inactive'}>
+                              Signature: {binding.signatureValid ? 'Valid' : 'Invalid / Tampered'}
+                            </p>
+                          </div>
+                        )}
+                        <div className="terminal-mgmt-binding-fields">
+                          <label className="terminal-mgmt-field" htmlFor="bind-store">
+                            <span className="terminal-mgmt-label">Store</span>
+                            <select
+                              id="bind-store"
+                              className="terminal-mgmt-input"
+                              value={selectedStoreId}
+                              onChange={(e) => setSelectedStoreId(e.target.value)}
+                            >
+                              <option value="">-- Select store --</option>
+                              {bindingStores.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}{s.is_primary ? ' (Primary)' : ''}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="terminal-mgmt-field" htmlFor="bind-instance">
+                            <span className="terminal-mgmt-label">Workspace Instance</span>
+                            <select
+                              id="bind-instance"
+                              className="terminal-mgmt-input"
+                              value={selectedInstanceId}
+                              onChange={(e) => setSelectedInstanceId(e.target.value)}
+                              disabled={!selectedStoreId}
+                            >
+                              <option value="">-- Select instance --</option>
+                              {bindingInstances.map((i) => (
+                                <option key={i.instance_id} value={i.instance_id}>{i.name} ({i.type_key})</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <div className="terminal-mgmt-binding-actions">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            loading={bindingSaving}
+                            disabled={!selectedStoreId || !selectedInstanceId}
+                            onClick={handleBind}
+                          >
+                            {binding?.bounded ? 'Update Binding' : 'Bind Terminal'}
+                          </Button>
+                          {binding?.bounded && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={bindingSaving}
+                              onClick={handleClearBinding}
+                            >
+                              Clear Binding
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                    {bindingError && (
+                      <div className="terminal-mgmt-error" role="alert">
+                        <span>{bindingError}</span>
                       </div>
                     )}
                   </div>
