@@ -133,6 +133,10 @@ pub struct StartSaleResult {
     pub cart_id: CartId,
 }
 
+/// Start a new sale cart using the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `start_sale_scoped`
+/// with a `session_token` to create the cart in the store-scoped database.
 #[command]
 pub async fn start_sale(
     args: StartSaleArgs,
@@ -150,6 +154,35 @@ pub async fn start_sale(
     let id = cart.id();
 
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    store.save_active_cart(&cart)?;
+    drop(db);
+
+    Ok(StartSaleResult { cart_id: id })
+}
+
+/// Start a new sale in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn start_sale_scoped(
+    session_token: String,
+    args: StartSaleArgs,
+    state: State<'_, AppState>,
+) -> Result<StartSaleResult, AppError> {
+    let currency_str = if args.currency.is_empty() {
+        "USD"
+    } else {
+        &args.currency
+    };
+    let currency: oz_core::Currency = currency_str
+        .parse()
+        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency_str}")))?;
+    let cart = Cart::new(currency);
+    let id = cart.id();
+
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     store.save_active_cart(&cart)?;
     drop(db);
@@ -237,6 +270,9 @@ pub struct AddLineResult {
     pub line_total: Option<Money>,
 }
 
+/// Add a line to an active cart using the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `add_line_scoped`.
 #[command]
 pub async fn add_line(
     args: AddLineArgs,
@@ -244,6 +280,41 @@ pub async fn add_line(
 ) -> Result<AddLineResult, AppError> {
     // Load the cart and add the line in a single DB transaction scope.
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let mut cart = store
+        .load_active_cart(&args.cart_id)?
+        .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
+
+    let currency = cart.currency();
+    let unit_price = Money {
+        minor_units: args.unit_price_minor,
+        currency,
+    };
+    let line = CartLine::new(args.sku.clone(), args.qty, unit_price);
+    let line_id = line.id;
+    let line_total = line.total();
+    cart.add_line(line)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    store.save_active_cart(&cart)?;
+    drop(db);
+
+    Ok(AddLineResult {
+        line_id,
+        line_total,
+    })
+}
+
+/// Add a line to an active cart in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn add_line_scoped(
+    session_token: String,
+    args: AddLineArgs,
+    state: State<'_, AppState>,
+) -> Result<AddLineResult, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let mut cart = store
         .load_active_cart(&args.cart_id)?

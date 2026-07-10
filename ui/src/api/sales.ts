@@ -70,8 +70,16 @@ export interface SetCartDiscountArgs {
 export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
   invoke<StartSaleResult>('start_sale', { args });
 
+/** ADR #7: Start a new sale in the store resolved from a session token. */
+export const startSaleScoped = (sessionToken: string, args: StartSaleArgs): Promise<StartSaleResult> =>
+  invoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
+
 export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
   invoke<AddLineResult>('add_line', { args });
+
+/** ADR #7: Add a line to a cart in the store resolved from a session token. */
+export const addLineScoped = (sessionToken: string, args: AddLineArgs): Promise<AddLineResult> =>
+  invoke<AddLineResult>('add_line_scoped', { sessionToken, args });
 
 export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale', { args });

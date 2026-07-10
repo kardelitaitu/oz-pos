@@ -89,6 +89,8 @@ pub async fn list_products_scoped(
 | `list_active_carts` / `get_active_cart` | various | `session_token: String, ...` | ✅ + API wrappers |
 | `hold_cart` / `list_held_carts` / `list_open_bills` / `get_held_cart` / `delete_held_cart` / `compute_cart_tax` | various | `session_token: String, ...` | ✅ + API wrappers |
 | `complete_sale` | `args: CompleteSaleArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `complete_sale_scoped` + `CompleteSaleScopedArgs` + dual-lock DB pattern |
+| `start_sale` | `args: StartSaleArgs` | `session_token: String, args` | ✅ `start_sale_scoped` + API wrapper |
+| `add_line` | `args: AddLineArgs` | `session_token: String, args` | ✅ `add_line_scoped` + API wrapper |
 | *(remaining domain commands)* | various | `session_token: String, ...` | ⏳ |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
@@ -141,6 +143,7 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `list_active_carts_scoped` / `get_active_cart_scoped` — migrate cart queries
 - [x] `hold_cart_scoped` / `list_held_carts_scoped` / `list_open_bills_scoped` / `get_held_cart_scoped` / `delete_held_cart_scoped` / `compute_cart_tax_scoped` — migrate held cart commands
 - [x] `complete_sale_scoped` — migrate with `CompleteSaleScopedArgs` + dual-lock DB pattern
+- [x] `start_sale_scoped` / `add_line_scoped` — migrate POS cart creation
 - [ ] *(remaining domain commands)*
 
 ### Phase 4: Enforcement ⏳
