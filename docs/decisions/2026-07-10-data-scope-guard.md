@@ -77,6 +77,9 @@ pub async fn list_products_scoped(
 | `delete_product` | `args: DeleteProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `delete_product_scoped` + `DeleteProductScopedArgs` + API wrapper |
 | `list_sales` | `()` | `session_token: String` | ✅ `list_sales_scoped` + API wrapper |
 | `get_sale` | `id: String` | `session_token: String, id: String` | ✅ `get_sale_scoped` + `map_sale_to_detail` helper |
+| `export_daily_summary` | `()` | `session_token: String` | ✅ `export_daily_summary_scoped` + API wrapper |
+| `export_sales_by_hour` | `()` | `session_token: String` | ✅ `export_sales_by_hour_scoped` + API wrapper |
+| `export_eod_report` | `()` | `session_token: String` | ✅ `export_eod_report_scoped` + `build_eod_report` helper |
 | *(all other domain commands)* | various | `session_token: String, ...` | ⏳ |
 
 ### 3. Compile-Time Enforcement (Clippy Lint)
@@ -117,6 +120,9 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `delete_product_scoped` — remove `user_id` from args
 - [x] `list_sales_scoped` — migrate sales history listing
 - [x] `get_sale_scoped` — migrate sale detail lookup
+- [x] `export_daily_summary_scoped` — migrate daily summary report
+- [x] `export_sales_by_hour_scoped` — migrate sales-by-hour report
+- [x] `export_eod_report_scoped` — migrate EOD report with extracted `build_eod_report` helper
 - [ ] *(remaining domain commands)*
 
 ### Phase 4: Enforcement ⏳

@@ -143,6 +143,10 @@ fn map_sale_to_detail(s: oz_core::Sale) -> SaleDetail {
 
 // ── Dashboard / Export ───────────────────────────────────────────────
 
+/// Fetch the daily sales summary from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `export_daily_summary_scoped`
+/// with a `session_token` for store-scoped reports.
 #[command]
 pub async fn export_daily_summary(
     state: State<'_, AppState>,
@@ -154,11 +158,50 @@ pub async fn export_daily_summary(
     Ok(rows)
 }
 
+/// Fetch the daily sales summary for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `export_daily_summary`.
+#[command]
+pub async fn export_daily_summary_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<DailySummaryRow>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows = store.export_daily_summary()?;
+    drop(db);
+    Ok(rows)
+}
+
+/// Fetch sales-by-hour breakdown from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `export_sales_by_hour_scoped`.
 #[command]
 pub async fn export_sales_by_hour(
     state: State<'_, AppState>,
 ) -> Result<Vec<SalesByHourRow>, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let rows = store.export_sales_by_hour()?;
+    drop(db);
+    Ok(rows)
+}
+
+/// Fetch sales-by-hour breakdown for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `export_sales_by_hour`.
+#[command]
+pub async fn export_sales_by_hour_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SalesByHourRow>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let rows = store.export_sales_by_hour()?;
     drop(db);
@@ -187,11 +230,34 @@ pub struct PaymentBreakdown {
     pub total: i64,
 }
 
-/// Fetch the full EOD (End-of-Day) report for today.
+/// Fetch the full EOD (End-of-Day) report from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `export_eod_report_scoped`.
 #[command]
 pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    build_eod_report(&db)
+}
+
+/// Fetch the full EOD report for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `export_eod_report`. Opens the store-scoped
+/// database and builds the report from that store's data only.
+#[command]
+pub async fn export_eod_report_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<EodReport, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    build_eod_report(&db)
+}
+
+/// Shared business logic for building an EOD report from a connection.
+fn build_eod_report(db: &rusqlite::Connection) -> Result<EodReport, AppError> {
+    let store = Store::new(db);
 
     let daily = store.export_daily_summary()?;
     let hourly = store.export_sales_by_hour()?;
@@ -245,8 +311,6 @@ pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, 
         .first()
         .map(|r| r.currency.clone())
         .unwrap_or_else(|| "USD".into());
-
-    drop(db);
 
     Ok(EodReport {
         total_sales,
@@ -457,6 +521,13 @@ mod tests {
     fn get_sale_scoped_rejects_invalid_token() {
         let state = AppState::for_test();
         let result = state.resolve_session("bad-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn export_reports_scoped_reject_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
         assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }

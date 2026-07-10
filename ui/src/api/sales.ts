@@ -304,11 +304,23 @@ export interface EodReport {
 export const exportDailySummary = (): Promise<DailySummaryRow[]> =>
   invoke<DailySummaryRow[]>('export_daily_summary');
 
+/** ADR #7: Scoped daily summary report for the store resolved from a session token. */
+export const exportDailySummaryScoped = (sessionToken: string): Promise<DailySummaryRow[]> =>
+  invoke<DailySummaryRow[]>('export_daily_summary_scoped', { sessionToken });
+
 export const exportSalesByHour = (): Promise<SalesByHourRow[]> =>
   invoke<SalesByHourRow[]>('export_sales_by_hour');
 
+/** ADR #7: Scoped sales-by-hour report for the store resolved from a session token. */
+export const exportSalesByHourScoped = (sessionToken: string): Promise<SalesByHourRow[]> =>
+  invoke<SalesByHourRow[]>('export_sales_by_hour_scoped', { sessionToken });
+
 export const exportEodReport = (): Promise<EodReport> =>
   invoke<EodReport>('export_eod_report');
+
+/** ADR #7: Scoped EOD report for the store resolved from a session token. */
+export const exportEodReportScoped = (sessionToken: string): Promise<EodReport> =>
+  invoke<EodReport>('export_eod_report_scoped', { sessionToken });
 
 // ── Receipt Printing ──────────────────────────────────────────────
 
