@@ -367,6 +367,22 @@ pub struct CreateProductArgs {
     pub product_type: String,
 }
 
+/// Args for `create_product_scoped` — identical to `CreateProductArgs`
+/// but without `user_id` (read from the session token instead).
+#[derive(Debug, Deserialize)]
+pub struct CreateProductScopedArgs {
+    pub sku: String,
+    pub name: String,
+    pub price_minor: i64,
+    pub currency: String,
+    pub category_id: Option<String>,
+    pub barcode: Option<String>,
+    pub initial_stock: i64,
+    pub tax_rate_ids: Vec<String>,
+    #[serde(default = "default_product_type")]
+    pub product_type: String,
+}
+
 fn default_product_type() -> String {
     "retail".to_owned()
 }
@@ -376,6 +392,11 @@ pub struct CreateProductResult {
     pub sku: String,
 }
 
+/// Create a product using the global database and a `user_id` parameter.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `create_product_scoped`
+/// with a `session_token` instead. The `user_id` field should be read
+/// from the resolved session, not passed as a frontend parameter.
 #[command]
 pub async fn create_product(
     args: CreateProductArgs,
@@ -440,6 +461,83 @@ pub async fn create_product(
     Ok(CreateProductResult { sku: args.sku })
 }
 
+/// Create a product within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `create_product`. The `user_id` for
+/// permission checks is read from the resolved `SessionContext`,
+/// not passed as a frontend parameter. The product is created in
+/// the store-scoped database for the session's `store_id`.
+#[command]
+pub async fn create_product_scoped(
+    session_token: String,
+    args: CreateProductScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<CreateProductResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    // Scope the DB borrow so Store (which is !Send) is dropped before
+    // the next .await point when we lock the kernel for event publishing.
+    {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+
+        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_CREATE)?;
+
+        let currency: oz_core::Currency = args
+            .currency
+            .parse()
+            .map_err(|_| AppError::Invalid(format!("invalid currency '{}'", args.currency)))?;
+
+        let price = Money {
+            minor_units: args.price_minor,
+            currency,
+        };
+
+        store.create_product(
+            &args.sku,
+            &args.name,
+            price,
+            args.category_id.as_deref(),
+            args.barcode.as_deref(),
+            args.initial_stock,
+            Some(&args.product_type),
+        )?;
+
+        store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
+    } // db and store dropped here before .await
+
+    // Publish the ProductCreated domain event.
+    {
+        let event = ProductCreated {
+            sku: args.sku.clone(),
+            name: args.name.clone(),
+            price_minor: args.price_minor,
+            currency: args.currency.clone(),
+            category_id: args.category_id.clone(),
+            barcode: args
+                .barcode
+                .as_ref()
+                .and_then(|s| foundation::Barcode::new(s).ok()),
+            initial_stock: args.initial_stock,
+        };
+
+        let kernel = state.kernel.lock().await;
+        let bus = kernel.event_bus();
+        if let Err(e) = bus.publish(&event) {
+            tracing::warn!(sku = %args.sku, error = %e, "event bus publish failed");
+        }
+    }
+
+    tracing::info!(sku = %args.sku, name = %args.name, "product created (scoped)");
+    Ok(CreateProductResult { sku: args.sku })
+}
+
 // ── Update product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -455,11 +553,29 @@ pub struct UpdateProductArgs {
     pub product_type: Option<String>,
 }
 
+/// Args for `update_product_scoped` — identical to `UpdateProductArgs`
+/// but without `user_id` (read from the session token instead).
+#[derive(Debug, Deserialize)]
+pub struct UpdateProductScopedArgs {
+    pub sku: String,
+    pub name: String,
+    pub price_minor: i64,
+    pub currency: String,
+    pub category_id: Option<String>,
+    pub barcode: Option<String>,
+    pub tax_rate_ids: Vec<String>,
+    pub product_type: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UpdateProductResult {
     pub sku: String,
 }
 
+/// Update a product using the global database and a `user_id` parameter.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `update_product_scoped`
+/// with a `session_token` instead.
 #[command]
 pub async fn update_product(
     args: UpdateProductArgs,
@@ -494,6 +610,58 @@ pub async fn update_product(
     Ok(UpdateProductResult { sku: args.sku })
 }
 
+/// Update a product within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `update_product`. The `user_id` for
+/// permission checks is read from the resolved `SessionContext`.
+#[command]
+pub async fn update_product_scoped(
+    session_token: String,
+    args: UpdateProductScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<UpdateProductResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    // Scope the DB borrow so Store (which is !Send) is dropped before
+    // any future .await points.
+    {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+
+        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_UPDATE)?;
+
+        let currency: oz_core::Currency = args
+            .currency
+            .parse()
+            .map_err(|_| AppError::Invalid(format!("invalid currency '{}'", args.currency)))?;
+
+        let price = Money {
+            minor_units: args.price_minor,
+            currency,
+        };
+
+        store.update_product(
+            &args.sku,
+            &args.name,
+            price,
+            args.category_id.as_deref(),
+            args.barcode.as_deref(),
+            args.product_type.as_deref(),
+        )?;
+
+        store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
+    }
+
+    tracing::info!(sku = %args.sku, name = %args.name, "product updated (scoped)");
+    Ok(UpdateProductResult { sku: args.sku })
+}
+
 /// Check whether a product tracks serial numbers.
 #[command]
 pub async fn get_product_track_serial(
@@ -515,6 +683,16 @@ pub struct DeleteProductArgs {
     pub sku: String,
 }
 
+/// Args for `delete_product_scoped` — no `user_id`; read from session.
+#[derive(Debug, Deserialize)]
+pub struct DeleteProductScopedArgs {
+    pub sku: String,
+}
+
+/// Delete a product using the global database and a `user_id` parameter.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `delete_product_scoped`
+/// with a `session_token` instead.
 #[command]
 pub async fn delete_product(
     args: DeleteProductArgs,
@@ -524,6 +702,37 @@ pub async fn delete_product(
     let store = Store::new(&db);
     require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_DELETE)?;
     store.delete_product(&args.sku)?;
+    Ok(())
+}
+
+/// Delete a product within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `delete_product`. The `user_id` for
+/// permission checks is read from the resolved `SessionContext`.
+#[command]
+pub async fn delete_product_scoped(
+    session_token: String,
+    args: DeleteProductScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    // Scope the DB borrow so Store (which is !Send) is dropped before
+    // any future .await points.
+    {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_DELETE)?;
+        store.delete_product(&args.sku)?;
+    }
+
+    tracing::info!(sku = %args.sku, "product deleted (scoped)");
     Ok(())
 }
 
@@ -775,6 +984,19 @@ mod tests {
     }
 
     #[test]
+    fn create_product_scoped_args_deserialize() {
+        let json = r##"{"sku":"LATTE","name":"Latte","price_minor":450,"currency":"USD","category_id":null,"barcode":null,"initial_stock":0,"tax_rate_ids":[]}"##;
+        let args: CreateProductScopedArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku, "LATTE");
+        assert_eq!(args.price_minor, 450);
+
+        // user_id is intentionally absent — verify it's not deserialized
+        let json_with_user = r##"{"user_id":"u1","sku":"LATTE","name":"Latte","price_minor":450,"currency":"USD","category_id":null,"barcode":null,"initial_stock":0,"tax_rate_ids":[]}"##;
+        let args2: CreateProductScopedArgs = serde_json::from_str(json_with_user).unwrap();
+        assert_eq!(args2.sku, "LATTE"); // extra fields ignored by serde
+    }
+
+    #[test]
     fn create_product_args_debug() {
         let args = CreateProductArgs {
             user_id: "u".into(),
@@ -817,6 +1039,14 @@ mod tests {
     }
 
     #[test]
+    fn update_product_scoped_args_deserialize() {
+        let json = r##"{"sku":"LATTE","name":"Latte Updated","price_minor":500,"currency":"USD","category_id":null,"barcode":null,"tax_rate_ids":[]}"##;
+        let args: UpdateProductScopedArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Latte Updated");
+        assert_eq!(args.price_minor, 500);
+    }
+
+    #[test]
     fn update_product_result_serialize() {
         let result = UpdateProductResult {
             sku: "UPD-SKU".into(),
@@ -830,6 +1060,34 @@ mod tests {
         let json = r##"{"user_id":"u1","sku":"OLD-SKU"}"##;
         let args: DeleteProductArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.sku, "OLD-SKU");
+    }
+
+    #[test]
+    fn delete_product_scoped_args_deserialize() {
+        let json = r##"{"sku":"OLD-SKU"}"##;
+        let args: DeleteProductScopedArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sku, "OLD-SKU");
+    }
+
+    #[test]
+    fn create_product_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn update_product_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("bad-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn delete_product_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("bogus");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 
     #[test]

@@ -62,11 +62,46 @@ export const listProductsScoped = (sessionToken: string): Promise<ProductDto[]> 
 export const createProduct = (args: CreateProductArgs): Promise<{ sku: string }> =>
   invoke('create_product', { args });
 
+/** ADR #7: Scoped product creation — `userId` is read from session, not args. */
+export interface CreateProductScopedArgs {
+  sku: string;
+  name: string;
+  priceMinor: number;
+  currency: string;
+  categoryId?: string | undefined;
+  barcode?: string | undefined;
+  initialStock: number;
+  productType?: string;
+  taxRateIds: string[];
+}
+
+export const createProductScoped = (sessionToken: string, args: CreateProductScopedArgs): Promise<{ sku: string }> =>
+  invoke<{ sku: string }>('create_product_scoped', { sessionToken, args });
+
 export const updateProduct = (args: UpdateProductArgs): Promise<{ sku: string }> =>
   invoke('update_product', { args });
 
+/** ADR #7: Scoped product update — `userId` is read from session, not args. */
+export interface UpdateProductScopedArgs {
+  sku: string;
+  name: string;
+  priceMinor: number;
+  currency: string;
+  categoryId?: string | undefined;
+  barcode?: string | undefined;
+  productType?: string;
+  taxRateIds: string[];
+}
+
+export const updateProductScoped = (sessionToken: string, args: UpdateProductScopedArgs): Promise<{ sku: string }> =>
+  invoke<{ sku: string }>('update_product_scoped', { sessionToken, args });
+
 export const deleteProduct = (args: { userId: string; sku: string }): Promise<void> =>
   invoke('delete_product', { args });
+
+/** ADR #7: Scoped product deletion — `userId` is read from session, not args. */
+export const deleteProductScoped = (sessionToken: string, sku: string): Promise<void> =>
+  invoke('delete_product_scoped', { sessionToken, args: { sku } });
 
 // ── Barcode / SKU Lookup ───────────────────────────────────────────
 

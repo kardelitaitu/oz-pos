@@ -72,9 +72,9 @@ pub async fn list_products_scoped(
 | `adjust_stock` | `args: AdjustStockArgs` | `session_token: String, args: AdjustStockArgs` | ✅ `adjust_stock_scoped` added, API wrapper `adjustStockScoped` |
 | `lookup_by_barcode` | `barcode: String` | `session_token: String, barcode: String` | ✅ `lookup_by_barcode_scoped` + API wrapper |
 | `lookup_product_by_sku` | `sku: String` | `session_token: String, sku: String` | ✅ `lookup_product_by_sku_scoped` + API wrapper |
-| `create_product` | `args: CreateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ⏳ |
-| `update_product` | `args: UpdateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ⏳ |
-| `delete_product` | `args: DeleteProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ⏳ |
+| `create_product` | `args: CreateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `create_product_scoped` + `CreateProductScopedArgs` + API wrapper |
+| `update_product` | `args: UpdateProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `update_product_scoped` + `UpdateProductScopedArgs` + API wrapper |
+| `delete_product` | `args: DeleteProductArgs` (has user_id) | `session_token: String, args` (remove user_id) | ✅ `delete_product_scoped` + `DeleteProductScopedArgs` + API wrapper |
 | `list_orders` | (needs investigation) | `session_token: String, ...` | ⏳ |
 | *(all other domain commands)* | various | `session_token: String, ...` | ⏳ |
 
@@ -107,13 +107,13 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - [x] `resolve_scope()` on tablet `AppState`
 - [x] `list_products_scoped` simplified to use `resolve_scope()`
 
-### Phase 3: Domain Command Migration ⏳
-- [ ] `adjust_stock_scoped` — migrate stock adjustment
-- [ ] `lookup_by_barcode_scoped` — migrate barcode lookup
-- [ ] `lookup_product_by_sku_scoped` — migrate SKU lookup
-- [ ] `create_product_scoped` — remove `user_id` from args, use session token
-- [ ] `update_product_scoped` — remove `user_id` from args
-- [ ] `delete_product_scoped` — remove `user_id` from args
+### Phase 3: Domain Command Migration ⏳ (8 of 11 done)
+- [x] `adjust_stock_scoped` — migrate stock adjustment
+- [x] `lookup_by_barcode_scoped` — migrate barcode lookup
+- [x] `lookup_product_by_sku_scoped` — migrate SKU lookup
+- [x] `create_product_scoped` — remove `user_id` from args, use session token
+- [x] `update_product_scoped` — remove `user_id` from args
+- [x] `delete_product_scoped` — remove `user_id` from args
 - [ ] `list_orders_scoped` — migrate order listing
 - [ ] *(remaining domain commands)*
 
