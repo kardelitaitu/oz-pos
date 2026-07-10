@@ -80,9 +80,19 @@ pub struct OpenShiftArgs {
     pub opening_balance_minor: i64,
 }
 
+/// Args for `open_shift_scoped` — without `user_id`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenShiftScopedArgs {
+    pub terminal_id: Option<String>,
+    pub opening_balance_minor: i64,
+}
+
 // ── Commands ──────────────────────────────────────────────────────────
 
-/// Open a new shift for a user.
+/// Open a new shift for a user using the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `open_shift_scoped`.
 #[command]
 pub async fn open_shift(
     args: OpenShiftArgs,
@@ -104,6 +114,37 @@ pub async fn open_shift(
     Ok(ShiftDto::from(shift))
 }
 
+/// Open a shift in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn open_shift_scoped(
+    session_token: String,
+    args: OpenShiftScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<ShiftDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::SHIFTS_OPEN)?;
+
+    let shift = store.open_shift(
+        &session.user_id,
+        args.terminal_id.as_deref(),
+        args.opening_balance_minor,
+    )?;
+    drop(db);
+
+    tracing::info!(id = %shift.id, user_id = %shift.user_id, "shift opened (scoped)");
+    Ok(ShiftDto::from(shift))
+}
+
 /// Arguments for closing a shift.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,7 +155,18 @@ pub struct CloseShiftArgs {
     pub notes: Option<String>,
 }
 
-/// Close an active shift with a counted closing balance.
+/// Args for `close_shift_scoped` — without `user_id`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloseShiftScopedArgs {
+    pub id: String,
+    pub closing_balance_minor: i64,
+    pub notes: Option<String>,
+}
+
+/// Close an active shift using the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `close_shift_scoped`.
 #[command]
 pub async fn close_shift(
     args: CloseShiftArgs,
@@ -134,7 +186,38 @@ pub async fn close_shift(
     Ok(ShiftDto::from(shift))
 }
 
-/// Get the currently open shift for a user, if any.
+/// Close a shift in the store resolved from a session token. ADR #7.
+#[command]
+pub async fn close_shift_scoped(
+    session_token: String,
+    args: CloseShiftScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<ShiftDto, AppError> {
+    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::SHIFTS_CLOSE)?;
+
+    let shift = store.close_shift(&args.id, args.closing_balance_minor, args.notes.as_deref())?;
+    drop(db);
+
+    tracing::info!(id = %shift.id, "shift closed (scoped)");
+    Ok(ShiftDto::from(shift))
+}
+
+/// Get the currently open shift for a user from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_active_shift_scoped`.
 #[command]
 pub async fn get_active_shift(
     user_id: String,
@@ -145,6 +228,28 @@ pub async fn get_active_shift(
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let shift = store.get_active_shift(&user_id)?;
+    drop(db);
+
+    Ok(shift.map(ShiftDto::from))
+}
+
+/// Get the active shift for the session user from the store-scoped DB. ADR #7.
+#[command]
+pub async fn get_active_shift_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ShiftDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let shift = store.get_active_shift(&session.user_id)?;
     drop(db);
 
     Ok(shift.map(ShiftDto::from))
