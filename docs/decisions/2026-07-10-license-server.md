@@ -1,9 +1,10 @@
-# ADR #9: License Server Architecture
+# ADR #9: License Server Architecture (PocketBase on Northflank)
 
 **Status:** Proposed
 **Date:** 2026-07-10
+**Revised:** 2026-07-11
 **Author:** Architecture Team & OZ-POS Contributors
-**Tags:** licensing, activation, subscription-signing, admin-dashboard
+**Tags:** licensing, activation, subscription-signing, pocketbase, northflank
 
 ---
 
@@ -11,31 +12,113 @@
 
 OZ-POS is sold as licensed software. A customer buys a license (e.g., "Pro tier, 2 stores") and receives a license key. The POS software needs to validate this key, activate the license, and receive a cryptographically signed `tenant_subscription` record that governs feature access, store quotas, and instance limits (per ADR #5).
 
-The license server is the **signing authority** — it holds the private key and issues signed subscription payloads. Once activated, the POS operates offline using the locally-stored signed subscription (ADR #5's 14-day offline grace). The license server is only contacted during activation, renewal, and tier changes.
+The license server is the **signing authority** — it holds the RSA private key and issues signed subscription payloads. Once activated, the POS operates offline using the locally-stored signed subscription (ADR #5's 14-day offline grace). The license server is only contacted during activation, renewal, and tier changes.
 
 ---
 
 ## Decision
 
-### 1. Separate Docker Service
+### 1. PocketBase as the License Backend
 
-The license server is a **separate Docker container** from the cloud sync server (`apps/cloud-server/`). This is the right separation because:
+We use **[PocketBase](https://pocketbase.io/)** — a single-binary Go backend with built-in auth, admin UI, and auto-generated REST API — extended with **custom Go hooks** for RSA signing logic. PocketBase runs on a **Northflank** VPS with a persistent volume for the SQLite database.
 
-| Concern | License Server | Cloud Sync Server |
+#### Why Not a Custom Rust Server?
+
+| Concern | Custom Rust (axum + PostgreSQL) | PocketBase + Northflank |
 |---|---|---|
-| **Purpose** | Validate keys, sign subscriptions | Sync POS data between stores |
-| **Holds** | RSA private key | No secrets beyond JWT signing key |
-| **Contacted** | Activation, renewal, tier change | Continuous sync push/pull |
-| **Critical-path?** | No — POS operates offline after activation | No — POS operates offline, syncs when connected |
-| **Admin access** | Developer dashboard (manage keys, tenants) | None (headless) |
-| **Database** | PostgreSQL (SaaS, multi-tenant) | SQLite or PostgreSQL |
-| **Attack surface** | Web UI for admin + public activation API | Public sync API only |
+| **Build effort** | ~2 weeks (auth, dash, CRUD, endpoints) | ~2 days (collections + Go hooks) |
+| **Admin dashboard** | Build from scratch (askama templates) | Built-in (`/_/`) — zero UI work |
+| **Admin auth** | Hand-coded email/password + sessions | Built-in — email/password, OAuth2, OTP |
+| **CRUD API** | Hand-code every endpoint | Auto-generated from collection schema |
+| **Database** | PostgreSQL (separate container) | Embedded SQLite (no separate service) |
+| **Deployment** | Dockerfile + docker-compose + Caddy | Northflank one-click template + persistent volume |
+| **Hosting cost** | $20+/month (VPS for 2 containers) | ~$6–12/month (Northflank hobby tier) |
+| **Ops burden** | DB backups, container updates, reverse proxy | Northflank handles infra; PocketBase is a single binary |
+| **Custom logic** | Native Rust (axum handlers) | Go hooks embedded in PocketBase binary |
 
-### 2. License Key Flow
+#### PocketBase: What We Use vs. What We Extend
+
+| Feature | PocketBase Built-in | Our Custom Go |
+|---|---|---|
+| **Collections / database** | ✅ `license_keys`, `tenants`, `subscriptions`, `tenant_machines` | — |
+| **Admin UI (/_/)** | ✅ Full CRUD for all collections | — |
+| **Admin auth** | ✅ Email/password, JWT sessions | — |
+| **API Rules (authz)** | ✅ Per-collection `@request.auth.*` rules | — |
+| **RSA signing** | — | ✅ Go hook: `POST /api/v1/license/activate` |
+| **License key validation** | — | ✅ Go hook: business logic in activate handler |
+| **Subscription renewal** | — | ✅ Go hook: `POST /api/v1/license/renew` |
+| **Public status endpoint** | — | ✅ Go hook: `GET /api/v1/license/status/:tenant_id` |
+| **Rate limiting** | — | ✅ Simple Go middleware or Northflank ingress |
+
+### 2. Deployment Model (Northflank)
+
+PocketBase runs as a single container on Northflank with a persistent NVMe volume attached at `/pb/pb_data`. No separate database container, no reverse proxy config needed (Northflank handles HTTPS).
 
 ```
-CUSTOMER                            LICENSE SERVER                    POS (LOCAL)
-─────────                            ──────────────                    ───────────
+┌──────────────────────────────────────────────┐
+│  Northflank (Hobby tier, ~$6–12/month)        │
+│                                               │
+│  ┌──────────────────────────────────────┐    │
+│  │  PocketBase (single Go binary)        │    │
+│  │                                       │    │
+│  │  Port 8080 (internal)                 │    │
+│  │                                       │    │
+│  │  Built-in features:                   │    │
+│  │  ├── Admin UI (/_/)                   │    │
+│  │  ├── Auth (admin users)               │    │
+│  │  ├── Auto CRUD API                    │    │
+│  │  └── Collections engine               │    │
+│  │                                       │    │
+│  │  Custom Go hooks:                     │    │
+│  │  ├── POST /api/v1/license/activate   │    │
+│  │  ├── POST /api/v1/license/renew      │    │
+│  │  └── GET /api/v1/license/status/:id  │    │
+│  │                                       │    │
+│  │  Env vars:                            │    │
+│  │  ├── OZ_LICENSE_PRIVATE_KEY (RSA PEM) │    │
+│  │  └── OZ_LICENSE_SERVER_URL            │    │
+│  └──────────────┬───────────────────────┘    │
+│                 │                              │
+│  ┌──────────────▼───────────────────────┐    │
+│  │  Persistent Volume (NVMe)             │    │
+│  │  /pb/pb_data/                         │    │
+│  │  ├── data.db (SQLite)                 │    │
+│  │  ├── backups/                         │    │
+│  │  └── storage/                         │    │
+│  └──────────────────────────────────────┘    │
+│                                               │
+│  Northflank Ingress (HTTPS):                  │
+│  ├── license.oz-pos.com/api/* → :8080        │
+│  ├── license.oz-pos.com/_/    → :8080        │
+│  └── TLS auto-provisioned                    │
+└──────────────────────────────────────────────┘
+        ▲                          ▲
+        │ POS clients              │ You (browser)
+        │ activate/renew/status    │ PocketBase admin UI (/_/)
+```
+
+**Northflank setup (one-time):**
+
+1. Create a new "Combined" service from the PocketBase template
+2. Attach a persistent NVMe volume at `/pb/pb_data` (Single Read/Write)
+3. Set environment variables: `OZ_LICENSE_PRIVATE_KEY`
+4. After first deploy, SSH in and create the admin user:
+   ```bash
+   /pb/pocketbase superuser upsert admin@oz-pos.com <password>
+   ```
+5. Import the collections schema (see §4) via the admin UI or API
+
+**Key benefits:**
+- No reverse proxy config — Northflank handles HTTPS/TLS
+- No database container — SQLite on persistent volume
+- No Dockerfile needed — use PocketBase's official Docker image as base, copy in custom binary
+- Backup: Northflank volume snapshots or periodic `pb_data` tar exports
+
+### 3. License Key Flow
+
+```
+CUSTOMER                            POCKETBASE                        POS (LOCAL)
+─────────                            ──────────                        ───────────
 1. Buys license
    ← Receives key:
      OZ-PRO-ABC1-DEF2-GHI3
@@ -44,23 +127,21 @@ CUSTOMER                            LICENSE SERVER                    POS (LOCAL
    → Enters key in setup wizard ──────────────────────────────────→  stores key
 
 3.                                    ← POST /api/v1/license/activate ←
-                                          { key, tenant_id, device_fingerprint }
+                                          { key, tenant_id, machine_id }
                                      →
-                                     Validates key:
-                                     - Key exists and unused ✓
-                                     - Tier: "pro"
-                                     - max_stores: 2
-                                     - max_pos_instances: 3
+                                     Go hook validates key:
+                                     - Key exists in license_keys ✓
+                                     - Status is 'unused' ✓
+                                     - Not expired ✓
 
+                                     Creates tenant record
+                                     Creates tenant_machines record
                                      Signs tenant_subscription
-                                     with RSA private key:
-                                     { tenant_id, tier_key, max_stores,
-                                       max_pos_instances, allowed_types,
-                                       expires_at, signature }
+                                     with RSA private key
 
                                      Returns signed subscription ──→  stores in
                                                                       tenant_subscription
-                                                                      table (global DB)
+                                                                      table (local DB)
 
 4.                                                                    Verifies signature
                                                                       against embedded
@@ -70,7 +151,7 @@ CUSTOMER                            LICENSE SERVER                    POS (LOCAL
                                                                       with Pro tier
 ```
 
-### 3. API Endpoints
+### 4. API Endpoints
 
 #### Public (POS Client — no auth, rate-limited)
 
@@ -78,111 +159,133 @@ CUSTOMER                            LICENSE SERVER                    POS (LOCAL
 |---|---|---|
 | `POST` | `/api/v1/license/activate` | Activate a license key. Body: `{ key, tenant_id, machine_id }`. Returns signed `tenant_subscription`. |
 | `POST` | `/api/v1/license/renew` | Renew an existing subscription. Body: `{ tenant_id, api_key }`. Returns fresh signed subscription. |
-| `GET` | `/api/v1/license/status/:tenant_id` | Check current subscription status (public info only: tier, active, expires_at). |
+| `GET` | `/api/v1/license/status/:tenant_id` | Check current subscription status (tier, active, expires_at). |
 
-#### Admin (Developer Dashboard — authenticated)
+These are **custom Go routes** registered via `app.OnServe()`. They bypass PocketBase's collection API to enforce business logic (key validation, RSA signing, machine binding, rate limiting).
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/admin/login` | Admin login. Body: `{ email, password }`. Returns session token. |
-| `GET` | `/api/v1/admin/dashboard` | Dashboard overview: active tenants, key usage, revenue metrics. |
-| `GET` | `/api/v1/admin/tenants` | List all tenants with filters (tier, status, search). |
-| `GET` | `/api/v1/admin/tenants/:id` | Tenant detail: subscription, activation date, machines. |
-| `POST` | `/api/v1/admin/keys/generate` | Generate new license keys. Body: `{ tier, count, max_stores }`. |
-| `GET` | `/api/v1/admin/keys` | List all keys with status (unused, activated, revoked). |
-| `POST` | `/api/v1/admin/tenants/:id/tier` | Change a tenant's tier (re-signs subscription). |
-| `POST` | `/api/v1/admin/tenants/:id/revoke` | Revoke a license. |
+#### Admin — PocketBase Built-in
 
-### 4. Database Schema (PostgreSQL)
+PocketBase's admin panel at `/_/` provides **full CRUD** for all collections with zero code:
 
-```sql
--- License keys generated by the developer
-CREATE TABLE license_keys (
-    key             TEXT PRIMARY KEY,           -- 'OZ-PRO-ABC1-DEF2-GHI3'
-    tier_key        TEXT NOT NULL,              -- 'free' | 'pro' | 'premium' | 'enterprise'
-    max_stores      INTEGER NOT NULL,
-    max_pos_instances INTEGER NOT NULL,
-    allowed_types   JSONB NOT NULL,             -- ["restaurant-pos","store-pos","inventory","admin"]
-    status          TEXT NOT NULL DEFAULT 'unused',  -- 'unused' | 'activated' | 'expired' | 'revoked'
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at      TIMESTAMPTZ NOT NULL,       -- Key becomes invalid if unused past this date
-    activated_at    TIMESTAMPTZ,
-    activated_by    TEXT,                       -- tenant_id that used this key
-    revoked_at      TIMESTAMPTZ,
-    notes           TEXT                        -- admin notes
-);
+| Page | What Admin Does |
+|---|---|
+| **Collections UI** | Browse/filter/edit/delete any record in any collection |
+| **`license_keys`** | View keys by status, generate new keys, revoke keys |
+| **`tenants`** | View tenant details, contact info, change status |
+| **`subscriptions`** | Audit trail of all activations, renewals, tier changes |
+| **`tenant_machines`** | View registered devices, reset machine bindings |
+| **Admin users** | Manage admin accounts via `_superusers` collection |
 
--- Tenants (one per customer installation)
-CREATE TABLE tenants (
-    id              TEXT PRIMARY KEY,           -- Client-generated UUID (V4 or ULID)
-    -- Contact information
-    business_name   TEXT NOT NULL,              -- "Downtown Café"
-    contact_name    TEXT NOT NULL,              -- "John Doe"
-    email           TEXT NOT NULL,              -- For license keys, renewal reminders, support
-    phone           TEXT,                       -- Optional: "+1-555-0123"
-    company         TEXT,                       -- Optional: legal company name if different
-    address_line1   TEXT,
-    address_line2   TEXT,
-    city            TEXT,
-    state           TEXT,
-    postal_code     TEXT,
-    country         TEXT NOT NULL DEFAULT 'US',
-    -- Notes
-    notes           TEXT,                       -- Admin notes (e.g., "Upgraded from Free, June 2026")
-    -- License metadata
-    api_key         TEXT NOT NULL UNIQUE,       -- Generated on activation; used for renew/status
-    status          TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'suspended' | 'revoked'
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+**No custom admin dashboard is built.** PocketBase's auto-generated UI covers all CRUD needs. The only custom code is the signing hooks in §5.
 
--- Subscription history — one row per activation/renewal/change.
--- The CURRENT subscription is the row with the latest created_at.
--- This gives a full audit trail of tier changes and renewals.
-CREATE TABLE subscriptions (
-    id              SERIAL PRIMARY KEY,
-    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
-    tier_key        TEXT NOT NULL,              -- 'free' | 'pro' | 'premium' | 'enterprise'
-    max_stores      INTEGER NOT NULL,
-    max_pos_instances INTEGER NOT NULL,
-    allowed_types   JSONB NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'expired' | 'grace_period' | 'revoked'
-    starts_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at      TIMESTAMPTZ NOT NULL,       -- When the subscription period ends
-    grace_until     TIMESTAMPTZ,                -- NULL or expires_at + 14 days offline grace
-    -- The POS stores this payload + signature locally.
-    -- On expiry, the POS enters grace period (14 days offline).
-    -- After grace_until, the POS reverts to Free tier quotas.
-    signed_payload  TEXT NOT NULL,              -- JSON payload (the subscription data)
-    signature       TEXT NOT NULL,              -- RSA signature over signed_payload
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+### 5. PocketBase Collections Schema
 
-CREATE INDEX idx_subscriptions_tenant ON subscriptions(tenant_id, created_at DESC);
+PocketBase collections are defined as JSON and managed via the admin UI or `pb_schema.json`. Below is the equivalent of the PostgreSQL schema from the original design, expressed as PocketBase collections.
 
--- Machine registrations (track which devices activated)
-CREATE TABLE tenant_machines (
-    id              TEXT PRIMARY KEY,           -- machine_id from POS
-    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
-    first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(tenant_id, id)
-);
+#### `license_keys` collection
 
--- Admin users (developer team)
-CREATE TABLE admin_users (
-    id              SERIAL PRIMARY KEY,
-    email           TEXT NOT NULL UNIQUE,
-    password_hash   TEXT NOT NULL,
-    name            TEXT NOT NULL,
-    role            TEXT NOT NULL DEFAULT 'admin',  -- 'admin' | 'superadmin'
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+```
+System fields: id, created, updated
+
+Custom fields:
+  key               text (required, unique)       "OZ-PRO-ABC1-DEF2-GHI3"
+  tier_key          select (required)             free | pro | premium | enterprise
+  max_stores        number (required, min 1)      e.g. 2
+  max_pos_instances number (required, min 1)      e.g. 3
+  allowed_types     json (required)               ["restaurant-pos","store-pos","inventory","admin"]
+  status            select (required)             unused | activated | expired | revoked
+  expires_at        date (required)               key becomes invalid if unused past this date
+  activated_at      date                          set on activation
+  activated_by      relation → tenants.id         set on activation (single)
+  revoked_at        date
+  notes             text                          admin notes
+
+API Rules:
+  list/search:   @request.auth.id != ""           (admin only)
+  view:          @request.auth.id != ""           (admin only)
+  create:        @request.auth.id != ""           (admin only)
+  update:        @request.auth.id != ""           (admin only)
+  delete:        @request.auth.id != ""           (admin only)
 ```
 
-### 4a. Expiration & Grace Period Dates
+#### `tenants` collection
 
-Every subscription has three critical date boundaries:
+```
+System fields: id, created, updated
+
+Custom fields:
+  business_name     text (required)                "Downtown Café"
+  contact_name      text (required)                "John Doe"
+  email             email (required)               customer contact email
+  phone             text
+  company           text                           optional legal company name
+  address_line1     text
+  address_line2     text
+  city              text
+  state             text
+  postal_code       text
+  country           text (default: "US")
+  notes             text
+  api_key           text (required, unique)        auto-generated on activation; used for renew/status
+  status            select (required)              active | suspended | revoked
+
+API Rules:
+  list/search:   @request.auth.id != ""           (admin only)
+  view:          @request.auth.id != "" || api_key = @request.query.api_key  (admin or tenant via api_key)
+  create:                                                                     (only via Go hook)
+  update:        @request.auth.id != ""           (admin only)
+  delete:        @request.auth.id != ""           (admin only)
+```
+
+#### `subscriptions` collection
+
+```
+System fields: id, created, updated
+
+Custom fields:
+  tenant_id         relation → tenants.id (required)
+  tier_key          select (required)             free | pro | premium | enterprise
+  max_stores        number (required)
+  max_pos_instances number (required)
+  allowed_types     json (required)
+  status            select (required)             active | expired | grace_period | revoked
+  starts_at         date (required)
+  expires_at        date (required)
+  grace_until       date                          expires_at + 14 days
+  signed_payload    text (required)               JSON payload (the subscription data)
+  signature         text (required)               RSA-2048 signature over signed_payload
+
+API Rules:
+  list/search:   @request.auth.id != ""           (admin only)
+  view:          @request.auth.id != ""           (admin only)
+  create:                                          (only via Go hook)
+  update:                                          (only via Go hook)
+  delete:        @request.auth.id != ""           (admin only)
+```
+
+#### `tenant_machines` collection
+
+```
+System fields: id (machine_id), created, updated
+
+Custom fields:
+  tenant_id         relation → tenants.id (required)
+  first_seen_at     date (auto-set on create)
+  last_seen_at      date (updated by Go hook on each request)
+
+API Rules:
+  list/search:   @request.auth.id != ""           (admin only)
+  view:          @request.auth.id != ""           (admin only)
+  create:                                          (only via Go hook)
+  update:                                          (only via Go hook)
+  delete:        @request.auth.id != ""           (admin only)
+```
+
+> **Note:** PocketBase does not use SQL migrations. Collections are defined via the admin UI and exported as `pb_schema.json`. For version control, we commit `pb_schema.json` and any seed data.
+
+### 6. Expiration & Grace Period
+
+Same as original design:
 
 ```
                     starts_at           expires_at         grace_until
@@ -195,216 +298,364 @@ Every subscription has three critical date boundaries:
 
 | Date | Purpose | Set By |
 |---|---|---|
-| `starts_at` | When the subscription becomes active | License server (on activation/renewal) |
-| `expires_at` | When the paid period ends | License server (calculated from tier duration: 1 month, 1 year, lifetime) |
-| `grace_until` | Last day the POS can operate with full features offline | `expires_at + 14 days` (per ADR #5) |
+| `starts_at` | When the subscription becomes active | PocketBase Go hook (on activation/renewal) |
+| `expires_at` | When the paid period ends | Calculated from tier duration |
+| `grace_until` | Last day of full-feature offline operation | `expires_at + 14 days` (per ADR #5) |
 
-**Tier durations (configured per tier):**
-
-| Tier | Default Duration | expires_at |
+| Tier | Duration | expires_at |
 |---|---|---|
 | **Free** | Lifetime | NULL (never expires) |
-| **Pro** | 1 year from activation | `activated_at + 365 days` |
-| **Premium** | 1 year from activation | `activated_at + 365 days` |
-| **Enterprise** | Configurable (1–3 years) | Negotiated per contract |
+| **Pro** | 1 year | `activated_at + 365 days` |
+| **Premium** | 1 year | `activated_at + 365 days` |
+| **Enterprise** | Configurable (1–3 years) | Per contract |
 
-**Expiration flow:**
+### 7. Signing Flow (Custom Go Hook)
 
-1. `expires_at` approaches → POS shows "License expires in X days" in the admin panel
-2. `expires_at` passes → POS enters **grace period** (`grace_until`), continues operating with full features
-3. `grace_until` passes → POS reverts to **Free tier quotas** (1 store, 1 register). Data is preserved. Customer sees "License expired — upgrade to restore full features"
-4. Customer renews → License server creates a new `subscriptions` row with fresh `starts_at`/`expires_at` → POS pulls the signed payload → full features restored
+The license server holds an RSA-2048 private key. The corresponding public key (`oz-pos-updater.key.pub`) is **embedded in the OZ-POS binary** at build time (unchanged from original design).
 
-**Key expiration:**
+#### PocketBase Go main.go structure
 
-`license_keys.expires_at` controls how long an unused key remains valid. If a customer buys a Pro license but doesn't activate it within (e.g.) 90 days, the key expires and shows as `'expired'` in the admin dashboard. The admin can extend or regenerate it.
+```go
+// apps/license-server/main.go
+package main
 
-### 5. Signing Flow
+import (
+    "crypto"
+    "crypto/rand"
+    "crypto/rsa"
+    "crypto/sha256"
+    "crypto/x509"
+    "encoding/base64"
+    "encoding/json"
+    "encoding/pem"
+    "net/http"
+    "os"
+    "time"
 
-The license server holds an RSA-2048 private key. The corresponding public key (`oz-pos-updater.key.pub`) is **embedded in the OZ-POS binary** at build time.
+    "github.com/pocketbase/pocketbase"
+    "github.com/pocketbase/pocketbase/apis"
+    "github.com/pocketbase/pocketbase/core"
+)
 
-**Signing (license server, on activation/renewal):**
+var privateKey *rsa.PrivateKey
 
-```rust
-fn sign_subscription(tenant: &Tenant, private_key: &RsaPrivateKey) -> SignedSubscription {
-    let payload = serde_json::json!({
-        "tenant_id": tenant.id,
-        "tier_key": tenant.tier_key,
-        "status": tenant.status,
-        "expires_at": tenant.expires_at,
-        "max_stores": tenant.max_stores,
-        "max_pos_instances": tenant.max_pos_instances,
-        "allowed_types": tenant.allowed_types,
-        "issued_at": Utc::now().to_rfc3339(),
-    });
+func main() {
+    app := pocketbase.New()
 
-    let payload_str = serde_json::to_string(&payload).unwrap();
-    let signature = private_key.sign(
-        RSA_PADDING_SCHEME,
-        &sha256_hash(payload_str.as_bytes())
-    );
+    // Load RSA private key from environment variable
+    keyPem := os.Getenv("OZ_LICENSE_PRIVATE_KEY")
+    if keyPem == "" {
+        panic("OZ_LICENSE_PRIVATE_KEY environment variable is required")
+    }
+    block, _ := pem.Decode([]byte(keyPem))
+    if block == nil {
+        panic("failed to decode PEM block from OZ_LICENSE_PRIVATE_KEY")
+    }
+    var err error
+    privateKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+    if err != nil {
+        // Try PKCS8 format
+        pkcs8Key, err2 := x509.ParsePKCS8PrivateKey(block.Bytes)
+        if err2 != nil {
+            panic("failed to parse RSA private key: " + err.Error())
+        }
+        privateKey = pkcs8Key.(*rsa.PrivateKey)
+    }
 
-    SignedSubscription {
-        payload: payload_str,
-        signature: base64_encode(&signature),
+    // Register custom routes
+    app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+        se.Router.POST("/api/v1/license/activate", handleActivate(app))
+        se.Router.POST("/api/v1/license/renew", handleRenew(app))
+        se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
+        return se.Next()
+    })
+
+    if err := app.Start(); err != nil {
+        panic(err)
+    }
+}
+
+func signSubscription(sub SubscriptionPayload) (string, error) {
+    payloadBytes, err := json.Marshal(sub)
+    if err != nil {
+        return "", err
+    }
+    hash := sha256.Sum256(payloadBytes)
+    signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
+    if err != nil {
+        return "", err
+    }
+    return base64.StdEncoding.EncodeToString(signature), nil
+}
+```
+
+#### Activation handler (Go)
+
+```go
+type ActivateRequest struct {
+    Key          string `json:"key"`
+    TenantID     string `json:"tenant_id"`
+    MachineID    string `json:"machine_id"`
+    BusinessName string `json:"business_name"` // optional, from setup wizard
+    ContactName  string `json:"contact_name"`  // optional
+    Email        string `json:"email"`         // optional
+}
+
+type RenewRequest struct {
+    TenantID string `json:"tenant_id"`
+    APIKey   string `json:"api_key"`
+}
+
+func handleActivate(app *pocketbase.PocketBase) func(e *core.RequestEvent) error {
+    return func(e *core.RequestEvent) error {
+        var req ActivateRequest
+        if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
+            return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+        }
+
+        // 1. Rate limit: 5 activations per IP per hour
+        clientIP := e.Request.RemoteAddr
+        if !rateLimiter.Allow(clientIP) {
+            return e.JSON(http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded, try again later"})
+        }
+
+        // 2. Per-key brute-force: track failed attempts
+        if keyFailures.Count(req.Key) >= 3 {
+            return e.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many attempts for this key, try again in 15 minutes"})
+        }
+
+        // 3. Find and validate the license key
+        keyRecord, err := app.FindFirstRecordByData("license_keys", "key", req.Key)
+        if err != nil || keyRecord.GetString("status") != "unused" {
+            keyFailures.Increment(req.Key)
+            return e.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid or already used license key"})
+        }
+        if keyRecord.GetDateTime("expires_at").Time().Before(time.Now()) {
+            return e.JSON(http.StatusGone, map[string]string{"error": "license key has expired"})
+        }
+
+        // 4. Create tenant record (populate contact info from request if provided)
+        tenantCollection, _ := app.FindCollectionByNameOrId("tenants")
+        tenant := core.NewRecord(tenantCollection)
+        tenant.SetId(req.TenantID)
+        tenant.Set("business_name", orDefault(req.BusinessName, req.TenantID))
+        tenant.Set("contact_name", req.ContactName)
+        tenant.Set("email", req.Email)
+        tenant.Set("api_key", generateAPIKey())
+        tenant.Set("status", "active")
+        if err := app.Save(tenant); err != nil {
+            return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create tenant"})
+        }
+
+        // 5. Create machine record
+        machineCollection, _ := app.FindCollectionByNameOrId("tenant_machines")
+        machine := core.NewRecord(machineCollection)
+        machine.SetId(req.MachineID)
+        machine.Set("tenant_id", req.TenantID)
+        if err := app.Save(machine); err != nil {
+            return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to register machine"})
+        }
+
+        // 6. Build and sign subscription (allowed_types is JSON; parse as []string)
+        tierKey := keyRecord.GetString("tier_key")
+        var allowedTypes []string
+        json.Unmarshal([]byte(keyRecord.GetString("allowed_types")), &allowedTypes)
+
+        sub := SubscriptionPayload{
+            TenantID:        req.TenantID,
+            TierKey:         tierKey,
+            Status:          "active",
+            MaxStores:       keyRecord.GetInt("max_stores"),
+            MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
+            AllowedTypes:    allowedTypes,
+            StartsAt:        time.Now().UTC().Format(time.RFC3339),
+            ExpiresAt:       calculateExpiry(tierKey).UTC().Format(time.RFC3339),
+            GraceUntil:      calculateGraceUntil(tierKey).UTC().Format(time.RFC3339),
+            IssuedAt:        time.Now().UTC().Format(time.RFC3339),
+        }
+
+        payloadBytes, _ := json.Marshal(sub)
+        signature, err := signSubscription(sub)
+        if err != nil {
+            return e.JSON(http.StatusInternalServerError, map[string]string{"error": "signing failed"})
+        }
+
+        // 7. Save subscription record
+        subCollection, _ := app.FindCollectionByNameOrId("subscriptions")
+        subRecord := core.NewRecord(subCollection)
+        subRecord.Set("tenant_id", req.TenantID)
+        subRecord.Set("tier_key", tierKey)
+        subRecord.Set("max_stores", sub.MaxStores)
+        subRecord.Set("max_pos_instances", sub.MaxPOSInstances)
+        subRecord.Set("allowed_types", sub.AllowedTypes)
+        subRecord.Set("status", "active")
+        subRecord.Set("starts_at", sub.StartsAt)
+        subRecord.Set("expires_at", sub.ExpiresAt)
+        subRecord.Set("grace_until", sub.GraceUntil)
+        subRecord.Set("signed_payload", string(payloadBytes))
+        subRecord.Set("signature", signature)
+        if err := app.Save(subRecord); err != nil {
+            return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save subscription"})
+        }
+
+        // 8. Mark key as activated
+        keyRecord.Set("status", "activated")
+        keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+        keyRecord.Set("activated_by", req.TenantID)
+        app.Save(keyRecord)
+
+        // 9. Return signed subscription + api_key to POS
+        // POS stores: signed_payload, signature, api_key in its local
+        // tenant_subscription table (api_key column added per ADR #5)
+        return e.JSON(http.StatusOK, map[string]interface{}{
+            "signed_payload": string(payloadBytes),
+            "signature":      signature,
+            "api_key":        tenant.GetString("api_key"),
+        })
     }
 }
 ```
 
-**Renewal flow:**
+#### Renewal handler (Go)
 
-1. POS detects `expires_at` approaching (within 30 days) → shows a banner: "License expires in X days. Renew now."
-2. Customer contacts us to renew (or automated Stripe flow in v2).
-3. Admin clicks "Renew" on the tenant in the dashboard → sets new `expires_at` → server creates a new `subscriptions` row and re-signs.
-4. Next time POS syncs or explicitly calls `/api/v1/license/renew`, it pulls the updated signed subscription.
-5. POS verifies the new signature → stores updated `tenant_subscription` locally → full features continue.
+```go
+func handleRenew(app *pocketbase.PocketBase) func(e *core.RequestEvent) error {
+    return func(e *core.RequestEvent) error {
+        var req RenewRequest
+        if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
+            return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+        }
+
+        // 1. Authenticate tenant by api_key
+        tenant, err := app.FindFirstRecordByData("tenants", "api_key", req.APIKey)
+        if err != nil || tenant.GetString("status") != "active" {
+            return e.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid api_key or tenant is not active"})
+        }
+        if tenant.GetId() != req.TenantID {
+            return e.JSON(http.StatusUnauthorized, map[string]string{"error": "tenant_id does not match api_key"})
+        }
+
+        // 2. Find the latest active subscription for this tenant
+        subs, err := app.FindRecordsByFilter(
+            "subscriptions",
+            "tenant_id = {:tenant_id} && status = 'active'",
+            "-created", 1, 0,
+            map[string]interface{}{"tenant_id": req.TenantID},
+        )
+        if err != nil || len(subs) == 0 {
+            return e.JSON(http.StatusNotFound, map[string]string{"error": "no active subscription found"})
+        }
+        currentSub := subs[0]
+
+        // 3. Build new subscription payload with updated expiry
+        tierKey := currentSub.GetString("tier_key")
+        sub := SubscriptionPayload{
+            TenantID:        req.TenantID,
+            TierKey:         tierKey,
+            Status:          "active",
+            MaxStores:       currentSub.GetInt("max_stores"),
+            MaxPOSInstances: currentSub.GetInt("max_pos_instances"),
+            AllowedTypes:    parseAllowedTypes(currentSub),
+            StartsAt:        time.Now().UTC().Format(time.RFC3339),
+            ExpiresAt:       calculateExpiry(tierKey).UTC().Format(time.RFC3339),
+            GraceUntil:      calculateGraceUntil(tierKey).UTC().Format(time.RFC3339),
+            IssuedAt:        time.Now().UTC().Format(time.RFC3339),
+        }
+
+        // 4. Sign the new subscription
+        payloadBytes, _ := json.Marshal(sub)
+        signature, err := signSubscription(sub)
+        if err != nil {
+            return e.JSON(http.StatusInternalServerError, map[string]string{"error": "signing failed"})
+        }
+
+        // 5. Mark old subscription as expired, save new one
+        currentSub.Set("status", "expired")
+        app.Save(currentSub)
+
+        subCollection, _ := app.FindCollectionByNameOrId("subscriptions")
+        newSub := core.NewRecord(subCollection)
+        newSub.Set("tenant_id", req.TenantID)
+        newSub.Set("tier_key", tierKey)
+        newSub.Set("max_stores", sub.MaxStores)
+        newSub.Set("max_pos_instances", sub.MaxPOSInstances)
+        newSub.Set("allowed_types", sub.AllowedTypes)
+        newSub.Set("status", "active")
+        newSub.Set("starts_at", sub.StartsAt)
+        newSub.Set("expires_at", sub.ExpiresAt)
+        newSub.Set("grace_until", sub.GraceUntil)
+        newSub.Set("signed_payload", string(payloadBytes))
+        newSub.Set("signature", signature)
+        if err := app.Save(newSub); err != nil {
+            return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save subscription"})
+        }
+
+        return e.JSON(http.StatusOK, map[string]interface{}{
+            "signed_payload": string(payloadBytes),
+            "signature":      signature,
+        })
+    }
+}
+```
+
+> **Note:** `generateAPIKey()`, `calculateExpiry()`, `calculateGraceUntil()`, `rateLimiter`, and `keyFailures` are helper functions/types defined in the same Go package. They are omitted here for brevity but are straightforward: `generateAPIKey` returns a UUIDv4, `calculateExpiry` adds tier-specific duration to `time.Now()`, `rateLimiter` is a token-bucket per IP, and `keyFailures` is a map with TTL-based expiry for per-key brute-force protection.
+
+#### Verification (Rust — in `crates/oz-core`, unchanged from original)
 
 ```rust
 fn verify_subscription(sub: &SignedSubscription, public_key: &RsaPublicKey) -> Result<TenantSubscription> {
     let payload_hash = sha256_hash(sub.payload.as_bytes());
     let signature = base64_decode(&sub.signature)?;
-    
+
     public_key.verify(RSA_PADDING_SCHEME, &payload_hash, &signature)
         .map_err(|_| CoreError::InvalidSubscriptionSignature)?;
-    
+
     let subscription: TenantSubscription = serde_json::from_str(&sub.payload)?;
     Ok(subscription)
 }
 ```
 
-**Key rotation:** The private key is stored as an environment variable (`OZ_LICENSE_PRIVATE_KEY`) or mounted file. Public key is embedded in the binary via `include_str!()`. To rotate keys: generate a new key pair, update the environment variable on the license server, and ship a new POS binary with the updated public key. The old public key remains valid for existing subscriptions until they expire.
-
-### 6. Admin Dashboard
-
-A lightweight web UI for the developer to manage licenses. **Not** a full React SPA — server-rendered HTML with minimal JavaScript (HTMX or vanilla), served from the same axum binary.
-
-```
-┌─────────────────────────────────────────────────────┐
-│  OZ-POS License Server           [admin@oz-pos.com] │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  Dashboard                                          │
-│  ┌──────────┬──────────┬──────────┬──────────┐     │
-│  │ Active   │ Keys     │ Revenue  │ Trials   │     │
-│  │ Tenants  │ Issued   │ (MTD)    │ Active   │     │
-│  │   142    │   350    │ $4,200   │   18     │     │
-│  └──────────┴──────────┴──────────┴──────────┘     │
-│                                                     │
-│  ── Tenants ────────────────────────────────        │
-│  Search: [____________]  Tier: [All ▼]             │
-│                                                     │
-│  │ Name          │ Tier    │ Stores │ Status  │     │
-│  │ Downtown Cafe │ Pro     │ 2/2    │ Active  │     │
-│  │ Mall Bistro   │ Premium │ 5/5    │ Active  │     │
-│  │ Food Truck X  │ Free    │ 1/1    │ Active  │     │
-│  │ ...           │         │        │         │     │
-│                                                     │
-│  ── Generate Keys ──────────────────────────        │
-│  Tier: [Pro ▼]  Count: [5]  Max Stores: [2]        │
-│  [Generate]                                          │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-Dashboard pages:
-- **Dashboard** — metrics overview (active tenants, keys issued, revenue estimate)
-- **Tenants** — searchable list with filters (tier, status, country), detail view with full contact info, activation history, subscription timeline
-- **Keys** — generate, view status, revoke, filter by expiration
-- **Settings** — admin users management
-
-### 7. Rate Limiting & Abuse Prevention
+### 8. Rate Limiting & Abuse Prevention
 
 The activation endpoint is public (no auth) and must be protected:
 
 | Control | Implementation |
 |---|---|
-| **Rate limiting** | 5 activation attempts per IP per hour |
-| **Key brute-force** | 3 failed attempts per key → 15-minute cooldown |
-| **Machine fingerprint** | `machine_id` stored; one key = one machine (transfer requires admin reset) |
-| **API key for renew/status** | `tenant.api_key` required for renew and status endpoints (issued on activation) |
+| **Rate limiting** | 5 activation attempts per IP per hour (in-memory token bucket in Go hook) |
+| **Key brute-force** | 3 failed attempts per key → 15-minute cooldown (in-memory map with TTL expiry) |
+| **Machine fingerprint** | `machine_id` stored in `tenant_machines`; one key = one machine; transfer requires admin to delete the record from the admin UI |
+| **API key for renew/status** | `tenant.api_key` required for renew and status endpoints (issued on activation, persisted by POS in local `tenant_subscription` table per ADR #5) |
 
-### 8. Docker Deployment
+### 9. POS Client Integration
 
-**Deployment model:** The license server runs on a VPS with a public IP (e.g., Hetzner, DigitalOcean, $20/month). POS clients and the admin dashboard both connect to the same domain. A reverse proxy (Caddy/nginx) handles HTTPS termination.
-
-The POS binary embeds the server URL at build time:
+The POS binary embeds the license server URL at build time:
 
 ```rust
-// Embedded in oz-core or a build script
+// In crates/oz-core or a build script
 pub const LICENSE_SERVER_URL: &str = "https://license.oz-pos.com";
 ```
 
-This URL is used for activation, renewal, and status checks. It can be overridden via environment variable (`OZ_LICENSE_SERVER_URL`) for testing or self-hosted deployments.
+Override via env var for testing:
 
-```
-┌──────────────────────────────────────────────┐
-│  VPS (public IP)                              │
-│                                               │
-│  Caddy/nginx (:443 HTTPS)                     │
-│  ├── license.oz-pos.com/api/v1/* → :3100     │
-│  └── license.oz-pos.com/admin/*  → :3100     │
-│                                               │
-│  ┌──────────────────┐  ┌──────────────────┐  │
-│  │ license-server    │  │ license-db       │  │
-│  │ (:3100, internal) │──│ (PostgreSQL)     │  │
-│  │                   │  │ port 5432        │  │
-│  │ RSA private key   │  │ internal only    │  │
-│  │ Admin dashboard   │  └──────────────────┘  │
-│  │ Activation API    │                        │
-│  │ Rate limiting     │                        │
-│  └──────────────────┘                        │
-└──────────────────────────────────────────────┘
-        ▲                          ▲
-        │ POS clients              │ You (browser)
-        │ activate/renew           │ admin dashboard
+```rust
+pub fn license_server_url() -> String {
+    std::env::var("OZ_LICENSE_SERVER_URL")
+        .unwrap_or_else(|_| LICENSE_SERVER_URL.to_string())
+}
 ```
 
-**Security notes:**
-- `license-db` is NOT exposed to the internet — only `license-server` connects to it internally
-- Only ports 80/443 are exposed publicly; port 3100 is internal to Docker
-- `OZ_LICENSE_PRIVATE_KEY` is set via environment variable (never committed to Git)
-- Admin password hash is set once via `OZ_ADMIN_PASSWORD_HASH` env var on first deploy
-- Rate limiting on the activation endpoint prevents brute-force key guessing from the public internet
+#### Local Persistence
 
-```yaml
-# docker-compose.yml addition
-services:
-  license-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.license
-    ports:
-      - "3100:3100"
-    environment:
-      OZ_LICENSE_PORT: "3100"
-      DATABASE_URL: "postgresql://ozpos:secret@license-db:5432/ozpos_license"
-      OZ_LICENSE_PRIVATE_KEY: "${OZ_LICENSE_PRIVATE_KEY}"  # RSA private key (PEM)
-      OZ_ADMIN_PASSWORD_HASH: "${OZ_ADMIN_PASSWORD_HASH}"  # Initial admin password
-      RUST_LOG: "info"
-    depends_on:
-      license-db:
-        condition: service_healthy
-    restart: unless-stopped
+After a successful activation or renewal, the POS persists the response in its local `tenant_subscription` table (defined in ADR #5):
 
-  license-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ozpos
-      POSTGRES_PASSWORD: "${PG_PASSWORD}"
-      POSTGRES_DB: ozpos_license
-    volumes:
-      - license_pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ozpos -d ozpos_license"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+| Local Column | Source from License Server Response |
+|---|---|
+| `signed_payload` | `response.signed_payload` (JSON string) |
+| `signature` | `response.signature` (base64 RSA-2048 signature) |
+| `api_key` | `response.api_key` (UUIDv4, used for renew/status calls) |
+| `verified_at` | `Utc::now()` (timestamp of successful signature verification) |
 
-volumes:
-  license_pg_data:
-```
-
-The license server runs on port **3100** (distinct from cloud-sync on 3099).
+The `api_key` is stored once on activation and reused for all subsequent renew and status requests. The POS never exposes the `api_key` to the user — it is an internal credential for machine-to-machine communication with the license server.
 
 ---
 
@@ -412,44 +663,64 @@ The license server runs on port **3100** (distinct from cloud-sync on 3099).
 
 ### Positive
 
-- License validation is cryptographically enforced — customers cannot forge subscriptions.
-- POS operates fully offline after activation (14-day grace per ADR #5).
-- The license server is NOT critical-path for POS uptime — it's only needed during activation and renewal.
-- Separate from cloud sync — compromise of sync server does not expose the private signing key.
-- Admin dashboard gives the developer full visibility and control over licenses.
+- **Massively simplified development** — PocketBase provides auth, admin UI, and CRUD for free. Only ~200 lines of Go needed for the signing hooks.
+- **Cheaper hosting** — $6–12/month on Northflank vs. $20+/month for a VPS running two Docker containers.
+- **Zero ops for DB** — SQLite on a persistent volume; no PostgreSQL to manage, backup, or tune.
+- **License validation is cryptographically enforced** — RSA signing still happens server-side with the private key.
+- **POS operates fully offline after activation** — 14-day grace per ADR #5.
+- **Not critical-path for POS uptime** — only contacted during activation and renewal.
+- **Built-in admin panel** — full CRUD for all collections at `/_/` with zero custom UI code.
 
 ### Negative
 
-- Requires hosting a PostgreSQL database + license server (two new services).
-- License key distribution (emailing keys to customers) is a manual process in v1 — no automated purchase flow.
-- Machine binding means license transfer requires admin intervention.
-- If the license server is down during a renewal window, the customer may hit the 14-day grace limit.
+- **Go build step** — the PocketBase binary must be compiled with custom hooks (simple `go build`, but a new toolchain dependency for the team).
+- **Single-instance scaling** — SQLite on a single persistent volume means no horizontal scaling (fine for license management; not a high-throughput service).
+- **License key distribution** — still manual in v1 (emailing keys to customers).
+- **Rate limiting is simple** — in-memory per-process; resets on restart. Acceptable for activation (low volume).
 
 ### Mitigations
 
-- The license server + DB are lightweight and can run on a $20/month VPS.
-- Automated purchase flow (Stripe integration → auto-generate keys) can be added later.
-- Renewal can happen any time during the 14-day grace window — plenty of time to resolve server issues.
-- Admin can reset machine binding from the dashboard if a customer replaces their hardware.
+- Go build is a one-time setup; the `Makefile` or CI pipeline handles it.
+- Single-instance is fine — activation is a one-time event per customer, not a high-QPS API.
+- Automated purchase flow (Stripe → auto-generate keys) can be added later as a Go hook.
+- Northflank volume snapshots provide backups with zero configuration.
 
 ---
 
 ## Implementation Checklist
 
-- [ ] Create `apps/license-server/` crate (axum binary, same pattern as cloud-server).
-- [ ] Add `Dockerfile.license` for multi-stage build.
-- [ ] Implement `/api/v1/license/activate` — validates key, creates tenant, signs subscription.
-- [ ] Implement `/api/v1/license/renew` — re-signs subscription with updated expiry.
-- [ ] Implement `/api/v1/license/status/:tenant_id` — public status endpoint.
-- [ ] Implement admin auth (email/password → session cookie).
-- [ ] Implement admin dashboard (server-rendered HTML with askama templates).
-- [ ] Implement key generation and management UI.
-- [ ] Implement rate limiting middleware.
-- [ ] Add `license-server` and `license-db` services to `docker-compose.yml`.
-- [ ] Embed public key in POS binary via `include_str!()` build script.
-- [ ] Implement `verify_subscription()` in `crates/oz-core` using the embedded public key.
-- [ ] Write tests: activation, renewal, signature verification, rate limiting, admin auth, key revocation.
-- [ ] Run `cargo clippy -p license-server -- -D warnings` and full test suite.
+### Phase 1: PocketBase Collections & Go Binary
+
+- [ ] **Step 1.1**: Create `apps/license-server/` directory with `main.go` (custom PocketBase binary).
+- [ ] **Step 1.2**: Define collections (`license_keys`, `tenants`, `subscriptions`, `tenant_machines`) and export as `pb_schema.json`.
+- [ ] **Step 1.3**: Implement RSA private key loading from `OZ_LICENSE_PRIVATE_KEY` env var.
+- [ ] **Step 1.4**: Implement `signSubscription()` helper in Go.
+- [ ] **Step 1.5**: Implement `POST /api/v1/license/activate` Go hook — validates key, creates tenant, registers machine, signs subscription.
+- [ ] **Step 1.6**: Implement `POST /api/v1/license/renew` Go hook — re-signs with updated expiry.
+- [ ] **Step 1.7**: Implement `GET /api/v1/license/status/:tenant_id` Go hook — public status.
+- [ ] **Step 1.8**: Add simple in-memory rate limiter for the activate endpoint.
+- [ ] **Step 1.V1 (Verification)**: Run `go build` and `go test ./...` in `apps/license-server/`.
+- [ ] **Step 1.V2 (Verification)**: Start locally with `OZ_LICENSE_PRIVATE_KEY=<test-key>` and test activate/renew/status via curl.
+
+### Phase 2: POS Client (Rust)
+
+- [ ] **Step 2.1**: Confirm `oz-pos-updater.key.pub` is embedded in the binary (already exists via build script).
+- [ ] **Step 2.2**: Implement `verify_subscription()` in `crates/oz-core/src/subscription.rs` using the RSA public key.
+- [ ] **Step 2.3**: Implement `activate_license()` HTTP client in `crates/oz-core` — POSTs to license server, stores response.
+- [ ] **Step 2.4**: Implement `renew_license()` and `check_license_status()` HTTP clients.
+- [ ] **Step 2.5**: Add `LICENSE_SERVER_URL` constant with env var override.
+- [ ] **Step 2.V1 (Verification)**: `cargo test -p oz-core` — subscription verification, activation flow.
+- [ ] **Step 2.V2 (Verification)**: `cargo clippy -p oz-core -- -D warnings`.
+
+### Phase 3: Northflank Deployment
+
+- [ ] **Step 3.1**: Create Northflank service from PocketBase template.
+- [ ] **Step 3.2**: Attach persistent NVMe volume at `/pb/pb_data`.
+- [ ] **Step 3.3**: Set `OZ_LICENSE_PRIVATE_KEY` env var (generated RSA key pair, private key).
+- [ ] **Step 3.4**: Deploy custom Go binary, create admin user via SSH.
+- [ ] **Step 3.5**: Import `pb_schema.json` collections via admin UI.
+- [ ] **Step 3.6**: Configure custom domain (e.g., `license.oz-pos.com`).
+- [ ] **Step 3.V1 (Verification)**: End-to-end test: generate key in admin UI → activate from POS → verify signature → check status.
 
 ---
 
@@ -458,5 +729,6 @@ The license server runs on port **3100** (distinct from cloud-sync on 3099).
 - ADR #4 — Store-First Tenancy & Workspace Type/Instance Architecture
 - ADR #5 — Subscription Tier & Entitlement (defines `tenant_subscription` schema and `InstanceStatus`)
 - `oz-pos-updater.key.pub` — Public key embedded in POS binary
-- `apps/cloud-server/` — Cloud sync server (separate service, separate Docker container)
-- `docker-compose.yml` — Updated with license-server + license-db services
+- `apps/cloud-server/` — Cloud sync server (separate service on separate VPS)
+- [PocketBase Docs](https://pocketbase.io/docs/)
+- [Northflank PocketBase Guide](https://northflank.com/guides/how-to-deploy-pocketbase-step-by-step-deployment-guide)
