@@ -66,7 +66,7 @@ const REGION_TO_CURRENCY: Record<string, string> = {
  */
 export function detectDefaultCurrency(): string {
   try {
-    const raw = navigator.language || (navigator as any).languages?.[0] || 'en-US';
+    const raw = navigator.language || navigator.languages?.[0] || 'en-US';
     // Parse locale: "id-ID", "en-US", "de-DE", or just "id", "en", "de"
     const parts = raw.split('-');
     // The region is the LAST subtag that is exactly 2 uppercase letters or

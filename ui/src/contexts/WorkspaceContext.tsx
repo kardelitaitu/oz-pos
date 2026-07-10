@@ -167,7 +167,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // ADR #4 Phase 3: Dynamically resolved store ID from device binding or primary store.
   const [resolvedStoreId, setResolvedStoreId] =
     useState<string>(DEFAULT_STORE_ID);
-  const [isBootResolved, setIsBootResolved] = useState(false);
 
   // ADR #4 / ADR #7: Opaque session token created by create_session command.
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -330,7 +329,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setAvailableWorkspaces([]);
       setWorkspaceScreensState([]);
       setLoading(false);
-      setIsBootResolved(false);
       return;
     }
 
@@ -347,7 +345,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         storeId = resolution.store_id;
         if (!cancelled) {
           setResolvedStoreId(storeId);
-          setIsBootResolved(true);
         }
       } catch (err) {
         console.warn(
@@ -356,7 +353,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         );
         if (!cancelled) {
           setResolvedStoreId(DEFAULT_STORE_ID);
-          setIsBootResolved(true);
         }
       }
 
@@ -484,8 +480,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <WorkspaceScopeContext.Provider value={scope}>
-      <WorkspaceContext.Provider
+    <WorkspaceScopeContext.Provider value={scope}>        <WorkspaceContext.Provider
         value={{
           activeWorkspace,
           setActiveWorkspace: handleSetActive,
@@ -496,6 +491,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           loading,
           error,
           retry,
+          lastWorkspace,
           switchStore,
           resolvedStoreId,
           sessionToken,

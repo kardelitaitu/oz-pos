@@ -40,12 +40,15 @@ export default function StoreSwitcher() {
         prev.map((s) => ({ ...s, is_primary: s.id === store.id })),
       );
       // ADR #4 Phase 2b: trigger workspace re-resolution for the new store.
+      // switchStore is stable (memoized with roleId/userId deps upstream),
+      // so adding it to this useCallback's deps does not invalidate the callback
+      // on every render.
       switchStore(store.id);
     } catch {
       // silently fail
     }
     setOpen(false);
-  }, [primary]);
+  }, [primary, switchStore]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
