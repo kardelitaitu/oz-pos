@@ -339,10 +339,52 @@ To ensure cashier screens update instantaneously without receiving unrelated cro
       scope.store_id.as_deref(),
       &StoreEvent::TableStatusChanged { table_id: "tbl-4".into(), status: "occupied".into() }
   )?;
-  ```
 - Only client instances whose active `WorkspaceScope` matches the emitted `store_id` process the event and trigger a re-render.
 
-### 7. Workspace Picker Visual Design
+### 7. Subscription Tier & Entitlement Architecture
+
+Separating `WorkspaceType` from `WorkspaceInstance` unlocks granular, backend-enforced subscription tiering across three monetization dimensions: physical locations (`store_profiles`), concurrent cashier registers (`workspace_instances`), and specialized UI templates (`workspace_types`).
+
+#### 1. Subscription Tier Enforcement Matrix
+
+| Tier | Store Quota (`store_profiles`) | POS Register Quota (`workspace_instances`) | Allowed Workspace Types (`workspace_types`) | Advanced Features & Hardware |
+| :--- | :--- | :--- | :--- | :--- |
+| **Free** | **1 Store** | **1 POS Register** | `store-pos` (or `restaurant-pos`), `admin` | Basic receipt printing (`oz-hal`), Local SQLite only. |
+| **Pro** | **Up to 2 Stores** | **Up to 3 Registers / Store** | `restaurant-pos`, `store-pos`, `inventory`, `admin` | Barcode scanners, Cash drawers, Basic inventory tracking. |
+| **Premium** | **Up to 5 Stores** | **Up to 10 Registers / Store** | + `kds` (Kitchen Display System), `analytics-pro` | Multi-store cloud sync (`apps/cloud-server`), Advanced recipe costing. |
+| **Enterprise** | **Unlimited (`N`)** | **Unlimited Registers** | + All types + Custom Plugin Workspaces (`oz-plugin`) | Multi-warehouse routing, Custom Lua scripts (`oz-lua`), Dedicated API access. |
+
+#### 2. Runtime Quota Validation (`create_workspace_instance`)
+When an administrator attempts to create a new register instance or add a location, the backend evaluates active instance counts against `SubscriptionTier` limits inside a database transaction:
+
+```rust
+pub fn create_workspace_instance(&self, req: &CreateInstanceRequest, tier: &SubscriptionTier) -> Result<WorkspaceDto> {
+    let active_pos_count = self.count_active_instances_by_type(&req.type_key)?;
+    if active_pos_count >= tier.max_pos_instances() {
+        return Err(CoreError::SubscriptionLimitExceeded(
+            format!("Your {} tier allows maximum {} registers. Upgrade to add more.", tier.name, tier.max_pos_instances())
+        ));
+    }
+    // ... proceed with instance creation
+}
+```
+
+#### 3. Workspace Boot Entitlement Check (`allows_workspace_type`)
+When a user attempts to open an advanced workspace (`kds` or `analytics-pro`), the backend verifies template entitlements before issuing session scope credentials:
+
+```rust
+if !tier.allows_workspace_type(&instance.type_key) {
+    return Err(CoreError::SubscriptionUpgradeRequired(
+        "Kitchen Display System (KDS) requires Premium tier or higher."
+    ));
+}
+```
+
+#### 4. Graceful Upgrades & Downgrades
+- **Upgrades**: Raising a tier instantly increases `max_pos_instances` and adds allowed `workspace_types`. No database migration or client restart is required.
+- **Downgrading (Safe Archiving)**: If a client downgrades below their current register count, excess instances transition to `is_active = false`. Historical audit logs and orders (`WHERE store_id = ...`) are preserved, while only quota-compliant instances remain openable for new sales.
+
+### 8. Workspace Picker Visual Design
 
 The workspace picker (`WorkspaceHome.tsx`) shows workspace **instances**, not types:
 
@@ -373,7 +415,7 @@ The `WS_COLORS` and `WS_ORDER` maps are migrated from hardcoded objects to datab
 ALTER TABLE workspace_types ADD COLUMN accent_colour TEXT NOT NULL DEFAULT '';
 ```
 
-### 8. Default Instance + Backward Compatibility
+### 9. Default Instance + Backward Compatibility
 
 To ensure zero disruption for existing single-location deployments:
 
