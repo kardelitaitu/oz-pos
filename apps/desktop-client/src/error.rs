@@ -217,4 +217,130 @@ mod tests {
             _ => panic!("expected Core variant"),
         }
     }
+
+    // ── InvalidSession variant ────────────────────────────────
+
+    #[test]
+    fn invalid_session_display() {
+        let err = AppError::InvalidSession;
+        assert_eq!(err.to_string(), "invalid or expired session");
+    }
+
+    #[test]
+    fn invalid_session_serde() {
+        let err = AppError::InvalidSession;
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["kind"], "invalidSession");
+    }
+
+    #[test]
+    fn invalid_session_debug() {
+        let err = AppError::InvalidSession;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("InvalidSession"));
+    }
+
+    // ── Invalid and PermissionDenied serde ───────────────────
+
+    #[test]
+    fn invalid_serde() {
+        let err = AppError::Invalid("bad input".into());
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["kind"], "invalid");
+        assert_eq!(json["message"], "bad input");
+    }
+
+    #[test]
+    fn permission_denied_serde() {
+        let err = AppError::PermissionDenied("no access".into());
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["kind"], "permissionDenied");
+        assert_eq!(json["message"], "no access");
+    }
+
+    #[test]
+    fn internal_serde() {
+        let err = AppError::Internal("boom".into());
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["kind"], "internal");
+        assert_eq!(json["message"], "boom");
+    }
+
+    // ── Serde: sub_kind field on Core / Hardware ─────────────
+
+    #[test]
+    fn serde_core_includes_sub_kind() {
+        let err = AppError::Core {
+            sub_kind: CoreErrorKind::Validation,
+            message: "name required".into(),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["subKind"], "Validation");
+    }
+
+    #[test]
+    fn serde_hardware_includes_sub_kind() {
+        let err = AppError::Hardware {
+            sub_kind: HalErrorKind::Timeout,
+            message: "device not responding".into(),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["subKind"], "Timeout");
+    }
+
+    // ── From conversions ─────────────────────────────────────
+
+    #[test]
+    fn from_tauri_error() {
+        // Tauri errors have complex construction; test via a string conversion
+        let e: AppError = tauri::Error::AssetNotFound("test.txt".into()).into();
+        match e {
+            AppError::Internal(msg) => {
+                assert!(msg.contains("test.txt"));
+            }
+            _ => panic!("expected Internal variant"),
+        }
+    }
+
+    // ── Multiple rusqlite error types ─────────────────────────
+
+    #[test]
+    fn from_rusqlite_error_message_includes_sqlite_prefix() {
+        let e: AppError = rusqlite::Error::QueryReturnedNoRows.into();
+        match e {
+            AppError::Core { sub_kind, message } => {
+                assert_eq!(format!("{sub_kind:?}"), "Db");
+                assert!(message.starts_with("sqlite:"));
+            }
+            _ => panic!("expected Core variant"),
+        }
+    }
+
+    #[test]
+    fn from_rusqlite_to_string() {
+        let e: AppError = rusqlite::Error::InvalidQuery.into();
+        let display = e.to_string();
+        assert!(display.starts_with("core error:"));
+        assert!(display.contains("sqlite:"));
+    }
+
+    // ── PermissionDenied / Internal Debug ──────────────────────
+
+    #[test]
+    fn permission_denied_debug() {
+        let err = AppError::PermissionDenied("owner only".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("PermissionDenied"));
+        assert!(debug.contains("owner only"));
+    }
+
+    // ── Internal Debug ────────────────────────────────────────
+
+    #[test]
+    fn internal_debug() {
+        let err = AppError::Internal("catastrophic failure".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("Internal"));
+        assert!(debug.contains("catastrophic failure"));
+    }
 }
