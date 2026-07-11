@@ -743,6 +743,28 @@ func TestSignSubscription_DifferentTiersProduceDifferentSignatures(t *testing.T)
 	}
 }
 
+// ── Tests: normalizePEM (remaining branches) ─────────────────────
+
+func TestNormalizePEM_EndMarkerBeforeHeader(t *testing.T) {
+	// END marker appears before the header closes — edge case that returns raw.
+	result := normalizePEM("-----END PRIVATE KEY----------BEGIN PRIVATE KEY-----base64")
+	// "-----END" appears at start, "-----BEGIN" at position 31. The search for
+	// "-----BEGIN " would find the BEGIN marker, but endMarker would be 0
+	// which is < headerClose, so it returns raw.
+	if !strings.Contains(result, "-----END") {
+		t.Error("malformed PEM with END before BEGIN should be preserved")
+	}
+}
+
+func TestNormalizePEM_EndMarkerWithoutClosingDashes(t *testing.T) {
+	// "-----END PRIVATE KEY" without the final "-----".
+	result := normalizePEM("-----BEGIN PRIVATE KEY-----base64data-----END PRIVATE KEY")
+	// footerClose will be -1 (no closing -----), returns raw.
+	if !strings.Contains(result, "-----END PRIVATE KEY") {
+		t.Error("PEM with incomplete END marker should be preserved")
+	}
+}
+
 // ── Tests: jsonMarshal ────────────────────────────────────────────
 
 func TestJsonMarshal_Simple(t *testing.T) {
