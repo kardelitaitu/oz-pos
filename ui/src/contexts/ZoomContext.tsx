@@ -21,9 +21,7 @@ export function ZoomProvider({ children }: { children: ReactNode }) {
     const applyZoom = () => {
       let fontSize = 16;
       if (zoomLevel === 'auto') {
-        // Use window.outerWidth instead of innerWidth. 
-        // This allows the app to adapt to window resizing without fighting the browser's native zoom (Ctrl +/-).
-        const windowWidth = window.outerWidth || window.innerWidth;
+        const windowWidth = window.innerWidth;
         // Base resolution is 1920px (standard 1080p width) = 16px base font
         const scale = windowWidth / 1920;
         // Clamp between 14px (minimum readable) and 28px
@@ -38,9 +36,42 @@ export function ZoomProvider({ children }: { children: ReactNode }) {
 
     applyZoom();
 
-    // Re-apply if screen resolution changes (e.g. moving window to a different monitor)
+    // Re-apply if screen resolution changes
     window.addEventListener('resize', applyZoom);
-    return () => window.removeEventListener('resize', applyZoom);
+
+    // Intercept Ctrl +/- / 0 to handle zooming manually
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey) {
+        if (e.key === '=' || e.key === '+' || e.code === 'NumpadAdd') {
+          e.preventDefault();
+          setZoomLevel((prev) => {
+            if (prev === 'auto') return '125';
+            if (prev === '100') return '125';
+            if (prev === '125') return '150';
+            if (prev === '150') return '200';
+            return '200';
+          });
+        } else if (e.key === '-' || e.code === 'NumpadSubtract') {
+          e.preventDefault();
+          setZoomLevel((prev) => {
+            if (prev === 'auto') return '100';
+            if (prev === '200') return '150';
+            if (prev === '150') return '125';
+            if (prev === '125') return '100';
+            return '100';
+          });
+        } else if (e.key === '0' || e.code === 'Numpad0') {
+          e.preventDefault();
+          setZoomLevel('auto');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('resize', applyZoom);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [zoomLevel]);
 
   return (
