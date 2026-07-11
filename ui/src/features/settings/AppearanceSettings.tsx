@@ -11,6 +11,8 @@ import { useBrand } from '@/contexts/BrandContext';
 import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { useAppZoom } from '@/contexts/ZoomContext';
+import type { ZoomLevel } from '@/contexts/ZoomContext';
 import './AppearanceSettings.css';
 
 interface AppearanceSettingsProps {
@@ -33,6 +35,7 @@ export function AppearanceSettings({
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [storeName, setStoreName] = useState('');
   const [saving, setSaving] = useState(false);
+  const { zoomLevel, setZoomLevel } = useAppZoom();
 
   useEffect(() => {
     if (embedded) return;
@@ -144,6 +147,24 @@ export function AppearanceSettings({
           onChange={(e) => updateStoreName(e.target.value)}
           className="settings-input"
         />
+      </div>
+
+      <div className="appearance-field">
+        <label htmlFor="interface-zoom" className="settings-label">
+          <Localized id="appearance-interface-zoom">Interface Zoom</Localized>
+        </label>
+        <select
+          id="interface-zoom"
+          value={zoomLevel}
+          onChange={(e) => setZoomLevel(e.target.value as ZoomLevel)}
+          className="settings-input"
+        >
+          <option value="auto">Automatic (Scale with screen)</option>
+          <option value="100">100% (Default)</option>
+          <option value="125">125%</option>
+          <option value="150">150%</option>
+          <option value="200">200%</option>
+        </select>
       </div>
 
       <div className="appearance-preview">

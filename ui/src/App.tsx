@@ -3,6 +3,7 @@ import { BrandProvider } from '@/contexts/BrandContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { LocaleProvider } from './i18n/LocaleContext';
+import { ZoomProvider } from '@/contexts/ZoomContext';
 import AppShell from '@/frontend/shell/AppShell';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
@@ -217,15 +218,17 @@ export default function App() {
     <ErrorBoundary>
       <LocaleProvider>
         <BrandProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <ToastProvider>
-              <WorkspaceProvider>
-                <AppShell />
-              </WorkspaceProvider>
-            </ToastProvider>
-          </AuthProvider>
-        </ThemeProvider>
+          <ZoomProvider>
+            <ThemeProvider>
+              <AuthProvider>
+                <ToastProvider>
+                  <WorkspaceProvider>
+                    <AppShell />
+                  </WorkspaceProvider>
+                </ToastProvider>
+              </AuthProvider>
+            </ThemeProvider>
+          </ZoomProvider>
         </BrandProvider>
       </LocaleProvider>
     </ErrorBoundary>

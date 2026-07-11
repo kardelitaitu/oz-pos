@@ -241,6 +241,7 @@ appearance-choose-logo = Pilih Logo
 appearance-choose-logo-aria =
     .aria-label = Pilih file logo
 appearance-store-name = Nama Toko Tampilan
+appearance-interface-zoom = Perbesaran Antarmuka
 appearance-store-name-fallback = OZ-POS
 appearance-preview = Pratinjau
 appearance-save-aria =

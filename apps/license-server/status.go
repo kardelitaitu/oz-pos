@@ -22,7 +22,7 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 		subs, err := app.FindRecordsByFilter(
 			"subscriptions",
 			"tenant_id = {:tenant_id}",
-			"-created", 1, 0,
+			"-starts_at", 1, 0,
 			map[string]any{"tenant_id": tenantID},
 		)
 		if err != nil || len(subs) == 0 {

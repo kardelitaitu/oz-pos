@@ -115,8 +115,6 @@ func TestSignAndVerify_RoundTrip(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-roundtrip", TierKey: "pro", Status: "active",
-		MaxStores: 2, MaxPOSInstances: 3,
-		AllowedTypes: []string{"restaurant-pos", "store-pos", "admin"},
 		StartsAt: time.Now().UTC().Format(time.RFC3339),
 		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
@@ -134,8 +132,6 @@ func TestSignAndVerify_TamperedPayload(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-tamper", TierKey: "pro", Status: "active",
-		MaxStores: 2, MaxPOSInstances: 3,
-		AllowedTypes: []string{"restaurant-pos"},
 		StartsAt: time.Now().UTC().Format(time.RFC3339),
 		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
@@ -555,5 +551,240 @@ func TestCalculateExpiry_SameLength(t *testing.T) {
 	diff := pro.Sub(premium)
 	if diff > time.Hour || diff < -time.Hour {
 		t.Errorf("pro and premium should have same expiry, got diff %v", diff)
+	}
+}
+
+// ── Tests: safePrefix ─────────────────────────────────────────────
+
+func TestSafePrefix_Short(t *testing.T) {
+	result := safePrefix("hello", 10)
+	if result != "hello" {
+		t.Errorf("short string should be returned as-is, got %q", result)
+	}
+}
+
+func TestSafePrefix_Truncated(t *testing.T) {
+	result := safePrefix("hello world this is long", 10)
+	if len(result) > 10 {
+		t.Errorf("truncated string should be at most 10 chars, got %d", len(result))
+	}
+}
+
+func TestSafePrefix_WithNewlines(t *testing.T) {
+	result := safePrefix("line1\nline2\nline3", 20)
+	if strings.Contains(result, "\n") {
+		t.Error("newlines should be escaped to \\n")
+	}
+	if !strings.Contains(result, "\\n") {
+		t.Error("newlines should be replaced with literal \\n")
+	}
+}
+
+func TestSafePrefix_Zero(t *testing.T) {
+	result := safePrefix("test", 0)
+	if result != "" {
+		t.Errorf("zero-length prefix should be empty, got %q", result)
+	}
+}
+
+func TestSafePrefix_Empty(t *testing.T) {
+	result := safePrefix("", 10)
+	if result != "" {
+		t.Errorf("empty input should return empty, got %q", result)
+	}
+}
+
+// ── Tests: normalizePEM Edge Cases ────────────────────────────────
+
+func TestNormalizePEM_EmptyInput(t *testing.T) {
+	result := normalizePEM("")
+	// Empty input after trimming still contains no PEM markers,
+	// so it hits the raw-base64 wrapping path (wrapping empty base64 is harmless).
+	if !strings.HasPrefix(result, "-----BEGIN") {
+		t.Errorf("empty input should be wrapped as PEM, got %q", result)
+	}
+}
+
+func TestNormalizePEM_NoMarkersAtAll(t *testing.T) {
+	result := normalizePEM("just some random text")
+	// Should return the text unchanged since it's not valid PEM and not base64-ish.
+	// It will hit the "raw base64" path and wrap it.
+	if !strings.HasPrefix(result, "-----BEGIN PRIVATE KEY-----") {
+		t.Error("unrecognized input should be wrapped as raw base64")
+	}
+}
+
+func TestNormalizePEM_OnlyBeginMarker(t *testing.T) {
+	result := normalizePEM("-----BEGIN PRIVATE KEY-----somebase64")
+	// Missing END marker — should return as-is (can't parse).
+	if !strings.Contains(result, "-----BEGIN PRIVATE KEY-----") {
+		t.Error("partial PEM with only BEGIN should be preserved")
+	}
+}
+
+func TestNormalizePEM_OnlyEndMarker(t *testing.T) {
+	result := normalizePEM("somebase64-----END PRIVATE KEY-----")
+	// END marker is present but BEGIN is not, so the function can't
+	// determine the envelope type and returns the input unchanged.
+	if strings.HasPrefix(result, "-----BEGIN") {
+		t.Error("input with only END marker should NOT be wrapped (ambiguous)")
+	}
+	if !strings.Contains(result, "-----END PRIVATE KEY-----") {
+		t.Error("input with only END marker should be preserved")
+	}
+}
+
+func TestNormalizePEM_CRLFLineEndings(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	crlf := strings.ReplaceAll(valid, "\n", "\r\n")
+	result := normalizePEM(crlf)
+
+	// normalizePEM checks for "-----\r\n" and returns as-is if found.
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("CRLF PEM should decode after normalization")
+	}
+}
+
+func TestNormalizePEM_SingleQuotes(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	quoted := "'  " + valid + "  '"
+	result := normalizePEM(quoted)
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("single-quoted PEM should decode after normalization")
+	}
+}
+
+// ── Tests: generateAPIKey Edge Cases ──────────────────────────────
+
+func TestGenerateAPIKey_Format(t *testing.T) {
+	k := generateAPIKey()
+	// Should be "oz_" prefix + 64 hex chars (32 bytes).
+	if len(k) != 67 {
+		t.Errorf("API key should be 67 chars (oz_ + 64 hex), got %d: %s", len(k), k)
+	}
+	if !strings.HasPrefix(k, "oz_") {
+		t.Errorf("API key should have oz_ prefix, got: %s", k)
+	}
+	// The hex part should only contain hex characters.
+	hexPart := strings.TrimPrefix(k, "oz_")
+	for _, c := range hexPart {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Errorf("API key hex part should be lowercase hex, got char %c in %s", c, k)
+		}
+	}
+}
+
+func TestGenerateAPIKey_ManyUniqueness(t *testing.T) {
+	keys := make(map[string]bool)
+	for i := 0; i < 1000; i++ {
+		k := generateAPIKey()
+		if keys[k] {
+			t.Fatalf("duplicate API key generated after %d iterations: %s", i, k)
+		}
+		keys[k] = true
+	}
+}
+
+// ── Tests: signSubscription Edge Cases ────────────────────────────
+
+func TestSignSubscription_EmptyTier(t *testing.T) {
+	initPrivateKey(t)
+
+	sub := SubscriptionPayload{
+		TenantID: "tenant-empty-tier", TierKey: "", Status: "active",
+	}
+	payload, sig, err := signSubscription(sub)
+	if err != nil {
+		t.Fatalf("signing with empty tier should succeed: %v", err)
+	}
+	verifySignature(t, payload, sig)
+}
+
+func TestSignSubscription_MinimalFields(t *testing.T) {
+	initPrivateKey(t)
+
+	sub := SubscriptionPayload{
+		TenantID: "tenant-minimal", TierKey: "free", Status: "active",
+	}
+	payload, sig, err := signSubscription(sub)
+	if err != nil {
+		t.Fatalf("signing with minimal fields should succeed: %v", err)
+	}
+	verifySignature(t, payload, sig)
+}
+
+func TestSignSubscription_DifferentTiersProduceDifferentSignatures(t *testing.T) {
+	initPrivateKey(t)
+
+	sub1 := SubscriptionPayload{TenantID: "t1", TierKey: "pro", Status: "active"}
+	sub2 := SubscriptionPayload{TenantID: "t1", TierKey: "enterprise", Status: "active"}
+
+	p1, s1, _ := signSubscription(sub1)
+	p2, s2, _ := signSubscription(sub2)
+
+	if s1 == s2 {
+		t.Error("different tiers should produce different signatures")
+	}
+	if p1 == p2 {
+		t.Error("different tiers should produce different payloads")
+	}
+}
+
+// ── Tests: normalizePEM (remaining branches) ─────────────────────
+
+func TestNormalizePEM_EndMarkerBeforeHeader(t *testing.T) {
+	// END marker appears before the header closes — edge case that returns raw.
+	result := normalizePEM("-----END PRIVATE KEY----------BEGIN PRIVATE KEY-----base64")
+	// "-----END" appears at start, "-----BEGIN" at position 31. The search for
+	// "-----BEGIN " would find the BEGIN marker, but endMarker would be 0
+	// which is < headerClose, so it returns raw.
+	if !strings.Contains(result, "-----END") {
+		t.Error("malformed PEM with END before BEGIN should be preserved")
+	}
+}
+
+func TestNormalizePEM_EndMarkerWithoutClosingDashes(t *testing.T) {
+	// "-----END PRIVATE KEY" without the final "-----".
+	result := normalizePEM("-----BEGIN PRIVATE KEY-----base64data-----END PRIVATE KEY")
+	// footerClose will be -1 (no closing -----), returns raw.
+	if !strings.Contains(result, "-----END PRIVATE KEY") {
+		t.Error("PEM with incomplete END marker should be preserved")
+	}
+}
+
+func TestNormalizePEM_BeginMarkerWithoutClosingDashes(t *testing.T) {
+	// BEGIN marker present but the type section never closes with "-----"
+	// anywhere in the string (no "-----" appears at all after the type name).
+	result := normalizePEM("-----BEGIN PRIVATE KEY")
+	// headerClose is -1 (no "-----" found in afterType), returns raw.
+	if !strings.Contains(result, "-----BEGIN PRIVATE KEY") {
+		t.Error("PEM with incomplete BEGIN header should be preserved")
+	}
+}
+
+// ── Tests: jsonMarshal ────────────────────────────────────────────
+
+func TestJsonMarshal_Simple(t *testing.T) {
+	data, err := jsonMarshal(map[string]string{"key": "value"})
+	if err != nil {
+		t.Fatalf("jsonMarshal should not error: %v", err)
+	}
+	if string(data) != `{"key":"value"}` {
+		t.Errorf("unexpected json output: %s", string(data))
+	}
+}
+
+func TestJsonMarshal_Error(t *testing.T) {
+	_, err := jsonMarshal(make(chan int)) // channels can't be marshaled
+	if err == nil {
+		t.Error("jsonMarshal should error on unmarshalable type")
 	}
 }

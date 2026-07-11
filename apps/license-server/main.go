@@ -181,16 +181,13 @@ func safePrefix(s string, n int) string {
 // This is the payload the POS stores locally and verifies against the
 // embedded public key.
 type SubscriptionPayload struct {
-	TenantID        string   `json:"tenant_id"`
-	TierKey         string   `json:"tier_key"`
-	Status          string   `json:"status"`
-	MaxStores       int      `json:"max_stores"`
-	MaxPOSInstances int      `json:"max_pos_instances"`
-	AllowedTypes    []string `json:"allowed_types"`
-	StartsAt        string   `json:"starts_at"`
-	ExpiresAt       string   `json:"expires_at"`
-	GraceUntil      string   `json:"grace_until"`
-	IssuedAt        string   `json:"issued_at"`
+	TenantID   string `json:"tenant_id"`
+	TierKey    string `json:"tier_key"`
+	Status     string `json:"status"`
+	StartsAt   string `json:"starts_at"`
+	ExpiresAt  string `json:"expires_at"`
+	GraceUntil string `json:"grace_until"`
+	IssuedAt   string `json:"issued_at"`
 }
 
 // signSubscription marshals the payload to JSON, SHA-256 hashes it,

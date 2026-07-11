@@ -94,7 +94,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 		machine := core.NewRecord(machineColl)
 		machine.Set("id", req.MachineID)
-		machine.Set("tenant_id", req.TenantID)
+		machine.Set("tenant_id", []string{req.TenantID})
 		machine.Set("first_seen_at", time.Now().UTC())
 		machine.Set("last_seen_at", time.Now().UTC())
 		if err := app.Save(machine); err != nil {
@@ -105,34 +105,15 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 
 		// ── Build and sign subscription ───────────────────────────
 		tierKey := keyRecord.GetString("tier_key")
-		var allowedTypes []string
-		if raw := keyRecord.Get("allowed_types"); raw != nil {
-			// allowed_types is stored as JSON array; PocketBase returns it
-			// as a []any or string depending on the driver version.
-			switch v := raw.(type) {
-			case []any:
-				for _, item := range v {
-					if s, ok := item.(string); ok {
-						allowedTypes = append(allowedTypes, s)
-					}
-				}
-			case string:
-				json.Unmarshal([]byte(v), &allowedTypes)
-			}
-		}
-
 		expiresAt := calculateExpiry(tierKey)
 		sub := SubscriptionPayload{
-			TenantID:        req.TenantID,
-			TierKey:         tierKey,
-			Status:          "active",
-			MaxStores:       keyRecord.GetInt("max_stores"),
-			MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
-			AllowedTypes:    allowedTypes,
-			StartsAt:        time.Now().UTC().Format(time.RFC3339),
-			ExpiresAt:       expiresAt.Format(time.RFC3339),
-			GraceUntil:      calculateGraceUntil(expiresAt).Format(time.RFC3339),
-			IssuedAt:        time.Now().UTC().Format(time.RFC3339),
+			TenantID:   req.TenantID,
+			TierKey:    tierKey,
+			Status:     "active",
+			StartsAt:   time.Now().UTC().Format(time.RFC3339),
+			ExpiresAt:  expiresAt.Format(time.RFC3339),
+			GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
+			IssuedAt:   time.Now().UTC().Format(time.RFC3339),
 		}
 
 		payloadStr, signature, err := signSubscription(sub)
@@ -150,11 +131,11 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 		subRecord := core.NewRecord(subColl)
-		subRecord.Set("tenant_id", req.TenantID)
+		subRecord.Set("tenant_id", []string{req.TenantID})
 		subRecord.Set("tier_key", tierKey)
-		subRecord.Set("max_stores", sub.MaxStores)
-		subRecord.Set("max_pos_instances", sub.MaxPOSInstances)
-		subRecord.Set("allowed_types", sub.AllowedTypes)
+		subRecord.Set("max_stores", keyRecord.GetInt("max_stores"))
+		subRecord.Set("max_pos_instances", keyRecord.GetInt("max_pos_instances"))
+		subRecord.Set("allowed_types", keyRecord.GetString("allowed_types"))
 		subRecord.Set("status", "active")
 		subRecord.Set("starts_at", sub.StartsAt)
 		subRecord.Set("expires_at", sub.ExpiresAt)

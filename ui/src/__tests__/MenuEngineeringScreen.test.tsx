@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { LocalizationProvider } from '@fluent/react';
 import { createEnUsLocalization } from '@/locales';
 import MenuEngineeringScreen from '@/features/reports/MenuEngineeringScreen';
@@ -225,6 +226,271 @@ describe('MenuEngineeringScreen', () => {
     await waitFor(() => {
       const recs = screen.getAllByText(/Promote Star/);
       expect(recs.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── Title ──────────────────────────────────────────────
+  it('renders Menu Engineering title', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Menu Engineering')).toBeTruthy();
+    });
+  });
+
+  // ── All four quadrant recommendations ───────────────────
+  it('renders Plowhorse recommendation text', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const recs = screen.getAllByText(/Increase Price on Plowhorse/);
+      expect(recs.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('renders Puzzle recommendation text', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const recs = screen.getAllByText(/Reposition Puzzle/);
+      expect(recs.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('renders Dog recommendation text', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const recs = screen.getAllByText(/Remove Dog/);
+      expect(recs.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── Quadrant icons ─────────────────────────────────────
+  it('renders all four quadrant icons (★ ▲ ◆ ▼)', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('★').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.getAllByText('▲').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('◆').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('▼').length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Scatter chart ──────────────────────────────────────
+  it('renders scatter chart section title', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Volume vs. Margin Matrix')).toBeTruthy();
+    });
+  });
+
+  it('renders scatter chart legend with quadrant descriptions', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Star.*high vol, high margin/)).toBeTruthy();
+      expect(screen.getByText(/Plowhorse.*high vol, low margin/)).toBeTruthy();
+      expect(screen.getByText(/Puzzle.*low vol, high margin/)).toBeTruthy();
+      expect(screen.getByText(/Dog.*low vol, low margin/)).toBeTruthy();
+    });
+  });
+
+  // ── Table hover state ──────────────────────────────────
+  it('table row gets is-hovered class on mouseEnter', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Ribeye Steak')).toBeTruthy();
+    });
+
+    const row = screen.getByRole('row', { name: /Ribeye Steak: Star/ });
+    expect(row.className).not.toContain('is-hovered');
+
+    await userEvent.hover(row);
+    expect(row.className).toContain('is-hovered');
+
+    await userEvent.unhover(row);
+    expect(row.className).not.toContain('is-hovered');
+  });
+
+  it('table row has keyboard tabIndex', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Ribeye Steak')).toBeTruthy();
+    });
+
+    const row = screen.getByRole('row', { name: /Ribeye Steak: Star/ });
+    expect(row.getAttribute('tabIndex')).toBe('0');
+  });
+
+  // ── Table ARIA ─────────────────────────────────────────
+  it('product table has role="table" with aria-label', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const table = screen.getByRole('table', { name: 'Menu engineering product breakdown' });
+      expect(table).toBeTruthy();
+    });
+  });
+
+  it('table has column headers for all 9 columns', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const headers = screen.getAllByRole('columnheader');
+      expect(headers.length).toBe(9);
+    });
+  });
+
+  it('table has role="cell" on data cells', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const cells = screen.getAllByRole('cell');
+      expect(cells.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ── Date filter refetch ────────────────────────────────
+  it('re-fetches data when start date changes', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Menu Engineering')).toBeTruthy();
+    });
+
+    vi.mocked(reportsApi.getMenuEngineering).mockClear();
+
+    const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
+    fireEvent.change(startInput, { target: { value: '2026-06-01' } });
+
+    await waitFor(() => {
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith('2026-06-01', expect.any(String));
+    });
+  });
+
+  it('re-fetches data when end date changes', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Menu Engineering')).toBeTruthy();
+    });
+
+    vi.mocked(reportsApi.getMenuEngineering).mockClear();
+
+    const endInput = screen.getByLabelText('End date') as HTMLInputElement;
+    fireEvent.change(endInput, { target: { value: '2026-07-15' } });
+
+    await waitFor(() => {
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-07-15');
+    });
+  });
+
+  // ── Edge: zero revenue ─────────────────────────────────
+  it('shows em-dash for margin rate when total revenue is zero', async () => {
+    vi.mocked(reportsApi.getMenuEngineering).mockResolvedValue({
+      median_volume: 0,
+      median_margin: 0,
+      rows: [
+        {
+          product_id: 'p0',
+          sku: 'FREE',
+          name: 'Free Item',
+          total_volume: 10,
+          unit_price_minor: 0,
+          unit_cost_minor: 0,
+          margin_per_unit: 0,
+          total_margin_minor: 0,
+          total_revenue_minor: 0,
+        },
+      ],
+    });
+
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Products/)).toBeTruthy();
+    });
+
+    // Margin rate should be "—"
+    const kpiCards = document.querySelectorAll('.menu-eng-kpi');
+    const marginRateCard = Array.from(kpiCards).find(
+      (el) => el.textContent?.includes('Margin Rate'),
+    );
+    // The value should contain an em-dash
+    expect(marginRateCard?.textContent).toMatch(/—/);
+  });
+
+  // ── KPI labels ─────────────────────────────────────────
+  it('renders Products KPI label and count', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const productLabels = screen.getAllByText('Products');
+      expect(productLabels.length).toBeGreaterThanOrEqual(1);
+    });
+
+    // 4 products in mockResult — appears in KPI and table row numbering, check at least one exists
+    expect(screen.getAllByText('4').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders Total Revenue KPI label', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Total Revenue')).toBeTruthy();
+    });
+  });
+
+  it('renders Total Margin KPI label', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Total Margin')).toBeTruthy();
+    });
+  });
+
+  it('renders Margin Rate KPI label', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Margin Rate')).toBeTruthy();
+    });
+  });
+
+  // ── Classification logic ───────────────────────────────
+  it('classifies high-volume low-margin items as Plowhorse', async () => {
+    // COLA: volume 200 >= 50 (high), margin 200 < 2500 (low) → Plowhorse
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      const plowhorses = screen.getAllByText(/Plowhorse/);
+      expect(plowhorses.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── Product Breakdown title ────────────────────────────
+  it('renders Product Breakdown section title', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Product Breakdown')).toBeTruthy();
+    });
+  });
+
+  // ── Table SKU column ───────────────────────────────────
+  it('renders SKU values in product table', async () => {
+    renderWithLocales(<MenuEngineeringScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('STEAK')).toBeTruthy();
+      expect(screen.getByText('SALAD')).toBeTruthy();
+      expect(screen.getByText('SODA')).toBeTruthy();
+      expect(screen.getByText('COFFEE')).toBeTruthy();
     });
   });
 });

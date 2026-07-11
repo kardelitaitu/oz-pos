@@ -20,8 +20,8 @@ use crate::error::CoreError;
 /// The license server URL embedded at build time.
 ///
 /// Override via the `OZ_LICENSE_SERVER_URL` environment variable
-/// for testing or self-hosted deployments.
-pub const LICENSE_SERVER_URL: &str = "https://license.oz-pos.com";
+/// in production, or use `http://localhost:8090` for local testing.
+pub const LICENSE_SERVER_URL: &str = "https://auth--oz-pos-license-service--76cyv4d6bn54.code.run";
 
 /// The RSA-2048 public key in PEM format, embedded at build time.
 ///
@@ -420,7 +420,7 @@ mod tests {
         // Test the default URL without env var overrides (avoid unsafe on set_var).
         let url = license_server_url();
         assert_eq!(url, LICENSE_SERVER_URL);
-        assert!(url.contains("license.oz-pos.com"));
+        assert!(url.starts_with("https://"));
     }
 
     #[test]
