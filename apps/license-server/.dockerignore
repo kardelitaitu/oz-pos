@@ -1,0 +1,33 @@
+# OZ-POS License Server .dockerignore
+# Excludes files that should not be copied into the Docker build context.
+
+# Go build artifacts
+*.exe
+*.test
+*.out
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files (not needed in the build)
+*_test.go
+
+# Documentation (bundled separately)
+DEPLOY.md
+README.md
+
+# Git
+.git/
+.gitignore
+
+# Environment files
+.env
+.env.*
