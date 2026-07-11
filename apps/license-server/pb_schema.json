@@ -4,537 +4,669 @@
     "name": "license_keys",
     "type": "base",
     "system": false,
-    "schema": [
-      {
-        "id": "af044ec7984a865",
-        "name": "key",
-        "type": "text",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": true,
-        "options": {
-          "min": 10,
-          "max": 100,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "59b679ea73a6729",
-        "name": "tier_key",
-        "type": "select",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "maxSelect": 1,
-          "values": [
-            "free",
-            "pro",
-            "premium",
-            "enterprise"
-          ]
-        }
-      },
-      {
-        "id": "4f950bb08fa6d5e",
-        "name": "status",
-        "type": "select",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "maxSelect": 1,
-          "values": [
-            "unused",
-            "activated",
-            "expired",
-            "revoked"
-          ]
-        }
-      },
-      {
-        "id": "eb24b9b69bb5837",
-        "name": "expires_at",
-        "type": "date",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      },
-      {
-        "id": "91e7162030cf3b8",
-        "name": "activated_at",
-        "type": "date",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      },
-      {
-        "id": "c5104eaa56335a5",
-        "name": "activated_by",
-        "type": "relation",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "collectionId": "64d11bd2cc57a18",
-          "cascadeDelete": false,
-          "minSelect": null,
-          "maxSelect": 1,
-          "displayFields": null
-        }
-      },
-      {
-        "id": "645a042694c20f5",
-        "name": "revoked_at",
-        "type": "date",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      },
-      {
-        "id": "123417a8af39507",
-        "name": "notes",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      }
-    ],
-    "indexes": [],
     "listRule": "@request.auth.id != ''",
     "viewRule": "@request.auth.id != ''",
     "createRule": "@request.auth.id != ''",
     "updateRule": "@request.auth.id != ''",
     "deleteRule": "@request.auth.id != ''",
-    "options": {}
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text6923198650",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text6500792914",
+        "name": "key",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 100,
+        "min": 10,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "select2663659568",
+        "name": "tier_key",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "maxSelect": 1,
+        "values": [
+          "free",
+          "pro",
+          "premium",
+          "enterprise"
+        ]
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "select1900800228",
+        "name": "status",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "maxSelect": 1,
+        "values": [
+          "unused",
+          "activated",
+          "expired",
+          "revoked"
+        ]
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date7532158020",
+        "name": "expires_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date9656895403",
+        "name": "activated_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "relation1379592947",
+        "name": "activated_by",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date5820615666",
+        "name": "revoked_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text3766565349",
+        "name": "notes",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate3454440663",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate7707342909",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": []
   },
   {
     "id": "64d11bd2cc57a18",
     "name": "tenants",
     "type": "base",
     "system": false,
-    "schema": [
-      {
-        "id": "e2a6ad8418b7ac1",
-        "name": "business_name",
-        "type": "text",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "c9804c103217408",
-        "name": "contact_name",
-        "type": "text",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "184590b72d16748",
-        "name": "email",
-        "type": "email",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "exceptDomains": null,
-          "onlyDomains": null
-        }
-      },
-      {
-        "id": "e57f1957afa5851",
-        "name": "phone",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "04cb6fb42ded25a",
-        "name": "company",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "95c8f57d6ceb5d2",
-        "name": "address_line1",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "fb56ceb5cd6fb58",
-        "name": "address_line2",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "7e88e220be52da5",
-        "name": "city",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "6689988afe9d267",
-        "name": "state",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "3e1c301f6f2aa1d",
-        "name": "postal_code",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "7f202e738a4d1bc",
-        "name": "country",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "55647b37eeeabf0",
-        "name": "notes",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "f798424ab71e74f",
-        "name": "api_key",
-        "type": "text",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": true,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "3c83351e1ed8a89",
-        "name": "status",
-        "type": "select",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "maxSelect": 1,
-          "values": [
-            "active",
-            "suspended",
-            "revoked"
-          ]
-        }
-      }
-    ],
-    "indexes": [],
     "listRule": "@request.auth.id != ''",
     "viewRule": "@request.auth.id != ''",
     "createRule": null,
     "updateRule": "@request.auth.id != ''",
     "deleteRule": "@request.auth.id != ''",
-    "options": {}
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text4375216299",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text1554646295",
+        "name": "business_name",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text6560766399",
+        "name": "contact_name",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "email5797430265",
+        "name": "email",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "email",
+        "exceptDomains": null,
+        "onlyDomains": null
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text5734442841",
+        "name": "phone",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text6513340250",
+        "name": "company",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text6660938095",
+        "name": "address_line1",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text8106986965",
+        "name": "address_line2",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text8810334845",
+        "name": "city",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text5713612811",
+        "name": "state",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text4457679873",
+        "name": "postal_code",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text8984594018",
+        "name": "country",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text9525626071",
+        "name": "notes",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text5908105184",
+        "name": "api_key",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "select4919185970",
+        "name": "status",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "maxSelect": 1,
+        "values": [
+          "active",
+          "suspended",
+          "revoked"
+        ]
+      },
+      {
+        "hidden": false,
+        "id": "autodate3976882600",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate5481419016",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": []
   },
   {
     "id": "c70451d421d53cf",
     "name": "subscriptions",
     "type": "base",
     "system": false,
-    "schema": [
-      {
-        "id": "b415aead5f62ff6",
-        "name": "tenant_id",
-        "type": "relation",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "collectionId": "64d11bd2cc57a18",
-          "cascadeDelete": false,
-          "minSelect": null,
-          "maxSelect": 1,
-          "displayFields": null
-        }
-      },
-      {
-        "id": "959c6d415bbc13a",
-        "name": "tier_key",
-        "type": "select",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "maxSelect": 1,
-          "values": [
-            "free",
-            "pro",
-            "premium",
-            "enterprise"
-          ]
-        }
-      },
-      {
-        "id": "368eb441fe01789",
-        "name": "status",
-        "type": "select",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "maxSelect": 1,
-          "values": [
-            "active",
-            "expired",
-            "grace_period",
-            "revoked"
-          ]
-        }
-      },
-      {
-        "id": "39118b0e7c3df91",
-        "name": "starts_at",
-        "type": "date",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      },
-      {
-        "id": "745f72b034ac1cf",
-        "name": "expires_at",
-        "type": "date",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      },
-      {
-        "id": "ed955428ec3db94",
-        "name": "grace_until",
-        "type": "date",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      },
-      {
-        "id": "c2e4c95fb873032",
-        "name": "signed_payload",
-        "type": "text",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      },
-      {
-        "id": "02f21bbeeaa744a",
-        "name": "signature",
-        "type": "text",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": null,
-          "max": null,
-          "pattern": ""
-        }
-      }
-    ],
-    "indexes": [],
     "listRule": "@request.auth.id != ''",
     "viewRule": "@request.auth.id != ''",
     "createRule": null,
     "updateRule": null,
     "deleteRule": "@request.auth.id != ''",
-    "options": {}
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text6620184580",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "relation9377121391",
+        "name": "tenant_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "select2670663631",
+        "name": "tier_key",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "maxSelect": 1,
+        "values": [
+          "free",
+          "pro",
+          "premium",
+          "enterprise"
+        ]
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "select3345608427",
+        "name": "status",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "maxSelect": 1,
+        "values": [
+          "active",
+          "expired",
+          "grace_period",
+          "revoked"
+        ]
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date4545758050",
+        "name": "starts_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date5285493416",
+        "name": "expires_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date5077564346",
+        "name": "grace_until",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text2965012333",
+        "name": "signed_payload",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "text9300599683",
+        "name": "signature",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate7853078470",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2345372474",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": []
   },
   {
     "id": "cc353d653cfd74a",
     "name": "tenant_machines",
     "type": "base",
     "system": false,
-    "schema": [
-      {
-        "id": "a9d7b8b89695edb",
-        "name": "tenant_id",
-        "type": "relation",
-        "system": false,
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "collectionId": "64d11bd2cc57a18",
-          "cascadeDelete": false,
-          "minSelect": null,
-          "maxSelect": 1,
-          "displayFields": null
-        }
-      },
-      {
-        "id": "990496f49d296c1",
-        "name": "first_seen_at",
-        "type": "date",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      },
-      {
-        "id": "507c61236a83d3f",
-        "name": "last_seen_at",
-        "type": "date",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {
-          "min": "",
-          "max": ""
-        }
-      }
-    ],
-    "indexes": [],
     "listRule": "@request.auth.id != ''",
     "viewRule": "@request.auth.id != ''",
     "createRule": null,
     "updateRule": null,
     "deleteRule": "@request.auth.id != ''",
-    "options": {}
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text1830095356",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "relation7130132509",
+        "name": "tenant_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date2472367056",
+        "name": "first_seen_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date5805409256",
+        "name": "last_seen_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "hidden": false,
+        "id": "autodate7039629861",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3305849370",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": []
   }
 ]
