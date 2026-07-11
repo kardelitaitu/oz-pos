@@ -4,10 +4,16 @@ import './ConnectionStatus.css';
 interface ConnectionStatusProps {
   label: string;
   url: string;
-  intervalMs?: number;
+  minIntervalMs?: number;
+  maxIntervalMs?: number;
 }
 
-export default function ConnectionStatus({ label, url, intervalMs = 10000 }: ConnectionStatusProps) {
+export default function ConnectionStatus({ 
+  label, 
+  url, 
+  minIntervalMs = 30000, 
+  maxIntervalMs = 120000 
+}: ConnectionStatusProps) {
   const [latency, setLatency] = useState<number | null>(null);
   const [status, setStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
@@ -51,17 +57,25 @@ export default function ConnectionStatus({ label, url, intervalMs = 10000 }: Con
       }
     };
 
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const scheduleNextCheck = () => {
+      if (!mounted) return;
+      // Random jitter between min and max
+      const jitterMs = Math.floor(Math.random() * (maxIntervalMs - minIntervalMs + 1)) + minIntervalMs;
+      timeoutId = setTimeout(() => {
+        checkConnection().then(scheduleNextCheck);
+      }, jitterMs);
+    };
+
     // Initial check
-    checkConnection();
-    
-    // Polling interval
-    const timer = setInterval(checkConnection, intervalMs);
+    checkConnection().then(scheduleNextCheck);
     
     return () => {
       mounted = false;
-      clearInterval(timer);
+      clearTimeout(timeoutId);
     };
-  }, [url, intervalMs]);
+  }, [url, minIntervalMs, maxIntervalMs]);
 
   // Determine indicator color
   let indicatorClass = 'status-indicator checking';
