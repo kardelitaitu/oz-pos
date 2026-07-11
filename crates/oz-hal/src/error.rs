@@ -6,7 +6,33 @@
 //! `.map_err(|e| HalError::Usb(e.to_string()))` at the trait boundary
 //! — never leak `rusb`/`btleplug`/`serialport` types past the driver.
 
+use serde::Serialize;
 use thiserror::Error;
+
+/// Serializable discriminator for [`HalError`] variants.
+///
+/// Mirrored on the front-end as `AppError.subKind` so UI code can branch
+/// on the specific hardware failure mode without parsing the message string.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HalErrorKind {
+    /// Device id not found in the registry.
+    NotFound,
+    /// Device was disconnected.
+    Disconnected,
+    /// I/O transport error.
+    Io,
+    /// USB transport error.
+    Usb,
+    /// Bluetooth transport error.
+    Bluetooth,
+    /// Operation timed out.
+    Timeout,
+    /// Malformed packet or unexpected response.
+    Protocol,
+    /// Device is busy with a prior request.
+    Busy,
+}
 
 /// Errors that can originate in a HAL driver or the HAL runtime.
 #[derive(Debug, Error)]
@@ -45,6 +71,22 @@ pub enum HalError {
     Busy,
 }
 
+impl HalError {
+    /// Map a `HalError` to its [`HalErrorKind`] discriminator.
+    pub fn kind(&self) -> HalErrorKind {
+        match self {
+            HalError::NotFound(_) => HalErrorKind::NotFound,
+            HalError::Disconnected => HalErrorKind::Disconnected,
+            HalError::Io(_) => HalErrorKind::Io,
+            HalError::Usb(_) => HalErrorKind::Usb,
+            HalError::Bluetooth(_) => HalErrorKind::Bluetooth,
+            HalError::Timeout(_) => HalErrorKind::Timeout,
+            HalError::Protocol(_) => HalErrorKind::Protocol,
+            HalError::Busy => HalErrorKind::Busy,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,5 +108,35 @@ mod tests {
         let io = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
         let e: HalError = io.into();
         assert!(matches!(e, HalError::Io(_)));
+    }
+
+    #[test]
+    fn disconnected_display() {
+        let e = HalError::Disconnected;
+        assert_eq!(e.to_string(), "device disconnected");
+    }
+
+    #[test]
+    fn usb_display() {
+        let e = HalError::Usb("permission denied".into());
+        assert_eq!(e.to_string(), "usb error: permission denied");
+    }
+
+    #[test]
+    fn bluetooth_display() {
+        let e = HalError::Bluetooth("adapter not found".into());
+        assert_eq!(e.to_string(), "bluetooth error: adapter not found");
+    }
+
+    #[test]
+    fn protocol_display() {
+        let e = HalError::Protocol("unexpected NAK".into());
+        assert_eq!(e.to_string(), "protocol error: unexpected NAK");
+    }
+
+    #[test]
+    fn busy_display() {
+        let e = HalError::Busy;
+        assert_eq!(e.to_string(), "device busy");
     }
 }

@@ -1,0 +1,17 @@
+# ── cargo-tarpaulin config (Linux-only fallback) ────────────────────────
+#
+# As of 2026-07 the canonical coverage tool is `cargo-llvm-cov`, driven
+# by scripts/coverage.{sh,ps1}. This file is kept because tarpaulin is
+# faster on Linux and some maintainers prefer it for local-only runs.
+#
+# IMPORTANT: tarpaulin only works on Linux (it uses ptrace). On macOS
+# and Windows use scripts/coverage.{sh,ps1} with cargo-llvm-cov instead.
+#
+# Run with: `cargo tarpaulin` from the workspace root.
+# Output:   coverage/tarpaulin-report.html + coverage/tarpaulin-report.json
+#
+[tarpaulin]
+manifest-path = "Cargo.toml"
+packages = ["oz-core", "oz-hal", "oz-lua"]
+out = ["Html", "Json"]
+output-dir = "coverage/"

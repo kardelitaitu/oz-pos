@@ -1,0 +1,17 @@
+[package]
+name = "modules-sales"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS Sales Module: POS pipeline, cart management, sales history, refunds."
+
+[dependencies]
+foundation = { workspace = true }
+oz-core = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+platform-kernel = { workspace = true }

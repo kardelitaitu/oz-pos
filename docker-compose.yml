@@ -1,0 +1,85 @@
+# ── OZ-POS Cloud Server — Docker Compose ────────────────────────────
+#
+# Defines two services:
+#   1. pos-cloud-server — the headless sync & API binary
+#   2. pos-cloud-db    — optional PostgreSQL database (for enterprise
+#                        deployments using pg_transport replication)
+#
+# Usage (SQLite — default, no external DB needed):
+#
+#   docker compose up -d
+#   curl http://localhost:3099/api/v1/health
+#
+# Usage (PostgreSQL — requires OZ_API_SECRET to be set):
+#
+#   docker compose --profile pg up -d
+#   docker compose exec pos-cloud-server \
+#     /app/oz-cloud-server --help
+#
+# Environment overrides:
+#
+#   OZ_API_SECRET=my-secret docker compose up -d
+#   OZ_API_PORT=8080 docker compose up -d
+
+services:
+
+  # ── Cloud Server ──────────────────────────────────────────────────
+  pos-cloud-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "3099:3099"
+    environment:
+      # Runtime database — SQLite by default.
+      OZ_DB_PATH: /data/oz-pos.db
+      OZ_API_PORT: "3099"
+      RUST_LOG: "${RUST_LOG:-info}"
+
+      # JWT signing secret — MUST be set in production.
+      # Generate: openssl rand -hex 32
+      OZ_API_SECRET: "${OZ_API_SECRET:-}"
+
+      # PostgreSQL connection string (set this to switch to PG backend).
+      # Format: postgresql://user:pass@pos-cloud-db:5432/ozpos
+      DATABASE_URL: "${DATABASE_URL:-}"
+    volumes:
+      - oz_cloud_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:3099/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # The DB service is started only with the `pg` profile. When it's
+    # not active, DATABASE_URL is empty and the server uses SQLite.
+    profiles:
+      - ""
+      - pg
+
+  # ── PostgreSQL Database (optional) ────────────────────────────────
+  pos-cloud-db:
+    image: postgres:16-alpine
+    profiles:
+      - pg
+    environment:
+      POSTGRES_USER: "${PG_USER:-ozpos}"
+      POSTGRES_PASSWORD: "${PG_PASSWORD:-changeme}"
+      POSTGRES_DB: "${PG_DATABASE:-ozpos}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - oz_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-ozpos} -d ${PG_DATABASE:-ozpos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  oz_cloud_data:
+  oz_pg_data:

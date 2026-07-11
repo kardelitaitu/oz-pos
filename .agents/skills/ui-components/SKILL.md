@@ -251,6 +251,32 @@ test('renders line with formatted price', () => {
 - Always wrap in `<LocalizationProvider>` even with empty bundles — components may use `<Localized>`.
 - Mock `pos.ts` at the module boundary, not `invoke()`. Use `vi.mock('@/api/pos', ...)`.
 
+### Async state updates: use `renderInAct` / `renderHookInAct`
+
+Any component or hook whose `useEffect` fires an async IPC on mount (e.g., loading settings from the secure settings DB, pulling from the cloud sync server, refreshing the offline queue) will trigger React's
+
+> "An update to `<Component>` inside a test was not wrapped in act(...)."
+
+…unless the initial `render()` / `renderHook()` is itself wrapped in an `act()` boundary. Use the shared helpers in `ui/src/test-utils/renderInAct.ts` instead of inlining `await act(async () => render(...))` everywhere:
+
+```tsx
+import { renderInAct, renderHookInAct } from '@/test-utils/renderInAct';
+
+// For components:
+await renderInAct(<MyComponent />);
+await waitFor(() => expect(screen.getByText('…')).toBeInTheDocument());
+
+// For isolated hook tests:
+const { result } = await renderHookInAct(() => useMyHook());
+expect(result.current.value).toBe(42);
+```
+
+Both helpers are async, so the calling `it` must be `async`. The async-`act` variant is used uniformly so that both sync and async mount-effect state updates are flushed before the test continues.
+
+**Don't** fall back to plain `render()` / `renderHook()` in new tests — the project has a CI gate in `.github/workflows/ci.yml` that surfaces any act() warnings the test suite emits. The gate fails the build on act() warnings (currently warning-only while pre-existing warnings are being cleaned up; flip `exit 0` to `exit 1` once the suite is clean).
+
+**For tests that deliberately use `vi.advanceTimersByTime` (not the async variant)** — e.g., a hook test that needs a promise to stay pending so an in-flight guard can be exercised — wrap the *resolve* step in `await act(async () => { ... })` (not just `act(...)`) so the microtask that runs the hook's `finally` block is inside the act() boundary.
+
 ---
 
 ## Folder structure
@@ -290,6 +316,7 @@ ui/
 6. **Reading a context inside a render** without a memoized selector. Causes re-renders of every consumer.
 7. **Forgetting `aria-busy` during async commands.** The button looks clickable while the request is in flight; the user clicks again.
 8. **Styling with `px` everywhere** — the app must scale for tablets, large touch screens, and high-DPI. Use `rem`, `em`, or CSS variables for sizes.
+9. **Rendering a component whose `useEffect` fires an async IPC without wrapping in `act()`.** Any mount effect that resolves a promise and calls `setState` will trigger a `Warning: An update to <Component> inside a test was not wrapped in act(...)`. Use `renderInAct` / `renderHookInAct` from `@/test-utils/renderInAct` instead of plain `render()` / `renderHook()` — see the "Async state updates" subsection above.
 
 ---
 

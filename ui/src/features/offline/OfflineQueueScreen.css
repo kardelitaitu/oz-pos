@@ -1,0 +1,207 @@
+.offline-queue-screen {
+  padding: var(--space-6) var(--space-8);
+}
+
+.offline-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.offline-queue-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.offline-queue-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+  color: var(--color-fg);
+}
+
+.offline-queue-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-0) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-full);
+  background: var(--color-accent-dim);
+  color: var(--color-accent-fg);
+  white-space: nowrap;
+}
+
+.offline-queue-loading {
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-base);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+/* ── Empty / Error state ──────────────────────────────────────────── */
+
+.offline-queue-empty {
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-fg-secondary);
+}
+
+.offline-queue-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ── Sync result banner ───────────────────────────────────────────── */
+
+.offline-queue-sync-result {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-dim);
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ── Table ────────────────────────────────────────────────────────── */
+
+.offline-queue-table-wrap {
+  overflow-x: auto;
+}
+
+.offline-queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.offline-queue-table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  border-bottom: 2px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.offline-queue-table td {
+  padding: var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+/* ── Cell styles ──────────────────────────────────────────────────── */
+
+.offline-queue-cell-action {
+  font-weight: var(--font-weight-medium);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.offline-queue-cell-retries {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  text-align: center;
+}
+
+.offline-queue-cell-error {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offline-queue-cell-created {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+}
+
+.offline-queue-cell-synced {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+}
+
+.offline-queue-cell-none {
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Status badges ────────────────────────────────────────────────── */
+
+.offline-queue-status-badge {
+  display: inline-block;
+  padding: var(--space-0) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.status-pending {
+  background: var(--color-warning-bg);
+  color: var(--color-fg);
+}
+
+.status-synced {
+  background: var(--color-success-bg);
+  color: var(--color-fg);
+}
+
+.status-failed {
+  background: var(--color-danger-bg);
+  color: var(--color-fg);
+}
+
+/* ── Actions ──────────────────────────────────────────────────────── */
+
+.offline-queue-cell-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.offline-queue-action-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  color: var(--color-fg-secondary);
+  transition: all var(--duration-150) var(--ease-out);
+}
+
+.offline-queue-action-btn:hover {
+  background: var(--color-bg-surface);
+}
+
+.offline-queue-action-btn--danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger-dim);
+}
+
+.offline-queue-action-btn--danger:hover {
+  background: var(--color-danger-bg);
+}

@@ -1,0 +1,79 @@
+.sc-form-screen {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Shared with parent screen */
+.sc-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.sc-form-header {
+  margin-bottom: 20px;
+}
+
+.sc-form-card {
+  padding: 24px;
+}
+
+.sc-form-field {
+  margin-bottom: 20px;
+}
+
+.sc-form-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.sc-type-options {
+  display: flex;
+  gap: 10px;
+}
+
+.sc-type-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.sc-type-btn--active {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+.sc-form-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.sc-form-error {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.sc-form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}

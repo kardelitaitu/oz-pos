@@ -1,0 +1,75 @@
+/* ═══════════════════════════════════════════════════════════════
+   RTL (Right-to-Left) Layout Support
+
+   Applied via [dir="rtl"] on the root element.
+   This file flips margins, paddings, text-align, and flex
+   directions for Arabic, Hebrew, Persian, and Urdu locales.
+
+   Currently a scaffold — populated fully when a RTL locale
+   (e.g., Arabic `ar`) is added.
+   ═══════════════════════════════════════════════════════════════ */
+
+[dir="rtl"] {
+  /* ── Text alignment ────────────────────────────────────────── */
+  text-align: right;
+}
+
+[dir="rtl"] .nav-sidebar {
+  /* Sidebar slides in from the right instead of the left */
+  left: auto;
+  right: 0;
+  border-right: none;
+  border-left: 1px solid var(--color-border);
+}
+
+[dir="rtl"] .app-layout-main {
+  margin-left: 0;
+  margin-right: 240px; /* sidebar width */
+}
+
+[dir="rtl"] .cart-panel {
+  right: auto;
+  left: 0;
+  border-left: none;
+  border-right: 1px solid var(--color-border);
+}
+
+/* ── Flex / Grid direction overrides ─────────────────────────── */
+[dir="rtl"] .flex-row {
+  flex-direction: row-reverse;
+}
+
+[dir="rtl"] .gap-ltr {
+  /* Swap margin-left/right for inline gaps */
+  margin-left: 0;
+  margin-right: var(--space-2);
+}
+
+[dir="rtl"] .ml-auto {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+[dir="rtl"] .mr-auto {
+  margin-right: 0;
+  margin-left: auto;
+}
+
+/* ── Icons ────────────────────────────────────────────────────── */
+[dir="rtl"] svg[aria-hidden="true"] {
+  /* Flip icons horizontally in RTL mode */
+  transform: scaleX(-1);
+}
+
+/* ── Input / form padding ─────────────────────────────────────── */
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] select {
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+
+/* ── Table headers ────────────────────────────────────────────── */
+[dir="rtl"] th {
+  text-align: right;
+}

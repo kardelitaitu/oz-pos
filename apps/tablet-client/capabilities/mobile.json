@@ -1,0 +1,11 @@
+{
+  "identifier": "mobile-capability",
+  "description": "Capabilities for the tablet / mobile app",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen"
+  ]
+}

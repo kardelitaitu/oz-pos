@@ -1,0 +1,267 @@
+{
+  "collections": [
+    {
+      "name": "license_keys",
+      "type": "base",
+      "schema": [
+        {
+          "name": "key",
+          "type": "text",
+          "required": true,
+          "unique": true,
+          "options": { "min": 10, "max": 100 }
+        },
+        {
+          "name": "tier_key",
+          "type": "select",
+          "required": true,
+          "options": {
+            "values": ["free", "pro", "premium", "enterprise"],
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "max_stores",
+          "type": "number",
+          "required": true,
+          "options": { "min": 1, "max": 9999 }
+        },
+        {
+          "name": "max_pos_instances",
+          "type": "number",
+          "required": true,
+          "options": { "min": 1, "max": 9999 }
+        },
+        {
+          "name": "allowed_types",
+          "type": "json",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "options": {
+            "values": ["unused", "activated", "expired", "revoked"],
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "expires_at",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "activated_at",
+          "type": "date"
+        },
+        {
+          "name": "activated_by",
+          "type": "relation",
+          "options": {
+            "collectionId": "tenants",
+            "cascadeDelete": false,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "revoked_at",
+          "type": "date"
+        },
+        {
+          "name": "notes",
+          "type": "text"
+        }
+      ],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.id != ''",
+      "updateRule": "@request.auth.id != ''",
+      "deleteRule": "@request.auth.id != ''"
+    },
+    {
+      "name": "tenants",
+      "type": "base",
+      "schema": [
+        {
+          "name": "business_name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "contact_name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": true
+        },
+        {
+          "name": "phone",
+          "type": "text"
+        },
+        {
+          "name": "company",
+          "type": "text"
+        },
+        {
+          "name": "address_line1",
+          "type": "text"
+        },
+        {
+          "name": "address_line2",
+          "type": "text"
+        },
+        {
+          "name": "city",
+          "type": "text"
+        },
+        {
+          "name": "state",
+          "type": "text"
+        },
+        {
+          "name": "postal_code",
+          "type": "text"
+        },
+        {
+          "name": "country",
+          "type": "text"
+        },
+        {
+          "name": "notes",
+          "type": "text"
+        },
+        {
+          "name": "api_key",
+          "type": "text",
+          "required": true,
+          "unique": true
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "options": {
+            "values": ["active", "suspended", "revoked"],
+            "maxSelect": 1
+          }
+        }
+      ],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": null,
+      "updateRule": "@request.auth.id != ''",
+      "deleteRule": "@request.auth.id != ''"
+    },
+    {
+      "name": "subscriptions",
+      "type": "base",
+      "schema": [
+        {
+          "name": "tenant_id",
+          "type": "relation",
+          "required": true,
+          "options": {
+            "collectionId": "tenants",
+            "cascadeDelete": false,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "tier_key",
+          "type": "select",
+          "required": true,
+          "options": {
+            "values": ["free", "pro", "premium", "enterprise"],
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "max_stores",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "max_pos_instances",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "allowed_types",
+          "type": "json",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "options": {
+            "values": ["active", "expired", "grace_period", "revoked"],
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "starts_at",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "expires_at",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "grace_until",
+          "type": "date"
+        },
+        {
+          "name": "signed_payload",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "signature",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": "@request.auth.id != ''"
+    },
+    {
+      "name": "tenant_machines",
+      "type": "base",
+      "schema": [
+        {
+          "name": "tenant_id",
+          "type": "relation",
+          "required": true,
+          "options": {
+            "collectionId": "tenants",
+            "cascadeDelete": false,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "first_seen_at",
+          "type": "date"
+        },
+        {
+          "name": "last_seen_at",
+          "type": "date"
+        }
+      ],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": "@request.auth.id != ''"
+    }
+  ]
+}

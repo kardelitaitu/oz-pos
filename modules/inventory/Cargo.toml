@@ -1,0 +1,20 @@
+[package]
+name = "modules-inventory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS Inventory Module: product catalog, stock management, variants, categories."
+
+[dependencies]
+anyhow = { workspace = true }
+foundation = { workspace = true }
+oz-core = { workspace = true }
+rusqlite = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+platform-kernel = { workspace = true }

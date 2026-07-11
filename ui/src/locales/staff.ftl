@@ -1,0 +1,102 @@
+# ui/src/locales/staff.ftl — Staff management
+
+staff-title = Staff
+staff-add-button = Add Staff
+staff-loading = Loading staff…
+staff-empty = No staff members yet.
+staff-empty-cta = Add your first staff member
+staff-col-name = Name
+staff-col-username = Username
+staff-col-role = Role
+staff-col-status = Status
+staff-col-actions =
+    .aria-label = Actions
+staff-status-active = Active
+staff-status-inactive = Inactive
+staff-edit = Edit
+staff-edit-aria =
+    .aria-label = Edit { $name }
+staff-deactivate = Deactivate
+staff-deactivate-aria =
+    .aria-label = Deactivate { $name }
+staff-restore = Restore
+staff-restore-aria =
+    .aria-label = Reactivate { $name }
+staff-modal-add-aria =
+    .aria-label = Add staff member
+staff-modal-edit-aria =
+    .aria-label = Edit staff member
+staff-modal-add-title = Add Staff Member
+staff-modal-edit-title = Edit Staff Member
+staff-modal-close =
+    .aria-label = Close
+staff-field-username-label = Username *
+staff-username-placeholder =
+    .placeholder = e.g. jane
+staff-field-name-label = Display Name *
+staff-name-placeholder =
+    .placeholder = e.g. Jane Smith
+staff-field-pin-edit-label = New PIN (leave blank to keep current)
+staff-field-pin-label = PIN * (4+ characters)
+staff-pin-edit-placeholder =
+    .placeholder = Leave blank to keep current
+staff-pin-placeholder =
+    .placeholder = Enter PIN
+staff-field-role-label = Role *
+staff-role-select-default = Select a role…
+staff-btn-cancel = Cancel
+staff-btn-update = Update
+staff-btn-create = Create
+staff-error-username-required = Username is required
+staff-error-display-name-required = Display name is required
+staff-error-role-required = Please select a role
+staff-error-pin-length = PIN must be at least 4 characters
+staff-error-save-failed = Failed to save staff member
+staff-table-aria = Staff members
+staff-field-username-aria =
+    .aria-label = Username
+staff-field-name-aria = Display Name
+staff-field-pin-aria = PIN
+staff-error-generic = { $message }
+
+# ── Workspace Access ──────────────────────────────────────────────────────
+staff-ws-section-label = Workspace Access
+staff-ws-role-defaults = Use role defaults
+staff-ws-custom = Custom
+
+# ── Staff Login ──────────────────────────────────────────────────────────
+staff-login-title = OZ-POS
+staff-login-subtitle = Staff Login
+staff-login-step-username = Enter your username
+staff-login-step-pin = Enter your PIN
+staff-login-progress-aria =
+    .aria-label = Login progress
+staff-login-username-placeholder =
+    .placeholder = Username
+staff-login-username-aria =
+    .aria-label = Username
+staff-login-next = Next
+staff-login-pin-section-aria =
+    .aria-label = PIN entry — type digits on your keyboard or use the on-screen keypad
+staff-login-pin-aria =
+    .aria-label = PIN entry: { $length } of { $max } digits
+staff-login-keypad-aria =
+    .aria-label = Numeric keypad
+staff-login-clear = Clear
+staff-login-clear-aria =
+    .aria-label = Clear
+staff-login-backspace-aria =
+    .aria-label = Backspace
+staff-login-digit-aria =
+    .aria-label = { $digit }
+staff-login-submit = Login
+staff-login-submitting = Logging in…
+staff-login-verifying = Verifying...
+staff-login-back = ← Back
+staff-login-copyright = © 2026 OZ-POS. All rights reserved.
+
+# ── Fast User Switching (ADR #6) ──────────────────────────────────────────
+
+fastpin-switch-user = Switch User
+fastpin-active-user = Active: { $name }
+fastpin-enter-pin = Enter PIN for { $user }

@@ -1,0 +1,323 @@
+/* ============================================================
+ * OZ-POS Table Management Floor Plan Styling
+ *
+ * Designed with a blueprint layout, glassmorphic UI controls,
+ * glowing semantic status gradients, and smooth interactive states.
+ * Fully compatible with light and dark mode tokens.
+ * ============================================================ */
+
+.tables {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tables-title {
+  margin: 0;
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-bold);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+}
+
+.tables-sections {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  scrollbar-width: none; /* Hide scrollbar for cleaner look */
+}
+
+.tables-sections::-webkit-scrollbar {
+  display: none;
+}
+
+.tables-section-btn {
+  padding: var(--space-1_5) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out),
+    transform var(--duration-100) var(--ease-out);
+}
+
+.tables-section-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-fg);
+  transform: translateY(-1px);
+}
+
+.tables-section-btn.active {
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  border-color: var(--color-accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+
+/* ── Floorplan Area ──────────────────────────────── */
+.tables-floorplan {
+  position: relative;
+  flex: 1;
+  margin: var(--space-6);
+  background-color: var(--color-bg-secondary);
+  /* Blueprint grid pattern background */
+  background-image: 
+    radial-gradient(var(--color-border) 1px, transparent 1px),
+    radial-gradient(var(--color-border) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-inner);
+  overflow: hidden;
+  min-height: 400px;
+}
+
+/* Base table style */
+.tables-table {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  color: var(--color-accent-fg);
+  font-weight: var(--font-weight-semibold);
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--color-fg) 40%, transparent);
+  padding: var(--space-1);
+  overflow: hidden;
+  line-height: var(--leading-tight);
+  transition:
+    transform var(--duration-200) cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow var(--duration-200) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out);
+}
+
+.tables-table:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.tables-table:hover {
+  transform: scale(1.08);
+  border-color: rgba(255, 255, 255, 0.9);
+  z-index: 10;
+}
+
+.tables-table:active {
+  transform: scale(0.96);
+}
+
+/* ── Shapes ──────────────────────────────────────── */
+.tables-table--circle {
+  border-radius: var(--radius-full);
+}
+
+.tables-table--rectangle {
+  border-radius: var(--radius-lg);
+}
+
+/* ── Table Status Colors (Gradients & Glowing Shadows) ── */
+
+/* Available */
+.tables-table--available {
+  background: linear-gradient(135deg, var(--color-success) 0%, color-mix(in srgb, var(--color-success) 80%, black) 100%);
+  box-shadow: 
+    0 4px 12px color-mix(in srgb, var(--color-success) 25%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.tables-table--available:hover {
+  box-shadow: 
+    0 8px 20px color-mix(in srgb, var(--color-success) 40%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Occupied */
+.tables-table--occupied {
+  background: linear-gradient(135deg, var(--color-danger) 0%, color-mix(in srgb, var(--color-danger) 80%, black) 100%);
+  box-shadow: 
+    0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: table-occupied-pulse 2s infinite ease-in-out;
+}
+.tables-table--occupied:hover {
+  box-shadow: 
+    0 8px 20px color-mix(in srgb, var(--color-danger) 40%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Reserved */
+.tables-table--reserved {
+  background: linear-gradient(135deg, var(--color-warning) 0%, color-mix(in srgb, var(--color-warning) 80%, black) 100%);
+  box-shadow: 
+    0 4px 12px color-mix(in srgb, var(--color-warning) 25%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.tables-table--reserved:hover {
+  box-shadow: 
+    0 8px 20px color-mix(in srgb, var(--color-warning) 40%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Cleaning */
+.tables-table--cleaning {
+  background: linear-gradient(135deg, var(--color-fg-tertiary) 0%, color-mix(in srgb, var(--color-fg-tertiary) 80%, black) 100%);
+  box-shadow: 
+    0 4px 12px color-mix(in srgb, var(--color-fg-tertiary) 20%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.tables-table--cleaning:hover {
+  box-shadow: 
+    0 8px 20px color-mix(in srgb, var(--color-fg-tertiary) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+@keyframes table-occupied-pulse {
+  0% {
+    box-shadow: 
+      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow: 
+      0 4px 20px color-mix(in srgb, var(--color-danger) 45%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+  100% {
+    box-shadow: 
+      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+}
+
+.tables-table-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  word-break: break-word;
+}
+
+.tables-table-status {
+  font-size: var(--text-xs);
+  opacity: 0.85;
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+/* ── Detail dialog ──────────────────────────────────── */
+.tables-detail {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-2xl);
+  z-index: 100;
+  animation: slideUp var(--duration-200) var(--ease-out);
+}
+
+.tables-detail h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-primary);
+}
+
+.tables-detail p {
+  margin: var(--space-1) 0;
+  color: var(--color-fg-secondary);
+  font-size: var(--text-sm);
+}
+
+.tables-detail-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.tables-detail-actions button {
+  flex: 1;
+  padding: var(--space-3);
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 20%, transparent);
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    transform var(--duration-100) var(--ease-out),
+    opacity var(--duration-150) var(--ease-out);
+}
+
+.tables-detail-actions button:hover {
+  background-color: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+
+.tables-detail-actions button:active {
+  transform: translateY(0);
+}
+
+.tables-detail-actions button:last-child {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  box-shadow: none;
+}
+
+.tables-detail-actions button:last-child:hover {
+  background: var(--color-bg-hover);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* ── Desktop responsive overlay modal ────────────────── */
+@media (min-width: 768px) {
+  .tables-detail {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    bottom: auto;
+    right: auto;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-2xl);
+    animation: fadeIn var(--duration-200) var(--ease-out);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}

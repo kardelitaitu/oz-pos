@@ -1,0 +1,147 @@
+/* ── Reporting Widgets ───────────────────────────────────────────── */
+
+.reporting-widget {
+  padding: var(--space-3);
+}
+
+.reporting-widget-header {
+  margin-bottom: var(--space-3);
+}
+
+.reporting-widget-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-secondary);
+}
+
+/* KPI row inside a widget */
+
+.reporting-widget-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
+.reporting-widget-kpi {
+  text-align: center;
+  padding: var(--space-2) 0;
+}
+
+.reporting-widget-kpi-label {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-tertiary);
+  margin-bottom: 2px;
+}
+
+.reporting-widget-kpi-value {
+  display: block;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.reporting-widget-kpi-value--primary {
+  font-size: var(--text-2xl);
+  color: var(--color-accent);
+}
+
+/* Hourly chart inside a widget */
+
+.reporting-widget-hourly-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.reporting-widget-hour-bar-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 72px;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.reporting-widget-hour-label {
+  font-size: 11px;
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.reporting-widget-hour-bar-track {
+  height: 12px;
+  background: var(--color-bg-hover, var(--color-border));
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.reporting-widget-hour-bar {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--color-border);
+}
+
+.reporting-widget-hour-bar--active {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary, var(--color-accent)));
+}
+
+.reporting-widget-hour-value {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-fg-secondary);
+  text-align: right;
+}
+
+.reporting-widget-no-data {
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-4) 0;
+  font-size: var(--text-sm);
+}
+
+/* ── Reporting Dashboard Grid ─────────────────────────────────────── */
+
+.reporting-dashboard {
+  padding: var(--space-4);
+}
+
+.reporting-dashboard-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.reporting-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.reporting-dashboard-grid > .widget-width-2 {
+  grid-column: span 2;
+}
+
+.reporting-dashboard-grid > .widget-width-1 {
+  grid-column: span 1;
+}
+
+.reporting-dashboard-empty {
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-8) 0;
+  font-size: var(--text-sm);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reporting-widget-hour-bar {
+    transition: width var(--duration-300) var(--ease-out);
+  }
+}

@@ -16,13 +16,138 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod audit;
+pub mod auth;
+pub mod cache;
 pub mod cart;
+pub mod cash_payout;
+pub mod category;
+pub mod customer;
+pub mod db;
 pub mod error;
+pub mod events;
+pub mod exchange_rate;
+pub mod features;
+/// Gift cards — issue, redeem, top-up, freeze, balance checks.
+pub mod gift_card;
+pub mod inventory;
+pub mod kds;
+/// License server client — verify, activate, renew subscriptions (ADR #9).
+pub mod license_verification;
+/// Loyalty program — points, tiers, and redemption.
+pub mod loyalty;
 pub mod migrations;
 pub mod money;
+pub mod offline;
+pub mod ozpkg;
+pub mod payment;
+pub mod product;
+/// Product bundles — sell multiple SKUs as one item.
+pub mod product_bundle;
+pub mod product_variant;
+pub mod promotion;
+pub mod purchase_order;
+pub mod recipe;
+pub mod refund;
+pub mod sale;
+pub mod session;
+pub mod settings;
+pub mod shift;
 pub mod sku;
+pub mod stock_count;
+pub mod stock_transfer;
+pub mod store_profile;
+pub mod subscription;
+pub mod supplier;
+pub mod sync;
+pub mod sync_client;
+/// Restaurant table management — floor plan positions and statuses.
+pub mod table;
+pub mod tax_rate;
+pub mod terminal;
+pub mod terminal_override;
+pub mod terminal_profile;
+pub mod user;
+/// Per-user display preferences (card size, font size, etc.).
+pub mod user_preferences;
 
+/// Generate a new time-ordered UUIDv7 primary key.
+///
+/// UUIDv7 embeds a millisecond-precision timestamp in the high bits,
+/// providing better B-tree index locality in SQLite and preventing
+/// ID collisions when multiple offline registers generate IDs
+/// independently (ADR #6).
+///
+/// Use this helper for all new entity IDs. Avoid `Uuid::new_v4()`
+/// in production code.
+#[must_use]
+pub fn new_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
+/// Default optimistic concurrency version (ADR #6).
+///
+/// Used as the `#[serde(default)]` value for [`Product::version`]
+/// and [`Sale::version`] so that deserialization from pre-migration
+/// payloads succeeds.
+#[doc(hidden)]
+pub fn default_version() -> i64 {
+    1
+}
+
+pub use audit::AuditEntry;
+#[cfg(feature = "cache-redis")]
+pub use cache::redis_cache::RedisCache;
+pub use cache::{Cache, NoopCache, create_cache};
 pub use cart::{Cart, CartError, CartId, CartLine};
-pub use error::CoreError;
+pub use cash_payout::CashPayout;
+pub use category::Category;
+pub use customer::Customer;
+pub use db::reports::{
+    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
+    TopProductRow, WeeklyRevenueRow,
+};
+pub use db::{ProductWithDetails, Store};
+pub use error::{CoreError, CoreErrorKind};
+pub use features::{
+    Feature, FeatureGuard, FeatureGuardRegistry, FeatureRegistry, KdsFeatureGuard,
+    ShiftFeatureGuard,
+};
+pub use foundation;
+pub use foundation::{InvalidTransition, SaleStatus};
+pub use gift_card::{
+    GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
+    RedeemGiftCardResult,
+};
+pub use inventory::Inventory;
+pub use kds::{CreateKdsOrderInput, KdsOrder, KdsStatus};
+pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
 pub use money::{Currency, Money};
+pub use offline::{OfflineQueueItem, OfflineQueueStatus};
+pub use payment::{Payment, PaymentSplitArg};
+pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
+pub use product::{Product, ProductType};
+pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
+pub use product_variant::ProductVariant;
+pub use promotion::{Promotion, PromotionApplication, PromotionType};
+pub use purchase_order::{PurchaseOrder, PurchaseOrderLine, PurchaseOrderWithLines};
+pub use recipe::RecipeItem;
+pub use refund::{Refund, RefundLine};
+pub use sale::{Sale, SaleLine};
+pub use settings::Settings;
+pub use shift::Shift;
 pub use sku::{LineId, Sku};
+pub use stock_count::{CountType, StockAdjustment, StockCount, StockCountLine, StockCountStatus};
+pub use stock_transfer::{StockTransfer, StockTransferLine};
+pub use store_profile::StoreProfile;
+pub use subscription::{InstanceStatus, SubscriptionTier, TenantSubscription};
+pub use supplier::Supplier;
+pub use sync_client::{
+    PullResult, SyncAttemptResult, SyncConfig, pull_snapshot, sync_pending, sync_pending_async,
+};
+pub use table::{Table, TableStatus};
+pub use terminal::Terminal;
+pub use terminal_override::TerminalFeatureOverride;
+pub use terminal_profile::TerminalProfile;
+pub use user::{Role, User, builtin_roles, seed_users};
+pub use user_preferences::UserPreferences;

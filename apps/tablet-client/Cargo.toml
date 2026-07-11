@@ -1,0 +1,52 @@
+[package]
+name = "oz-pos-tablet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS tablet-optimised shell (Tauri v2 mobile). Touch-optimised UI for Android/iOS."
+
+[lib]
+name = "oz_pos_tablet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "oz-pos-tablet"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dev-dependencies]
+tauri = { workspace = true, features = ["test"] }
+
+[dependencies]
+foundation = { workspace = true }
+oz-core = { workspace = true }
+oz-hal = { workspace = true }
+oz-logging = { workspace = true }
+modules-crm = { workspace = true }
+modules-inventory = { workspace = true }
+modules-settings = { workspace = true }
+modules-tax = { workspace = true }
+modules-sales = { workspace = true }
+modules-staff = { workspace = true }
+modules-reporting = { workspace = true }
+modules-terminal = { workspace = true }
+modules-currency = { workspace = true }
+platform-kernel = { workspace = true }
+platform-startup = { workspace = true }
+tauri = { workspace = true, features = [] }
+tauri-plugin-updater = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

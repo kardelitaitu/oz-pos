@@ -22,11 +22,16 @@ pub mod drivers;
 pub mod error;
 pub mod registry;
 pub mod traits;
+pub mod transport;
 pub mod types;
 
-pub use error::HalError;
+pub use drivers::scale::WeightReading;
+pub use drivers::scale::WeightScale;
+pub use error::{HalError, HalErrorKind};
 pub use registry::DriverRegistry;
 pub use traits::barcode::BarcodeScanner;
 pub use traits::cash_drawer::CashDrawer;
+pub use traits::customer_display::CustomerDisplay;
+pub use traits::customer_display::DisplayContent;
 pub use traits::printer::ReceiptPrinter;
 pub use types::{Barcode, BarcodeSymbology, DeviceInfo};

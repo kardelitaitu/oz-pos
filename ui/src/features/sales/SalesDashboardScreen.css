@@ -1,0 +1,22 @@
+.reporting-dashboard {
+  padding: var(--space-4);
+}
+
+.reporting-dashboard-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.reporting-dashboard-empty {
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-6) 0;
+  font-size: var(--text-sm);
+}
+
+.reporting-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}

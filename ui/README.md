@@ -1,17 +1,16 @@
-# `ui/` — OZ-POS React/TypeScript front-end
+# `ui/` — OZ-POS Frontend
 
-The Tauri v2 webview. React 18 + Vite + TypeScript with `@fluent/react`
-for internationalisation and `eslint-plugin-jsx-a11y` for accessibility.
+React 18 + TypeScript + Vite 5 + Tauri v2 webview.
 
 ## Stack
 
-- React 18 + react-dom
-- Vite 5 (dev server + bundler)
-- TypeScript 5 (strict mode)
-- @fluent/react (i18n; see `src/locales/en-US.ftl`)
-- @tauri-apps/api 2 (Tauri v2 IPC)
-- Vitest + @testing-library/react for tests
-- ESLint + @typescript-eslint + jsx-a11y
+- **React 18** + react-dom
+- **Vite 5** (dev server + bundler)
+- **TypeScript 5** (strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`)
+- **@fluent/react** (i18n via `.ftl` files)
+- **@tauri-apps/api 2** (IPC bridge)
+- **Vitest** + **@testing-library/react** (tests)
+- **ESLint** + `eslint-plugin-jsx-a11y` (accessibility enforced)
 
 ## Scripts
 
@@ -20,43 +19,91 @@ npm install            # one-time
 npm run dev            # vite dev server on http://localhost:1420
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
-npm run test           # vitest run
-npm run build          # tsc -b && vite build (output: dist/)
+npm run test           # vitest run (33 test files)
+npm run build          # tsc -b && vite build
 ```
 
-`npm run dev` is what `cargo tauri dev` (from `src-tauri/`) launches;
-both must be running for live-reload development.
+`npm run dev` is what `cargo tauri dev` (from `apps/desktop-client/`) launches.
 
 ## Structure
 
 ```
 ui/src/
 ├── api/
-│   └── pos.ts            # ONLY place that calls invoke()
+│   └── (29 per-domain files)  # Typed invoke() wrappers — no invoke() in components
 ├── components/
-│   └── Localized.tsx     # re-export of @fluent/react's <Localized>
+│   ├── AppLayout.tsx    # Sidebar navigation, route definitions, feature gates
+│   ├── Badge.tsx        # status/role badges
+│   ├── Button.tsx
+│   ├── Card.tsx
+│   ├── RoleBadge.tsx
+│   ├── ThemeProvider.tsx
+│   ├── ThemeToggle.tsx
+│   ├── Toast.tsx        # + ToastProvider + useToast hook
+│   ├── UpdateBanner.tsx
+│   └── ...              # EmptyState, ErrorState, Skeleton, Spinner
+├── contexts/
+│   └── AuthContext.tsx   # Staff login session state
 ├── features/
-│   └── sales/
-│       └── CartScreen.tsx
+│   ├── audit/           # AuditLogScreen (paginated, searchable)
+│   ├── auth/            # StaffLoginScreen
+│   ├── categories/      # CategoryManagementScreen
+│   ├── currency/        # ExchangeRateScreen (CRUD)
+│   ├── customers/       # CustomerManagementScreen (WIP)
+│   ├── design/          # DesignSystem showcase
+│   ├── inventory/       # InventoryAdjustmentScreen
+│   ├── products/        # ProductLookupScreen, ProductManagementScreen
+│   ├── sales/           # PosScreen, SalesHistoryScreen, SalesDashboardScreen,
+│   │                    # VoidOrdersScreen, EodReportScreen, PaymentModal
+│   ├── settings/        # SettingsPage, FeatureToggleScreen, DataManagementScreen
+│   ├── staff/           # StaffManagementScreen
+│   ├── setup/           # SetupWizard
+│   └── tax/             # TaxConfigurationScreen
+├── hooks/
+│   └── useFeatures.ts   # Feature flag hook for route gating
 ├── locales/
-│   └── en-US.ftl
+│   └── en-US.ftl        # Primary locale (1900+ IDs across 25 .ftl files)
 ├── styles/
 │   ├── reset.css
-│   └── tokens.css        # design tokens (colors, spacing, etc.)
+│   ├── tokens.css       # CSS custom properties (colors, spacing, typography)
+│   └── components.css   # Shared component styles
 ├── types/
-│   └── domain.ts         # Money, CartId, Sku, AppError, formatMoney
-├── __tests__/
-│   └── CartScreen.test.tsx
-├── App.tsx
-├── main.tsx
-└── test-setup.ts
+│   └── domain.ts        # Money, CartId, Sku, LineId, Product, formatMoney
+├── __tests__/           # Per-screen test files (33 files)
+├── App.tsx              # Root: setup guard → auth guard → AppLayout
+└── main.tsx             # Entry: Fluent bundle registration + StrictMode
 ```
+
+## IPC Rules
+
+- **No `invoke()` in components** — every Tauri command has a typed wrapper in `api/pos.ts`
+- Components call `pos.ts` functions; `pos.ts` owns the `invoke()` calls
+- All args/results are statically typed via exported interfaces
 
 ## i18n
 
-All user-visible strings live in `src/locales/en-US.ftl` and are
-referenced via `<Localized id="...">`. Hardcoded English in JSX is a
-build failure (enforced by code review, the `ui-components` skill, and
-the `skill-drift-guard` Fluent check).
+- All user-visible strings live in `src/locales/en-US.ftl`
+- Referenced via `<Localized id="...">` from `@fluent/react`
+- Hardcoded English in JSX is a build failure (enforced by code review)
+- Add a new locale: copy `en-US.ftl`, translate, register in `main.tsx`
 
-> last audited 28-06-26 by docs-auditor
+## Testing
+
+- **Vitest** + `@testing-library/react`
+- Each feature screen has a `__tests__/<Screen>.test.tsx` file
+- IPC is mocked via `vi.hoisted()` → `vi.mock('@tauri-apps/api/core')`
+- Fluent strings are provided inline via `FluentBundle` + `FluentResource`
+- Run: `npm run test` (33 test files, ~7s)
+
+## Conventions
+
+| Rule | Enforcement |
+|------|-------------|
+| No `any` or `// @ts-ignore` without `// FIXME` | TypeScript strict mode |
+| ARIA labels on all interactive elements | ESLint jsx-a11y |
+| No hardcoded colors/sizes | CSS custom property tokens only |
+| Presentational components, hooks own behavior | Code review |
+| Every screen has a test file | `__tests__/` audit |
+| Money displayed via `formatMoney()` | Import from `types/domain.ts` |
+
+> last audited 07-07-26 by docs-auditor

@@ -1,8 +1,8 @@
 # Build artifacts
 /target/
-/ui/dist/
-/ui/node_modules/
 /crates/*/target/
+/apps/*/gen/
+/apps/license-server/
 
 # Cargo workspaces have a single Cargo.lock at the workspace root, not
 # one per crate. OZ-POS ships binaries (oz-cli, and the Tauri app in
@@ -34,26 +34,30 @@ Thumbs.db
 # Rust
 **/*.rs.bk
 
+# Coverage
+/coverage/
+/ui/coverage/
+
 # Test artifacts
 *.profraw
 *.gcda
 *.gcno
+# CI gate teed output from the act() / flushSync warning check
+# in .github/workflows/ci.yml. Regenerated on every CI run.
+ui/vitest-output.log
 
-# Tauri
-src-tauri/target/
-src-tauri/gen/
+# Tauri — generated platform code (Android/iOS)
 # Tauri requires real PNG/ICO icons; the scaffold ships without them.
-# Generate them with `cargo tauri icon path/to/source.png` once you
-# have a source image. Until then `cargo build -p oz-pos-app` will
-# fail at the resource-embedding step.
-src-tauri/icons/*.png
-src-tauri/icons/*.ico
-src-tauri/icons/*.icns
+# The generated icons are committed so CI and contributors don't need
+# the Tauri CLI installed to build.
+# apps/*/icons/*.png   ← committed, do not ignore
+# apps/*/icons/*.ico   ← committed, do not ignore
 
 # UI
-/ui/dist/
-/ui/node_modules/
-/ui/coverage/
 /ui/.vite/
 /ui/.eslintcache
 /ui/.stylelintcache
+nul
+ui/vite.config.js
+ui/tsconfig.tsbuildinfo
+ui/tsconfig.node.tsbuildinfo

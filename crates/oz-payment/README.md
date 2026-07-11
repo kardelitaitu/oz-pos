@@ -1,18 +1,16 @@
 # oz-payment
 
-Payment processor abstraction for OZ-POS. A single trait with vendor-specific implementations for Stripe, Square, and EMV terminals. The cashier's flow uses the trait; switching processors is a config change, not a code change.
-
-## Public API
-
-- [`PaymentError`](src/error.rs) — `thiserror`-based error for processor calls (declined, timeout, network, invalid response).
-
-## Planned surface
-
-- `PaymentProcessor` trait with `authorize`, `capture`, `void`, `refund`.
-- Adapters for Stripe (`stripe-rust`), Square (`square-rust-sdk`), and IDTech/ViVOtech EMV terminals.
-- A `MockProcessor` for tests, following the same pattern as `oz-hal`'s mandatory mocks.
-- Idempotency keys for every `authorize` and `capture` to make retries safe.
+Payment processor abstraction for OZ-POS.
 
 ## Status
 
-Scaffold only. The trait and adapters land in a follow-up alongside the `oz-hal` `PaymentTerminal` driver.
+✅ `PaymentProcessor` trait defined with the full lifecycle:
+`authorize → capture → refund → void`. Includes a `sale()`
+default implementation (authorize + capture in one call).
+
+✅ `MockPaymentProcessor` — programmable test double with call
+counters, one-shot decline/timeout simulation. 35 unit tests pass.
+
+Next: real adapters (Stripe, Square, EMV terminal).
+
+> last audited 30-06-26 by docs-auditor

@@ -1,0 +1,346 @@
+.data-mgmt {
+  padding: var(--space-6);
+  max-width: 700px;
+}
+
+.data-mgmt-header {
+  margin-bottom: var(--space-6);
+}
+
+.data-mgmt-title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-fg-primary);
+  margin: 0;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────── */
+
+.data-mgmt-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-8);
+  border-bottom: 1px solid var(--color-border, rgba(128, 128, 128, 0.15));
+  padding-bottom: var(--space-1);
+}
+
+.data-mgmt-tab {
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-fg-secondary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.data-mgmt-tab:hover {
+  color: var(--color-fg-primary);
+  background: var(--color-bg-hover);
+}
+
+.data-mgmt-tab--active {
+  color: var(--color-accent);
+  border-bottom: 2px solid var(--color-accent);
+  font-weight: 600;
+}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+
+.data-mgmt-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.data-mgmt-section-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-fg-primary);
+  margin: 0;
+}
+
+.data-mgmt-section-desc {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Data type checkboxes ────────────────────────────────────────── */
+
+.data-mgmt-types {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.data-mgmt-type-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.data-mgmt-type-checkbox:hover {
+  background: var(--color-bg-hover);
+}
+
+.data-mgmt-type-checkbox--all {
+  border-bottom: 1px solid var(--color-border, rgba(128, 128, 128, 0.15));
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-1);
+}
+
+.data-mgmt-type-checkbox input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--color-accent);
+}
+
+.data-mgmt-type-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.data-mgmt-type-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-fg-primary);
+}
+
+.data-mgmt-type-desc {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Date range ──────────────────────────────────────────────────── */
+
+.data-mgmt-date-range {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.data-mgmt-date-range .data-mgmt-field {
+  flex: 1;
+}
+
+/* ── Fields ──────────────────────────────────────────────────────── */
+
+.data-mgmt-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.data-mgmt-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-fg-secondary);
+}
+
+.data-mgmt-value {
+  font-size: var(--text-sm);
+  color: var(--color-fg-primary);
+}
+
+.data-mgmt-input {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-fg-primary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.2));
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.data-mgmt-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
+.data-mgmt-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Actions ─────────────────────────────────────────────────────── */
+
+.data-mgmt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+/* ── Error ───────────────────────────────────────────────────────── */
+
+.data-mgmt-error {
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-sm);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+/* ── Progress indicator ──────────────────────────────────────────── */
+
+.data-mgmt-progress {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-4) 0;
+}
+
+.data-mgmt-progress-done {
+  font-size: 2rem;
+  color: var(--color-success);
+  line-height: 1;
+}
+
+/* ── Done state ──────────────────────────────────────────────────── */
+
+.data-mgmt-done-text {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  margin: 0;
+}
+
+.data-mgmt-done-text code {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  padding: 1px 4px;
+  background: var(--color-bg-surface);
+  border-radius: 3px;
+}
+
+/* ── File picker ─────────────────────────────────────────────────── */
+
+.data-mgmt-file-picker {
+  margin-top: var(--space-2);
+}
+
+.data-mgmt-file-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-12);
+  border: 2px dashed var(--color-border, rgba(128, 128, 128, 0.25));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.data-mgmt-file-dropzone:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+
+.data-mgmt-file-dropzone p {
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+  margin: 0;
+}
+
+.data-mgmt-file-icon {
+  font-size: 2rem;
+}
+
+/* ── Metadata preview ────────────────────────────────────────────── */
+
+.data-mgmt-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.data-mgmt-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.data-mgmt-meta-label {
+  color: var(--color-fg-tertiary);
+  font-weight: 500;
+}
+
+.data-mgmt-meta-value {
+  color: var(--color-fg-primary);
+  font-size: var(--text-sm);
+  text-align: right;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Dry-run ─────────────────────────────────────────────────────── */
+
+.data-mgmt-dry-run {
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.data-mgmt-dry-run-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-fg-primary);
+  margin: 0 0 var(--space-2);
+}
+
+.data-mgmt-dry-run-grid {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.data-mgmt-dry-run-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+.data-mgmt-dry-run-count {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+/* ── Backup status ───────────────────────────────────────────────── */
+
+.data-mgmt-backup-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.data-mgmt-backup-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-sm);
+}
+

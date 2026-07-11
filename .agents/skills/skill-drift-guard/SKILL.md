@@ -1,6 +1,6 @@
 ---
 name: skill-drift-guard
-description: Meta-skill that detects and patches drift in the other OZ-POS skills. Use when a code change is made that touches a path, type, trait, or convention referenced in a skill; when onboarding a new contributor who might have added a crate or module; or as a periodic CI check. Always run before merging a change that touches `oz-*` crates, `src-tauri/`, or `ui/`.
+description: Meta-skill that detects and patches drift in the other OZ-POS skills. Use when a code change is made that touches a path, type, trait, or convention referenced in a skill; when onboarding a new contributor who might have added a crate or module; or as a periodic CI check. Always run before merging a change that touches `oz-*` crates, `apps/desktop-client/`, or `ui/`.
 ---
 
 # Skill Drift Guard
@@ -14,7 +14,7 @@ The drift guard audits each skill against the code it describes, classifies the 
 ## When to run
 
 - After any PR that changes a public API in an `oz-*` crate.
-- After any rename, move, or delete in `src-tauri/`, `ui/`, `hal/`, or `crates/`.
+- After any rename, move, or delete in `apps/desktop-client/`, `ui/`, `hal/`, or `crates/`.
 - After a dependency bump (Tauri, React, `rusqlite`, etc.).
 - After a change to `AGENTS.md` (golden rules).
 - **As a CI job** that runs nightly or on changes to `.agents/skills/**`.
@@ -23,7 +23,7 @@ The drift guard audits each skill against the code it describes, classifies the 
 
 ## Taxonomy of drift
 
-Nine concrete kinds. Each has a detection strategy and a patch strategy.
+Eleven concrete kinds. Each has a detection strategy and a patch strategy.
 
 | # | Drift | Detection | Patch |
 |---|-------|-----------|-------|
@@ -36,6 +36,8 @@ Nine concrete kinds. Each has a detection strategy and a patch strategy.
 | 7 | **Fluent ID drift** | Every `<Localized id="...">` in a skill must exist in `ui/src/locales/*.ftl` (one-way) | Manual (decide whether to add the id or remove the reference) |
 | 8 | **Cross-reference broken** | For every `\`<skill-name>\`` mention, verify the skill directory exists | Auto: remove the reference or rename |
 | 9 | **`last audited` date stale (>30 days)** | Grep the footer line | Auto: bump the date and the auditor name |
+| 10 | **`last audited` format violated** (wrong format like `YYYY-MM-DD`, or missing `by <auditor>` clause) | Grep every `> last audited` line; assert exact regex match `^> last audited [0-9]{2}-[0-9]{2}-[0-9]{2} by [^\s]+$` | Manual (format may not be safely auto-derivable when the original line is broken in subtle ways) |
+| 11 | **Project-doc audit-footer format violated** (`> last audited` line in any non-skill `*.md` outside `.agents/skills/`) | `find . -name '*.md' <excludes>` + same regex as Check 10 (skill-side) | Manual (same reasoning as Check 10) |
 
 If a change is **not** in this list, the drift guard does not auto-patch it. File an issue instead.
 
@@ -43,12 +45,12 @@ If a change is **not** in this list, the drift guard does not auto-patch it. Fil
 
 ## Detection workflow
 
-Run these checks in order. Each is a fast, mechanical pass. Stop after each pass to triage the output before running the next. (Checks 1–8 are implemented in `scripts/detect.sh`. Inline Check 2 covers taxonomy kinds 2 and 3 — the "removed" and "added" cases are both detected from the same `members` diff.)
+Run these checks in order. Each is a fast, mechanical pass. Stop after each pass to triage the output before running the next. (Checks 1–10 are implemented in `scripts/detect.sh`. Inline Check 2 covers taxonomy kinds 2 and 3 — the "removed" and "added" cases are both detected from the same `members` diff.)
 
 **Pre-code state:** when the corresponding code does not yet exist, each check silently no-ops:
 - Checks 2–4 (crates, API, dep versions) skip if `Cargo.toml` is missing.
 - Check 7 (Fluent) skips if `ui/src/locales/` is missing.
-- Checks 1, 5, 6, 8 (paths, golden rules, refs, audit date) always run.
+- Checks 1, 5, 6, 8, 9, 10 (paths, golden rules, refs, audit date + format + project-doc audit-footers) always run.
 
 Once the Rust workspace and UI scaffold land, all checks become active without any change to the script.
 
@@ -185,6 +187,69 @@ done
 
 **Output:** skills older than 30 days. Bump them with the patch step.
 
+### Check 9 — Audit-date format enforcement
+
+```bash
+# Every `> last audited` line in a skill must match the project convention.
+# Two-pass validation, both via $AUDIT_RE + helpers shared with Check 10.
+# Performance: dates are batched into a single Python call per check (not
+# one per footer) via `batch_validate_audit_dates`, so the value check is
+# O(1) Python invocations regardless of corpus size.
+#
+# The inner loop (`audit_footer_check_in_file`) is factored out so Check 9
+# and Check 10 share the per-file logic byte-for-byte. The teaching form
+# below uses the shared helper directly. The real detect.sh appends the
+# shape-failure message to FINDINGS[$cat] inline (parameterized by the
+# helper's first argument — `audit-format` for Check 9, `doc-audit` for
+# Check 10) and writes the date+context pair to pairs_file for the
+# batched value check.
+#
+# Logic (matches the per-footer model):
+#   1. shape: digit-shaped DD-MM-YY + by-clause  (fast grep, no Python)
+#   2. value: date substring is a real calendar date (Python strptime, batched)
+# Wrong shape → FORMAT_VIOLATION. Right shape, wrong value (e.g. 00-00-00,
+# 30-02-26, 99-99-99) → DATE_INVALID. Either failure is a manual fix.
+pairs_file="$(mktemp)"
+for skill in .agents/skills/*/SKILL.md; do
+  audit_footer_check_in_file audit-format "$skill" "$pairs_file"
+done
+# One Python call validates all shape-pass dates; the helper appends
+# FINDINGS[audit-format] entries for every INVALID date in lockstep.
+batch_validate_audit_dates audit-format "$pairs_file"
+rm -f "$pairs_file"
+```
+
+**Output:** a list of `FORMAT_VIOLATION:` and `DATE_INVALID:` lines, each naming the source skill and the offending footer. Manual review required — auto-patch is unsafe for arbitrary `YYYY-MM-DD → DD-MM-YY` date conversions or invented calendar values.
+
+**Why Check 8 isn't enough:** Check 8's pattern `last audited [0-9]{2}-[0-9]{2}-[0-9]{2}` matches a substring of `> last audited 2026-07-07 by x` as `26-07-07`, which Python's `strptime` then parses as July 7, 2026 → coincidentally recent → silenced. Check 9 enforces the format up front so the parser never sees ambiguous input — both shape (no year prefix, no missing by-clause) AND value (the extracted date is a real calendar date Python's strptime accepts, batched in a single Python call).
+
+### Check 10 — Project-doc audit-footer format enforcement
+
+```bash
+# Same two-pass batched validation as Check 9, applied to every `*.md` file
+# outside `.agents/skills/`. Catches a future wrong-format or invalid-dated
+# footer in CONTRIBUTING.md, AGENTS.md, docs/QUICKSTART.md, or any crate/app/
+# module/README.md — anywhere the convention is documented should also be
+# enforced. $AUDIT_RE, audit_date_of, and batch_validate_audit_dates are
+# defined at the top of detect.sh and shared with Check 9.
+pairs_file="$(mktemp)"
+find . -name '*.md' \
+     -not -path './.git/*' \
+     -not -path './.agents/skills/*' \
+     -not -path './node_modules/*' \
+     -not -path './target/*' \
+     -not -path './dist/*' \
+  2>/dev/null | while read -r file; do
+  audit_footer_check_in_file doc-audit "$file" "$pairs_file"
+done
+batch_validate_audit_dates doc-audit "$pairs_file"
+rm -f "$pairs_file"
+```
+
+**Output:** a list of `FOOTER_VIOLATION:` and `DATE_INVALID:` lines, one per wrong-shaped or invalid-dated audit-footer in any project `*.md` file. The shape regex and value check are shared with Check 9 so any future tightening to either is enforced consistently across skills and docs. Both checks make a single Python call per check (not per footer), so the value check is O(1) Python invocations regardless of corpus size.
+
+**Why a separate check from Check 9:** the "documents" exception in [What this skill explicitly does NOT do](#what-this-skill-explicitly-does-not-do) keeps doc-content drift out of the drift guard's scope, but the audit-date format is one specific project-wide convention with zero interpretation — its maintainers (CONTRIBUTING.md + onboarding-guide) already document it as such, so enforcement belongs here.
+
 ---
 
 ## Patch workflow
@@ -295,9 +360,58 @@ bash .agents/skills/skill-drift-guard/scripts/detect.sh --report
 
 ---
 
+### Manual & bats testing
+
+The detection script has an integration test suite under `tests/` that pins the audit-footer pipeline so future polish-class changes can be validated automatically. The suite runs the full `detect.sh` end-to-end against controlled fixtures — it catches regressions at the user-facing granularity (exit codes, FINDINGS keys, message templates) that ad-hoc text-polish cycles would otherwise let accumulate.
+
+#### What's covered
+
+Three scenarios under `tests/`:
+
+| File | Pins |
+|------|------|
+| `clean-baseline.bats` | Three happy-path cases: full `detect.sh` run, `--check=audit-format`, `--check=doc-audit`. All expect exit 0 + "No drift detected". |
+| `invented-date.bats` | `30-02-26` (real-shape, invalid-calendar) injected into a fixture.md → fires under `doc-audit` with `shape OK but date` and NOT the shape-violation message. Pins the 2-pass invariant (shape passes → Python validates → INVALID). |
+| `shape-violation.bats` | `(extra)` in the by-clause → fires under `doc-audit` with `DD-MM-YY + by-clause` and NOT the value-check message. Pins the SHAPE-first invariant (no Python call when shape fails). |
+| `audit-date-stale.bats` | `03-06-26` (~35 days before 08-07-26, > 30-day threshold) appended to `hal-drivers/SKILL.md` → fires under `audit-date` with `days ago` and the stale date. Pins Check 8's strptime parse + 30-day threshold + `tail -1` "latest wins" extraction invariant. |
+
+Each test uses bats' `setup` / `teardown` to backup + restore CONTRIBUTING.md inside `$BATS_TEST_TMPDIR` so the suite is hermetic — no test leak survives between runs.
+
+#### Install bats
+
+Bats is the standard bash test framework. Pick one of:
+
+- Linux (apt): `sudo apt-get install -y bats`
+- macOS (homebrew): `brew install bats-core`
+- Windows (choco): `choco install bats`
+- Windows (scoop): `scoop install bats`
+- Cross-platform (npm): `npm install -g bats`
+
+(`scripts/run-tests.sh` prints the same list on hosts where bats is missing.)
+
+#### Run the tests
+
+```bash
+bash .agents/skills/skill-drift-guard/scripts/run-tests.sh
+```
+
+The wrapper auto-detects `bats` on PATH. If absent, it prints the install paths above and exits 2 so CI surfaces "bats missing" loudly instead of silently.
+
+#### Adding a new test
+
+For each new invariant worth pinning:
+
+1. Write a `tests/<scenario>.bats` file with `@test "..."` blocks.
+2. Use `setup` / `teardown` for fixtures — backup to `$BATS_TEST_TMPDIR`, restore in `teardown`.
+3. Prefer substring assertions (`[[ "$output" == *"marker"* ]]`) over exact-string match — message templates can evolve without breaking the test, while the marker survives.
+
+If a future change needs to source helper functions directly, the convention is to extract them into `scripts/lib.sh` and `source "$(dirname "${BATS_TEST_FILENAME}")/../scripts/lib.sh"` from the test.
+
+---
+
 ## What this skill explicitly does NOT do
 
-- It does **not** read the project's other `.md` files (`README.md`, `WHITEPAPER.md`, `ARCHITECTURE.md`, `ROADMAP.md`) for drift. Those files are human-maintained documentation, not agent skills. Drift there is a separate concern.
+- It does **not** read the project's other `.md` files (`README.md`, `WHITEPAPER.md`, `ARCHITECTURE.md`, `ROADMAP.md`) for **content** drift. Those files are human-maintained documentation, not agent skills; their content drift is a separate, human-maintained concern. The one carve-out is the **audit-date footer format**, enforced by Check 10 across every non-skill `*.md` — because the convention is documented in CONTRIBUTING.md and onboarding-guide with zero interpretation, and would silently drift again without an automated check.
 - It does **not** generate new skills. Creating a new skill is a deliberate act; the onboarding guide (`onboarding-guide`) decides what to add.
 - It does **not** delete skills. A skill that becomes irrelevant should be removed by the `onboarding-guide` maintainer, not silently.
 - It does **not** judge whether a code change is correct. The drift guard checks consistency, not correctness.
@@ -338,5 +452,8 @@ The drift guard should be self-extending: every discovery becomes a new check, s
 7. **Patching the onboarding-guide's router table** when a skill is added. Yes, do this — but also patch every skill that mentions the new skill as a "see also" cross-reference. The graph is bidirectional.
 
 ---
+8. **Trusting Check 8's date parser to catch wrong formats.** Check 8's grep `'last audited [0-9]{2}-[0-9]{2}-[0-9]{2}'` matches a substring of `> last audited 2026-07-07 by x` as `26-07-07`, which Python then parses as July 7, 2026 → coincidentally recent → silenced. Check 9 fires the format violation even when Check 8 reads it as recent. Always trust Check 9's regex match over Check 8's parsed value when they disagree — the regex is the source of truth on shape.
 
-> last audited 28-06-26 by skill-drift-guard
+---
+
+> last audited 08-07-26 by skill-drift-guard

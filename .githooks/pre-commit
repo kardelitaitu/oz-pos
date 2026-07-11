@@ -1,0 +1,89 @@
+#!/bin/bash
+# .githooks/pre-commit — auto-format Rust code before every commit.
+set -e
+
+# Run cargo fmt, capturing output if it fails
+if ! cargo fmt --all 2>/dev/null; then
+    echo "error: cargo fmt failed — aborting commit." >&2
+    exit 1
+fi
+
+# Re-stage ONLY files that cargo fmt actually modified (.rs sources).
+# Earlier: `git diff --name-only` returned every tracked-but-uncommitted
+# change in the working tree — not just files `cargo fmt --all` touched.
+# The hook then auto-staged them via `git add $CHANGED`, sweeping every
+# non-Rust file in the developer's in-flight work (unrelated .md / .tsx
+# / .ftl / .json / .gitignore / AGENTS.md / READMEs) into the next
+# commit's staging area. Scope the diff to `-- '*.rs'` so CHANGED holds
+# only Rust files (cargo fmt's actual mutation surface). Other
+# working-tree changes stay in the developer's own staging — the hook
+# is a check, not a silent re-stage.
+CHANGED=$(git diff --name-only -- '*.rs')
+if [ -n "$CHANGED" ]; then
+    echo "cargo fmt applied changes to:"
+    echo "$CHANGED"
+    git add $CHANGED
+fi
+
+# ── i18n lint ──────────────────────────────────────────────────────────────
+# Runs the local i18n quality gate (mirrors `.github/workflows/ci.yml#ui
+# i18n quality gate`) on every commit so translation gaps and Fluent
+# key duplicates surface BEFORE reaching CI. ~1 second cost because
+# it targets `i18nBundle.test.tsx` only.
+if [ -f scripts/lint-i18n.sh ]; then
+    if ! bash scripts/lint-i18n.sh; then
+        echo "error: i18n lint failed — fix issues above or run 'bash scripts/check.sh' for context." >&2
+        exit 1
+    fi
+fi
+
+# ── Bundle parity: staged files only ───────────────────────────────────
+# Runs `scripts/verify-bundle-parity.py --staged-only` against
+# .tsx / .ts files modified in the current commit (cheap ~100ms;
+# targeted, not full repo). Catches missing-translation regressions
+# BEFORE push, independently of the 78-key baseline because it
+# inspects only the files this commit touches. CI's `lint-i18n.sh`
+# still runs the full-tree scan in complement; this hook is the
+# commit-time cheap-fail-fast guard. Skipped silently when no
+# feature files are staged (e.g. a commit touching only Rust code
+# or .ftl locale files).
+#
+# Reads .tsx/.ts from `git diff --cached --diff-filter=ACM` (added /
+# copied / modified) and feeds them as positional args to the
+# script. Uses `while read` + array (NOT `mapfile`) so the hook
+# stays portable to bash 3.2 / macOS /bin/bash where `mapfile` is
+# unavailable.
+if [ -f scripts/verify-bundle-parity.py ]; then
+    STAGED_FILES=()
+    while IFS= read -r file; do
+        STAGED_FILES+=("$file")
+    done < <(git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
+        | grep -E '\.(tsx|ts)$' || true)
+    # || true: swallow grep no-match (e.g. no .tsx/.ts staged) + mask any upstream pipe failure.
+    if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
+        if ! python3 scripts/verify-bundle-parity.py --staged-only "${STAGED_FILES[@]}"; then
+            printf '%s\n' "error: bundle parity — staged files reference keys missing from one or both .ftl bundles. See verify-bundle-parity.py output above." >&2
+            exit 1
+        fi
+    fi
+fi
+
+# ── FTL dedupe dry-run ────────────────────────────────────────────────────
+# Runs `scripts/dedupe-ftl.py --dry-run` so any new Fluent key
+# duplicates surface BEFORE reaching CI. ~50ms cost; runs in-process
+# without mutating any files (use `npm run dedupe:ftl` to actually
+# rewrite). Skipped silently when the script is not present.
+# Gates on the script's exit code (1 = duplicates found, 0 = clean)
+# rather than string-matching its output so the gate stays decoupled
+# from the diagnostic wording. Captures both streams so the quiet
+# path silences the "no duplicates" line entirely while the loud
+# path prints the actual file list alongside the error.
+if [ -f scripts/dedupe-ftl.py ]; then
+    if output=$(python3 scripts/dedupe-ftl.py --dry-run 2>&1); then
+        : # clean — silently discard the "no duplicates" line
+    else
+        printf '%s\n' "error: FTL duplicates detected — run 'npm run dedupe:ftl' to fix:" >&2
+        printf '%s\n' "$output" >&2
+        exit 1
+    fi
+fi

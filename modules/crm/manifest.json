@@ -1,0 +1,11 @@
+{
+  "id": "crm",
+  "name": "CRM",
+  "version": "1.0.0",
+  "description": "Customer Relationship Management module: customer CRUD, loyalty tracking, purchase history.",
+  "dependencies": [],
+  "permissions": [
+    "crm:view",
+    "crm:edit"
+  ]
+}

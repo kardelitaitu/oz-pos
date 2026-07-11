@@ -1,36 +1,46 @@
 {
   "name": "oz-pos-ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.4",
   "type": "module",
   "description": "OZ-POS front-end: React 18 + Vite + TypeScript + @fluent/react.",
+  "license": "SEE LICENSE IN ../LICENSE",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:i18n": "bash ../scripts/lint-i18n.sh",
+    "dedupe:ftl": "python3 ../scripts/dedupe-ftl.py",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "docs": "npx -y typedoc --skipErrorChecking --entryPointStrategy expand ./src/api ./src/types ./src/hooks --out ../docs/html/ui-docs"
   },
   "dependencies": {
     "@fluent/bundle": "^0.18.0",
     "@fluent/react": "^0.15.0",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "recharts": "^3.9.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.4.6",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^7.16.0",
     "@typescript-eslint/parser": "^7.16.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/coverage-v8": "^1.6.1",
     "eslint": "^8.57.0",
     "eslint-plugin-jsx-a11y": "^6.9.0",
     "eslint-plugin-react": "^7.34.4",
@@ -42,6 +52,7 @@
     "vitest": "^1.6.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
+
 }

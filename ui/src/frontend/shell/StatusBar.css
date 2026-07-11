@@ -1,0 +1,155 @@
+/* ============================================================
+ * OZ-POS Status Bar — full-width bottom bar
+ *
+ * Inspired by VS Code's status bar pattern: thin, monochrome,
+ * left/right segments with dots for live status.
+ * ============================================================ */
+
+.app-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  user-select: none;
+  z-index: var(--z-sticky);
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+/* ── Left / Right segments ─────────────────────────── */
+
+.statusbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Grouped segment ──────────────────────────────── */
+
+.statusbar-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-100) var(--ease-out);
+}
+
+.statusbar-segment:hover {
+  background: var(--color-bg-surface);
+}
+
+/* ── Connection status dot ────────────────────────── */
+
+.statusbar-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.statusbar-dot--online {
+  background: var(--color-success);
+  box-shadow: 0 0 4px var(--color-success);
+}
+
+.statusbar-dot--offline {
+  background: var(--color-danger);
+  box-shadow: 0 0 4px var(--color-danger);
+}
+
+/* ── Version text ─────────────────────────────────── */
+
+.statusbar-version {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+}
+
+/* ── Gateway pill ─────────────────────────────────── */
+
+.statusbar-gateway {
+  gap: 4px;
+}
+
+.statusbar-gateway-name {
+  white-space: nowrap;
+}
+
+/* ── License text ─────────────────────────────────── */
+
+.statusbar-license {
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* ── Divider ──────────────────────────────────────── */
+
+.statusbar-divider {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* ── Action button ────────────────────────────────── */
+
+.statusbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--duration-100) var(--ease-out),
+    background-color var(--duration-100) var(--ease-out);
+}
+
+.statusbar-btn:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
+.statusbar-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+/* ── Theme Toggle inside status bar ───────────────── */
+.app-statusbar .theme-toggle {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.app-statusbar .theme-toggle svg {
+  width: 14px;
+  height: 14px;
+}

@@ -8,7 +8,7 @@ This guide gets OZ-POS building and running on your machine in under 15 minutes.
 
 | Tool | Version | Why |
 |------|---------|-----|
-| **Rust** | 1.85+ stable (`rustup install stable`) | The workspace uses edition 2024, which requires Rust 1.85+ |
+| **Rust** | 1.88+ stable (`rustup install stable`) | The workspace uses edition 2024 and axum/tower-http deps that require rustc ≥ 1.88 |
 | **Node.js** | 18 or 20 LTS | Tauri v2 webview (React 18 + TypeScript) |
 | **Tauri v2 prerequisites** | Per [Tauri docs](https://tauri.app/v2/guides/) | WebView2 on Windows, webkit2gtk on Linux, etc. |
 | **SQLite** | 3.x (bundled via `rusqlite`) | Local persistence — no separate install needed |
@@ -57,7 +57,7 @@ cargo test --workspace --all-features
 cd ui && npm run test
 ```
 
-The Rust test suite is fully offline — no browser, no network, no hardware. Mocks live in `hal/src/drivers/mock.rs` and are gated by the `mock` feature.
+The Rust test suite is fully offline — no browser, no network, no hardware. Mocks live in `crates/oz-hal/src/drivers/mock.rs` and are gated by the `mock` feature.
 
 ---
 
@@ -79,6 +79,18 @@ cd ui && npm run typecheck
 
 ---
 
+## Local validation helper
+
+`scripts/check.sh` runs the same checks locally in one shot, mirroring the CI matrix:
+
+```bash
+bash scripts/check.sh   # several minutes on a clean tree; faster on a focused subset or after `cargo build`
+```
+
+For the full sub-step list and what each gate catches, see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](../.agents/skills/onboarding-guide/SKILL.md#first-time-setup) (canonical verbose source). Use the one-liner before opening a PR to catch 90% of issues locally before CI.
+
+If you only want the i18n quality gate as a quick pre-flight, run `bash scripts/lint-i18n.sh` once — it fails-closed on Fluent key duplicates + byte-identical `.id.ftl` files.
+
 ## Project structure (at a glance)
 
 ```
@@ -93,11 +105,11 @@ oz-pos/
 │   ├── oz-reporting/           # analytics + CSV export
 │   ├── oz-logging/             # structured logging
 │   └── oz-cli/                 # migrations, backup, export CLI
-├── src-tauri/                  # the desktop/mobile shell
+├── apps/desktop-client/        # the desktop Tauri shell
 │   └── src/commands/           # Tauri commands (one folder per feature)
 ├── ui/                         # React + TypeScript front-end
-│   └── src/api/pos.ts          # the ONLY place that calls invoke()
-├── migrations/                 # SQL migration files
+│   └── src/api/                # per-domain invoke() wrappers
+├── crates/oz-core/migrations/  # SQL migration files
 ├── docs/                       # project documentation
 ├── .agents/skills/             # agent skills (read these when contributing)
 └── .github/workflows/          # CI pipelines
@@ -151,7 +163,7 @@ All green? Open the PR.
 
 ## Troubleshooting
 
-### "error: package `oz-core v0.1.0` cannot be built because it requires rustc 1.85 or newer"
+### "error: package `oz-core v0.0.1` cannot be built because it requires rustc 1.88 or newer"
 
 You're on an old Rust. Update:
 
@@ -196,4 +208,4 @@ Welcome to OZ-POS. Keep the curtain closed, the merchant happy, and the money in
 
 ---
 
-> last audited 28-06-26 by project-scaffold
+> last audited 08-07-26 by docs-auditor

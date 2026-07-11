@@ -1,0 +1,11 @@
+{
+  "id": "currency",
+  "name": "Currency/Exchange",
+  "version": "1.0.0",
+  "description": "Currency and exchange rate module: ISO-4217 currencies, exchange rate CRUD, default currency configuration.",
+  "dependencies": [],
+  "permissions": [
+    "currency:view",
+    "currency:edit"
+  ]
+}

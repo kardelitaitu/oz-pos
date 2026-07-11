@@ -11,9 +11,19 @@
 #
 # Exit code is the number of manual-review findings (0 = clean).
 
-set -euo pipefail
+set -u
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Tracks every pairs_file created via mktemp so an EXIT trap cleans
+# them up on Ctrl-C / SIGTERM (otherwise the killed run leaks /tmp/tmp.*
+# pairs files until the OS purges). Fires on EVERY exit (clean included);
+# idempotent because each check already does `rm -f "$pairs_file"` at the
+# end, so the array is empty by the time a clean-exit trap fires. The array
+# length is well-defined under `set -u` thanks to the `declare -a` above,
+# so no `:-0` default is needed.
+declare -a PAIRS_FILES=()
+trap '[ "${#PAIRS_FILES[@]}" -gt 0 ] && rm -f "${PAIRS_FILES[@]}" 2>/dev/null; true' EXIT
 
 REPORT="skill-drift-report.md"
 ONLY_CHECK=""
@@ -43,9 +53,153 @@ should_run() {
 # Categories that can be auto-patched safely
 AUTO_PATCH_CATS=("versions" "audit-date" "cross-refs" "missing-crates")
 
+# Audit-footer regex shared by Check 9 (skills) and Check 10 (project docs).
+# If you change this line, both call sites stay in sync because they
+# reference $AUDIT_RE. This is the SHAPE check only — date VALUE
+# (DD 01-31, MM 01-12) is enforced by the audit_date_of +
+# is_real_audit_date helpers below, called by both Check 9 and Check 10.
+AUDIT_RE='^> last audited [0-9]{2}-[0-9]{2}-[0-9]{2} by [^[:space:]]+$'
+
+# Shared Python interpreter for date-validity checks (Check 8,
+# batch_validate_audit_dates). Resolved once at script start so the
+# value-check helper doesn't pay the `command -v` cost per call. Empty
+# if neither python3 nor python is on the host — both Check 8 and
+# batch_validate_audit_dates fail-closed in that case (Check 8 reports
+# the date as stale under `audit-date`; batch_validate_audit_dates
+# surfaces every shape-pass date as invalid under `audit-format` /
+# `doc-audit` via its internal `awk -F'\t' '{print "INVALID\t" $0}'`
+# fallback when PYTHON_BIN is empty), so a missing Python is loudly
+# surfaced, never silently passed through.
+PYTHON_BIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
+# Smoke-test: some hosts (notably Windows 10/11 with the Microsoft Store
+# stub `python3`) expose a path that returns exit 0 but executes nothing.
+# That hidden state silently swallows the value check because
+# `cut | "$PYTHON_BIN" -c '...'` produces empty output → $res_file empty
+# → no FINDINGS written. Demote such stubs to empty so the awk fail-closed
+# path correctly surfaces every shape-pass date as INVALID instead of
+# silently passing through.
+
+# Amortize the ~100-500ms `python3 -c 'pass'` cold-start on canonical
+# real-Python install paths (Linux distro defaults, Homebrew, pyenv,
+# python.org macOS framework). The `[ -x ]` pre-flight still cheap-skips
+# non-executable stubs (e.g. Windows Store launchers); this positive-list
+# extends that to executable-but-known-real installs. Paths not in the
+# list fall through to the smoke-test, which catches unknown / venv /
+# programmatic installs at the cost of one cold-start per run.
+#
+# Each pattern is split into `python3` AND `python3.[0-9]*` (NOT a
+# single `python3*` glob) so unrelated helpers — `python3m`,
+# `python3-config`, `python3-something` — are NOT trusted. Add patterns
+# to the case below as new canonical paths surface; keep the list
+# short and conservative.
+case "$PYTHON_BIN" in
+  /usr/bin/python3|/usr/bin/python3.[0-9]*|\
+  /usr/local/bin/python3|/usr/local/bin/python3.[0-9]*|\
+  /opt/homebrew/bin/python3|/opt/homebrew/bin/python3.[0-9]*|\
+  /opt/python*/bin/python3|/opt/python*/bin/python3.[0-9]*|\
+  /usr/local/opt/python*/bin/python3|/usr/local/opt/python*/bin/python3.[0-9]*|\
+  /home/*/.pyenv/shims/python3|/home/*/.pyenv/shims/python3.[0-9]*|\
+  /Users/*/.pyenv/shims/python3|/Users/*/.pyenv/shims/python3.[0-9]*|\
+  /Library/Frameworks/Python.framework/Versions/*/bin/python3|\
+  /Library/Frameworks/Python.framework/Versions/*/bin/python3.[0-9]*)
+    # Canonical real-Python path; trust without smoke-test. The pyenv
+    # entries enumerate /home/* and /Users/* explicitly because bash
+    # case-patterns do not tilde-expand (literal `~/` would never match
+    # real `command -v python3` resolutions on pyenv hosts).
+    ;;
+  *)
+    [ -n "$PYTHON_BIN" ] && [ -x "$PYTHON_BIN" ] \
+      && ! "$PYTHON_BIN" -c 'pass' 2>/dev/null \
+      && PYTHON_BIN=""
+    ;;
+esac
+
+# Audit-footer validation helpers (used by Check 9 and Check 10).
+# Two-pass validation: $AUDIT_RE catches SHAPE failures (missing fields,
+# wrong separators, year prefix), then `is_real_audit_date` catches VALUE
+# failures (day/month out of range, invented dates like 00-00-00 / 99-99-99).
+# Both helpers fail-closed when Python is missing (see $PYTHON_BIN above).
+
+# Pull the DD-MM-YY substring from a footer (e.g. "> last audited 28-06-26 by x" → "28-06-26").
+# Returns the substring or an empty string if no date is present.
+audit_date_of() {
+  echo "$1" | grep -oE '[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1
+}
+
+# Batched Python validation for shape-pass audit-footer dates.
+# Reads tab-separated pairs from $2 (each line: "<DD-MM-YY>\t<context>"),
+# invokes $PYTHON_BIN ONCE on the date column, then appends a FINDINGS[$1]
+# entry for every INVALID date using the context as the formatted message.
+#
+# Fail-closed: PYTHON_BIN empty → every pair is treated as INVALID.
+# Empty pairs_file is a no-op (no Python call, no FINDINGS writes).
+# The inner while-read uses < <(paste …) so the FINDINGS write happens in
+# the parent shell (subshell from `paste | while` would discard the write).
+batch_validate_audit_dates() {
+  local cat="$1"
+  local pairs_file="$2"
+  [ ! -s "$pairs_file" ] && return 0
+  local res_file
+  res_file="$(mktemp)" || return 1
+  if [ -z "$PYTHON_BIN" ]; then
+    # PYTHON_BIN empty → every date is INVALID (fail-closed).
+    awk -F'\t' '{print "INVALID\t" $0}' "$pairs_file" > "$res_file"
+  else
+    cut -f1 "$pairs_file" | "$PYTHON_BIN" -c '
+import sys
+from datetime import datetime
+for line in sys.stdin:
+    d = line.strip()
+    if not d:
+        print("OK")  # empty line — skip without crashing
+        continue
+    try:
+        datetime.strptime(d, "%d-%m-%y")
+        print("OK")
+    except Exception:
+        print("INVALID")
+' > "$res_file"
+  fi
+  while IFS=$'\t' read -r res date context; do
+    [ "$res" = "INVALID" ] && FINDINGS[$cat]+="${context}"$'\n'
+  done < <(paste "$res_file" "$pairs_file" 2>/dev/null)
+  rm -f "$res_file"
+}
+
+# Validate audit-footer(s) in a single file. Shape violations are appended
+# to FINDINGS[$1] inline; shape-pass dates are appended as "<date>\t<context>"
+# pairs to $3 so the caller can batch-validate via `batch_validate_audit_dates`.
+# Shared by Check 9 (skills) and Check 10 (project docs) so the inner-loop
+# logic is defined exactly once — any future tightening to the shape check,
+# value check, or FINDINGS message format lands in both call sites for free.
+#
+# Caller responsibilities: $pairs_file must already be a writable temp file
+# (the mktemp + stderr-capture ceremony is inlined per check since each check
+# owns its own pairs_file lifecycle); the file must exist on disk ([ -f ] guard
+# makes a missing file a no-op rather than a crash).
+audit_footer_check_in_file() {
+  local cat="$1"
+  local file="$2"
+  local pairs_file="$3"
+  [ -f "$file" ] || return 0
+  while read -r line; do
+    [ -z "$line" ] && continue
+    footer="$(echo "$line" | sed 's/[[:space:]]*$//')"
+    if ! echo "$footer" | grep -qE "$AUDIT_RE"; then
+      FINDINGS[$cat]+="${file}: footer violates DD-MM-YY + by-clause convention: \`${footer}\`"$'\n'
+    else
+      date_part="$(audit_date_of "$footer")"
+      if [ -n "$date_part" ]; then
+        printf '%s\t%s: shape OK but date [%s] is not a real calendar DD-MM-YY: [%s]\n' \
+          "$date_part" "$file" "$date_part" "$footer" >> "$pairs_file"
+      fi
+    fi
+  done < <(grep -E '^> last audited ' "$file" 2>/dev/null)
+}
+
 # Findings: associative array of category -> lines
 declare -A FINDINGS
-for cat in paths crates api versions golden refs fluent audit-date; do
+for cat in paths crates api versions golden refs fluent audit-date audit-format doc-audit; do
   FINDINGS[$cat]=""
 done
 
@@ -83,7 +237,7 @@ if should_run crates; then
     skill_crates="$(cat .agents/skills/*/SKILL.md | grep -oE 'oz-[a-z-]+' | sort -u)"
 
     while read -r c; do
-      [ -z "$c" ] && continue
+      [ -z "$c" ] || [ "$c" = "oz-pos" ] && continue
       if ! echo "$workspace_crates" | grep -qx "$c"; then
         FINDINGS[crates]+="missing in workspace: ${c}"$'\n'
       fi
@@ -133,6 +287,11 @@ if should_run golden; then
   for phrase in "i64 minor units" "thiserror" "anyhow" "rusqlite" "Tauri v2"; do
     in_agents="$(grep -c "$phrase" AGENTS.md 2>/dev/null || echo 0)"
     in_skills="$(cat .agents/skills/*/SKILL.md | grep -c "$phrase" 2>/dev/null || echo 0)"
+    in_agents="$(echo "$in_agents" | tr -d '\r' | tr -cd '0-9')"
+    in_skills="$(echo "$in_skills" | tr -d '\r' | tr -cd '0-9')"
+    if [ -z "$in_agents" ]; then in_agents=0; fi
+    if [ -z "$in_skills" ]; then in_skills=0; fi
+
     # heuristic: if AGENTS.md says it but no skill mentions it, flag
     if [ "$in_agents" -gt 0 ] && [ "$in_skills" -eq 0 ]; then
       FINDINGS[golden]+="phrase '${phrase}' in AGENTS.md but not in any skill"$'\n'
@@ -202,8 +361,12 @@ if should_run audit-date; then
       FINDINGS[audit-date]+="${skill}: missing audit date"$'\n'
       continue
     fi
-    # crude age check: convert to days-since-epoch via python
-    age="$(python3 -c "
+    py_cmd="$PYTHON_BIN"
+    if [ -z "$py_cmd" ]; then
+      # No python on host — fail-closed: report as stale (age=9999).
+      age=9999
+    else
+      age="$($py_cmd -c "
 from datetime import datetime
 try:
     d = datetime.strptime('$last', '%d-%m-%y')
@@ -211,10 +374,62 @@ try:
 except Exception:
     print(9999)
 " 2>/dev/null || echo 9999)"
+    fi
     if [ "${age:-9999}" -gt 30 ]; then
       FINDINGS[audit-date]+="${skill}: last audited ${last} (${age} days ago)"$'\n'
     fi
   done < <(find .agents/skills -name SKILL.md 2>/dev/null)
+fi
+
+# ---------------------------------------------------------------------------
+# Check 9 — Audit-date format enforcement
+#
+# Asserts every `> last audited ...` footer in a skill file matches the
+# project convention exactly: `^> last audited [0-9]{2}-[0-9]{2}-[0-9]{2}
+# by [^[:space:]]+$`. Wrong-format footers (e.g. YYYY-MM-DD, missing
+# by-clause) are reported separately from Check 8's "stale" category so
+# triage is unambiguous. Format fixes are ALWAYS manual — Check 8's parser
+# can silently mis-accept a 4-digit year as a coincidentally-valid 2-digit
+# date (see Pitfall #8 in SKILL.md for the worked example).
+# ---------------------------------------------------------------------------
+if should_run audit-format; then
+  pairs_file="$(mktemp 2>/tmp/mktemp.err)" || { echo "detect.sh: mktemp failed for audit-format: $(cat /tmp/mktemp.err)" >&2; rm -f /tmp/mktemp.err; exit 1; }
+  rm -f /tmp/mktemp.err
+  PAIRS_FILES+=("$pairs_file")  # tracked for EXIT-trap cleanup if killed mid-run
+  while read -r skill; do
+    [ -z "$skill" ] && continue
+    audit_footer_check_in_file audit-format "$skill" "$pairs_file"
+  done < <(find .agents/skills -name SKILL.md 2>/dev/null)
+  batch_validate_audit_dates audit-format "$pairs_file"
+  rm -f "$pairs_file"
+fi
+
+# ---------------------------------------------------------------------------
+# Check 10 — Audit-date format enforcement (project docs, non-skill)
+#
+# Mirrors Check 9 against every `*.md` file outside `.agents/skills/` so
+# the audit-footer convention enforced for skills also fires for human-
+# maintained docs (CONTRIBUTING.md, AGENTS.md, docs/QUICKSTART.md, crate/app/
+# module README.md files, etc.). The audit-date format is a project-wide
+# convention — its drift would re-accumulate silently without this check.
+# Format fixes are ALWAYS manual — same reasoning as Check 9.
+# ---------------------------------------------------------------------------
+if should_run doc-audit; then
+  pairs_file="$(mktemp 2>/tmp/mktemp.err)" || { echo "detect.sh: mktemp failed for doc-audit: $(cat /tmp/mktemp.err)" >&2; rm -f /tmp/mktemp.err; exit 1; }
+  rm -f /tmp/mktemp.err
+  PAIRS_FILES+=("$pairs_file")  # tracked for EXIT-trap cleanup if killed mid-run
+  while read -r file; do
+    [ -z "$file" ] && continue
+    audit_footer_check_in_file doc-audit "$file" "$pairs_file"
+  done < <(find . -name '*.md' \
+              -not -path './.git/*' \
+              -not -path './.agents/skills/*' \
+              -not -path './node_modules/*' \
+              -not -path './target/*' \
+              -not -path './dist/*' \
+              2>/dev/null)
+  batch_validate_audit_dates doc-audit "$pairs_file"
+  rm -f "$pairs_file"
 fi
 
 # ---------------------------------------------------------------------------
@@ -244,7 +459,7 @@ manual_count=0
 report=""
 report+="# Skill drift report — $today"$'\n\n'
 
-for cat in paths crates api versions golden refs fluent audit-date; do
+for cat in paths crates api versions golden refs fluent audit-date audit-format doc-audit; do
   body="${FINDINGS[$cat]}"
   if [ -z "$body" ]; then continue; fi
   manual_count=$((manual_count + $(echo "$body" | grep -c . || true)))

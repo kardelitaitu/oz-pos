@@ -48,11 +48,12 @@ members = [
     "crates/oz-reporting",
     "crates/oz-logging",
     "crates/oz-cli",
-    "src-tauri",
+    "apps/desktop-client",
+    "apps/tablet-client",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 rust-version = "1.85"   # edition 2024 requires Rust 1.85+
 license = "MIT"
@@ -80,7 +81,7 @@ oz-pos/
 │   ├── oz-reporting/           # analytics + CSV export
 │   ├── oz-logging/             # structured logging
 │   └── oz-cli/                 # migrations, backup, export CLI
-├── src-tauri/                  # the desktop/mobile shell
+├── apps/desktop-client/        # the desktop shell
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
 │   └── src/
@@ -89,6 +90,7 @@ oz-pos/
 │       ├── commands/
 │       ├── error.rs
 │       └── state.rs
+├── apps/tablet-client/         # the mobile shell
 ├── ui/                         # React + TypeScript
 │   ├── package.json
 │   ├── tsconfig.json
@@ -376,7 +378,7 @@ When a spec finishes, move its folder from `_active/` to `_done/`.
 ## Common pitfalls
 
 1. **Adding a new crate to the wrong place** (e.g., `src/` instead of `crates/`). The workspace `members` list must include it, and it should follow the `oz-<name>` naming.
-2. **Committing `Cargo.lock` for a library crate.** It's only for binaries. The `src-tauri` and `oz-cli` binaries should commit it.
+2. **Committing `Cargo.lock` for a library crate.** It's only for binaries. The `apps/desktop-client` and `oz-cli` binaries should commit it.
 3. **Using `git commit --no-verify`** to skip pre-commit hooks. Fix the issue, don't bypass it.
 4. **Renaming a branch after pushing.** The PR link changes, CI re-runs needlessly. Pick the name right the first time.
 5. **Squash-merging a multi-commit feature branch** — fine, but the squash message must be a clean Conventional Commit, not the WIP history.

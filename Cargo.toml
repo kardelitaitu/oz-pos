@@ -1,36 +1,71 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/oz-api",
     "crates/oz-core",
     "crates/oz-hal",
     "crates/oz-lua",
+    "crates/oz-plugin",
     "crates/oz-security",
     "crates/oz-payment",
     "crates/oz-reporting",
     "crates/oz-logging",
     "crates/oz-cli",
-    "src-tauri",
+    "foundation",
+    "platform/core",
+    "platform/kernel",
+    "platform/startup",
+    "platform/sync",
+    "modules/sales",
+    "modules/inventory",
+    "modules/crm",
+    "modules/tax",
+    "modules/settings",
+    "modules/staff",
+    "modules/reporting",
+    "modules/terminal",
+    "modules/currency",
+    "apps/cloud-server",
+    "apps/desktop-client",
+    "apps/tablet-client",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.4"
 edition = "2024"
-rust-version = "1.85"   # edition 2024 requires Rust 1.85+
-license = "MIT"
+rust-version = "1.88"   # axum/tower-http deps (time 0.3.47+) require ≥ 1.88
+license = "SEE LICENSE IN LICENSE"
+license-file = "LICENSE"
 authors = ["OZ-POS contributors"]
 repository = "https://github.com/kardelitaitu/oz-pos"
 readme = "README.md"
 
 [workspace.dependencies]
 # all crates import from here: oz-core = { workspace = true }
+oz-api = { path = "crates/oz-api" }
 oz-core = { path = "crates/oz-core" }
 oz-hal = { path = "crates/oz-hal" }
 oz-lua = { path = "crates/oz-lua" }
+oz-plugin = { path = "crates/oz-plugin" }
 oz-security = { path = "crates/oz-security" }
 oz-payment = { path = "crates/oz-payment" }
 oz-reporting = { path = "crates/oz-reporting" }
 oz-logging = { path = "crates/oz-logging" }
 oz-cli = { path = "crates/oz-cli" }
+foundation = { path = "foundation" }
+platform-core = { path = "platform/core" }
+platform-kernel = { path = "platform/kernel" }
+modules-sales = { path = "modules/sales" }
+modules-inventory = { path = "modules/inventory" }
+modules-crm = { path = "modules/crm" }
+modules-tax = { path = "modules/tax" }
+modules-settings = { path = "modules/settings" }
+modules-staff = { path = "modules/staff" }
+modules-reporting = { path = "modules/reporting" }
+modules-terminal = { path = "modules/terminal" }
+modules-currency = { path = "modules/currency" }
+platform-startup = { path = "platform/startup" }
+platform-sync = { path = "platform/sync" }
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 
@@ -38,17 +73,44 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
+toml = "0.8"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "net", "io-util"] }
 async-trait = "0.1"
 async-channel = "2"
 clap = { version = "4", features = ["derive"] }
 embedded-hal = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+walkdir = "2"
+axum = { version = "0.8", features = ["macros"] }
+jsonwebtoken = "9"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
+rusb = "0.9"
+serialport = "4"
+argon2 = { version = "0.5", features = ["std", "rand"] }
+aes-gcm = "0.10"
+zstd = { version = "0.13", features = ["zstdmt"] }
+aead = "0.5"
+rand = "0.8"
+tracing-appender = "0.2"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+rlua = "0.20"
+notify = { version = "7", features = [] }
+
+regex = "1"
+mdns-sd = "0.10"
+zip = "2"
+
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+console-subscriber = "0.4"
+
 
 [profile.release]
 opt-level = 3

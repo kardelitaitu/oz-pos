@@ -23,9 +23,9 @@ OZ-POS uses Tauri v2 to bridge Rust and a React/TypeScript front-end. The IPC bo
 
 | # | Rule | Why |
 |---|------|-----|
-| 1 | **Rust commands live in `src-tauri/src/commands/<feature>.rs`.** | One folder, one feature, easy to find. |
-| 2 | **All commands are registered in `src-tauri/src/main.rs`.** | No hidden registration in sub-modules. |
-| 3 | **Front-end calls go through `ui/src/api/pos.ts`.** Components never call `invoke()` directly. |
+| 1 | **Rust commands live in `apps/desktop-client/src/commands/<feature>.rs`.** | One folder, one feature, easy to find. |
+| 2 | **All commands are registered in `apps/desktop-client/src/lib.rs`.** | Registration lives next to `Builder::default()` in the `invoke_handler!` list. |
+| 3 | **Front-end calls go through `ui/src/api/` (per-domain files).** Components never call `invoke()` directly. |
 | 4 | **Every command is `async fn` and returns `Result<T, AppError>`.** | Errors are typed on both sides; no stringified blobs. |
 | 5 | **Every command takes its dependencies via `tauri::State<...>`.** | No globals, no thread-locals. |
 
@@ -34,7 +34,7 @@ OZ-POS uses Tauri v2 to bridge Rust and a React/TypeScript front-end. The IPC bo
 ## Layout
 
 ```
-src-tauri/
+apps/desktop-client/
 └── src/
     ├── main.rs                      # registers commands, builds the runtime
     ├── lib.rs                       # the run() function, app setup
@@ -51,7 +51,7 @@ src-tauri/
 ui/
 └── src/
     ├── api/
-    │   └── pos.ts                   # the ONLY place that calls invoke()
+    │   └── (per-domain files)       # typed invoke() wrappers, one per feature
     ├── features/
     │   ├── sales/
     │   │   ├── CartScreen.tsx
@@ -66,7 +66,7 @@ ui/
 ## Defining a Rust command
 
 ```rust
-// src-tauri/src/commands/sales.rs
+ // apps/desktop-client/src/commands/sales.rs
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -101,21 +101,19 @@ pub async fn add_line(
 **Rules:**
 - Argument struct is `*Args`, return type is `*Result`. Keeps the call site readable.
 - `State<'_, AppState>` is the only way to reach the database, services, or hardware. No module-level `static`s.
-- Errors are `AppError`, defined once in `src-tauri/src/error.rs` and re-exported. Don't return `String` errors.
+- Errors are `AppError`, defined once in `apps/desktop-client/src/error.rs` and re-exported. Don't return `String` errors.
 - Commands are pure: they take inputs, return outputs, and use `State` for the world. No hidden state.
 
 ---
 
-## Registering in `main.rs`
+## Registering in `lib.rs`
 
 ```rust
-// src-tauri/src/main.rs
+ // apps/desktop-client/src/main.rs
 
 mod commands;
 mod error;
 mod state;
-
-use commands::{sales, inventory, payments, hardware, reports};
 
 fn main() {
     oz_pos_lib::run();
@@ -123,7 +121,7 @@ fn main() {
 ```
 
 ```rust
-// src-tauri/src/lib.rs
+ // apps/desktop-client/src/lib.rs
 
 use tauri::Builder;
 use crate::state::AppState;
@@ -226,7 +224,7 @@ export function useCart(cartId: CartId) {
 Use Tauri events for streaming or push-style updates (e.g., barcode scan, printer status, sync progress).
 
 ```rust
-// src-tauri/src/commands/hardware.rs
+// apps/desktop-client/src/commands/hardware.rs
 
 use tauri::{AppHandle, Emitter};  // <-- Emitter trait is required for .emit()
 

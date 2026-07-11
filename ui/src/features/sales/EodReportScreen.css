@@ -1,0 +1,637 @@
+.eod-report {
+  padding: var(--space-4);
+  max-width: 1200px;
+}
+
+.eod-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.eod-report-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.eod-report-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.eod-report-date {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+}
+
+.eod-report-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-link, var(--color-accent));
+  transition: background-color var(--duration-150) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out);
+}
+
+.eod-report-refresh-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-accent);
+}
+
+.eod-report-refresh-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.eod-report-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Loading ──────────────────────────────── */
+
+.eod-report-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-12) 0;
+  color: var(--color-fg-secondary);
+}
+
+.eod-report-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .eod-report-spinner {
+    animation: eod-spin 0.8s linear infinite;
+  }
+
+  @keyframes eod-spin {
+    to { transform: rotate(360deg); }
+  }
+}
+
+.eod-report-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-danger);
+}
+
+.eod-report-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+  color: var(--color-fg-secondary);
+}
+
+.eod-report-empty svg {
+  color: var(--color-fg-tertiary);
+}
+
+/* Empty-state SVG breathes for a passive ambient cue, mirroring
+ * the cousin-pos retail empty-state pattern. */
+@media (prefers-reduced-motion: no-preference) {
+  .eod-report-empty svg {
+    animation: eod-empty-breathe 4s ease-in-out infinite;
+  }
+
+  @keyframes eod-empty-breathe {
+    0%, 100% { opacity: 0.55; transform: scale(0.96); }
+    50%      { opacity: 0.9;  transform: scale(1.04); }
+  }
+}
+
+.eod-report-empty-sub {
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+}
+
+.eod-report-retry-btn {
+  margin-top: var(--space-1);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-link, var(--color-accent));
+}
+
+.eod-report-retry-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-accent);
+}
+.eod-report-retry-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.eod-report-print-btn {
+  color: var(--color-fg-primary) !important;
+}
+
+.eod-report-print-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover) !important;
+}
+
+/* ── KPI Cards ────────────────────────────── */
+
+.eod-report-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.eod-report-kpi-card {
+  overflow: hidden;
+}
+
+.eod-report-kpi {
+  padding: var(--space-3);
+}
+
+.eod-report-kpi-label {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.eod-report-kpi-value {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-mono);
+}
+
+.eod-report-kpi-value--primary {
+  color: var(--color-accent);
+}
+
+.eod-report-kpi-value--danger {
+  color: var(--color-danger);
+}
+
+.eod-report-kpi-value--warning {
+  color: var(--color-warning);
+}
+
+.eod-report-kpi-sub {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* ── Two-column layout ────────────────────── */
+
+.eod-report-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 800px) {
+  .eod-report-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.eod-report-section-card {
+  padding: var(--space-4);
+}
+
+.eod-report-section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Shift Summary Section ─────────────────────── */
+
+.eod-report-shift-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.eod-report-shift-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  background: var(--color-success-bg);
+  border-radius: var(--radius-full);
+}
+
+.eod-report-shift-active-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .eod-report-shift-active-dot {
+    animation: eod-shift-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes eod-shift-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+}
+
+/* ── Active shift card ─────────────────────────── */
+
+.eod-report-active-shift {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-dim);
+  border-radius: var(--radius-lg);
+}
+
+.eod-report-active-shift-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  flex: 1;
+}
+
+.eod-report-active-shift-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.eod-report-active-shift-value {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Closed shifts table ───────────────────────── */
+
+.eod-report-shift-list-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.eod-report-shift-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+.eod-report-shift-table {
+  font-size: var(--text-sm);
+}
+
+.eod-report-shift-table-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.eod-report-shift-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color var(--duration-100) var(--ease-out);
+}
+
+.eod-report-shift-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.eod-report-shift-row--total {
+  font-weight: var(--font-weight-bold);
+  background: var(--color-bg-surface);
+  border-top: 2px solid var(--color-border);
+  border-bottom: none;
+}
+
+.eod-report-shift-row--total:hover {
+  background: var(--color-bg-surface);
+}
+
+.eod-report-shift-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eod-report-shift-cell--mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.eod-report-shift-diff--negative {
+  color: var(--color-danger);
+}
+
+.eod-report-shift-diff--positive {
+  color: var(--color-success);
+}
+
+.eod-report-shift-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-1);
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+}
+
+.eod-report-shift-diff--negative .eod-report-shift-tag {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.eod-report-shift-diff--positive .eod-report-shift-tag {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+/* ── Combined cash summary ─────────────────────── */
+
+.eod-report-shift-cash-summary {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.eod-report-shift-cash-summary-label {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+}
+
+.eod-report-shift-cash-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+
+.eod-report-shift-cash-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  padding: var(--space-2);
+  background: var(--color-bg-hover);
+  border-radius: var(--radius-md);
+}
+
+.eod-report-shift-cash-label {
+  font-size: 10px;
+  color: var(--color-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.eod-report-shift-cash-value {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+  .eod-report-shift-cash-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .eod-report-shift-table-header,
+  .eod-report-shift-row {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .eod-report-active-shift {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+}
+
+.eod-report-no-data {
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-6) 0;
+  font-size: var(--text-sm);
+}
+
+/* ── Payment Breakdown ────────────────────── */
+
+.eod-report-payment-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.eod-report-payment-row {
+  display: grid;
+  grid-template-columns: 1fr 80px auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.eod-report-payment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eod-report-payment-method {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.eod-report-payment-count {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+.eod-report-payment-bar-wrap {
+  height: 8px;
+  background: var(--color-bg-hover, var(--color-border));
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.eod-report-payment-bar {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.eod-report-payment-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.eod-report-payment-total {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.eod-report-payment-pct {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Hourly Sales Chart ───────────────────── */
+
+.eod-report-hourly-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.eod-report-hour-bar-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 80px;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.eod-report-hour-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.eod-report-hour-bar-track {
+  height: 14px;
+  background: var(--color-bg-hover, var(--color-border));
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.eod-report-hour-bar {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--color-border);
+  transition: width 0.3s ease;
+}
+
+.eod-report-hour-bar--active {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary, var(--color-accent)));
+}
+
+.eod-report-hour-value {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-fg-secondary);
+  text-align: right;
+}
+
+/* ── Summary Grid ─────────────────────────── */
+
+.eod-report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.eod-report-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-hover, transparent);
+}
+
+.eod-report-summary-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.eod-report-summary-value {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-mono);
+}
+
+.eod-report-summary-value--danger {
+  color: var(--color-danger);
+}

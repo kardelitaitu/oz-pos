@@ -1,0 +1,88 @@
+/* ============================================================
+ * OZ-POS Course Firing Bar — restaurant-pos only
+ *
+ * Renders a horizontal strip of course buttons above the cart
+ * lines so the cashier can fire appetizers, mains, etc. to
+ * the kitchen (KDS) independently.
+ * ============================================================ */
+
+.pos-cart-course-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+}
+
+.pos-cart-course-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-fg);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 9999px);
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out),
+    transform var(--duration-150) var(--ease-out);
+  white-space: nowrap;
+}
+
+.pos-cart-course-btn:hover {
+  background: var(--color-accent-dim);
+  border-color: var(--color-accent, #2563eb);
+  transform: translateY(-1px);
+}
+
+.pos-cart-course-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus, #60a5fa);
+  outline-offset: 2px;
+}
+
+.pos-cart-course-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pos-cart-course-label {
+  line-height: 1;
+}
+
+.pos-cart-course-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-accent-fg);
+  background: var(--color-accent, #2563eb);
+  border-radius: var(--radius-full, 9999px);
+}
+
+.pos-cart-course-btn--all {
+  color: var(--color-accent, #2563eb);
+  font-weight: var(--font-weight-bold, 700);
+  margin-left: auto;
+}
+
+.pos-cart-course-btn--all:hover {
+  background: var(--color-accent, #2563eb);
+  color: var(--color-accent-fg);
+  border-color: var(--color-accent, #2563eb);
+}
+
+/* ── Reduced motion ────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .pos-cart-course-btn {
+    transition: none;
+  }
+}

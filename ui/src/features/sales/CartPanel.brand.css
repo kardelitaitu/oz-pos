@@ -1,0 +1,188 @@
+/* ============================================================
+ * OZ-POS Cart Panel — brand override stylesheet.
+ *
+ * This file is the deployer's white-label surface for the cart
+ * panel. Every variable declared here is consumed by CartPanel.css
+ * via `var(--brand-token, fallback)` so the cart surface can be
+ * re-skinned without editing the base.
+ *
+ * HOW DEPLOYERS REBRAND
+ *   1. Edit any var(--brand-*) or var(--cart-*) token below to
+ *      swap palette, line shape, pay-button cosmetics, or thumb
+ *      colour scheme — without touching CartPanel.css or
+ *      tokens.css.
+ *   2. Drop a [data-theme='dark'] block at the bottom for any
+ *      dark-bias overrides (none required by default; tokens.css
+ *      already drives light/dark automatically).
+ *   3. The Settings colour picker feeds --color-accent onto the
+ *      <html> element automatically. To scope a per-tenant cart,
+ *      apply a class to the JSX `aside.pos-cart-panel` and set
+ *      --color-accent directly on that scoped element (see the
+ *      per-tenant recipe at the bottom).
+ *
+ * LOAD ORDER
+ *   PosScreen.tsx loads PosScreen.css → CartPanel.css → CartPanel.brand.css
+ *   so values declared here cascade on top of the base styles.
+ *
+ * CASCADE (how --color-accent reaches the cart)
+ *   tokens.css :root  ─── ThemeProvider html.style.setProperty
+ *       ↓                        ↓
+ *   default emerald      custom colour from DB
+ *       ↓                        ↓
+ *   └────── html has --color-accent: <custom-or-default>
+ *                      ↓
+ *              .pos-cart-panel inherits it
+ *                      ↓
+ *   Everything in the cart reads var(--color-accent),
+ *   var(--color-accent-hover), etc. through normal inheritance.
+ *   For a per-tenant override, set --color-accent directly on
+ *   the panel element (see recipe).
+ *
+ * LOAD ORDER
+ *   PosScreen.tsx loads PosScreen.css → CartPanel.css → CartPanel.brand.css
+ *   so values declared here cascade on top of the base styles.
+ * ============================================================ */
+
+:root {
+  /* ── Brand identity ──────────────────────────────────
+   * Read --color-accent from the html-level cascade (set by
+   * ThemeProvider on startup, or by the Settings colour picker
+   * at runtime). The default comes from tokens.css (--primary-500).
+   * Override any one to rebrand without changing the rest of the UI.
+   *
+   * NOTE: --brand-primary points to the runtime --color-accent so
+   * the Settings colour picker flows through. If you need hover /
+   * active variants that differ from `brightness(…)` of the base,
+   * hardcode them explicitly below. */
+  --brand-primary:          var(--color-accent);
+  --brand-primary-hover:    var(--color-accent-hover, var(--primary-600));
+  --brand-primary-active:   var(--primary-700);
+  --brand-primary-fg:       var(--color-accent-fg);
+  --brand-gradient-from:    var(--brand-primary);
+  --brand-gradient-to:      var(--brand-primary-hover);
+
+  /* ── Cart-scoped accent chain ────────────────────────
+   * Re-exports the brand tokens as --cart-* so the per-tenant
+   * pattern can override them independently. These are consumed
+   * by --cart-pay-shadow and --cart-pay-shadow-hover below. */
+  --cart-accent:            var(--brand-primary);
+  --cart-accent-hover:      var(--brand-primary-hover);
+  --cart-accent-active:     var(--brand-primary-active);
+  --cart-accent-fg:         var(--brand-primary-fg);
+
+  /* ── Line-card shape + elevation ───────────────────── */
+  --cart-line-bg:           var(--color-bg);
+  --cart-line-radius:       var(--radius-xl);
+  --cart-line-shadow:       var(--shadow-xs);
+  --cart-line-shadow-hover: var(--shadow-md);
+
+  /* ── Hero Pay button (Charge) cosmetics ────────────── */
+  --cart-pay-radius:         var(--radius-lg);
+  --cart-pay-gradient-from:  var(--brand-gradient-from);
+  --cart-pay-gradient-to:    var(--brand-gradient-to);
+  --cart-pay-shadow:         0 8px 22px -10px var(--cart-accent),
+                             inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --cart-pay-shadow-hover:   0 12px 28px -10px var(--cart-accent-hover),
+                             inset 0 1px 0 rgba(255, 255, 255, 0.18);
+
+  /* ── Thumbnail colour scheme ─────────────────────────
+   * `--thumb-lightness-light` is used in light mode; `--thumb-
+   * lightness-dark` is used in dark mode (manual and OS-driven).
+   * Saturation is shared — override it to rebrand (e.g. monochrome
+   * vs vivid). The per-SKU `--thumb-hue` is set inline by JS. */
+  --thumb-hue-default:      200;
+  --thumb-saturation:       60%;
+  --thumb-lightness-light:  45%;
+  --thumb-lightness-dark:   35%;
+}
+
+/* ── Per-tenant scope (see recipe at bottom) ──────────────
+ * The `--color-accent` family is inherited from the html-level
+ * cascade (set by ThemeProvider from DB settings). No override is
+ * needed here — the cart panel reads `var(--color-accent)` from
+ * its parent scope automatically.
+ *
+ * For tenant-scoped carts, apply a class to the JSX element and
+ * set `--color-accent` directly on that scope (see recipe below). */
+
+/* ============================================================
+ * OPTIONAL — uncomment to bias the cart in dark mode. By default
+ * tokens.css drives light/dark automatically, so no [data-theme]
+ * overrides are required. Add a dark block only if your brand
+ * needs its own dark-mode treatment (e.g. deeper shadows).
+ * ============================================================ */
+
+/*
+[data-theme='dark'] {
+  --cart-line-bg: color-mix(in srgb, var(--color-bg-elevated) 92%, var(--color-fg, white) 8%);
+  --cart-pay-shadow: 0 10px 26px -8px var(--color-accent),
+                     inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+*/
+
+/* ============================================================
+ * DEPLOYER RECIPES
+ *
+ * Each recipe is a flat list of property values. Copy-paste into
+ * the `:root` block above (between the existing properties) to
+ * apply. Do NOT paste these into a brand-new `:root { ... }` —
+ * doing so creates duplicate selectors and CSS last-wins silently
+ * picks one. If you need a fully fresh brand, REPLACE the `:root`
+ * block above with your own copy that includes ONLY the tokens
+ * you care about (inherited vars fall back safely).
+ * ============================================================ */
+
+/* Restaurant palette (warm amber, golden gradient, sharper corners):
+ *   --brand-primary:        #f59e0b;
+ *   --brand-primary-hover:  #d97706;
+ *   --brand-primary-active: #b45309;
+ *   --brand-primary-fg:     #1c1917;
+ *   --brand-gradient-from:  #fbbf24;
+ *   --brand-gradient-to:    #d97706;
+ *   --cart-line-radius:     10px;
+ *   --cart-pay-radius:      8px;
+ */
+
+/* Tech-cool palette (deep blue, soft glow on pay button):
+ *   --brand-primary:        #2563eb;
+ *   --brand-primary-hover:  #1d4ed8;
+ *   --brand-primary-active: #1e40af;
+ *   --cart-line-radius:     12px;
+ *   --thumb-saturation:     55%;
+ *   --cart-pay-shadow:      0 8px 24px -10px #2563eb,
+ *                           inset 0 1px 0 rgba(255, 255, 255, 0.10);
+ */
+
+/* Minimal monochrome (greyscale, no Pay glow, neutral panels):
+ *   --brand-primary:        #111827;
+ *   --brand-primary-hover:  #1f2937;
+ *   --brand-primary-active: #0b1220;
+ *   --cart-line-bg:         #f8fafc;
+ *   --cart-pay-shadow:      0 4px 12px -4px rgba(0,0,0,0.20),
+ *                           inset 0 0 0 1px rgba(255,255,255,0.04);
+ *   --thumb-saturation:     0%;
+ *   --thumb-lightness-light: 92%;
+ *   --thumb-lightness-dark: 24%;
+ */
+
+/* Per-tenant scope (one cart instance only — does not leak):
+ *
+ *   JSX:  <aside className="pos-cart-panel brand-warm" ...>
+ *
+ *   Then add this rule to the bottom of CartPanel.brand.css:
+ *
+ *     .brand-warm.pos-cart-panel {
+ *       --color-accent:        #f59e0b;
+ *       --color-accent-hover:  #d97706;
+ *       --color-accent-fg:     #1c1917;
+ *     }
+ *
+ *   Specificity: .brand-warm.pos-cart-panel = (0,2,0); :root =
+ *   (0,1,0). The wrapper class wins because of the higher
+ *   specificity AND because custom properties are inherited
+ *   from the nearest defining scope (the element itself).
+ *
+ *   IMPORTANT: setting --color-accent directly on the element (not
+ *   --cart-accent) ensures the accent chain flows through every
+ *   `var(--color-accent)` reference in the cart stylesheets without
+ *   creating a CSS custom-property cycle. */
