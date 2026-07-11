@@ -973,3 +973,41 @@ func TestActivateHandler_MissingSubscriptionsCollection(t *testing.T) {
 		t.Errorf("expected 'subscriptions collection not found', got: %s", rec.Body.String())
 	}
 }
+
+// ── Tests: Renew handler misconfiguration ────────────────────────
+//
+// handleRenew first calls FindRecordsByFilter("subscriptions", ...) to
+// locate the current active subscription. When the subscriptions collection
+// is entirely missing, this returns an error (caught by the if-err guard),
+// so the handler returns 404 "no active subscription found" rather than
+// reaching the later FindCollectionByNameOrId misconfiguration 500 path.
+// This test verifies that defensive behavior.
+
+func TestRenewHandler_MissingSubscriptionsCollection(t *testing.T) {
+	app, se := setupDirectAppWithoutCollection(t, map[string]bool{"subscriptions": true})
+	defer app.Cleanup()
+
+	// Seed an active tenant so authentication succeeds.
+	seedTenant(t, app, "rnwmiscfg000001", "rnwmiscfgkey001", "active")
+
+	body := strings.NewReader(`{
+		"tenant_id": "rnwmiscfg000001",
+		"api_key": "rnwmiscfgkey001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	// Missing subscriptions caught by FindRecordsByFilter guard → 404.
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "no active subscription found") {
+		t.Errorf("expected 'no active subscription found', got: %s", rec.Body.String())
+	}
+}
