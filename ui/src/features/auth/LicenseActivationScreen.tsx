@@ -16,6 +16,7 @@ export interface LicenseActivationScreenProps {
 export default function LicenseActivationScreen({ initialError, onActivated }: LicenseActivationScreenProps) {
   const [key, setKey] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
   const { addToast } = useToast();
@@ -36,7 +37,8 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       const success = await activateLicense(
         key.trim(),
         email.trim(),
-        machineId
+        machineId,
+        phone.trim()
       );
 
       if (success) {
@@ -88,6 +90,19 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
               placeholder="store@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="license-form-group">
+            <label htmlFor="phone">Phone Number</label>
+            <input
+              id="phone"
+              type="tel"
+              className="license-input"
+              placeholder="+1-555-0123"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
               disabled={loading}
             />
           </div>

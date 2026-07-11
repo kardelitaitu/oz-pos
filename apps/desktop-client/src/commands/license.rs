@@ -49,18 +49,20 @@ pub struct LicenseStatusDto {
     pub message: Option<String>,
 }
 
-/// Activates a license key for the given email and machine ID.
+/// Activates a license key for the given email, phone, and machine ID.
 #[command]
 pub async fn activate_license(
     state: State<'_, AppState>,
     key: String,
     email: String,
     machine_id: String,
+    phone: String,
 ) -> Result<bool, AppError> {
     let req = ActivateLicenseRequest {
         key,
         email,
         machine_id,
+        phone,
     };
 
     let resp = core_activate_license(&req)

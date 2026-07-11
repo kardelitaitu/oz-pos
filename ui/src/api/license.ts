@@ -21,15 +21,17 @@ export async function getMachineId(): Promise<string> {
   return invoke('get_machine_id');
 }
 
-/** Activate the license with a key, email, and machine identifier. Returns true if activation succeeded. */
+/** Activate the license with a key, email, phone, and machine identifier. Returns true if activation succeeded. */
 export async function activateLicense(
   key: string,
   email: string,
-  machineId: string
+  machineId: string,
+  phone: string
 ): Promise<boolean> {
   return invoke('activate_license', {
     key,
     email,
     machineId,
+    phone,
   });
 }

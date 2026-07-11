@@ -49,6 +49,8 @@ pub struct ActivateLicenseRequest {
     pub machine_id: String,
     /// The contact email (used as primary tenant identifier).
     pub email: String,
+    /// The contact phone number for the licensee.
+    pub phone: String,
 }
 
 /// Response from `POST /api/v1/license/activate`.
