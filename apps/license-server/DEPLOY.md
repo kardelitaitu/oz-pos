@@ -32,7 +32,7 @@ Before starting, ensure you have:
 - [ ] **Docker** installed locally — [Get Docker](https://docs.docker.com/get-docker/)
 - [ ] A **GitHub account** (or any container registry) to store the Docker image
 - [ ] A **domain** (optional, e.g., `license.oz-pos.com`) for a custom URL
-- [ ] **Go 1.24+** and **OpenSSL** installed locally (for key generation and testing)
+- [ ] **Go 1.25+** and **OpenSSL** installed locally (for key generation and testing)
 
 ---
 
@@ -84,7 +84,7 @@ $env:OZ_LICENSE_PRIVATE_KEY = (Get-Content -Raw ../../crates/oz-core/oz-license-
 
 ## 3. Build the Docker Image
 
-The `Dockerfile` uses a **multi-stage build**: `golang:1.24-alpine` compiles the binary, then copies it into `alpine:3.20` for a ~25 MB final image.
+The `Dockerfile` uses a **multi-stage build**: `golang:1.25-alpine` compiles the binary, then copies it into `alpine:3.20` for a ~25 MB final image.
 
 ### 3.1 Build locally
 
