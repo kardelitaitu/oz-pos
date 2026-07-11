@@ -86,6 +86,12 @@ func normalizePEM(raw string) string {
 		return raw
 	}
 
+	// If there are no PEM markers at all, the user may have pasted only
+	// the raw base64 body. Wrap it in a PKCS#8 PEM envelope.
+	if !strings.Contains(raw, "-----BEGIN") && !strings.Contains(raw, "-----END") {
+		return wrapPEM(raw, "PRIVATE KEY")
+	}
+
 	// The PEM is on a single line. Find the BEGIN and END marker boundaries.
 	// Format: -----BEGIN <TYPE>-----<base64>-----END <TYPE>-----
 	// The header line is everything from the first "-----" through the next "-----".
@@ -133,6 +139,31 @@ func normalizePEM(raw string) string {
 	}
 	sb.WriteString(footer)
 	sb.WriteByte('\n')
+	return sb.String()
+}
+
+// wrapPEM wraps raw base64 data in a PEM envelope with the given type label
+// and standard 64-character line width. Any existing whitespace or newlines
+// in the base64 data are stripped before re-wrapping.
+func wrapPEM(base64data, label string) string {
+	// Strip any existing whitespace/newlines from the base64 body.
+	base64data = strings.NewReplacer("\n", "", "\r", "", " ", "", "\t", "").Replace(base64data)
+
+	var sb strings.Builder
+	sb.WriteString("-----BEGIN ")
+	sb.WriteString(label)
+	sb.WriteString("-----\n")
+	for i := 0; i < len(base64data); i += 64 {
+		end := i + 64
+		if end > len(base64data) {
+			end = len(base64data)
+		}
+		sb.WriteString(base64data[i:end])
+		sb.WriteByte('\n')
+	}
+	sb.WriteString("-----END ")
+	sb.WriteString(label)
+	sb.WriteString("-----\n")
 	return sb.String()
 }
 
