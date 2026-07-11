@@ -16,8 +16,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 /// Discriminated error returned by every `#[tauri::command]`.
-#[derive(Debug, Error, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum AppError {
     /// Wraps any `oz_core::CoreError` (DB, money, currency mismatch, …).
@@ -71,6 +70,46 @@ impl From<oz_hal::HalError> for AppError {
             sub_kind: e.kind(),
             message: e.to_string(),
         }
+    }
+}
+
+impl serde::Serialize for AppError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(serde::Serialize)]
+        #[serde(tag = "kind", rename_all = "camelCase")]
+        enum AppErrorDto<'a> {
+            Core {
+                sub_kind: &'a CoreErrorKind,
+                message: &'a str,
+            },
+            Hardware {
+                sub_kind: &'a HalErrorKind,
+                message: &'a str,
+            },
+            Invalid {
+                message: &'a str,
+            },
+            PermissionDenied {
+                message: &'a str,
+            },
+            InvalidSession,
+            Internal {
+                message: &'a str,
+            },
+        }
+
+        let dto = match self {
+            AppError::Core { sub_kind, message } => AppErrorDto::Core { sub_kind, message },
+            AppError::Hardware { sub_kind, message } => AppErrorDto::Hardware { sub_kind, message },
+            AppError::Invalid(message) => AppErrorDto::Invalid { message },
+            AppError::PermissionDenied(message) => AppErrorDto::PermissionDenied { message },
+            AppError::InvalidSession => AppErrorDto::InvalidSession,
+            AppError::Internal(message) => AppErrorDto::Internal { message },
+        };
+        dto.serialize(serializer)
     }
 }
 
