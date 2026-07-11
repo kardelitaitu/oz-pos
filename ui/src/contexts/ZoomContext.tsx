@@ -21,8 +21,9 @@ export function ZoomProvider({ children }: { children: ReactNode }) {
     const applyZoom = () => {
       let fontSize = 16;
       if (zoomLevel === 'auto') {
-        // Use window.innerWidth to adapt to any window size changes
-        const windowWidth = window.innerWidth;
+        // Use window.outerWidth instead of innerWidth. 
+        // This allows the app to adapt to window resizing without fighting the browser's native zoom (Ctrl +/-).
+        const windowWidth = window.outerWidth || window.innerWidth;
         // Base resolution is 1920px (standard 1080p width) = 16px base font
         const scale = windowWidth / 1920;
         // Clamp between 14px (minimum readable) and 28px
