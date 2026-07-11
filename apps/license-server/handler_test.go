@@ -362,7 +362,7 @@ func seedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expi
 func TestStatusHandler_TenantNotFound(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
 		Method:          "GET",
-		URL:             "/api/v1/license/status/n0t4f0und000000",
+		URL:             "/api/v1/license/status/n0t4f0und000000?api_key=test",
 		ExpectedStatus:  404,
 		ExpectedContent: []string{`"error"`, "tenant not found"},
 	})
@@ -373,7 +373,7 @@ func TestStatusHandler_TenantNoSubscription(t *testing.T) {
 	// fallback response with active:false and tier:"unknown".
 	runScenario(t, &tests.ApiScenario{
 		Method:          "GET",
-		URL:             "/api/v1/license/status/nosubtest000001",
+		URL:             "/api/v1/license/status/nosubtest000001?api_key=nosubapikey0001",
 		ExpectedStatus:  200,
 		ExpectedContent: []string{`"tenant_id":"nosubtest000001"`, `"active":false`, `"tier":"unknown"`},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
@@ -496,7 +496,8 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "tsxinvalid00001",
-			"api_key": "invalidkey00001"
+			"api_key": "invalidkey00001",
+			"key": "OZ-RENEW-KEY"
 		}`),
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`},
@@ -514,6 +515,7 @@ func TestRenewHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestRenewHandler_WrongTenantID(t *testing.T) {
+	resetRateLimiters()
 	// Seed a tenant with api_key "wrongapik000001" and id "wrongtenant0002",
 	// then send a request with a different tenant_id.
 	// The handler should authenticate via api_key but reject the mismatched tenant_id.
@@ -522,7 +524,8 @@ func TestRenewHandler_WrongTenantID(t *testing.T) {
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "wrongtenant0001",
-			"api_key": "wrongapik000001"
+			"api_key": "wrongapik000001",
+			"key": "OZ-RENEW-KEY"
 		}`),
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`tenant_id does not match api_key`},
@@ -533,13 +536,15 @@ func TestRenewHandler_WrongTenantID(t *testing.T) {
 }
 
 func TestRenewHandler_SuspendedTenant(t *testing.T) {
+	resetRateLimiters()
 	// Seed a tenant with status "suspended" — the handler should reject renewal.
 	runScenario(t, &tests.ApiScenario{
 		Method: "POST",
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "susptest0000001",
-			"api_key": "suspapikey00001"
+			"api_key": "suspapikey00001",
+			"key": "OZ-RENEW-KEY"
 		}`),
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`not active`},
@@ -564,7 +569,7 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 	seedTenant(t, app, "stathappy000001", "stathappykey001", "active")
 	seedSubscription(t, app, "stathappy000001", "pro", "active")
 
-	req := httptest.NewRequest("GET", "/api/v1/license/status/stathappy000001", nil)
+	req := httptest.NewRequest("GET", "/api/v1/license/status/stathappy000001?api_key=stathappykey001", nil)
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -598,14 +603,23 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 	}
 }
 
+func resetRateLimiters() {
+	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	keyFailTracker.failures = make(map[string]*keyFailures)
+}
+
 func TestRenewHandler_NoSubscription(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 
 	// Seed an active tenant but NO subscription.
 	seedTenant(t, app, "rnwsub000000001", "rnwsubkey000001", "active")
 
-	body := strings.NewReader(`{"tenant_id":"rnwsub000000001","api_key":"rnwsubkey000001"}`)
+	// Need a seeded unused key too so it passes key validation before checking subscriptions
+	seedLicenseKey(t, app, "rnwsubkey000001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{"tenant_id":"rnwsub000000001","api_key":"rnwsubkey000001","key":"rnwsubkey000001-key"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -624,6 +638,7 @@ func TestRenewHandler_NoSubscription(t *testing.T) {
 }
 
 func TestRenewHandler_WithSubscription(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 
@@ -631,7 +646,10 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	seedTenant(t, app, "rnwhappy0000001", "rnwhappykey0001", "active")
 	seedSubscription(t, app, "rnwhappy0000001", "pro", "active")
 
-	body := strings.NewReader(`{"tenant_id":"rnwhappy0000001","api_key":"rnwhappykey0001"}`)
+	// Seed valid unused key for renewal
+	seedLicenseKey(t, app, "rnwhappykey0001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{"tenant_id":"rnwhappy0000001","api_key":"rnwhappykey0001","key":"rnwhappykey0001-key"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -687,14 +705,6 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	if !foundExpired {
 		t.Error("expected one expired subscription after renewal")
 	}
-}
-
-// resetRateLimiters clears the package-level rate limiter and key failure
-// tracker so that tests manipulating these globals don't interfere with
-// each other.
-func resetRateLimiters() {
-	ipRateLimiter.buckets = make(map[string]*tokenBucket)
-	keyFailTracker.failures = make(map[string]*keyFailures)
 }
 
 func TestActivateHandler_RateLimited(t *testing.T) {
@@ -954,15 +964,19 @@ func TestActivateHandler_MissingSubscriptionsCollection(t *testing.T) {
 // This test verifies that defensive behavior.
 
 func TestRenewHandler_MissingSubscriptionsCollection(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectAppWithoutCollection(t, map[string]bool{"subscriptions": true})
 	defer app.Cleanup()
 
 	// Seed an active tenant so authentication succeeds.
 	seedTenant(t, app, "rnwmiscfg000001", "rnwmiscfgkey001", "active")
+	// Seed an unused key so key validation succeeds
+	seedLicenseKey(t, app, "rnwmiscfgkey001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
 
 	body := strings.NewReader(`{
 		"tenant_id": "rnwmiscfg000001",
-		"api_key": "rnwmiscfgkey001"
+		"api_key": "rnwmiscfgkey001",
+		"key": "rnwmiscfgkey001-key"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")

@@ -28,6 +28,13 @@ func (rl *rateLimiter) allow(ip string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
+	// Clean up old buckets periodically (e.g. > 2 hours old) to prevent memory leaks
+	for k, v := range rl.buckets {
+		if time.Since(v.lastFill) > 2*time.Hour {
+			delete(rl.buckets, k)
+		}
+	}
+
 	bucket, ok := rl.buckets[ip]
 	if !ok {
 		bucket = &tokenBucket{tokens: rl.maxPerHr, lastFill: time.Now()}
@@ -58,6 +65,7 @@ type keyFailureTracker struct {
 type keyFailures struct {
 	count      int
 	cooldownAt time.Time
+	lastAttempt time.Time
 }
 
 // keyFailTracker limits to 3 failed attempts per key, then 15-minute cooldown.
@@ -71,13 +79,18 @@ func (kf *keyFailureTracker) isBlocked(key string) bool {
 	kf.mu.Lock()
 	defer kf.mu.Unlock()
 
+	// Clean up old partial failures (memory leak fix)
+	for k, v := range kf.failures {
+		if v.count < kf.maxAttempts && time.Since(v.lastAttempt) > 24*time.Hour {
+			delete(kf.failures, k)
+		}
+	}
+
 	f, ok := kf.failures[key]
 	if !ok {
 		return false
 	}
 	// Only clean up entries that have reached maxAttempts AND passed cooldown.
-	// Entries with partial failures (count < maxAttempts) persist to track
-	// progressive brute-force attempts.
 	if f.count >= kf.maxAttempts && time.Now().After(f.cooldownAt) {
 		delete(kf.failures, key)
 		return false
@@ -95,6 +108,7 @@ func (kf *keyFailureTracker) recordFailure(key string) {
 		kf.failures[key] = f
 	}
 	f.count++
+	f.lastAttempt = time.Now()
 	if f.count >= kf.maxAttempts {
 		f.cooldownAt = time.Now().Add(kf.cooldown)
 	}

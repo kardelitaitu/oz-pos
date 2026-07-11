@@ -65,12 +65,14 @@ pub struct ActivateLicenseResponse {
 }
 
 /// Request body for `POST /api/v1/license/renew`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RenewLicenseRequest {
     /// The tenant ID.
     pub tenant_id: String,
     /// The API key obtained during activation.
     pub api_key: String,
+    /// The new license key.
+    pub key: String,
 }
 
 /// Response from `POST /api/v1/license/renew`.
@@ -266,10 +268,17 @@ pub async fn renew_license(req: &RenewLicenseRequest) -> Result<RenewLicenseResp
 
 /// Check the current license status from the license server.
 ///
-/// GETs `/api/v1/license/status/:tenant_id`. This is a public endpoint
-/// (no auth required).
-pub async fn check_license_status(tenant_id: &str) -> Result<LicenseStatusResponse, CoreError> {
-    let url = format!("{}/api/v1/license/status/{tenant_id}", license_server_url());
+/// GETs `/api/v1/license/status/:tenant_id?api_key=...`.
+pub async fn check_license_status(
+    tenant_id: &str,
+    api_key: &str,
+) -> Result<LicenseStatusResponse, CoreError> {
+    let url = format!(
+        "{}/api/v1/license/status/{}?api_key={}",
+        license_server_url(),
+        tenant_id,
+        api_key
+    );
     let client = reqwest::Client::new();
 
     let resp = client

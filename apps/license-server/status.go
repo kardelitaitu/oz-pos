@@ -9,12 +9,25 @@ import (
 func handleStatus(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		tenantID := e.Request.PathValue("tenant_id")
+		apiKey := e.Request.URL.Query().Get("api_key")
+
+		if apiKey == "" {
+			return e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "api_key is required",
+			})
+		}
 
 		// ── Find tenant ───────────────────────────────────────────
 		tenant, err := app.FindRecordById("tenants", tenantID)
 		if err != nil {
 			return e.JSON(http.StatusNotFound, map[string]any{
 				"error": "tenant not found",
+			})
+		}
+
+		if tenant.GetString("api_key") != apiKey {
+			return e.JSON(http.StatusForbidden, map[string]any{
+				"error": "invalid api_key",
 			})
 		}
 
