@@ -38,7 +38,7 @@ function AlertIcon() {
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const MAX_PIN_LENGTH = 6;
+const MAX_PIN_LENGTH = 4;
 
 // ── Resized Logo Helper (1:1 PNG at target size) ───────────────────
 

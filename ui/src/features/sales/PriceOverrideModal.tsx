@@ -28,7 +28,7 @@ export default function PriceOverrideModal({
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const pinSubmitted = useRef(false);
 
-  const MAX_PIN_LENGTH = 6;
+  const MAX_PIN_LENGTH = 4;
 
   useEffect(() => {
     if (step === 'username') {
