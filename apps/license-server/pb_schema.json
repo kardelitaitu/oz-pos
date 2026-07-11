@@ -160,7 +160,9 @@
         "type": "autodate"
       }
     ],
-    "indexes": []
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_license_keys_key ON license_keys (key)"
+    ]
   },
   {
     "id": "64d11bd2cc57a18",
@@ -267,7 +269,10 @@
         "type": "autodate"
       }
     ],
-    "indexes": []
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_tenants_email ON tenants (email)",
+      "CREATE UNIQUE INDEX idx_tenants_api_key ON tenants (api_key)"
+    ]
   },
   {
     "id": "c70451d421d53cf",
