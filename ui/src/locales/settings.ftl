@@ -262,6 +262,7 @@ appearance-choose-logo = Choose Logo
 appearance-choose-logo-aria =
     .aria-label = Pick logo file
 appearance-store-name = Display Store Name
+appearance-interface-zoom = Interface Zoom
 appearance-store-name-fallback = OZ-POS
 appearance-preview = Preview
 appearance-preview-btn-label = Primary Button
