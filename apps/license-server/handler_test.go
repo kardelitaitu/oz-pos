@@ -191,6 +191,153 @@ func setupDirectApp(t *testing.T) (*tests.TestApp, *core.ServeEvent) {
 	return app, se
 }
 
+// ── Misconfiguration test helpers ────────────────────────────────
+//
+// createMinimalCollections creates only the collections NOT listed in the
+// skip set. This lets us simulate a misconfigured server where a required
+// collection (tenants, tenant_machines, subscriptions) is missing.
+func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]bool) {
+	t.Helper()
+
+	// Create tenants first so other collections can reference its ID.
+	var tenantsID string
+	if !skip["tenants"] {
+		tenants := core.NewBaseCollection("tenants")
+		tenants.Fields.Add(
+			&core.TextField{Name: "business_name", Required: true},
+			&core.TextField{Name: "contact_name", Required: true},
+			&core.EmailField{Name: "email", Required: true},
+			&core.TextField{Name: "phone"},
+			&core.TextField{Name: "company"},
+			&core.TextField{Name: "address_line1"},
+			&core.TextField{Name: "address_line2"},
+			&core.TextField{Name: "city"},
+			&core.TextField{Name: "state"},
+			&core.TextField{Name: "postal_code"},
+			&core.TextField{Name: "country"},
+			&core.TextField{Name: "notes"},
+			&core.TextField{Name: "api_key", Required: true},
+			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
+		)
+		tenants.CreateRule = types.Pointer("")
+		tenants.ListRule = types.Pointer("")
+		tenants.ViewRule = types.Pointer("")
+		if err := app.Save(tenants); err != nil {
+			t.Fatalf("failed to create tenants collection: %v", err)
+		}
+		tenantsID = tenants.Id
+	}
+
+	// license_keys is always required (the handler validates keys before
+	// reaching any misconfiguration path). Its activated_by relation field
+	// references tenants — only add it when tenants is present.
+	licenseKeys := core.NewBaseCollection("license_keys")
+	licenseKeys.Fields.Add(
+		&core.TextField{Name: "key", Required: true},
+		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.NumberField{Name: "max_stores", Required: true},
+		&core.NumberField{Name: "max_pos_instances", Required: true},
+		&core.JSONField{Name: "allowed_types", Required: true},
+		&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "activated", "expired", "revoked"}},
+		&core.DateField{Name: "expires_at", Required: true},
+		&core.DateField{Name: "activated_at"},
+		&core.DateField{Name: "revoked_at"},
+		&core.TextField{Name: "notes"},
+	)
+	if tenantsID != "" {
+		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID})
+	}
+	licenseKeys.CreateRule = types.Pointer("")
+	licenseKeys.ListRule = types.Pointer("")
+	licenseKeys.ViewRule = types.Pointer("")
+	licenseKeys.UpdateRule = types.Pointer("")
+	if err := app.Save(licenseKeys); err != nil {
+		t.Fatalf("failed to create license_keys collection: %v", err)
+	}
+
+	if !skip["tenant_machines"] && tenantsID != "" {
+		tenantMachines := core.NewBaseCollection("tenant_machines")
+		tenantMachines.Fields.Add(
+			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
+			&core.DateField{Name: "first_seen_at"},
+			&core.DateField{Name: "last_seen_at"},
+		)
+		tenantMachines.CreateRule = types.Pointer("")
+		tenantMachines.ListRule = types.Pointer("")
+		tenantMachines.ViewRule = types.Pointer("")
+		if err := app.Save(tenantMachines); err != nil {
+			t.Fatalf("failed to create tenant_machines collection: %v", err)
+		}
+	}
+
+	if !skip["subscriptions"] && tenantsID != "" {
+		subscriptions := core.NewBaseCollection("subscriptions")
+		subscriptions.Fields.Add(
+			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
+			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+			&core.NumberField{Name: "max_stores", Required: true},
+			&core.NumberField{Name: "max_pos_instances", Required: true},
+			&core.JSONField{Name: "allowed_types", Required: true},
+			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
+			&core.DateField{Name: "starts_at", Required: true},
+			&core.DateField{Name: "expires_at", Required: true},
+			&core.DateField{Name: "grace_until"},
+			&core.TextField{Name: "signed_payload", Required: true},
+			&core.TextField{Name: "signature", Required: true},
+		)
+		subscriptions.CreateRule = types.Pointer("")
+		subscriptions.ListRule = types.Pointer("")
+		subscriptions.ViewRule = types.Pointer("")
+		subscriptions.UpdateRule = types.Pointer("")
+		if err := app.Save(subscriptions); err != nil {
+			t.Fatalf("failed to create subscriptions collection: %v", err)
+		}
+	}
+}
+
+// setupDirectAppWithoutCollection creates a TestApp and ServeEvent with all
+// collections EXCEPT the ones listed in skip. This is used to test the
+// "server misconfiguration" error paths in the handlers.
+func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests.TestApp, *core.ServeEvent) {
+	t.Helper()
+
+	initPrivateKey(t)
+
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("failed to create test app: %v", err)
+	}
+
+	createMinimalCollections(t, app, skip)
+
+	// Register routes manually instead of using registerTestRoutes so that
+	// we match the same set of collections the handler expects.
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		se.Router.POST("/api/v1/license/activate", handleActivate(app))
+		se.Router.POST("/api/v1/license/renew", handleRenew(app))
+		se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
+		return se.Next()
+	})
+
+	router, err := apis.NewRouter(app)
+	if err != nil {
+		t.Fatalf("failed to create router: %v", err)
+	}
+
+	se := &core.ServeEvent{
+		App:    app,
+		Router: router,
+	}
+
+	if err := app.OnServe().Trigger(se, func(e *core.ServeEvent) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("OnServe trigger failed: %v", err)
+	}
+
+	return app, se
+}
+
 // seedSubscription inserts a subscription record directly via app.Save
 // (bypassing ApiScenario transaction isolation). Only use with setupDirectApp.
 func seedSubscription(t *testing.T, app *tests.TestApp, tenantID, tierKey, status string) {
@@ -724,5 +871,105 @@ func TestActivateHandler_Success(t *testing.T) {
 	)
 	if err != nil || len(machines) == 0 {
 		t.Fatal("machine should have been registered")
+	}
+}
+
+// ── Tests: Misconfiguration error paths ──────────────────────────
+//
+// These tests verify that handleActivate returns 500 with a descriptive
+// "server misconfiguration" message when a required PocketBase collection
+// is missing from the database schema.
+
+func TestActivateHandler_MissingTenantsCollection(t *testing.T) {
+	app, se := setupDirectAppWithoutCollection(t, map[string]bool{"tenants": true})
+	defer app.Cleanup()
+
+	// Seed a valid license key so we pass the key-validation step.
+	seedLicenseKey(t, app, "OZ-MISCFG-KEY01", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{
+		"key": "OZ-MISCFG-KEY01",
+		"tenant_id": "miscfgtenan0001",
+		"machine_id": "miscfgmachin001",
+		"contact_name": "Test",
+		"email": "test@example.com"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "tenants collection not found") {
+		t.Errorf("expected 'tenants collection not found', got: %s", rec.Body.String())
+	}
+}
+
+func TestActivateHandler_MissingMachinesCollection(t *testing.T) {
+	app, se := setupDirectAppWithoutCollection(t, map[string]bool{"tenant_machines": true})
+	defer app.Cleanup()
+
+	seedLicenseKey(t, app, "OZ-MISCFG-KEY02", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{
+		"key": "OZ-MISCFG-KEY02",
+		"tenant_id": "miscfgtenan0002",
+		"machine_id": "miscfgmachin002",
+		"contact_name": "Test",
+		"email": "test@example.com"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "tenant_machines collection not found") {
+		t.Errorf("expected 'tenant_machines collection not found', got: %s", rec.Body.String())
+	}
+}
+
+func TestActivateHandler_MissingSubscriptionsCollection(t *testing.T) {
+	app, se := setupDirectAppWithoutCollection(t, map[string]bool{"subscriptions": true})
+	defer app.Cleanup()
+
+	seedLicenseKey(t, app, "OZ-MISCFG-KEY03", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{
+		"key": "OZ-MISCFG-KEY03",
+		"tenant_id": "miscfgtenan0003",
+		"machine_id": "miscfgmachin003",
+		"contact_name": "Test",
+		"email": "test@example.com"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "subscriptions collection not found") {
+		t.Errorf("expected 'subscriptions collection not found', got: %s", rec.Body.String())
 	}
 }
