@@ -1,5 +1,4 @@
-{
-  "collections": [
+[
     {
       "name": "license_keys",
       "type": "base",
@@ -232,4 +231,3 @@
       "deleteRule": "@request.auth.id != ''"
     }
   ]
-}
