@@ -4,10 +4,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{State, command};
 
+use chrono::{DateTime, Utc};
 use oz_core::Settings;
 use oz_core::error::CoreError;
 use oz_core::license_verification::{
-    ActivateLicenseRequest, activate_license as core_activate_license, verify_license_signature,
+    ActivateLicenseRequest, SignedSubscriptionPayload, activate_license as core_activate_license,
+    verify_license_signature,
 };
 use oz_core::subscription::TenantSubscription;
 
@@ -25,6 +27,16 @@ pub enum LicenseVerificationStatus {
     GracePeriod,
     InvalidSignature,
     ClockTampered,
+    Missing,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LicenseVerificationStatus {
+    Valid,
+    Expired,
+    GracePeriod,
+    InvalidSignature,
     Missing,
 }
 
@@ -102,47 +114,78 @@ fn generate_machine_id() -> String {
 #[command]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseStatusDto, AppError> {
     let conn = state.db.lock().await;
-
-    // Check for clock rollback before evaluating licence expiry.
-    // If the system clock has been set back, the ledger will contain
-    // timestamps in the future relative to the wall clock.
-    match TenantSubscription::validate_clock_rollback(&conn) {
-        Err(CoreError::SystemClockTampered(msg)) => {
-            return Ok(LicenseStatusDto {
-                is_active: false,
-                status: LicenseVerificationStatus::ClockTampered,
-                payload: None,
-                message: Some(format!("Clock tampering detected: {msg}")),
-            });
-        }
-        Err(e) => return Err(AppError::Internal(e.to_string())),
-        Ok(()) => {}
-    }
-
     let payload_str = Settings::get(&conn, "license.payload")?;
     let signature = Settings::get(&conn, "license.signature")?;
 
-    if let (Some(p), Some(s)) = (payload_str.clone(), signature) {
-        match verify_license_signature(&p, &s) {
-            Ok(_) => Ok(LicenseStatusDto {
+    if let (Some(p), Some(s)) = (payload_str, signature) {
+        if let Err(e) = verify_license_signature(&p, &s) {
+            return Ok(LicenseStatusDto {
+                is_active: false,
+                status: LicenseVerificationStatus::InvalidSignature,
+                payload: None,
+                message: Some(format!("Invalid signature: {}", e)),
+            });
+        }
+
+        // Parse payload
+        let payload: SignedSubscriptionPayload = match serde_json::from_str(&p) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                return Ok(LicenseStatusDto {
+                    is_active: false,
+                    status: LicenseVerificationStatus::InvalidSignature,
+                    payload: None,
+                    message: Some(format!("Failed to parse payload: {}", e)),
+                });
+            }
+        };
+
+        let now = Utc::now();
+
+        let expires_at = DateTime::parse_from_rfc3339(&payload.expires_at)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or(now);
+
+        let grace_until = DateTime::parse_from_rfc3339(&payload.grace_until)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or(now);
+
+        if now < expires_at {
+            Ok(LicenseStatusDto {
                 is_active: true,
                 status: LicenseVerificationStatus::Valid,
                 payload: Some(p),
                 message: None,
-            }),
-            Err(_) => Ok(LicenseStatusDto {
+            })
+        } else if now < grace_until {
+            Ok(LicenseStatusDto {
+                is_active: true,
+                status: LicenseVerificationStatus::GracePeriod,
+                payload: Some(p),
+                message: Some(format!(
+                    "License expired on {}. You are in the grace period until {}.",
+                    expires_at.format("%Y-%m-%d"),
+                    grace_until.format("%Y-%m-%d")
+                )),
+            })
+        } else {
+            Ok(LicenseStatusDto {
                 is_active: false,
-                status: LicenseVerificationStatus::InvalidSignature,
+                status: LicenseVerificationStatus::Expired,
                 payload: None,
-                message: None,
-            }), // Invalid signature
+                message: Some(format!(
+                    "License expired on {}. Grace period ended on {}.",
+                    expires_at.format("%Y-%m-%d"),
+                    grace_until.format("%Y-%m-%d")
+                )),
+            })
         }
     } else {
         Ok(LicenseStatusDto {
             is_active: false,
             status: LicenseVerificationStatus::Missing,
             payload: None,
-            message: None,
+            message: Some("No license found. Please activate.".to_string()),
         })
     }
 }
