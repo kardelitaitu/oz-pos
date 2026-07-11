@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Tax Module — tax rate configuration and management.
 //!
 //! This module owns the tax vertical: tax rate CRUD, product and

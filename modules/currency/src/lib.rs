@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Currency/Exchange Module — ISO-4217 currencies and exchange rates.
 //!
 //! This module owns the currency and exchange rate management

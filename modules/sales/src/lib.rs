@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Sales Module — core point-of-sale functionality.
 //!
 //! This is the first real module in the OZ-POS module system. It owns

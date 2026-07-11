@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Settings Module — store configuration and feature flag management.
 //!
 //! This module owns the settings vertical: store name, address, tax ID,

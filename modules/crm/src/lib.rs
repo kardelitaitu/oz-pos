@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! CRM Module — customer relationship management.
 //!
 //! This module owns the customer management vertical: customer CRUD,

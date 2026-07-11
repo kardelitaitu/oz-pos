@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Inventory Module — product catalog and stock management.
 //!
 //! This module owns the entire inventory vertical: product CRUD,
