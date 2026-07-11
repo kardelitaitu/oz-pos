@@ -144,12 +144,8 @@ func normalizePEM(raw string) string {
 }
 
 // wrapPEM wraps raw base64 data in a PEM envelope with the given type label
-// and standard 64-character line width. Any existing whitespace or newlines
-// in the base64 data are stripped before re-wrapping.
+// and standard 64-character line width.
 func wrapPEM(base64data, label string) string {
-	// Strip any existing whitespace/newlines from the base64 body.
-	base64data = strings.NewReplacer("\n", "", "\r", "", " ", "", "\t", "").Replace(base64data)
-
 	var sb strings.Builder
 	sb.WriteString("-----BEGIN ")
 	sb.WriteString(label)
