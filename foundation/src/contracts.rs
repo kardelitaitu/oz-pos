@@ -404,6 +404,7 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
         #[derive(Debug)]
         struct PriceEvent {
+            #[allow(dead_code)]
             amount: i32,
         }
         impl DomainEvent for PriceEvent {
@@ -437,7 +438,9 @@ mod tests {
         use anyhow::Context;
         let result: ModuleResult<u32> = Err(anyhow::anyhow!("io error"));
         let chained = result.context("while loading config");
-        let err = chained.unwrap_err();
+        let Err(err) = chained else {
+            panic!("Expected an error")
+        };
         let msg = format!("{err:#}");
         assert!(msg.contains("while loading config"));
         assert!(msg.contains("io error"));
@@ -450,7 +453,9 @@ mod tests {
             io::ErrorKind::NotFound,
             "file missing"
         )));
-        let err = result.unwrap_err();
+        let Err(err) = result else {
+            panic!("Expected an error")
+        };
         let root = err.root_cause();
         assert!(root.downcast_ref::<io::Error>().is_some());
     }

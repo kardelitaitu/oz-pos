@@ -73,10 +73,10 @@ pub async fn activate_license(
 pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().await;
     // Return the persisted machine ID if one already exists.
-    if let Some(existing) = Settings::get(&conn, "machine_id")? {
-        if !existing.is_empty() {
-            return Ok(existing);
-        }
+    if let Some(existing) = Settings::get(&conn, "machine_id")?
+        && !existing.is_empty()
+    {
+        return Ok(existing);
     }
     // Generate a new one and persist it.
     let id = generate_machine_id();

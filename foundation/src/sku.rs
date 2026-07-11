@@ -185,6 +185,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::clone_on_copy)]
     fn line_id_clone_and_copy() {
         let a = LineId::new();
         let b = a; // Copy

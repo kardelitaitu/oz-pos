@@ -12,10 +12,15 @@ pub mod commands;
 pub mod error;
 pub mod state;
 
+#[cfg(not(test))]
 use crate::error::AppError;
+#[cfg(not(test))]
 use crate::state::AppState;
+#[cfg(not(test))]
 use oz_core::db::Store;
+#[cfg(not(test))]
 use oz_core::sync_client::SyncConfig;
+#[cfg(not(test))]
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
