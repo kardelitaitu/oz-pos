@@ -110,7 +110,7 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
-		se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
+		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		return se.Next()
 	})
 }
@@ -297,7 +297,7 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
-		se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
+		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		return se.Next()
 	})
 
@@ -368,27 +368,69 @@ func seedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expi
 
 // ── Tests: Status Handler ────────────────────────────────────────
 
-func TestStatusHandler_TenantNotFound(t *testing.T) {
-	runScenario(t, &tests.ApiScenario{
-		Method:          "GET",
-		URL:             "/api/v1/license/status/n0t4f0und000000?api_key=test",
-		ExpectedStatus:  404,
-		ExpectedContent: []string{`"error"`, "tenant not found"},
-	})
+// TestStatusHandler_UnknownAPIKey verifies that a request with an api_key
+// that does not match any tenant in the database returns 401, not 404.
+// This is the C1-audit successor to the old TestStatusHandler_TenantNotFound:
+// with Bearer authentication, the server can no longer leak whether a given
+// tenant_id vs. api_key-vs-tenant combination is "valid".
+func TestStatusHandler_UnknownAPIKey(t *testing.T) {
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", nil)
+	req.Header.Set("Authorization", "Bearer notarealapikey0001")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "invalid api_key") {
+		t.Errorf("expected 'invalid api_key' in response, got: %s", rec.Body.String())
+	}
 }
 
 func TestStatusHandler_TenantNoSubscription(t *testing.T) {
 	// Seeds a tenant without any subscription — handler should return
 	// fallback response with active:false and tier:"unknown".
-	runScenario(t, &tests.ApiScenario{
-		Method:          "GET",
-		URL:             "/api/v1/license/status/nosubtest000001?api_key=nosubapikey0001",
-		ExpectedStatus:  200,
-		ExpectedContent: []string{`"tenant_id":"nosubtest000001"`, `"active":false`, `"tier":"unknown"`},
-		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
-			seedTenant(t.(*testing.T), app, "nosubtest000001", "nosubapikey0001", "active")
-		},
-	})
+	// Auth happens via Bearer header (C1 audit fix); no path or query
+	// parameters carry credentials.
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "nosubtest000001", "nosubapikey0001", "active")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", nil)
+	req.Header.Set("Authorization", "Bearer nosubapikey0001")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if body["tenant_id"] != "nosubtest000001" {
+		t.Errorf("expected tenant_id 'nosubtest000001', got %v", body["tenant_id"])
+	}
+	if body["active"] != false {
+		t.Errorf("expected active=false, got %v", body["active"])
+	}
+	if body["tier"] != "unknown" {
+		t.Errorf("expected tier 'unknown', got %v", body["tier"])
+	}
 }
 
 // ── Tests: Activate Handler ──────────────────────────────────────
@@ -578,7 +620,8 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 	seedTenant(t, app, "stathappy000001", "stathappykey001", "active")
 	seedSubscription(t, app, "stathappy000001", "pro", "active")
 
-	req := httptest.NewRequest("GET", "/api/v1/license/status/stathappy000001?api_key=stathappykey001", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", nil)
+	req.Header.Set("Authorization", "Bearer stathappykey001")
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {

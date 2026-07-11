@@ -86,7 +86,7 @@ pub struct RenewLicenseResponse {
     pub signature: String,
 }
 
-/// Response from `GET /api/v1/license/status/:tenant_id`.
+/// Response from `POST /api/v1/license/status`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LicenseStatusResponse {
     /// The tenant ID.
@@ -275,21 +275,23 @@ pub async fn renew_license(req: &RenewLicenseRequest) -> Result<RenewLicenseResp
 
 /// Check the current license status from the license server.
 ///
-/// GETs `/api/v1/license/status/:tenant_id?api_key=...`.
-pub async fn check_license_status(
-    tenant_id: &str,
-    api_key: &str,
-) -> Result<LicenseStatusResponse, CoreError> {
-    let url = format!(
-        "{}/api/v1/license/status/{}?api_key={}",
-        license_server_url(),
-        tenant_id,
-        api_key
-    );
+/// POSTs to `/api/v1/license/status` with the api_key carried in an
+/// `Authorization: Bearer <api_key>` header. The server authenticates the
+/// caller by this header alone (no `tenant_id` path parameter). Moving
+/// the credential out of the URL into a header prevents it from being
+/// captured in webserver access logs, CDN logs, browser history, or
+/// `Referer` request headers.
+///
+/// # Arguments
+/// * `api_key` - The API key returned by the activation response, used
+///   to authenticate this status check.
+pub async fn check_license_status(api_key: &str) -> Result<LicenseStatusResponse, CoreError> {
+    let url = format!("{}/api/v1/license/status", license_server_url());
     let client = reqwest::Client::new();
 
     let resp = client
-        .get(&url)
+        .post(&url)
+        .bearer_auth(api_key)
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await

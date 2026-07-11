@@ -58,7 +58,10 @@ func main() {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
-		se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
+		// /status uses POST + Authorization: Bearer <api_key> to keep the
+		// credential out of URLs (which would otherwise leak it to webserver
+		// access logs, CDN logs, browser history, and Referer headers).
+		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		return se.Next()
 	})
 

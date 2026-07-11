@@ -2,34 +2,55 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/pocketbase/pocketbase/core"
 )
 
+// bearerPrefix is the RFC 6750 scheme required on the Authorization header.
+// The scheme itself ("Bearer") is case-sensitive per RFC 7235 §2.1; the
+// header NAME is case-insensitive and normalized by Go's http.Header.Get.
+const bearerPrefix = "Bearer "
+
+// handleStatus returns the current license status for a tenant.
+//
+// POST /api/v1/license/status
+// Authorization: Bearer <api_key>
+//
+// The api_key is the sole authenticator. The `tenants.api_key` column is
+// uniquely indexed (see renew.go for the same lookup pattern), so we resolve
+// the tenant in one query without needing a tenant_id path parameter.
+// This avoids leaking the credential through webserver access logs,
+// CDN request logs, browser history, or Referer headers.
+//
+// All authentication failures (missing/malformed header, unknown api_key,
+// non-active tenant) return 401 with a generic message — never 403, which
+// would imply successful authentication — and never reveal whether the
+// failure was an unknown key vs. a suspended tenant.
 func handleStatus(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		tenantID := e.Request.PathValue("tenant_id")
-		apiKey := e.Request.URL.Query().Get("api_key")
-
+		// ── Authenticate via Authorization: Bearer header ────────
+		auth := e.Request.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, bearerPrefix) {
+			return e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "missing or malformed Authorization header (expected: Bearer <api_key>)",
+			})
+		}
+		apiKey := strings.TrimPrefix(auth, bearerPrefix)
 		if apiKey == "" {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key is required",
+				"error": "missing or malformed Authorization header (expected: Bearer <api_key>)",
 			})
 		}
 
-		// ── Find tenant ───────────────────────────────────────────
-		tenant, err := app.FindRecordById("tenants", tenantID)
-		if err != nil {
-			return e.JSON(http.StatusNotFound, map[string]any{
-				"error": "tenant not found",
+		// ── Look up tenant by api_key (uniquely indexed) ─────────
+		tenant, err := app.FindFirstRecordByData("tenants", "api_key", apiKey)
+		if err != nil || tenant.GetString("status") != "active" {
+			return e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "invalid api_key or tenant is not active",
 			})
 		}
-
-		if tenant.GetString("api_key") != apiKey {
-			return e.JSON(http.StatusForbidden, map[string]any{
-				"error": "invalid api_key",
-			})
-		}
+		tenantID := tenant.Id
 
 		// ── Find latest subscription ──────────────────────────────
 		subs, err := app.FindRecordsByFilter(
