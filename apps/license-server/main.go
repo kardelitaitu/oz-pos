@@ -12,7 +12,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 
@@ -75,9 +74,10 @@ func main() {
 //   - Literal "\\n" escape sequences (double-escaped in JSON/YAML)
 //   - Surrounding whitespace and quotes
 func normalizePEM(raw string) string {
-	// Strip surrounding whitespace and quotes.
+	// Strip surrounding whitespace.
 	raw = strings.TrimSpace(raw)
-	raw = strings.Trim(raw, "\"'")
+	// Strip surrounding quotes, then re-trim in case quotes hid whitespace.
+	raw = strings.TrimSpace(strings.Trim(raw, "\"'"))
 
 	// Replace literal backslash-n sequences with real newlines.
 	raw = strings.ReplaceAll(raw, "\\n", "\n")

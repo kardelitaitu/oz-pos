@@ -240,3 +240,320 @@ func initPrivateKey(t testing.TB) {
 		privateKey = key
 	}
 }
+
+// ── Tests: PEM Normalization ──────────────────────────────────────
+
+func TestNormalizePEM_AlreadyValid(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	original := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	result := normalizePEM(original)
+	// normalizePEM trims whitespace, so the result may differ from original
+	// but must still decode as valid PEM.
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("already-valid PEM should decode successfully after normalization")
+	}
+	_, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		t.Fatalf("already-valid PEM should parse after normalization: %v", err)
+	}
+}
+
+func TestNormalizePEM_SingleLine(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	// Strip all newlines to simulate Northflank-style single-line key.
+	singleLine := strings.ReplaceAll(valid, "\n", "")
+
+	result := normalizePEM(singleLine)
+	if !strings.Contains(result, "-----\n") {
+		t.Error("single-line PEM should be re-wrapped with line breaks")
+	}
+
+	// The result must be decodable.
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("normalized single-line PEM should decode successfully")
+	}
+	_, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		t.Fatalf("normalized PEM should parse as PKCS8: %v", err)
+	}
+}
+
+func TestNormalizePEM_LiteralBackslashN(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	// Replace real newlines with literal \n (double-escaped in JSON/YAML env vars).
+	literal := strings.ReplaceAll(valid, "\n", "\\n")
+
+	result := normalizePEM(literal)
+	if strings.Contains(result, "\\n") {
+		t.Error("literal \\n should be converted to real newlines")
+	}
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("PEM with literal \\n should decode after normalization")
+	}
+}
+
+func TestNormalizePEM_SurroundingQuotes(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	quoted := "\"  " + valid + "  \""
+	result := normalizePEM(quoted)
+	if strings.HasPrefix(result, "\"") {
+		t.Error("surrounding quotes should be stripped")
+	}
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("quoted PEM should decode after normalization")
+	}
+}
+
+func TestNormalizePEM_SurroundingWhitespace(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	spaced := "  \n  " + valid + "  \n  "
+	result := normalizePEM(spaced)
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("whitespace-padded PEM should decode after normalization")
+	}
+}
+
+// ── Tests: wrapPEM (raw base64) ───────────────────────────────────
+
+func TestWrapPEM_RawBase64(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	// Extract just the base64 body (strip PEM headers).
+	lines := strings.Split(strings.TrimSpace(valid), "\n")
+	var rawBase64 strings.Builder
+	for _, line := range lines {
+		if strings.HasPrefix(line, "-----") {
+			continue
+		}
+		rawBase64.WriteString(line)
+	}
+
+	result := normalizePEM(rawBase64.String())
+	if !strings.HasPrefix(result, "-----BEGIN PRIVATE KEY-----") {
+		t.Error("raw base64 should be wrapped in PKCS#8 PEM envelope")
+	}
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("wrapped base64 should produce valid PEM")
+	}
+}
+
+func TestWrapPEM_StripWhitespace(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs8DER, _ := x509.MarshalPKCS8PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	// Extract base64 with embedded newlines (64-char wrapped, no headers).
+	lines := strings.Split(strings.TrimSpace(valid), "\n")
+	var rawWithNewlines strings.Builder
+	for _, line := range lines {
+		if strings.HasPrefix(line, "-----") {
+			continue
+		}
+		rawWithNewlines.WriteString(line)
+		rawWithNewlines.WriteString("\n")
+	}
+
+	result := normalizePEM(rawWithNewlines.String())
+	// Result should have exactly 64-char lines (not doubled newlines).
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("base64 with embedded newlines should produce valid PEM")
+	}
+}
+
+func TestWrapPEM_RSAKeyType(t *testing.T) {
+	testKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pkcs1DER := x509.MarshalPKCS1PrivateKey(testKey)
+	valid := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: pkcs1DER}))
+
+	// Extract base64 from PKCS1 PEM, wrap in PKCS8 envelope.
+	lines := strings.Split(strings.TrimSpace(valid), "\n")
+	var rawBase64 strings.Builder
+	for _, line := range lines {
+		if strings.HasPrefix(line, "-----") {
+			continue
+		}
+		rawBase64.WriteString(line)
+	}
+
+	// normalizePEM wraps raw base64 in PKCS8 format by default.
+	result := normalizePEM(rawBase64.String())
+	block, _ := pem.Decode([]byte(result))
+	if block == nil {
+		t.Fatal("wrapped raw base64 should produce valid PEM")
+	}
+	// The DER bytes are PKCS1, so ParsePKCS1PrivateKey should succeed
+	// regardless of the PEM "PRIVATE KEY" type label.
+	parsed, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		t.Fatalf("PKCS1 DER should parse with ParsePKCS1PrivateKey: %v", err)
+	}
+	if parsed == nil {
+		t.Fatal("parsed key should not be nil")
+	}
+}
+
+// ── Tests: Helpers ────────────────────────────────────────────────
+
+func TestStrDefault_NonEmpty(t *testing.T) {
+	if strDefault("hello", "world") != "hello" {
+		t.Error("strDefault should return s when non-empty")
+	}
+}
+
+func TestStrDefault_Empty(t *testing.T) {
+	if strDefault("", "default") != "default" {
+		t.Error("strDefault should return d when s is empty")
+	}
+}
+
+func TestStrDefault_BothEmpty(t *testing.T) {
+	if strDefault("", "") != "" {
+		t.Error("strDefault should return empty string when both are empty")
+	}
+}
+
+func TestGenerateAPIKey_HasPrefix(t *testing.T) {
+	k := generateAPIKey()
+	if !strings.HasPrefix(k, "oz_") {
+		t.Errorf("API key should have 'oz_' prefix, got: %s", k)
+	}
+}
+
+// ── Tests: Rate Limiter Edge Cases ────────────────────────────────
+
+func TestRateLimiter_IsolatedByIP(t *testing.T) {
+	rl := &rateLimiter{buckets: make(map[string]*tokenBucket), maxPerHr: 3}
+	ip1 := "192.168.1.1"
+	ip2 := "192.168.1.2"
+
+	// Exhaust ip1.
+	for i := 0; i < 3; i++ {
+		rl.allow(ip1)
+	}
+	if rl.allow(ip1) {
+		t.Error("ip1 should be blocked after exhausting tokens")
+	}
+	// ip2 should still have full quota.
+	for i := 0; i < 3; i++ {
+		if !rl.allow(ip2) {
+			t.Errorf("ip2 request %d should be allowed (not affected by ip1)", i+1)
+		}
+	}
+}
+
+func TestRateLimiter_DefaultMaxPerHr(t *testing.T) {
+	if ipRateLimiter.maxPerHr != 5 {
+		t.Errorf("global ipRateLimiter should default to 5 per hour, got %d", ipRateLimiter.maxPerHr)
+	}
+}
+
+// ── Tests: Key Failure Tracker Edge Cases ─────────────────────────
+
+func TestKeyFailureTracker_IsolatedByKey(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+	key1 := "OZ-KEY-1"
+	key2 := "OZ-KEY-2"
+
+	// Exhaust key1.
+	for i := 0; i < 3; i++ {
+		kf.recordFailure(key1)
+	}
+	if !kf.isBlocked(key1) {
+		t.Error("key1 should be blocked after 3 failures")
+	}
+	// key2 should not be affected.
+	if kf.isBlocked(key2) {
+		t.Error("key2 should not be blocked (isolated from key1)")
+	}
+}
+
+func TestKeyFailureTracker_PartialFailures(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+	key := "OZ-PARTIAL"
+
+	// 2 failures should not block.
+	kf.recordFailure(key)
+	kf.recordFailure(key)
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after only 2 failures")
+	}
+	// 3rd failure should block.
+	kf.recordFailure(key)
+	if !kf.isBlocked(key) {
+		t.Error("should be blocked after 3rd failure")
+	}
+}
+
+func TestKeyFailureTracker_CleanupAfterCooldown(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: 100 * time.Millisecond}
+	key := "OZ-CLEANUP"
+
+	for i := 0; i < 3; i++ {
+		kf.recordFailure(key)
+	}
+	if !kf.isBlocked(key) {
+		t.Error("should be blocked after 3 failures")
+	}
+
+	time.Sleep(150 * time.Millisecond)
+
+	// After cooldown, the entry should be cleaned up on next check.
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after cooldown expires")
+	}
+	// New failures should start fresh.
+	kf.recordFailure(key)
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after single fresh failure")
+	}
+}
+
+// ── Tests: Expiry Edge Cases ──────────────────────────────────────
+
+func TestCalculateExpiry_Premium(t *testing.T) {
+	exp := calculateExpiry("premium")
+	diff := exp.Sub(time.Now().UTC().AddDate(1, 0, 0))
+	if diff > time.Hour || diff < -time.Hour {
+		t.Errorf("premium expiry should be ~1 year, got diff %v", diff)
+	}
+}
+
+func TestCalculateExpiry_Unknown(t *testing.T) {
+	exp := calculateExpiry("unknown-tier")
+	diff := exp.Sub(time.Now().UTC().AddDate(1, 0, 0))
+	if diff > time.Hour || diff < -time.Hour {
+		t.Errorf("unknown tier should default to ~1 year, got diff %v", diff)
+	}
+}
+
+func TestCalculateExpiry_SameLength(t *testing.T) {
+	pro := calculateExpiry("pro")
+	premium := calculateExpiry("premium")
+	diff := pro.Sub(premium)
+	if diff > time.Hour || diff < -time.Hour {
+		t.Errorf("pro and premium should have same expiry, got diff %v", diff)
+	}
+}
