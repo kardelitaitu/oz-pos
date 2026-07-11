@@ -466,6 +466,75 @@ func TestRateLimiter_DefaultMaxPerHr(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_SweepRemovesExpiredBuckets(t *testing.T) {
+	rl := &rateLimiter{buckets: make(map[string]*tokenBucket), maxPerHr: 3}
+
+	// Insert old buckets.
+	rl.mu.Lock()
+	rl.buckets["10.0.0.1"] = &tokenBucket{tokens: 1, lastFill: time.Now().Add(-3 * time.Hour)}
+	rl.buckets["10.0.0.2"] = &tokenBucket{tokens: 2, lastFill: time.Now()} // fresh
+	rl.mu.Unlock()
+
+	// Sweep should remove only the expired bucket.
+	rl.sweep()
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if _, ok := rl.buckets["10.0.0.1"]; ok {
+		t.Error("expired bucket 10.0.0.1 should have been swept")
+	}
+	if _, ok := rl.buckets["10.0.0.2"]; !ok {
+		t.Error("fresh bucket 10.0.0.2 should NOT be swept")
+	}
+}
+
+func TestRateLimiter_SweepEmpty(t *testing.T) {
+	rl := &rateLimiter{buckets: make(map[string]*tokenBucket), maxPerHr: 3}
+	rl.sweep() // should not panic on empty map
+	if len(rl.buckets) != 0 {
+		t.Error("sweeping empty map should leave it empty")
+	}
+}
+
+func TestKeyFailureTracker_SweepRemovesExpiredEntries(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+
+	// Insert a partial failure that's very old.
+	kf.mu.Lock()
+	kf.failures["old-partial"] = &keyFailures{count: 1, lastAttempt: time.Now().Add(-48 * time.Hour)}
+	// Insert a cooldown entry that's past its cooldown.
+	kf.failures["cooled-down"] = &keyFailures{
+		count: 5, cooldownAt: time.Now().Add(-1 * time.Hour), lastAttempt: time.Now(),
+	}
+	// Insert a fresh blocked entry (still in cooldown).
+	kf.failures["fresh-blocked"] = &keyFailures{
+		count: 5, cooldownAt: time.Now().Add(1 * time.Hour), lastAttempt: time.Now(),
+	}
+	kf.mu.Unlock()
+
+	kf.sweep()
+
+	kf.mu.Lock()
+	defer kf.mu.Unlock()
+	if _, ok := kf.failures["old-partial"]; ok {
+		t.Error("old partial failure should have been swept")
+	}
+	if _, ok := kf.failures["cooled-down"]; ok {
+		t.Error("cooled-down entry should have been swept")
+	}
+	if _, ok := kf.failures["fresh-blocked"]; !ok {
+		t.Error("fresh blocked entry should NOT be swept")
+	}
+}
+
+func TestKeyFailureTracker_SweepEmpty(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+	kf.sweep() // should not panic on empty map
+	if len(kf.failures) != 0 {
+		t.Error("sweeping empty map should leave it empty")
+	}
+}
+
 // ── Tests: Key Failure Tracker Edge Cases ─────────────────────────
 
 func TestKeyFailureTracker_IsolatedByKey(t *testing.T) {

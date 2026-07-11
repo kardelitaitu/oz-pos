@@ -610,8 +610,19 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 }
 
 func resetRateLimiters() {
+	ipRateLimiter.stop()
+	keyFailTracker.stop()
+
+	ipRateLimiter.mu.Lock()
 	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	ipRateLimiter.mu.Unlock()
+
+	keyFailTracker.mu.Lock()
 	keyFailTracker.failures = make(map[string]*keyFailures)
+	keyFailTracker.mu.Unlock()
+
+	ipRateLimiter.startCleanup()
+	keyFailTracker.startCleanup()
 }
 
 func TestRenewHandler_NoSubscription(t *testing.T) {

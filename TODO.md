@@ -2,17 +2,39 @@
 
 ## Rust Codebase Documentation Audit (1,400+ missing docs)
 
-### Phase 1: Core Crates
-- `[ ]` Document `foundation` crate (~9 warnings)
-- `[ ]` Document `platform-sync` crate (~10 warnings)
-- `[ ]` Document `oz-api` crate (~24 warnings)
-- `[ ]` Document `oz-plugin` crate (~46 warnings)
+### Phase 1: Core Crates (~89 total)
+- `[ ]` **`crates/oz-core/`** — Domain model & data access (was "foundation", ~15 doc + ~81 missing)
+  - `[x]` Top-level core types: `lib.rs`, `error.rs`, `money.rs`, `migrations.rs`
+  - `[x]` Auth & identity: `auth.rs`, `user.rs`, `user_preferences.rs`, `session.rs`, `subscription.rs`, `license_verification.rs`
+  - `[x]` Products & inventory: `product.rs`, `product_variant.rs`, `product_bundle.rs`, `category.rs`, `sku.rs`, `inventory.rs`, `stock_count.rs`, `stock_transfer.rs`
+  - `[ ]` Sales & payments: `sale.rs`, `cart.rs`, `refund.rs`, `promotion.rs`, `gift_card.rs`, `payment.rs`, `exchange_rate.rs`
+  - `[ ]` Operations: `shift.rs`, `cash_payout.rs`, `table.rs`, `kds.rs`, `recipe.rs`, `purchase_order.rs`, `supplier.rs`
+  - `[ ]` Config & infrastructure: `settings.rs`, `store_profile.rs`, `terminal.rs`, `terminal_profile.rs`, `terminal_override.rs`, `features.rs`, `audit.rs`, `cache.rs`, `events.rs`, `offline.rs`, `ozpkg.rs`
+  - `[ ]` `db/` data access layer (~31 modules: sales, products, payments, inventory, settings, staff, customers, loyalty, promotions, etc.)
+  - `[ ]` Sync subsystem (was "platform-sync"): `sync/` (`mod.rs`, `lan_discovery.rs`) + `sync_client.rs`
+- `[ ]` **`crates/oz-api/`** — REST API crate (~24 warnings)
+  - `[ ]` Top-level: `lib.rs`, `auth.rs`
+  - `[ ]` API route handlers: `routes/` (`mod.rs`, `health.rs`, `tokens.rs`, `categories.rs`, `products.rs`, `sales.rs`)
+- `[ ]` **`crates/oz-plugin/`** — Plugin system (~46 warnings)
+  - `[ ]` All modules: `lib.rs`, `manifest.rs`, `manager.rs`, `loader.rs`, `package.rs`, `db.rs`, `error.rs`
 
-### Phase 2: Tablet App
-- `[ ]` Document `oz-pos-tablet` crate (~501 warnings, primarily Tauri commands)
+### Phase 2: Tablet App (~501 warnings)
+- `[ ]` **`apps/tablet-client/src/`** — Tauri tablet commands
+  - `[ ]` Top-level: `lib.rs`, `error.rs`, `state.rs`
+  - `[ ]` Auth & config commands: `auth.rs`, `authz.rs`, `branding.rs`, `features.rs`, `settings.rs`, `setup.rs`, `currencies.rs`, `exchange_rates.rs`
+  - `[ ]` Product & inventory commands: `products.rs`, `product_variants.rs`, `categories.rs`, `bundles.rs`, `inventory_counts.rs`, `stock_transfers.rs`
+  - `[ ]` Sales & payment commands: `pos.rs`, `sales.rs`, `refunds.rs`, `void.rs`, `gift_cards.rs`, `loyalty.rs`, `promotions.rs`, `purchasing.rs`
+  - `[ ]` Operations commands: `shifts.rs`, `staff.rs`, `tables.rs`, `kds.rs`, `history.rs`, `reports.rs`, `audit.rs`
+  - `[ ]` Hardware & infrastructure: `hardware.rs`, `scale.rs`, `health.rs`, `offline.rs`, `sync.rs`, `tax.rs`, `terminals.rs`, `customers.rs`, `data.rs`, `license.rs`, `plugins.rs`
 
-### Phase 3: Desktop App
-- `[ ]` Document `oz-pos-app` crate (~811 warnings, primarily Tauri commands)
+### Phase 3: Desktop App (~811 warnings)
+- `[ ]` **`apps/desktop-client/src/`** — Tauri desktop commands
+  - `[ ]` Top-level: `lib.rs`, `error.rs`, `state.rs`, `lan_server.rs`
+  - `[ ]` Auth & config commands: `auth.rs`, `authz.rs`, `branding.rs`, `features.rs`, `settings.rs`, `setup.rs`, `currencies.rs`, `exchange_rates.rs`
+  - `[ ]` Product & inventory commands: `products.rs`, `product_variants.rs`, `categories.rs`, `bundles.rs`, `inventory_counts.rs`, `stock_transfers.rs`
+  - `[ ]` Sales & payment commands: `pos.rs`, `sales.rs`, `refunds.rs`, `void.rs`, `gift_cards.rs`, `loyalty.rs`, `promotions.rs`, `purchasing.rs`
+  - `[ ]` Operations commands: `shifts.rs`, `staff.rs`, `tables.rs`, `kds.rs`, `history.rs`, `reports.rs`, `audit.rs`
+  - `[ ]` Hardware & infrastructure: `hardware.rs`, `scale.rs`, `health.rs`, `offline.rs`, `sync.rs`, `tax.rs`, `terminals.rs`, `customers.rs`, `data.rs`, `license.rs`, `plugins.rs`, `workspaces.rs`
 
 ---
 ## 1. Centralized Branding & Assets Architecture (`assets/`)
