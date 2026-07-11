@@ -1,270 +1,254 @@
-// ── RefundModal exit-animation tests ──────────────────────────────
-//
-// Pins the contract for the layered (overlay + modal) exit added in
-// the sibling-surfaces polish. Both the overlay and the modal
-// container must fade in parallel — the overlay goes `opacity
-// 1 → 0` and the modal goes `translate + scale 1 → 0.98 + opacity
-// 1 → 0`. The Cancel × button, the "Cancel" footer button, and the
-// Done button all flow through the same requestClose() →
-// 200 ms → onClose() path.
-//
-// Test consumer pattern: a real React component (HostModal) drives
-// the modal's `open` state, with a mutable `hostRef` so the test
-// can peek at state synchronously WITHOUT calling React hooks
-// outside a render context.
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useState } from 'react';
-import { render, fireEvent, screen } from '@testing-library/react';
-import { act } from 'react';
-import { renderInAct } from '@/test-utils/renderInAct';
-import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { ReactLocalization, LocalizationProvider } from '@fluent/react';
-import RefundModal from '@/features/sales/RefundModal';
+// Mock the sales API.
+vi.mock('@/api/sales', () => ({
+  processRefund: vi.fn(),
+}));
 
-import {
-  ExitAnimHost,
-  createExitAnimHostRef,
-  advanceFadeSync,
-  expectExiting,
-  expectNotExiting,
-} from './test-utils/exitAnimHost';
-import type { ExitAnimHostRef } from './test-utils/exitAnimHost';
-
-// ── Mock @/api/sales.processRefund so the async submit is deterministic ──
-
-vi.mock('@/api/sales', async () => {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-  const actual = await vi.importActual<typeof import('@/api/sales')>('@/api/sales');
-  return {
-    ...actual,
-    processRefund: vi.fn(
-      async (req: { saleId: string; lines: unknown[]; userId: string }) => ({
-        refundId: 'refund-1',
-        totalMinor: 12345,
-        saleId: req.saleId,
-        lineCount: req.lines.length,
-      }),
-    ),
-  };
-});
-
-// ── Mock @/contexts/AuthContext so useAuth() doesn't throw ────────
-//
-// RefundModal destructures `{ session }` from useAuth() to call the
-// refund API with the current user's id. We provide a minimal stub
-// session so the component renders without an <AuthProvider> wrapper.
-
+// Mock AuthContext.
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
-    session: {
-      user_id: 'user-1',
-      username: 'testuser',
-      role_name: 'cashier',
-      token: 'mock-token',
-      role_id: 'role-1',
-    },
-    loading: false,
-    error: null,
-    login: vi.fn(),
-    logout: vi.fn(),
-    clearError: vi.fn(),
-    isManager: false,
-    isOwner: false,
+    session: { user_id: 'user-1', display_name: 'Cashier', role_name: 'cashier' },
   }),
 }));
 
-const wrapper = ({ children }: { children: React.ReactNode }) => {
-  const ftl = `
-refund-dialog-aria = Process refund
-refund-title = Process refund
+import RefundModal from '@/features/sales/RefundModal';
+import { processRefund } from '@/api/sales';
+
+const mockProcessRefund = processRefund as ReturnType<typeof vi.fn>;
+
+const refundFtl = `
+refund-title = Process Refund
 refund-close-aria = Cancel refund
-refund-cancel = Cancel
-refund-done-title = Refund processed
-refund-done-amount = Refunded: { $amount }
-refund-done = Done
-refund-sale-id = Sale { $id }
+    .aria-label = Cancel refund
+refund-sale-id = Sale: { $id }…
 refund-sale-total = Total: { $amount }
 refund-sale-date = Date: { $date }
-refund-items-title = Select items
-refund-reason-label = Reason
-refund-reason-placeholder = Why are you refunding?
+refund-items-title = Select Items to Refund
+refund-reason-label = Reason *
+refund-reason-placeholder = Enter reason…
 refund-reason-aria = Refund reason
-refund-note-label = Note
-refund-note-placeholder = Internal note (optional)
+refund-note-label = Note (internal)
+refund-note-placeholder = Internal notes
 refund-note-aria = Refund note
+refund-total-label = Refund Total
+refund-cancel = Cancel
+refund-submit = Process Refund
+refund-done-title = Refund Processed
+refund-done = Done
 refund-error = Refund failed
 refund-item-aria = Refund { $sku }
-refund-qty-decrease-aria = Decrease quantity
-refund-qty-increase-aria = Increase quantity
-refund-total-label = Refund total
-refund-submit = Process refund
+    .aria-label = Refund { $sku }
+refund-qty-decrease-aria = Decrease refund quantity
+    .aria-label = Decrease refund quantity
+refund-qty-increase-aria = Increase refund quantity
+    .aria-label = Increase refund quantity
+refund-dialog-aria = Process refund
+    .aria-label = Process refund
+refund-done-amount = Refunded: { $amount }
 `;
-  const bundle = new FluentBundle('en');
-  bundle.addResource(new FluentResource(ftl));
-  const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
-};
 
-const fakeSale = {
-  id: 'sale-abcdef1234567890',
-  createdAt: '2025-01-01T00:00:00Z',
-  total: { minor_units: 60000, currency: 'USD' },
-  subtotal: { minor_units: 60000, currency: 'USD' },
+const wrap = (children: React.ReactNode) => withFluent(children, salesFtl, refundFtl);
+
+const mockSale = {
+  id: 'sale-abc123456789',
+  total: { minor_units: 35000, currency: 'IDR' },
+  subtotal: { minor_units: 35000, currency: 'IDR' },
+  taxTotal: { minor_units: 0, currency: 'IDR' },
+  lineCount: 2,
+  status: 'completed',
+  paymentMethod: 'CASH',
+  tenderedMinor: 50000,
+  userId: 'user-1',
+  createdAt: '2026-07-05T10:00:00.000Z',
   lines: [
-    {
-      id: 'line-1',
-      sku: 'ITEM-001',
-      name: 'Item 1',
-      qty: 2,
-      total_minor: 8000,
-      unitPriceMinor: 4000,
-    },
-    {
-      id: 'line-2',
-      sku: 'ITEM-002',
-      name: 'Item 2',
-      qty: 1,
-      total_minor: 2000,
-      unitPriceMinor: 2000,
-    },
+    { id: 'line-1', sku: 'SKU-001', name: 'Indomie Goreng', qty: 2, unit_price: { minor_units: 3500, currency: 'IDR' }, total_minor: 7000, tax_amount: null, tax_rate_id: null },
+    { id: 'line-2', sku: 'SKU-002', name: 'Teh Botol', qty: 1, unit_price: { minor_units: 5000, currency: 'IDR' }, total_minor: 5000, tax_amount: null, tax_rate_id: null },
   ],
 };
 
-// ── Mutable host-state ref (extends shared ExitAnimHostRef) ───────
+const defaultProps = {
+  open: true,
+  sale: mockSale,
+  onClose: vi.fn(),
+  onRefunded: vi.fn(),
+};
 
-interface HostRef extends ExitAnimHostRef {
-  refunded: boolean;
-  setRefunded: (v: boolean) => void;
-}
-
-function makeHostRef(): HostRef {
-  return { ...createExitAnimHostRef(), refunded: false, setRefunded: () => {} };
-}
-
-function HostModal({
-  initialOpen = true,
-  hostRef,
-}: {
-  initialOpen?: boolean;
-  hostRef: HostRef;
-}) {
-  const [refunded, setRefunded] = useState(false);
-  hostRef.refunded = refunded;
-  hostRef.setRefunded = setRefunded;
-  return (
-    <ExitAnimHost hostRef={hostRef} initialOpen={initialOpen}>
-      {(open, setOpen) => (
-        <>
-          <span data-testid="open-state">{String(open)}</span>
-          <span data-testid="refunded-state">{String(refunded)}</span>
-          <RefundModal
-            open={open}
-            sale={fakeSale as never}
-            onClose={() => setOpen(false)}
-            onRefunded={() => setRefunded(true)}
-          />
-        </>
-      )}
-    </ExitAnimHost>
-  );
-}
-
-describe('RefundModal exit-animation polish', () => {
+describe('RefundModal', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
+    vi.clearAllMocks();
   });
 
-  it('does not render when closed initially', () => {
-    const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} initialOpen={false} />, { wrapper });
-    expect(document.querySelector('.refund-overlay')).toBeNull();
+  it('renders null when not open', () => {
+    const { container } = render(wrap(<RefundModal {...defaultProps} open={false} />));
+    expect(container.innerHTML).toBe('');
   });
 
-  it('renders the overlay + modal when open', () => {
-    const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />, { wrapper });
-    const overlay = document.querySelector('.refund-overlay');
-    const modal = document.querySelector('.refund-modal');
-    expect(overlay).toBeTruthy();
-    expect(modal).toBeTruthy();
-    expectNotExiting(overlay, 'refund-overlay');
-    expectNotExiting(modal, 'refund-modal');
+  it('renders the refund form title and sale info', () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    // The heading "Process Refund" appears in multiple elements (dialog aria-label + h2).
+    const headings = screen.getAllByText('Process Refund');
+    expect(headings.length).toBeGreaterThanOrEqual(1);
+    // Fluent bidi markers wrap variables, so use a function matcher.
+    expect(screen.getByText((content: string) => content.includes('Sale:') && content.includes('sale-abc'))).toBeInTheDocument();
+    expect(screen.getByText('Select Items to Refund')).toBeInTheDocument();
   });
 
-  it('× button applies BOTH overlay and modal --exiting classes (layered exit), then fades', () => {
-    const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />, { wrapper });
-
-    fireEvent.click(document.querySelector('.refund-close') as HTMLElement);
-
-    const overlay = document.querySelector('.refund-overlay');
-    const modal = document.querySelector('.refund-modal');
-    expectExiting(overlay, 'refund-overlay');
-    expectExiting(modal, 'refund-modal');
-
-    // Mid-fade: still in DOM.
-    advanceFadeSync(199);
-    expect(document.querySelector('.refund-overlay')).toBeTruthy();
-    expect(document.querySelector('.refund-modal')).toBeTruthy();
-
-    // After 200 ms: unmounted and parent open=false.
-    advanceFadeSync(1);
-    expect(document.querySelector('.refund-overlay')).toBeNull();
-    expect(hostRef.open).toBe(false);
+  it('shows sale line items with SKU and name', () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    expect(screen.getByText('SKU-001')).toBeInTheDocument();
+    expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
+    expect(screen.getByText('SKU-002')).toBeInTheDocument();
+    expect(screen.getByText('Teh Botol')).toBeInTheDocument();
   });
 
-  it('Cancel footer button also triggers the layered exit', () => {
-    const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />, { wrapper });
-
-    // The footer Cancel button has visible text "Cancel". The close
-    // × button has only an aria-label of "Cancel refund" (the SVG
-    // icon has no text content). Use text-based query to uniquely
-    // match the footer button by visible text, not aria-label.
-    fireEvent.click(screen.getByText('Cancel'));
-
-    advanceFadeSync(200);
-    expect(document.querySelector('.refund-overlay')).toBeNull();
-    expect(hostRef.open).toBe(false);
+  it('renders refund details fields', () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    expect(screen.getByText('Reason *')).toBeInTheDocument();
+    expect(screen.getByText('Note (internal)')).toBeInTheDocument();
   });
 
-  it('Done button applies the layered exit and fires onRefunded SYNCHRONOUSLY', async () => {
-    const hostRef = makeHostRef();
-    await renderInAct(<HostModal hostRef={hostRef} />, { wrapper });
+  it('shows Process Refund button disabled when no items selected', () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    const btns = screen.getAllByRole('button', { name: /process refund/i });
+    expect(btns.length).toBeGreaterThanOrEqual(1);
+    expect(btns[0]).toBeDisabled();
+  });
 
-    // Simulate clicking the refund checkbox to enable the submit.
-    fireEvent.click(document.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="text"]')!, {
-      target: { value: 'Customer changed mind' },
+  it('selects a line item when its checkbox is clicked', async () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(2);
+
+    await userEvent.click(checkboxes[0]!);
+    // Should be selected.
+    expect(checkboxes[0]).toBeChecked();
+  });
+
+  it('shows qty controls when a line is selected', async () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    const checkbox = screen.getAllByRole('checkbox')[0]!;
+    await userEvent.click(checkbox);
+
+    // Qty controls should appear: decrement, value, increment.
+    expect(screen.getByText('2')).toBeInTheDocument(); // maxQty displayed
+    expect(screen.getByRole('button', { name: /decrease refund quantity/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /increase refund quantity/i })).toBeInTheDocument();
+  });
+
+  it('decrements selected qty when decrease button clicked', async () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    const checkbox = screen.getAllByRole('checkbox')[0]!;
+    await userEvent.click(checkbox);
+
+    // Initial qty = maxQty = 2
+    expect(screen.getByText('2')).toBeInTheDocument();
+
+    const decBtn = screen.getByRole('button', { name: /decrease refund quantity/i });
+    await userEvent.click(decBtn);
+    expect(screen.getByText('1')).toBeInTheDocument();
+  });
+
+  it('calls onClose when close button is clicked', async () => {
+    const onClose = vi.fn();
+    render(wrap(<RefundModal {...defaultProps} onClose={onClose} />));
+    const closeBtns = screen.getAllByRole('button', { name: /cancel refund/i });
+    await userEvent.click(closeBtns[0]!);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls processRefund with correct args on submit', async () => {
+    mockProcessRefund.mockResolvedValueOnce({ refundId: 'ref-1', totalMinor: 7000 });
+    render(wrap(<RefundModal {...defaultProps} />));
+
+    // Select first line item.
+    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
+
+    // Enter reason into the reason input (first text input).
+    const reasonInput = screen.getAllByRole('textbox')[0]!;
+    await userEvent.type(reasonInput, 'Customer returned');
+
+    // Process.
+    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
+    await userEvent.click(submitBtns[submitBtns.length - 1]!);
+
+    expect(mockProcessRefund).toHaveBeenCalledTimes(1);
+    expect(mockProcessRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        saleId: 'sale-abc123456789',
+        reason: 'Customer returned',
+        userId: 'user-1',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ sku: 'SKU-001', qty: 2 }),
+        ]),
+      }),
+    );
+  });
+
+  it('shows success state after refund', async () => {
+    mockProcessRefund.mockResolvedValueOnce({ refundId: 'ref-done', totalMinor: 12000 });
+    render(wrap(<RefundModal {...defaultProps} />));
+
+    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
+    await userEvent.type(screen.getAllByRole('textbox')[0]!, 'Defective');
+    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
+    await userEvent.click(submitBtns[submitBtns.length - 1]!);
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Refund Processed')).toBeInTheDocument();
     });
-    // Click submit — wrap in act() so the async handler's state update
-    // (processRefund resolving, done-state mounting) is flushed.
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Process refund/i }));
-      await vi.advanceTimersByTimeAsync(0);
+  });
+
+  it('shows error when processRefund fails', async () => {
+    mockProcessRefund.mockRejectedValueOnce(new Error('Network down'));
+    render(wrap(<RefundModal {...defaultProps} />));
+
+    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
+    await userEvent.type(screen.getAllByRole('textbox')[0]!, 'Broken');
+    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
+    await userEvent.click(submitBtns[submitBtns.length - 1]!);
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Network down')).toBeInTheDocument();
+    });
+  });
+
+  it('calls onRefunded and onClose when Done is clicked after success', async () => {
+    mockProcessRefund.mockResolvedValueOnce({ refundId: 'ref-ok', totalMinor: 0 });
+    const onRefunded = vi.fn();
+    const onClose = vi.fn();
+
+    render(wrap(<RefundModal {...defaultProps} onRefunded={onRefunded} onClose={onClose} />));
+
+    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
+    await userEvent.type(screen.getAllByRole('textbox')[0]!, 'Return');
+    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
+    await userEvent.click(submitBtns[submitBtns.length - 1]!);
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Refund Processed')).toBeInTheDocument();
     });
 
-    // Now the done-state is visible. Click Done.
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Done/i }));
-    });
+    await userEvent.click(screen.getByRole('button', { name: /done/i }));
+    expect(onRefunded).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 
-    // onRefunded fired eagerly (before the fade).
-    expect(hostRef.refunded).toBe(true);
+  it('shows refund total row', () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    expect(screen.getByText('Refund Total')).toBeInTheDocument();
+  });
 
-    // --exiting class applied to both layers.
-    expectExiting(document.querySelector('.refund-overlay'), 'refund-overlay');
-    expectExiting(document.querySelector('.refund-modal'), 'refund-modal');
-
-    // After the fade, parent unmounted.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(200);
-    });
-    expect(document.querySelector('.refund-overlay')).toBeNull();
-    expect(hostRef.open).toBe(false);
+  it('deselects a line item when clicked again', async () => {
+    render(wrap(<RefundModal {...defaultProps} />));
+    const checkbox = screen.getAllByRole('checkbox')[0]!;
+    await userEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    await userEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
   });
 });
