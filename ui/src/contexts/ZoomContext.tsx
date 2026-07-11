@@ -21,14 +21,12 @@ export function ZoomProvider({ children }: { children: React.ReactNode }) {
     const applyZoom = () => {
       let fontSize = 16;
       if (zoomLevel === 'auto') {
-        // Use physical screen width so browser zoom (Ctrl +/-) isn't fought against
-        const screenWidth = window.screen.width;
-        // Standard desktop logical width is up to 1920px (where we want 16px).
-        // If the screen is wider than 1920 logical pixels (e.g., 4K at 100% OS scale),
-        // we scale up proportionally so the UI doesn't become microscopic.
-        const scale = Math.max(1, screenWidth / 1920);
-        // Clamp between 16px and 32px
-        fontSize = Math.max(16, Math.min(32, 16 * scale));
+        // Use window.innerWidth to adapt to any window size changes
+        const windowWidth = window.innerWidth;
+        // Base resolution is 1920px (standard 1080p width) = 16px base font
+        const scale = windowWidth / 1920;
+        // Clamp between 14px (minimum readable) and 28px
+        fontSize = Math.max(14, Math.min(28, 16 * scale));
       } else {
         const percentage = parseInt(zoomLevel, 10);
         fontSize = 16 * (percentage / 100);
