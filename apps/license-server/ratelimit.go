@@ -234,3 +234,30 @@ func init() {
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
 }
+
+// keyActivationLocks provides per-key mutual exclusion to prevent
+// concurrent activation of the same license key. Two goroutines
+// racing to activate the same key will be serialised.
+type keyActivationLocks struct {
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+var activationLocks = &keyActivationLocks{
+	locks: make(map[string]*sync.Mutex),
+}
+
+// lock acquires a mutex for the given key, creating one if needed.
+// Returns a function that must be called to release the lock.
+func (kal *keyActivationLocks) lock(key string) func() {
+	kal.mu.Lock()
+	mu, ok := kal.locks[key]
+	if !ok {
+		mu = &sync.Mutex{}
+		kal.locks[key] = mu
+	}
+	kal.mu.Unlock()
+
+	mu.Lock()
+	return func() { mu.Unlock() }
+}

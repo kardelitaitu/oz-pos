@@ -83,6 +83,13 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 
 		tenantID := tenant.Id
 
+		// ── Per-key activation lock ─────────────────────────────
+		// Serialise requests for the same key to prevent concurrent
+		// activation races (two goroutines both seeing "unused" and
+		// both creating subscriptions for the same key).
+		unlock := activationLocks.lock(req.Key)
+		defer unlock()
+
 		// ── Validate license key ──────────────────────────────────
 		keyRecord, err := app.FindFirstRecordByData("license_keys", "key", req.Key)
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -533,6 +534,50 @@ func TestKeyFailureTracker_SweepEmpty(t *testing.T) {
 	if len(kf.failures) != 0 {
 		t.Error("sweeping empty map should leave it empty")
 	}
+}
+
+// ── Tests: Key Activation Locks ───────────────────────────────────
+
+func TestActivationLocks_SerialisesSameKey(t *testing.T) {
+	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
+	key := "OZ-CONCURRENT"
+
+	unlock1 := kal.lock(key)
+
+	// Try to lock the same key from a goroutine — must block.
+	done := make(chan bool, 1)
+	go func() {
+		unlock2 := kal.lock(key)
+		unlock2()
+		done <- true
+	}()
+
+	// Give goroutine time to attempt lock acquisition.
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-done:
+		t.Error("second lock should block until first is released")
+	default:
+	}
+
+	unlock1()
+
+	// Now the second lock should succeed.
+	select {
+	case <-done:
+		// expected
+	case <-time.After(200 * time.Millisecond):
+		t.Error("second lock should succeed after first is released")
+	}
+}
+
+func TestActivationLocks_DifferentKeysAreIndependent(t *testing.T) {
+	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
+
+	unlock1 := kal.lock("KEY-A")
+	unlock2 := kal.lock("KEY-B") // different key, should not block
+	unlock1()
+	unlock2()
 }
 
 // ── Tests: Key Failure Tracker Edge Cases ─────────────────────────
