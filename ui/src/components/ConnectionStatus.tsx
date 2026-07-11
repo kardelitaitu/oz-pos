@@ -26,7 +26,7 @@ export default function ConnectionStatus({
           setStatus('offline');
           setLatency(null);
         }
-        return;
+        return false;
       }
       
       const start = performance.now();
@@ -45,35 +45,87 @@ export default function ConnectionStatus({
           const end = performance.now();
           setLatency(Math.round(end - start));
           setStatus('online');
+          return true;
         } else if (mounted) {
           setStatus('offline');
           setLatency(null);
+          return false;
         }
       } catch (err) {
         if (mounted) {
           setStatus('offline');
           setLatency(null);
         }
+        return false;
+      }
+      return false;
+    };
+    
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let currentBackoff = 2000; // Start backoff at 2s
+
+    const scheduleNextCheck = (isSuccess: boolean) => {
+      if (!mounted) return;
+      
+      let nextDelay = 0;
+      
+      if (isSuccess) {
+        // If successful, reset backoff and use the standard jittered interval
+        currentBackoff = 2000;
+        nextDelay = Math.floor(Math.random() * (maxIntervalMs - minIntervalMs + 1)) + minIntervalMs;
+      } else {
+        // If failed, use exponential backoff (up to 60s max) + small jitter
+        const jitter = Math.random() * 1000;
+        nextDelay = currentBackoff + jitter;
+        currentBackoff = Math.min(currentBackoff * 2, 60000);
+      }
+
+      timeoutId = setTimeout(() => {
+        runCheck();
+      }, nextDelay);
+    };
+
+    const runCheck = async () => {
+      // Don't bother pinging if OS says we are physically offline
+      if (!navigator.onLine) {
+        if (mounted) {
+          setStatus('offline');
+          setLatency(null);
+        }
+        scheduleNextCheck(false);
+        return;
+      }
+      
+      const success = await checkConnection();
+      scheduleNextCheck(success);
+    };
+
+    // Listen for OS network changes for instant reaction
+    const handleOnline = () => {
+      clearTimeout(timeoutId);
+      currentBackoff = 1000; // Fast ping when connection restores
+      runCheck();
+    };
+    
+    const handleOffline = () => {
+      clearTimeout(timeoutId);
+      if (mounted) {
+        setStatus('offline');
+        setLatency(null);
       }
     };
 
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const scheduleNextCheck = () => {
-      if (!mounted) return;
-      // Random jitter between min and max
-      const jitterMs = Math.floor(Math.random() * (maxIntervalMs - minIntervalMs + 1)) + minIntervalMs;
-      timeoutId = setTimeout(() => {
-        checkConnection().then(scheduleNextCheck);
-      }, jitterMs);
-    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
     // Initial check
-    checkConnection().then(scheduleNextCheck);
+    runCheck();
     
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, [url, minIntervalMs, maxIntervalMs]);
 
