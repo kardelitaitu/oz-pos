@@ -12,7 +12,6 @@
 
 use oz_core::CoreErrorKind;
 use oz_hal::HalErrorKind;
-use serde::Serialize;
 use thiserror::Error;
 
 /// Discriminated error returned by every `#[tauri::command]`.

@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-export type LicenseVerificationStatus = 'valid' | 'expired' | 'gracePeriod' | 'invalidSignature' | 'missing';
+export type LicenseVerificationStatus = 'valid' | 'expired' | 'gracePeriod' | 'invalidSignature' | 'clockTampered' | 'missing';
 
 export interface LicenseStatusDto {
   is_active: boolean;

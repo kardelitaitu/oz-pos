@@ -17,43 +17,65 @@ use crate::Money;
 use crate::cache::Cache;
 use crate::error::CoreError;
 
+/// Audit log queries (read / write).
 pub mod audit;
 /// Active cart persistence (survives restarts).
 pub mod cart;
+/// Cash payout CRUD (open / close / list).
 pub mod cash_payouts;
+/// Customer CRUD and lookups.
 pub mod customers;
 /// Gift cards — issue, redeem, top-up, freeze, balance checks.
 pub mod gift_cards;
+/// Kitchen Display System order CRUD.
 pub mod kds;
+/// Loyalty points / rewards CRUD.
 pub mod loyalty;
+/// Offline queue and sync state.
 pub mod offline;
+/// Payment CRUD (tenders, transactions).
 pub mod payments;
 /// CRUD for product bundles (group selling).
 pub mod product_bundles;
+/// Product CRUD and search.
 pub mod products;
+/// Promotion / discount CRUD.
 pub mod promotions;
 /// CRUD for purchase orders.
 pub mod purchase_orders;
+/// Recipe / modifier CRUD.
 pub mod recipes;
+/// Refund CRUD.
 pub mod refunds;
+/// Report generation queries.
 pub mod reports;
+/// Sale CRUD (transactions, lines, taxes).
 pub mod sales;
+/// Settings key/value CRUD.
 pub mod settings;
+/// Shift CRUD (open, close, reports).
 pub mod shifts;
+/// Staff / employee CRUD.
 pub mod staff;
 /// CRUD for stock counts / cycle counting.
 pub mod stock_counts;
 /// CRUD for stock transfers between terminals/stores.
 pub mod stock_transfers;
+/// Store profile CRUD.
 pub mod store_profiles;
 /// CRUD for suppliers.
 pub mod suppliers;
 /// CRUD for restaurant tables (floor plan, status management).
 pub mod tables;
+/// Tax rate CRUD.
 pub mod tax;
+/// Terminal override CRUD.
 pub mod terminal_overrides;
+/// Terminal profile CRUD.
 pub mod terminal_profiles;
+/// Terminal CRUD (registration, status).
 pub mod terminals;
+/// Workspace CRUD.
 pub mod workspaces;
 
 // ── Re-exports ──────────────────────────────────────────────────────
