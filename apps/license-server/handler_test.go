@@ -57,7 +57,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "activated", "expired", "revoked"}},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "activated_at"},
-		&core.RelationField{Name: "activated_by", CollectionId: tenants.Id},
+		&core.RelationField{Name: "activated_by", CollectionId: tenants.Id, MaxSelect: 1},
 		&core.DateField{Name: "revoked_at"},
 		&core.TextField{Name: "notes"},
 	)
@@ -135,7 +135,10 @@ func seedTenant(t *testing.T, app *tests.TestApp, tenantID, apiKey, status strin
 	}
 	rec := core.NewRecord(col)
 	rec.Set("id", tenantID)
-	rec.Set("email", tenantID+"@example.com")
+	// Stored emails are normalized to lowercase to match the
+	// case-insensitive lookup performed by the activate handler
+	// (which lowercases incoming requests before searching by email).
+	rec.Set("email", strings.ToLower(tenantID+"@example.com"))
 	rec.Set("phone", "-")
 	rec.Set("api_key", apiKey)
 	rec.Set("status", status)
@@ -224,7 +227,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		&core.TextField{Name: "notes"},
 	)
 	if tenantsID != "" {
-		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID})
+		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID, MaxSelect: 1})
 	}
 	licenseKeys.CreateRule = types.Pointer("")
 	licenseKeys.ListRule = types.Pointer("")
@@ -1096,5 +1099,161 @@ func TestRenewHandler_MissingSubscriptionsCollection(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "no active subscription found") {
 		t.Errorf("expected 'no active subscription found', got: %s", rec.Body.String())
+	}
+}
+
+// ── Tests: Activate handler regression coverage ───────────────────
+//
+
+// seedActivatedLicenseKey seeds a license key with a non-empty
+// activated_by relation field, simulating a key that was already
+// activated by the given tenant_id. Use this in tests that exercise
+// the "key reused by same tenant" branch of the handler.
+func seedActivatedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expiresAt, activatedBy string) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("license_keys")
+	if err != nil {
+		t.Fatalf("license_keys collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("key", key)
+	rec.Set("tier_key", tierKey)
+	rec.Set("max_stores", 5)
+	rec.Set("max_pos_instances", 3)
+	rec.Set("allowed_types", `["restaurant-pos", "store-pos"]`)
+	rec.Set("status", status)
+	rec.Set("expires_at", expiresAt)
+	rec.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+	if activatedBy != "" {
+		// Relation fields are stored as JSON arrays internally;
+		// pass a single-element slice to match PocketBase's layout.
+		rec.Set("activated_by", []string{activatedBy})
+	}
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed activated license key %q: %v", key, err)
+	}
+}
+
+// TestActivateHandler_SameTenantKeyReuse verifies that a tenant who
+// already activated a key can re-activate it (after re-install /
+// new-machine setup) and receive the cached subscription payload.
+// Previously broken: the activated_by relation field was stored as a
+// JSON-encoded array (no MaxSelect), so keyRecord.GetString("activated_by")
+// returned "[\"<id>\"]" which never string-matched the bare tenantID,
+// causing spurious 401 "invalid or already used" errors on legitimate
+// re-activation.
+func TestActivateHandler_SameTenantKeyReuse(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed an active tenant.
+	seedTenant(t, app, "reuseten0000001", "reuseApikey00001", "active")
+
+	// Seed an active subscription for the tenant — the reuse
+	// branch in activate.go looks up an existing subscription
+	// to return its already-signed payload.
+	seedSubscription(t, app, "reuseten0000001", "pro", "active")
+
+	// Seed a license key already activated by that tenant.
+	seedActivatedLicenseKey(t, app, "OZ-REUSE-KEY0001", "pro", "activated",
+		"2099-12-31 23:59:59.000Z", "reuseten0000001")
+
+	body := strings.NewReader(`{
+		"key": "OZ-REUSE-KEY0001",
+		"email": "reuseTen0000001@example.com",
+		"machine_id": "newmachine00001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (same-tenant reuse), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if _, ok := resp["signed_payload"]; !ok {
+		t.Error("expected signed_payload in response")
+	}
+	if _, ok := resp["signature"]; !ok {
+		t.Error("expected signature in response")
+	}
+	// api_key is included because keyStatus was "activated" — caller
+	// proved they know a key already bound to this tenant.
+	if _, ok := resp["api_key"]; !ok {
+		t.Error("expected api_key in response on key reuse by same tenant")
+	}
+}
+
+// TestActivateHandler_EmailCaseInsensitive verifies that the activate
+// handler normalizes incoming email so an arbitrary casing matches the
+// existing tenant. Without this, "User@…com" and "user@…com" create
+// duplicate tenants — each with its own api_key — and the user sees
+// "invalid or already used license key" when their key was bound to
+// the lower-case variant they originally typed.
+func TestActivateHandler_EmailCaseInsensitive(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed an existing tenant at lowercase email.
+	seedTenant(t, app, "caseinsen000001", "caseInsenKey0001", "active")
+
+	// Seed an unused license key.
+	seedLicenseKey(t, app, "OZ-CASE-INSEN01", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	// POST with UPPERCASE email — handler should normalize it to
+	// lowercase and reuse the existing tenant (not create a new one).
+	body := strings.NewReader(`{
+		"key": "OZ-CASE-INSEN01",
+		"email": "CASEINSEN000001@EXAMPLE.COM",
+		"machine_id": "casemachin00001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (case-insensitive email match), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// api_key must NOT be returned — if it is, that means a NEW tenant
+	// was created (isNewTenant=true), which would mean our
+	// normalization failed and we leaked credentials.
+	if _, ok := resp["api_key"]; ok {
+		t.Error("api_key must NOT be returned (existing tenant must be matched, no new tenant created)")
+	}
+
+	// Confirm only ONE tenant exists at the lowercase email — a
+	// failure here means our normalization didn't take effect.
+	tenants, err := app.FindRecordsByFilter(
+		"tenants", "email = {:email}", "", 0, 0,
+		map[string]any{"email": "caseinsen000001@example.com"},
+	)
+	if err != nil {
+		t.Fatalf("failed to query tenants: %v", err)
+	}
+	if len(tenants) != 1 {
+		t.Errorf("expected exactly 1 tenant matching lowercased email, got %d", len(tenants))
 	}
 }

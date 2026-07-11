@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -19,19 +20,26 @@ type ActivateRequest struct {
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		var req ActivateRequest
-		if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
-			return e.JSON(http.StatusBadRequest, map[string]any{
-				"error": "invalid request body",
-			})
-		}
+	var req ActivateRequest
+	if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
+		return e.JSON(http.StatusBadRequest, map[string]any{
+			"error": "invalid request body",
+		})
+	}
 
-		// ── Validate required fields ──────────────────────────────
-		if req.Key == "" || req.Email == "" || req.MachineID == "" {
-			return e.JSON(http.StatusBadRequest, map[string]any{
-				"error": "key, email, and machine_id are required",
-			})
-		}
+	// Normalize email to lowercase + trim so that lookup-by-email
+	// is case-insensitive and whitespace-tolerant. Email addresses
+	// are case-insensitive per RFC 5321 §2.4 in practice, and we
+	// store them in canonical form to avoid creating duplicate
+	// tenants for the same human.
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	// ── Validate required fields ──────────────────────────────
+	if req.Key == "" || req.Email == "" || req.MachineID == "" {
+		return e.JSON(http.StatusBadRequest, map[string]any{
+			"error": "key, email, and machine_id are required",
+		})
+	}
 
 		clientIP := e.RealIP()
 
@@ -99,16 +107,26 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		keyStatus := keyRecord.GetString("status")
-		if keyStatus != "unused" {
-			// Allow if already activated by this same tenant
-			if keyStatus != "activated" || keyRecord.GetString("activated_by") != tenantID {
-				keyFailTracker.recordFailure(req.Key)
-				return e.JSON(http.StatusUnauthorized, map[string]any{
-					"error": "invalid or already used license key",
-				})
+	keyStatus := keyRecord.GetString("status")
+	if keyStatus != "unused" {
+		// Allow if already activated by this same tenant. The
+		// activated_by relation field is a single-relation in the
+		// intended schema (MaxSelect: 1), but legacy data may have
+		// it stored as a JSON-encoded array if the schema was
+		// created without MaxSelect. Handle both forms defensively.
+		activatedBy := keyRecord.GetString("activated_by")
+		if strings.HasPrefix(activatedBy, "[") {
+			if sl := keyRecord.GetStringSlice("activated_by"); len(sl) > 0 {
+				activatedBy = sl[0]
 			}
 		}
+		if keyStatus != "activated" || activatedBy != tenantID {
+			keyFailTracker.recordFailure(req.Key)
+			return e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "invalid or already used license key",
+			})
+		}
+	}
 
 		if keyRecord.GetDateTime("expires_at").Time().Before(time.Now()) {
 			return e.JSON(http.StatusGone, map[string]any{
