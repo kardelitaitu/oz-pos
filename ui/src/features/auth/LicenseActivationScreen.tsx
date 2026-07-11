@@ -42,7 +42,15 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
         setErrorMsg('Failed to activate license.');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : (typeof err === 'string' ? err : 'An error occurred during activation.');
+      let message = 'An error occurred during activation.';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'string') {
+        message = err;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        message = String((err as Record<string, unknown>).message);
+      }
+      
       addToast({ 
         type: 'error', 
         message,
