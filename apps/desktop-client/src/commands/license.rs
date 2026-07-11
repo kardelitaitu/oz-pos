@@ -1,6 +1,7 @@
 //! License Activation Tauri commands.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::{State, command};
 
 use oz_core::Settings;
@@ -12,6 +13,9 @@ use oz_core::subscription::TenantSubscription;
 
 use crate::error::AppError;
 use crate::state::AppState;
+
+/// PocketBase requires IDs to be exactly 15 lowercase alphanumeric chars.
+const MACHINE_ID_LEN: usize = 15;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +65,36 @@ pub async fn activate_license(
     )?;
 
     Ok(true)
+}
+
+#[command]
+pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppError> {
+    let conn = state.db.lock().await;
+    // Return the persisted machine ID if one already exists.
+    if let Some(existing) = Settings::get(&conn, "machine_id")? {
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+    // Generate a new one and persist it.
+    let id = generate_machine_id();
+    Settings::set_batch(&conn, &[("machine_id".to_string(), id.clone())])?;
+    Ok(id)
+}
+
+/// Generate a cryptographically random 15-char lowercase alphanumeric
+/// machine ID matching PocketBase's ID constraints.
+///
+/// Uses UUID v4 (OS entropy) hashed with SHA-256 to produce a unique
+/// per-installation fingerprint. The ID is persisted in the local
+/// Settings table and reused across activations.
+fn generate_machine_id() -> String {
+    let uuid = uuid::Uuid::new_v4();
+    let mut hasher = Sha256::new();
+    hasher.update(uuid.as_bytes());
+    let hash = hasher.finalize();
+    let hex_str = hex::encode(&hash[..16]);
+    hex_str[..MACHINE_ID_LEN].to_string()
 }
 
 #[command]
@@ -145,6 +179,34 @@ mod tests {
         assert!(json.contains("\"clockTampered\""));
         assert!(json.contains("\"isActive\":false"));
         assert!(json.contains("Clock tampering detected"));
+    }
+
+    #[test]
+    fn generate_machine_id_returns_15_chars() {
+        let id = generate_machine_id();
+        assert_eq!(id.len(), 15, "machine ID must be 15 chars, got {id}");
+        assert!(id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            "machine ID must be lowercase alphanumeric, got {id}");
+    }
+
+    #[test]
+    fn generate_machine_id_is_unique() {
+        let mut ids = std::collections::HashSet::new();
+        for _ in 0..100 {
+            let id = generate_machine_id();
+            assert!(ids.insert(id.clone()), "duplicate machine ID: {id}");
+        }
+    }
+
+    #[test]
+    fn machine_id_is_persisted_in_settings() {
+        use oz_core::migrations;
+        let conn = migrations::fresh_db();
+        let id1 = generate_machine_id();
+        // Simulate what get_machine_id does: persist to Settings.
+        Settings::set_batch(&conn, &[("machine_id".to_string(), id1.clone())]).unwrap();
+        let id2 = Settings::get(&conn, "machine_id").unwrap().unwrap();
+        assert_eq!(id1, id2, "machine ID should survive round-trip through Settings");
     }
 
     #[test]

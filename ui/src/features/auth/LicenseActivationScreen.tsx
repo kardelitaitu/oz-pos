@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
-import { activateLicense } from '@/api/license';
+import { activateLicense, getMachineId } from '@/api/license';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import './LicenseActivationScreen.css';
 
@@ -26,9 +26,8 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
 
     setLoading(true);
     try {
-      // In a real app we might fetch machineId using a hardware profile API, 
-      // but for now we generate a random one or use a placeholder.
-      const machineId = 'MACH-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+      // Get the persistent, cryptographically-generated machine ID from Rust.
+      const machineId = await getMachineId();
 
       const success = await activateLicense(
         key.trim(),

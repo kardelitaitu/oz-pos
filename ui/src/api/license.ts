@@ -13,6 +13,10 @@ export async function getLicenseStatus(): Promise<LicenseStatusDto> {
   return invoke('get_license_status');
 }
 
+export async function getMachineId(): Promise<string> {
+  return invoke('get_machine_id');
+}
+
 export async function activateLicense(
   key: string,
   email: string,
