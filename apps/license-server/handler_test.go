@@ -150,6 +150,25 @@ func seedTenant(t *testing.T, app *tests.TestApp, tenantID, apiKey, status strin
 	}
 }
 
+func seedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expiresAt string) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("license_keys")
+	if err != nil {
+		t.Fatalf("license_keys collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("key", key)
+	rec.Set("tier_key", tierKey)
+	rec.Set("max_stores", 5)
+	rec.Set("max_pos_instances", 3)
+	rec.Set("allowed_types", `["restaurant-pos", "store-pos"]`)
+	rec.Set("status", status)
+	rec.Set("expires_at", expiresAt)
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed license key %q: %v", key, err)
+	}
+}
+
 // ── Tests: Status Handler ────────────────────────────────────────
 
 func TestStatusHandler_TenantNotFound(t *testing.T) {
@@ -208,6 +227,66 @@ func TestActivateHandler_InvalidJSON(t *testing.T) {
 		Body:            strings.NewReader(`not json`),
 		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`},
+	})
+}
+
+func TestActivateHandler_AlreadyUsedKey(t *testing.T) {
+	// Seed a license key with status "activated" — handler should return 401.
+	runScenario(t, &tests.ApiScenario{
+		Method: "POST",
+		URL:    "/api/v1/license/activate",
+		Body: strings.NewReader(`{
+			"key": "OZ-USED-KEY-00001",
+			"tenant_id": "usedkeytest0001",
+			"machine_id": "usedmachin00001"
+		}`),
+		ExpectedStatus:  401,
+		ExpectedContent: []string{`"error"`, "already used"},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedLicenseKey(t.(*testing.T), app,
+				"OZ-USED-KEY-00001", "pro", "activated",
+				"2099-12-31 23:59:59.000Z")
+		},
+	})
+}
+
+func TestActivateHandler_ExpiredKey(t *testing.T) {
+	// Seed an unused but expired license key — handler should return 410.
+	runScenario(t, &tests.ApiScenario{
+		Method: "POST",
+		URL:    "/api/v1/license/activate",
+		Body: strings.NewReader(`{
+			"key": "OZ-EXPIRED-KEY01",
+			"tenant_id": "expiredkeytes001",
+			"machine_id": "expmachint00001"
+		}`),
+		ExpectedStatus:  410,
+		ExpectedContent: []string{`"error"`, "expired"},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedLicenseKey(t.(*testing.T), app,
+				"OZ-EXPIRED-KEY01", "pro", "unused",
+				"2020-01-01 00:00:00.000Z")
+		},
+	})
+}
+
+func TestActivateHandler_RevokedKey(t *testing.T) {
+	// Seed a revoked license key — handler should return 401.
+	runScenario(t, &tests.ApiScenario{
+		Method: "POST",
+		URL:    "/api/v1/license/activate",
+		Body: strings.NewReader(`{
+			"key": "OZ-REVOKED-KEY01",
+			"tenant_id": "revokedkeyte0001",
+			"machine_id": "revmachint00001"
+		}`),
+		ExpectedStatus:  401,
+		ExpectedContent: []string{`"error"`, "already used"},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedLicenseKey(t.(*testing.T), app,
+				"OZ-REVOKED-KEY01", "pro", "revoked",
+				"2099-12-31 23:59:59.000Z")
+		},
 	})
 }
 
