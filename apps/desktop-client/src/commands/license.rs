@@ -185,8 +185,11 @@ mod tests {
     fn generate_machine_id_returns_15_chars() {
         let id = generate_machine_id();
         assert_eq!(id.len(), 15, "machine ID must be 15 chars, got {id}");
-        assert!(id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
-            "machine ID must be lowercase alphanumeric, got {id}");
+        assert!(
+            id.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            "machine ID must be lowercase alphanumeric, got {id}"
+        );
     }
 
     #[test]
@@ -206,7 +209,10 @@ mod tests {
         // Simulate what get_machine_id does: persist to Settings.
         Settings::set_batch(&conn, &[("machine_id".to_string(), id1.clone())]).unwrap();
         let id2 = Settings::get(&conn, "machine_id").unwrap().unwrap();
-        assert_eq!(id1, id2, "machine ID should survive round-trip through Settings");
+        assert_eq!(
+            id1, id2,
+            "machine ID should survive round-trip through Settings"
+        );
     }
 
     #[test]

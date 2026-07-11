@@ -185,32 +185,8 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				ExpiresAt:       expiresAt.Format(time.RFC3339),
 				GraceUntil:      calculateGraceUntil(expiresAt).Format(time.RFC3339),
 				IssuedAt:        time.Now().UTC().Format(time.RFC3339),
-			}
-
-		// ── Save subscription record ──────────────────────────────
+			}		// ── Save subscription record ──────────────────────────────
 		subColl, err := app.FindCollectionByNameOrId("subscriptions")
-		if err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "server misconfiguration: subscriptions collection not found",
-			})
-		}
-		subRecord := core.NewRecord(subColl)
-		subRecord.Set("tenant_id", tenantID)
-		subRecord.Set("tier_key", tierKey)
-		subRecord.Set("status", "active")
-		subRecord.Set("starts_at", sub.StartsAt)
-		subRecord.Set("expires_at", sub.ExpiresAt)
-		subRecord.Set("grace_until", sub.GraceUntil)
-		subRecord.Set("signed_payload", payloadStr)
-		subRecord.Set("signature", signature)
-		if err := app.Save(subRecord); err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "failed to save subscription",
-			})
-		}
-
-			// ── Save subscription record ──────────────────────────────
-			subColl, err := app.FindCollectionByNameOrId("subscriptions")
 			if err != nil {
 				return e.JSON(http.StatusInternalServerError, map[string]any{
 					"error": "server misconfiguration: subscriptions collection not found",
