@@ -20,6 +20,8 @@ type ActivateRequest struct {
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+	// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
+	e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, 64*1024)
 	var req ActivateRequest
 	if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
 		return e.JSON(http.StatusBadRequest, map[string]any{
