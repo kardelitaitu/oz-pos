@@ -1,78 +1,81 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { isGiftCardBarcode, generateGiftCardNumber } from '@/utils/giftCardBarcode';
 
-// ── isGiftCardBarcode ───────────────────────────────────────────────
-
 describe('isGiftCardBarcode', () => {
-  it('returns true for valid 8-char code', () => {
-    expect(isGiftCardBarcode('GC-ABCD1234')).toBe(true);
+  it('accepts valid GC- prefix with 8 chars', () => {
+    expect(isGiftCardBarcode('GC-1234ABCD')).toBe(true);
   });
 
-  it('returns true for valid 16-char code', () => {
-    expect(isGiftCardBarcode('GC-ABCDEF1234567890')).toBe(true);
+  it('accepts valid GC- prefix with 16 chars', () => {
+    expect(isGiftCardBarcode('GC-1234567890ABCDEF')).toBe(true);
   });
 
-  it('returns true for valid 12-char code', () => {
-    expect(isGiftCardBarcode('GC-ABC123DEF456')).toBe(true);
+  it('accepts 12-char middle segment', () => {
+    expect(isGiftCardBarcode('GC-A1B2C3D4E5F6')).toBe(true);
   });
 
-  it('is case insensitive', () => {
-    expect(isGiftCardBarcode('gc-abcd1234efgh')).toBe(true);
+  it('accepts lowercase gc- prefix', () => {
+    expect(isGiftCardBarcode('gc-1234abcd')).toBe(true);
   });
 
-  it('trims whitespace before testing', () => {
-    expect(isGiftCardBarcode('  GC-ABCDEF1234  ')).toBe(true);
+  it('trims whitespace before validating', () => {
+    expect(isGiftCardBarcode('  GC-1234ABCD  ')).toBe(true);
   });
 
-  it('returns false when missing GC- prefix', () => {
-    expect(isGiftCardBarcode('ABCDEF1234')).toBe(false);
+  it('rejects without GC- prefix', () => {
+    expect(isGiftCardBarcode('12345678')).toBe(false);
   });
 
-  it('returns false for too few chars (fewer than 8)', () => {
-    expect(isGiftCardBarcode('GC-ABC123')).toBe(false);
+  it('rejects too-short code (less than 8 chars after GC-)', () => {
+    expect(isGiftCardBarcode('GC-1234567')).toBe(false);
   });
 
-  it('returns false for too many chars (more than 16)', () => {
-    expect(isGiftCardBarcode('GC-ABCDEF12345678901')).toBe(false);
+  it('rejects too-long code (more than 16 chars after GC-)', () => {
+    expect(isGiftCardBarcode('GC-1234567890ABCDEFG')).toBe(false);
   });
 
-  it('returns false for special characters in code', () => {
-    expect(isGiftCardBarcode('GC-ABCD@#$%EFGH')).toBe(false);
+  it('rejects special characters inside the code', () => {
+    expect(isGiftCardBarcode('GC-1234-5678')).toBe(false);
+    expect(isGiftCardBarcode('GC-1234@#$%')).toBe(false);
   });
 
-  it('returns false for empty string', () => {
+  it('rejects empty string', () => {
     expect(isGiftCardBarcode('')).toBe(false);
   });
 
-  it('returns false for whitespace-only string', () => {
+  it('rejects whitespace-only', () => {
     expect(isGiftCardBarcode('   ')).toBe(false);
   });
 });
 
-// ── generateGiftCardNumber ──────────────────────────────────────────
-
 describe('generateGiftCardNumber', () => {
-  it('starts with "GC-"', () => {
-    const num = generateGiftCardNumber();
-    expect(num.startsWith('GC-')).toBe(true);
+  it('generates a valid gift card barcode', () => {
+    const code = generateGiftCardNumber();
+    expect(isGiftCardBarcode(code)).toBe(true);
   });
 
-  it('has total length of 15 (GC- + 12 chars)', () => {
-    const num = generateGiftCardNumber();
-    expect(num.length).toBe(15);
+  it('generates code with GC- prefix', () => {
+    const code = generateGiftCardNumber();
+    expect(code.startsWith('GC-')).toBe(true);
   });
 
-  it('only contains valid characters after prefix', () => {
-    const num = generateGiftCardNumber();
-    const code = num.slice(3); // after "GC-"
-    expect(/^[A-Z0-9]{12}$/.test(code)).toBe(true);
+  it('generates code of length 15 (GC- + 12 chars)', () => {
+    const code = generateGiftCardNumber();
+    expect(code.length).toBe(15);
   });
 
-  it('generates different values on successive calls', () => {
-    const results = new Set<string>();
-    for (let i = 0; i < 10; i++) {
-      results.add(generateGiftCardNumber());
+  it('generates unique codes', () => {
+    const codes = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      codes.add(generateGiftCardNumber());
     }
-    expect(results.size).toBeGreaterThan(1);
+    // All 20 should be unique (extremely unlikely collision with 36^12 space).
+    expect(codes.size).toBe(20);
+  });
+
+  it('generates only alphanumeric characters after prefix', () => {
+    const code = generateGiftCardNumber();
+    const body = code.slice(3); // Remove 'GC-'
+    expect(/^[A-Z0-9]+$/.test(body)).toBe(true);
   });
 });

@@ -16,12 +16,13 @@
 // The full doc pass is tracked as a followup in CHANGELOG.md
 // "Known limitations"; for now allow the warnings so the scaffold
 // compiles under `clippy -- -D warnings`.
-#![allow(missing_docs)]
+#![warn(missing_docs)]
 
 pub mod drivers;
 pub mod error;
 pub mod registry;
 pub mod traits;
+/// USB transport helpers for device enumeration.
 pub mod transport;
 pub mod types;
 

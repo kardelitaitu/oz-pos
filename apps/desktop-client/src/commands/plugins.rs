@@ -4,6 +4,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[command]
+/// Reload plugins.
 pub async fn reload_plugins(state: State<'_, AppState>) -> Result<(), AppError> {
     let plugins_dir = state
         .app

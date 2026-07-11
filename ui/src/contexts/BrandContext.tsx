@@ -18,6 +18,7 @@ interface BrandContextValue {
   refreshBrandSettings: () => void;
 }
 
+/** React context that carries brand/white-label settings. */
 export const BrandContext = createContext<BrandContextValue | null>(null);
 
 const DEFAULT_SETTINGS: BrandSettings = {

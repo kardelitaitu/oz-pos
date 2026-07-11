@@ -15,13 +15,18 @@ pub async fn ping() -> Result<String, AppError> {
 /// Build/version information for the About dialog.
 #[derive(Debug, Serialize)]
 pub struct VersionInfo {
+    /// Display name.
     pub name: &'static str,
+    /// Version.
     pub version: &'static str,
+    /// Rust Version.
     pub rust_version: &'static str,
+    /// Target.
     pub target: &'static str,
 }
 
 #[command]
+/// Version.
 pub async fn version() -> Result<VersionInfo, AppError> {
     Ok(VersionInfo {
         name: env!("CARGO_PKG_NAME"),

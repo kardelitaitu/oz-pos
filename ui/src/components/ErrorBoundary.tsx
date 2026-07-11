@@ -15,6 +15,12 @@ interface State {
   error: Error | null;
 }
 
+/**
+ * React class-based error boundary that catches render errors and
+ * displays a fallback UI with the error message. Uses a static
+ * Fluent bundle for localisation since class components cannot
+ * use hooks.
+ */
 export default class ErrorBoundary extends Component<Props, State> {
   override state: State = { error: null };
 

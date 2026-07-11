@@ -115,6 +115,7 @@ export interface LiveSetupPreviewProps {
 
 // ── Component ───────────────────────────────────────────────────────
 
+/** Real-time preview of which workspaces and navigation items are unlocked by the currently-selected feature set. */
 export default function LiveSetupPreview({ selectedFeatures }: LiveSetupPreviewProps) {
   const { l10n } = useLocalization();
 

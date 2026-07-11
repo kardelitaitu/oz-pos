@@ -6,38 +6,55 @@ use crate::error::PluginError;
 /// A plugin manifest (`plugin.toml`).
 #[derive(Debug, Clone, Deserialize)]
 pub struct PluginManifest {
+    /// Plugin metadata (name, version, etc.).
     pub plugin: PluginMeta,
+    /// Declared plugin capabilities.
     #[serde(default)]
     pub capabilities: PluginCapabilities,
+    /// Sandbox permission settings.
     #[serde(default)]
     pub permissions: PluginPermissions,
 }
 
+/// Metadata section of a plugin manifest.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PluginMeta {
+    /// Plugin name (must be unique).
     pub name: String,
+    /// Plugin version (semver string).
     pub version: String,
+    /// Optional human-readable description.
     pub description: Option<String>,
+    /// Optional plugin author.
     pub author: Option<String>,
+    /// Optional license identifier.
     pub license: Option<String>,
 }
 
+/// Declared capabilities of a plugin.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct PluginCapabilities {
+    /// Script files to load into the Lua sandbox.
     #[serde(default)]
     pub scripts: Vec<String>,
+    /// Native driver modules to load.
     #[serde(default)]
     pub drivers: Vec<String>,
+    /// Hook names this plugin registers.
     #[serde(default)]
     pub hooks: Vec<String>,
 }
 
+/// Sandbox permissions for a plugin.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct PluginPermissions {
+    /// Whether the plugin may make network requests.
     #[serde(default)]
     pub allow_network: bool,
+    /// Whether the plugin may access the filesystem.
     #[serde(default)]
     pub allow_filesystem: bool,
+    /// Whether the plugin may send HTTP requests.
     #[serde(default)]
     pub allow_http: bool,
 }

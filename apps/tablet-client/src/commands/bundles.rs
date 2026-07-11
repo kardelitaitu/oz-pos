@@ -8,23 +8,35 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+/// Createbundleargs.
 pub struct CreateBundleArgs {
+    /// Bundle Sku.
     pub bundle_sku: String,
+    /// Display name.
     pub name: String,
+    /// Human-readable description.
     pub description: Option<String>,
+    /// Bundle Price Minor.
     pub bundle_price_minor: Option<i64>,
+    /// ISO-4217 currency code.
     pub currency: Option<String>,
+    /// Items.
     pub items: Vec<CreateBundleItemArg>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Createbundleitemarg.
 pub struct CreateBundleItemArg {
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Quantity.
     pub qty: i64,
+    /// Unit Price Minor.
     pub unit_price_minor: Option<i64>,
 }
 
 #[command]
+/// List bundles.
 pub async fn list_bundles(state: State<'_, AppState>) -> Result<Vec<BundleWithItems>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -32,6 +44,7 @@ pub async fn list_bundles(state: State<'_, AppState>) -> Result<Vec<BundleWithIt
 }
 
 #[command]
+/// Get bundle.
 pub async fn get_bundle(
     id: String,
     state: State<'_, AppState>,
@@ -42,6 +55,7 @@ pub async fn get_bundle(
 }
 
 #[command]
+/// Create bundle.
 pub async fn create_bundle(
     args: CreateBundleArgs,
     state: State<'_, AppState>,
@@ -80,6 +94,7 @@ pub async fn create_bundle(
 }
 
 #[command]
+/// Update bundle.
 pub async fn update_bundle(
     bundle: BundleWithItems,
     state: State<'_, AppState>,
@@ -94,6 +109,7 @@ pub async fn update_bundle(
 }
 
 #[command]
+/// Delete bundle.
 pub async fn delete_bundle(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -102,6 +118,7 @@ pub async fn delete_bundle(id: String, state: State<'_, AppState>) -> Result<(),
 }
 
 #[command]
+/// Lookup bundle by sku.
 pub async fn lookup_bundle_by_sku(
     sku: String,
     state: State<'_, AppState>,

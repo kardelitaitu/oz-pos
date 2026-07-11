@@ -154,6 +154,7 @@ function AmbientParticles() {
 
 // ── Component ─────────────────────────────────────────────────────
 
+/** Workspace home screen — role-based workspace selection grid with branded greeting and responsive card layout. */
 export default function WorkspaceHome() {
   const { l10n } = useLocalization();
   const { availableWorkspaces, loading, error, retry, setActiveWorkspace, lastWorkspace } = useWorkspace();

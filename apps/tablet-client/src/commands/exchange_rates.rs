@@ -9,13 +9,21 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
+/// Exchangeratedto.
 pub struct ExchangeRateDto {
+    /// Unique identifier.
     pub id: String,
+    /// From Currency.
     pub from_currency: String,
+    /// To Currency.
     pub to_currency: String,
+    /// Rate.
     pub rate: f64,
+    /// Source.
     pub source: String,
+    /// Effective Date.
     pub effective_date: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
@@ -34,15 +42,22 @@ impl From<oz_core::exchange_rate::ExchangeRateRow> for ExchangeRateDto {
 }
 
 #[derive(Debug, Deserialize)]
+/// Createexchangerateargs.
 pub struct CreateExchangeRateArgs {
+    /// From Currency.
     pub from_currency: String,
+    /// To Currency.
     pub to_currency: String,
+    /// Rate.
     pub rate: f64,
+    /// Source.
     pub source: Option<String>,
+    /// Effective Date.
     pub effective_date: Option<String>,
 }
 
 #[command]
+/// List exchange rates.
 pub async fn list_exchange_rates(
     state: State<'_, AppState>,
 ) -> Result<Vec<ExchangeRateDto>, AppError> {
@@ -53,6 +68,7 @@ pub async fn list_exchange_rates(
 }
 
 #[command]
+/// Create exchange rate.
 pub async fn create_exchange_rate(
     args: CreateExchangeRateArgs,
     state: State<'_, AppState>,
@@ -80,6 +96,7 @@ pub async fn create_exchange_rate(
 }
 
 #[command]
+/// Delete exchange rate.
 pub async fn delete_exchange_rate(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);

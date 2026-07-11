@@ -3,6 +3,11 @@ import { Localized, useLocalization } from '@fluent/react';
 import { LocaleContext } from './LocaleContext';
 import type { LocaleCode } from './index';
 
+/**
+ * Dropdown to switch between supported application languages.
+ * Reads available locales from LocaleContext and persists the choice
+ * to localStorage.
+ */
 export function LanguageSelector() {
   const { l10n } = useLocalization();
   const { locale, setLocale, availableLocales, getLocaleLabel } = useContext(LocaleContext);

@@ -20,6 +20,7 @@ import type { RequiredRole } from '@/platform/ui/page-registry';
 
 // ── Section names ────────────────────────────────────────────────────
 
+/** Sidebar section identifiers for grouping navigation items. */
 export type SectionName =
   | 'operations'
   | 'sales'
@@ -32,6 +33,7 @@ export type SectionName =
   | 'settings'
   | 'dev';
 
+/** Maps each section name to its Fluent i18n label key. */
 export const SECTION_LABELS: Record<SectionName, string> = {
   operations: 'nav-section-operations',
   sales: 'nav-section-sales',
@@ -47,6 +49,7 @@ export const SECTION_LABELS: Record<SectionName, string> = {
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** A navigation item registered for the sidebar menu. */
 export interface NavItemRegistration {
   /** Route name this nav item navigates to. */
   route: string;

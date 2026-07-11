@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ── DTOs ────────────────────────────────────────────────────────────
 
+/** A cashier shift record with opening/closing balances and sales totals. */
 export interface ShiftDto {
   id: string;
   userId: string;
@@ -42,7 +43,7 @@ export const openShiftScoped = (sessionToken: string, openingBalanceMinor: numbe
     args: { terminalId: terminalId ?? null, openingBalanceMinor },
   });
 
-/** Arguments for closing a shift. */
+/** Arguments for manually closing a shift with a counted closing balance. */
 export interface CloseShiftArgs {
   userId: string;
   id: string;
@@ -69,16 +70,17 @@ export const getActiveShift = (userId: string): Promise<ShiftDto | null> =>
 export const getActiveShiftScoped = (sessionToken: string): Promise<ShiftDto | null> =>
   invoke<ShiftDto | null>('get_active_shift_scoped', { sessionToken });
 
-/** List all shifts (most recent first). */
+/** List all shifts, most recent first. */
 export const listShifts = (): Promise<ShiftDto[]> =>
   invoke<ShiftDto[]>('list_shifts');
 
-/** Get a single shift by id. */
+/** Get a single shift by its identifier. */
 export const getShift = (id: string): Promise<ShiftDto | null> =>
   invoke<ShiftDto | null>('get_shift', { id });
 
 // ── Cash Payouts ──────────────────────────────────────────────────────
 
+/** A cash payout (safe drop) recorded against a shift. */
 export interface CashPayoutDto {
   id: string;
   shiftId: string;
@@ -99,6 +101,7 @@ export const createCashPayout = (
 
 // ── Shift Report ─────────────────────────────────────────────────────
 
+/** Comprehensive report for a single shift. */
 export interface ShiftReportDto {
   shift: ShiftDto;
   paymentBreakdown: ShiftPaymentBreakdownDto[];
@@ -109,12 +112,14 @@ export interface ShiftReportDto {
   refundCount: number;
 }
 
+/** Payment method totals within a shift. */
 export interface ShiftPaymentBreakdownDto {
   method: string;
   count: number;
   totalMinor: number;
 }
 
+/** Hourly sales totals within a shift. */
 export interface ShiftSalesByHourDto {
   hour: number;
   totalMinor: number;

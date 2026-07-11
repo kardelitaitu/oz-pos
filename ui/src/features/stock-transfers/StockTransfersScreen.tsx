@@ -39,6 +39,7 @@ interface LineFormEntry {
   qty: string;
 }
 
+/** Stock transfers screen — create, send, receive, and cancel stock transfers between store locations or terminals. */
 export default function StockTransfersScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();

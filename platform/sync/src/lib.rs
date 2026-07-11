@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! OZ-POS Sync Engine
 //!
 //! Offline-first sync with eventual consistency. Provides:
@@ -39,21 +41,27 @@ pub type SyncResult<T> = Result<T, SyncError>;
 /// Common sync error type.
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
+    /// Network or HTTP error communicating with the sync server.
     #[error("transport error: {0}")]
     Transport(String),
 
+    /// Local queue operation failed (read/write/mark).
     #[error("queue error: {0}")]
     Queue(String),
 
+    /// Replication logic error (push/pull cycle).
     #[error("replication error: {0}")]
     Replication(String),
 
+    /// Conflict resolution failed.
     #[error("conflict error: {0}")]
     Conflict(String),
 
+    /// Invalid or missing sync configuration.
     #[error("configuration error: {0}")]
     Config(String),
 
+    /// Database error from the underlying oz-core store.
     #[error("database error: {0}")]
     Database(#[from] oz_core::error::CoreError),
 }
@@ -179,7 +187,9 @@ mod tests {
 /// The top-level sync engine that orchestrates queue, transport, replication,
 /// and conflict resolution for a single sync cycle.
 pub struct SyncEngine {
+    /// Sync configuration (server URL, API key).
     pub config: SyncConfig,
+    /// HTTP transport for communicating with the remote sync server.
     pub transport: SyncTransport,
 }
 

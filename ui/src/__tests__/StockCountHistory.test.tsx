@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/inventoryCounts', () => ({
   listStockCounts: vi.fn(),
@@ -18,7 +18,7 @@ const mockListCounts = listStockCounts as ReturnType<typeof vi.fn>;
 const mockListAdjustments = listStockAdjustments as ReturnType<typeof vi.fn>;
 const mockGetLines = getCountLines as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl, sharedFtl);
 
 const sampleCounts = [
   { id: 'sc-1', count_number: 'SC-001', status: 'completed' as const, count_type: 'full' as const,

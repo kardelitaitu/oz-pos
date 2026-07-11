@@ -1,7 +1,9 @@
 import type { HTMLAttributes, CSSProperties } from 'react';
 
+/** Shape variant for the Skeleton placeholder. */
 export type SkeletonVariant = 'text' | 'circle' | 'block';
 
+/** Props for the Skeleton loading placeholder component. */
 export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
   /** Shape variant. @default 'text' */
   variant?: SkeletonVariant;
@@ -11,6 +13,10 @@ export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
   height?: string;
 }
 
+/**
+ * Loading placeholder that renders a pulsing shape.
+ * Set `aria-hidden="true"` so assistive technology ignores it.
+ */
 export function Skeleton({
   variant = 'text',
   width,

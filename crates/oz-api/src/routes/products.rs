@@ -54,10 +54,15 @@ fn store_error_response(e: CoreError) -> Response {
 /// Request body for creating a new product.
 #[derive(Deserialize)]
 pub struct CreateProductRequest {
+    /// Unique product SKU.
     pub sku: String,
+    /// Product display name.
     pub name: String,
+    /// Base unit price.
     pub price: oz_core::Money,
+    /// Optional category ID.
     pub category_id: Option<String>,
+    /// Optional barcode string.
     pub barcode: Option<String>,
     /// Initial stock quantity (>= 0). If omitted or zero, no inventory row is inserted.
     pub initial_stock: Option<i64>,
@@ -73,8 +78,11 @@ pub struct PatchStockRequest {
 /// Response after a successful stock adjustment.
 #[derive(Serialize)]
 pub struct PatchStockResponse {
+    /// The product SKU that was adjusted.
     pub sku: String,
+    /// Stock quantity before the adjustment.
     pub previous_qty: i64,
+    /// Stock quantity after the adjustment.
     pub new_qty: i64,
 }
 

@@ -45,6 +45,7 @@ const EMPTY_FORM: FormData = {
 
 // ── Component ───────────────────────────────────────────────────────
 
+/** Staff management screen — manage user accounts, roles, PIN codes, and workspace assignments. */
 export default function StaffManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();

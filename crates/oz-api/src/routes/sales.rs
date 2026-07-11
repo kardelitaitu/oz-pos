@@ -54,8 +54,11 @@ pub struct CreateSaleRequest {
 /// A single line item in a create-sale request.
 #[derive(Deserialize)]
 pub struct CreateSaleLine {
+    /// Product SKU.
     pub sku: String,
+    /// Quantity (must be > 0).
     pub qty: i64,
+    /// Unit price for this line.
     pub unit_price: Money,
 }
 
@@ -69,8 +72,11 @@ pub struct UpdateSaleStatusRequest {
 /// Response after a status update.
 #[derive(Serialize)]
 pub struct SaleStatusResponse {
+    /// Sale ID.
     pub id: String,
+    /// Updated sale status.
     pub status: SaleStatus,
+    /// ISO-8601 timestamp of the update.
     pub updated_at: String,
 }
 

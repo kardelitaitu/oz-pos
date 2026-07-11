@@ -10,18 +10,28 @@ use crate::state::AppState;
 /// Arguments for creating a bundle.
 #[derive(Debug, Deserialize)]
 pub struct CreateBundleArgs {
+    /// Bundle Sku.
     pub bundle_sku: String,
+    /// Display name.
     pub name: String,
+    /// Human-readable description.
     pub description: Option<String>,
+    /// Bundle Price Minor.
     pub bundle_price_minor: Option<i64>,
+    /// ISO-4217 currency code.
     pub currency: Option<String>,
+    /// Items.
     pub items: Vec<CreateBundleItemArg>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Createbundleitemarg.
 pub struct CreateBundleItemArg {
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Quantity.
     pub qty: i64,
+    /// Unit Price Minor.
     pub unit_price_minor: Option<i64>,
 }
 

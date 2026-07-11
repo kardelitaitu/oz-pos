@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Terminal Module — registered POS device management.
 //!
 //! This module owns the terminal management vertical: device

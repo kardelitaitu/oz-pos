@@ -33,27 +33,39 @@ type HmacSha256 = Hmac<Sha256>;
 #[derive(Debug, Serialize)]
 #[allow(dead_code)]
 pub struct WorkspaceTypeDto {
+    /// Key.
     pub key: String,
+    /// Display name.
     pub name: String,
+    /// Human-readable description.
     pub description: String,
+    /// Icon.
     pub icon: String,
 }
 
 /// Screen within a workspace as seen by the front-end.
 #[derive(Debug, Serialize)]
 pub struct WorkspaceScreenDto {
+    /// Screen Key.
     pub screen_key: String,
+    /// Display sort order.
     pub sort_order: i32,
 }
 
 /// Request body for creating a workspace instance.
 #[derive(Debug, serde::Deserialize)]
 pub struct CreateInstanceRequest {
+    /// Unique identifier.
     pub id: String,
+    /// Type Key.
     pub type_key: String,
+    /// ID of the associated store.
     pub store_id: String,
+    /// Display name.
     pub name: String,
+    /// Human-readable description.
     pub description: Option<String>,
+    /// Colour.
     pub colour: Option<String>,
 }
 
@@ -613,8 +625,11 @@ pub async fn get_user_workspace_instances(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BootResolution {
+    /// Whether this is bound.
     pub is_bound: bool,
+    /// ID of the associated store.
     pub store_id: String,
+    /// ID of the associated instance.
     pub instance_id: Option<String>,
 }
 

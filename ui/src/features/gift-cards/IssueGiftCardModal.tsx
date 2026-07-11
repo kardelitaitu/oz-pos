@@ -4,11 +4,15 @@ import { issueGiftCard, type IssueGiftCardInput } from '@/api/giftCards';
 import { Button } from '@/components/Button';
 import { generateGiftCardNumber } from '@/utils/giftCardBarcode';
 
+/** Props for the IssueGiftCardModal component. */
 export interface IssueGiftCardModalProps {
+  /** Callback invoked when the modal is dismissed without issuing. */
   onClose: () => void;
+  /** Callback invoked after a gift card has been successfully issued. */
   onIssued: () => void;
 }
 
+/** Issue gift card modal dialog — form for creating a new gift card with number, initial amount, PIN, and recipient details. */
 export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardModalProps) {
   const { l10n } = useLocalization();
   const [cardNumber, setCardNumber] = useState(generateGiftCardNumber());

@@ -14,18 +14,24 @@ use crate::state::AppState;
 /// A received quantity for a single transfer line.
 #[derive(Debug, Deserialize)]
 pub struct ReceivedLineInput {
+    /// ID of the associated line.
     pub line_id: String,
+    /// Received Qty.
     pub received_qty: i64,
 }
 
 #[derive(Debug, Serialize)]
+/// Transferwithlines.
 pub struct TransferWithLines {
+    /// Transfer.
     pub transfer: StockTransfer,
+    /// Lines.
     pub lines: Vec<StockTransferLine>,
 }
 
 #[command]
 #[allow(clippy::too_many_arguments)]
+/// Create stock transfer.
 pub async fn create_stock_transfer(
     source_location: Option<String>,
     destination_location: Option<String>,
@@ -52,6 +58,7 @@ pub async fn create_stock_transfer(
 }
 
 #[command]
+/// Get stock transfer.
 pub async fn get_stock_transfer(
     id: String,
     state: State<'_, AppState>,
@@ -69,6 +76,7 @@ pub async fn get_stock_transfer(
 }
 
 #[command]
+/// List stock transfers.
 pub async fn list_stock_transfers(
     state: State<'_, AppState>,
 ) -> Result<Vec<StockTransfer>, AppError> {
@@ -80,6 +88,7 @@ pub async fn list_stock_transfers(
 }
 
 #[command]
+/// Get stock transfer lines.
 pub async fn get_stock_transfer_lines(
     transfer_id: String,
     state: State<'_, AppState>,
@@ -92,6 +101,7 @@ pub async fn get_stock_transfer_lines(
 }
 
 #[command]
+/// Add stock transfer line.
 pub async fn add_stock_transfer_line(
     transfer_id: String,
     sku: String,
@@ -107,6 +117,7 @@ pub async fn add_stock_transfer_line(
 }
 
 #[command]
+/// Remove stock transfer line.
 pub async fn remove_stock_transfer_line(
     line_id: String,
     state: State<'_, AppState>,
@@ -119,6 +130,7 @@ pub async fn remove_stock_transfer_line(
 }
 
 #[command]
+/// Send stock transfer.
 pub async fn send_stock_transfer(
     id: String,
     state: State<'_, AppState>,
@@ -131,6 +143,7 @@ pub async fn send_stock_transfer(
 }
 
 #[command]
+/// Receive stock transfer.
 pub async fn receive_stock_transfer(
     id: String,
     received_by: String,
@@ -152,6 +165,7 @@ pub async fn receive_stock_transfer(
 }
 
 #[command]
+/// Cancel stock transfer.
 pub async fn cancel_stock_transfer(
     id: String,
     state: State<'_, AppState>,

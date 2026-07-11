@@ -14,6 +14,7 @@ import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** Application colour-scheme theme. */
 export type Theme = 'light' | 'dark';
 
 interface ThemeContextValue {

@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Foundation crate for OZ-POS.
 //!
 //! Contains the value objects, contracts, enums, and error types that

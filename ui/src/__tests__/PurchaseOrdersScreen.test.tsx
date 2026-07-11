@@ -1,10 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
-import { renderInAct } from '@/test-utils/renderInAct';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import purchasingFtl from '@/locales/purchasing.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/purchasing', () => ({
   listPurchaseOrders: vi.fn(),
@@ -29,7 +28,7 @@ const mockListPOs = listPurchaseOrders as ReturnType<typeof vi.fn>;
 const mockUpdateStatus = updatePoStatus as ReturnType<typeof vi.fn>;
 const mockReceivePO = receivePurchaseOrder as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, purchasingFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, purchasingFtl, sharedFtl);
 
 const sampleOrders = [
   {
@@ -73,14 +72,14 @@ describe('PurchaseOrdersScreen', () => {
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and New Purchase Order button', async () => {
     mockListPOs.mockResolvedValue([]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
     expect(screen.getByText('Purchase Orders')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /new purchase order/i })).toBeInTheDocument();
   });
 
   it('loads and displays purchase orders in the table', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -93,13 +92,13 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows loading state initially', async () => {
     mockListPOs.mockReturnValue(new Promise(() => {}));
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
     expect(screen.getByText(/loading purchase orders/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no orders exist', async () => {
     mockListPOs.mockResolvedValue([]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
     await waitFor(() => {
       expect(screen.getByText(/no purchase orders yet/i)).toBeInTheDocument();
     });
@@ -107,7 +106,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('displays supplier_id when supplier_name is null', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[2]!]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-003')).toBeInTheDocument();
@@ -117,7 +116,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows the line count for each PO', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -130,7 +129,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('renders status badges with correct class', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -149,7 +148,7 @@ describe('PurchaseOrdersScreen', () => {
   // ── Status filters ───────────────────────────────────────────
   it('renders status filter buttons', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     expect(screen.getByText('All')).toBeInTheDocument();
     expect(screen.getByText('Draft')).toBeInTheDocument();
@@ -160,7 +159,7 @@ describe('PurchaseOrdersScreen', () => {
   it('filters orders by status when a filter is clicked', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue(sampleOrders);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -177,7 +176,7 @@ describe('PurchaseOrdersScreen', () => {
   it('shows filtered empty message when status filter matches nothing', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[0]!]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -193,7 +192,7 @@ describe('PurchaseOrdersScreen', () => {
   // ── Action buttons ───────────────────────────────────────────
   it('shows Submit button for draft orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[0]!]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -205,7 +204,7 @@ describe('PurchaseOrdersScreen', () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[0]!]);
     mockUpdateStatus.mockResolvedValue({});
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -222,7 +221,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows Approve and Cancel buttons for pending orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[1]!]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-002')).toBeInTheDocument();
@@ -234,7 +233,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows Receive button for approved orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[2]!]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-003')).toBeInTheDocument();
@@ -247,7 +246,7 @@ describe('PurchaseOrdersScreen', () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[2]!]);
     mockReceivePO.mockResolvedValue({});
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-003')).toBeInTheDocument();
@@ -262,7 +261,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows no action buttons for cancelled orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[3]!]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await waitFor(() => {
       expect(screen.getByText('PO-004')).toBeInTheDocument();
@@ -276,7 +275,7 @@ describe('PurchaseOrdersScreen', () => {
   it('opens PurchaseOrderForm when New Purchase Order is clicked', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await user.click(screen.getByRole('button', { name: /new purchase order/i }));
 
@@ -288,7 +287,7 @@ describe('PurchaseOrdersScreen', () => {
   it('refreshes list when form onSaved is called', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await user.click(screen.getByRole('button', { name: /new purchase order/i }));
     await waitFor(() => {
@@ -305,7 +304,7 @@ describe('PurchaseOrdersScreen', () => {
   it('closes form when form onClose is called', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([]);
-    await renderInAct(wrap(<PurchaseOrdersScreen />));
+    render(wrap(<PurchaseOrdersScreen />));
 
     await user.click(screen.getByRole('button', { name: /new purchase order/i }));
     await waitFor(() => {

@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! OZ-POS OpenAPI REST server.
 //!
 //! Starts an axum HTTP server on `OZ_API_PORT` (default 3099) with JWT
@@ -27,7 +29,9 @@
 //!   -H "Authorization: Bearer <token>"
 //! ```
 
+/// JWT auth middleware and token generation.
 pub mod auth;
+/// Axum route handlers (health, tokens, products, categories, sales).
 pub mod routes;
 
 use std::sync::Arc;
@@ -49,6 +53,7 @@ use tracing::info;
 /// ensuring only one handler writes to the database at a time.
 #[derive(Clone)]
 pub struct AppState {
+    /// Shared SQLite connection (mutex-guarded for axum handler safety).
     pub db: Arc<Mutex<Connection>>,
 }
 

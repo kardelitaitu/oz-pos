@@ -16,17 +16,26 @@ use crate::state::AppState;
 // ── Sale list / detail ───────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Salelistitem.
 pub struct SaleListItem {
+    /// Unique identifier.
     pub id: String,
+    /// Total amount in minor currency units.
     pub total: Money,
+    /// Line Count.
     pub line_count: i64,
+    /// Current status.
     pub status: String,
+    /// Payment Method.
     pub payment_method: Option<String>,
+    /// ID of the associated user.
     pub user_id: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
 #[command]
+/// List sales.
 pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -47,19 +56,30 @@ pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>,
 }
 
 #[derive(Debug, Serialize)]
+/// Saledetail.
 pub struct SaleDetail {
+    /// Unique identifier.
     pub id: String,
+    /// Total amount in minor currency units.
     pub total: Money,
+    /// Line Count.
     pub line_count: i64,
+    /// Current status.
     pub status: String,
+    /// Payment Method.
     pub payment_method: Option<String>,
+    /// Tendered Minor.
     pub tendered_minor: Option<i64>,
+    /// ID of the associated user.
     pub user_id: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// Lines.
     pub lines: Vec<oz_core::SaleLine>,
 }
 
 #[command]
+/// Get sale.
 pub async fn get_sale(
     id: String,
     state: State<'_, AppState>,
@@ -84,6 +104,7 @@ pub async fn get_sale(
 // ── Dashboard / Export ───────────────────────────────────────────────
 
 #[command]
+/// Export daily summary.
 pub async fn export_daily_summary(
     state: State<'_, AppState>,
 ) -> Result<Vec<DailySummaryRow>, AppError> {
@@ -95,6 +116,7 @@ pub async fn export_daily_summary(
 }
 
 #[command]
+/// Export sales by hour.
 pub async fn export_sales_by_hour(
     state: State<'_, AppState>,
 ) -> Result<Vec<SalesByHourRow>, AppError> {
@@ -108,22 +130,36 @@ pub async fn export_sales_by_hour(
 // ── EOD (End-of-Day) Report ──────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Eodreport.
 pub struct EodReport {
+    /// Total Sales.
     pub total_sales: i64,
+    /// Total Revenue.
     pub total_revenue: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Payment Breakdown.
     pub payment_breakdown: Vec<PaymentBreakdown>,
+    /// Void Count.
     pub void_count: i64,
+    /// Void Total.
     pub void_total: i64,
+    /// Discount Count.
     pub discount_count: i64,
+    /// Discount Total.
     pub discount_total: i64,
+    /// Hourly Breakdown.
     pub hourly_breakdown: Vec<SalesByHourRow>,
 }
 
 #[derive(Debug, Serialize)]
+/// Paymentbreakdown.
 pub struct PaymentBreakdown {
+    /// Method.
     pub method: String,
+    /// Count.
     pub count: i64,
+    /// Total amount in minor currency units.
     pub total: i64,
 }
 

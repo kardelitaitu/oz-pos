@@ -97,6 +97,7 @@ const INITIAL_IMPORT: ImportState = {
 
 // ── Component ──────────────────────────────────────────────────────
 
+/** Data management screen — encrypted export wizard, import wizard with dry-run preview, and one-click backup status. */
 export default function DataManagementScreen() {
   const { l10n } = useLocalization();
   const [exportState, setExportState] = useState<ExportState>(INITIAL_EXPORT);

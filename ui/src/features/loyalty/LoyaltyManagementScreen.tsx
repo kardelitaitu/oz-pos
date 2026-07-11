@@ -20,6 +20,7 @@ interface TierFormData {
   colour: string;
 }
 
+/** Loyalty management screen — view loyalty accounts, manage tiers, points configuration, and earn multipliers. */
 export default function LoyaltyManagementScreen() {
   const { l10n } = useLocalization();
   const [accounts, setAccounts] = useState<LoyaltyAccountWithDetails[]>([]);

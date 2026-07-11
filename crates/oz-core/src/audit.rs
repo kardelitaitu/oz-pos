@@ -32,7 +32,7 @@ pub struct AuditEntry {
 }
 
 impl AuditEntry {
-    /// Create a new audit entry with a generated UUID and current timestamp.
+    /// Create a new audit entry with a generated UUID v7 and current UTC timestamp.
     pub fn new(
         user_id: impl Into<String>,
         action: impl Into<String>,

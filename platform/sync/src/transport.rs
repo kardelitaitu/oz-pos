@@ -28,12 +28,16 @@ pub enum PushOutcome {
     /// returned for local conflict resolution.
     Conflict(OfflineQueueItem),
     /// Item was rejected with a reason.
-    Rejected { reason: String },
+    Rejected {
+        /// Human-readable reason for the rejection (e.g. "duplicate id").
+        reason: String,
+    },
 }
 
 /// Response from the push endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushResponse {
+    /// Per-item outcomes in the same order as the push request.
     pub results: Vec<PushOutcome>,
 }
 

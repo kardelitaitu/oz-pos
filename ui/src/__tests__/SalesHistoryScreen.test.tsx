@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import salesFtl from '@/locales/sales.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/sales', () => ({
   listSales: vi.fn(),
@@ -41,7 +41,7 @@ const mockGetSale = getSale as ReturnType<typeof vi.fn>;
 const mockListRefunds = listRefunds as ReturnType<typeof vi.fn>;
 const mockListStaff = listStaff as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, salesFtl);
+const wrap = (children: React.ReactNode) => withFluent(children, salesFtl, sharedFtl);
 
 const sampleSales = [
   {
@@ -149,7 +149,7 @@ describe('SalesHistoryScreen', () => {
     });
 
     // Click the "Voided" filter chip.
-    const voidedChip = screen.getByRole('radio', { name: /voided/i });
+    const voidedChip = screen.getByRole('button', { name: /voided/i });
     await user.click(voidedChip);
 
     // After filtering, only the Voided sale (sale-003) remains.

@@ -100,6 +100,7 @@ export interface WorkspaceScope {
 const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);
 
 // eslint-disable-next-line react-refresh/only-export-components
+/** Access the current workspace scope (storeId, instanceId, typeKey), or null. */
 export function useWorkspaceScope(): WorkspaceScope | null {
   return useContext(WorkspaceScopeContext);
 }
@@ -107,6 +108,7 @@ export function useWorkspaceScope(): WorkspaceScope | null {
 // ── Main workspace context ──────────────────────────────────────────
 
 // eslint-disable-next-line react-refresh/only-export-components
+/** Full workspace context value exposed to consumers. */
 export interface WorkspaceContextValue {
   /** Workspace type key (backward compat). Same as activeInstance?.type_key. */
   activeWorkspace: string | null;
@@ -146,6 +148,14 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
  *  Kept as fallback when boot resolution fails. */
 const DEFAULT_STORE_ID = "default";
 
+/**
+ * Provides workspace state to the entire app tree.
+ *
+ * Loads available workspaces on mount, resolves the boot store via
+ * ADR #4 Phase 3, manages the active workspace/instance selection,
+ * creates session tokens (ADR #4 / ADR #7), and supports hot-swap
+ * session token switching (ADR #6).
+ */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   // Standalone state — not derived from activeInstance, so it works
@@ -505,6 +515,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
+/** Access the workspace context. Must be used within a `<WorkspaceProvider>`. */
 export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext);
   if (!ctx)

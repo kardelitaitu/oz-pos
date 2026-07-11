@@ -1,3 +1,10 @@
+//! Product bundle domain type — a single SKU that bundles multiple sub-items.
+//!
+//! A [`ProductBundle`] groups several products into one sellable unit.
+//! Each component is a [`BundleItem`] with its own quantity and optional
+//! price override. The `BundleWithItems` struct is the compound result
+//! returned by list/get endpoints.
+
 use serde::{Deserialize, Serialize};
 
 /// A product bundle — a single SKU that contains multiple sub-items.

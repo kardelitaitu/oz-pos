@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Staff Module — user and role management.
 //!
 //! This module owns the staff management vertical: user CRUD, role

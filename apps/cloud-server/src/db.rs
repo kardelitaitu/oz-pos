@@ -158,21 +158,27 @@ impl DbPool {
 /// Errors that can occur during database setup.
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
+    /// A SQLite-specific error occurred.
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
+    /// An error from the `oz-core` crate.
     #[error("Core error: {0}")]
     Core(#[from] oz_core::error::CoreError),
 
+    /// Invalid or missing configuration.
     #[error("Configuration error: {0}")]
     Config(String),
 
+    /// Failed to create or configure the connection pool.
     #[error("Pool creation error: {0}")]
     Pool(String),
 
+    /// Failed to establish a database connection.
     #[error("Connection error: {0}")]
     Connection(String),
 
+    /// A database migration step failed.
     #[error("Migration error: {0}")]
     Migration(String),
 }

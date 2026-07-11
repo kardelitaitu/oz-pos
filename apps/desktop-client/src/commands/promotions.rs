@@ -12,22 +12,36 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+/// Createpromotionargs.
 pub struct CreatePromotionArgs {
+    /// Display name.
     pub name: String,
     #[serde(default)]
+    /// Human-readable description.
     pub description: String,
+    /// Promo Type.
     pub promo_type: String,
+    /// Value Minor.
     pub value_minor: i64,
+    /// Min Qty.
     pub min_qty: Option<i64>,
+    /// Trigger Sku.
     pub trigger_sku: Option<String>,
+    /// Reward Sku.
     pub reward_sku: Option<String>,
+    /// Reward Qty.
     pub reward_qty: Option<i64>,
+    /// Starts At.
     pub starts_at: Option<String>,
+    /// Ends At.
     pub ends_at: Option<String>,
     #[serde(default)]
+    /// Min Order Minor.
     pub min_order_minor: i64,
+    /// ID of the associated category.
     pub category_id: Option<String>,
     #[serde(default = "default_true")]
+    /// Whether this record is active.
     pub active: bool,
 }
 

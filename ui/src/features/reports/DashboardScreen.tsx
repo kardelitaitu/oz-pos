@@ -30,6 +30,7 @@ function fmtCurrency(minor: number, currency: string): string {
   }).format(minor / 100);
 }
 
+/** Dashboard screen — daily revenue summary, weekly trend, top products, and low-stock alerts in a card-based overview. */
 export default function DashboardScreen() {
   const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);

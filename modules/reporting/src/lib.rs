@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Reporting Module — generates and exports sales, inventory, and financial reports.
 //!
 //! This module subscribes to the `sale.completed` domain event to capture

@@ -140,4 +140,58 @@ mod tests {
         let bc = Barcode::new("012345678905").unwrap();
         assert_eq!(bc.as_str(), bc.to_string());
     }
+
+    // ── Display / Clone / Eq / Hash ──
+
+    #[test]
+    fn barcode_display_formats_as_inner() {
+        let bc = Barcode::new("4901234567890").unwrap();
+        assert_eq!(bc.to_string(), "4901234567890");
+    }
+
+    #[test]
+    fn barcode_clone_preserves_value() {
+        let bc = Barcode::new("5901234123457").unwrap();
+        let c = bc.clone();
+        assert_eq!(bc, c);
+        assert_eq!(c.as_str(), "5901234123457");
+    }
+
+    #[test]
+    fn barcode_equality_compares_inner_value() {
+        let a = Barcode::new("ABC").unwrap();
+        let b = Barcode::new("ABC").unwrap();
+        let c = Barcode::new("XYZ").unwrap();
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn barcode_hash_consistent_with_eq() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let a = Barcode::new("ABC").unwrap();
+        let b = Barcode::new("ABC").unwrap();
+        let mut ha = DefaultHasher::new();
+        let mut hb = DefaultHasher::new();
+        a.hash(&mut ha);
+        b.hash(&mut hb);
+        assert_eq!(ha.finish(), hb.finish());
+    }
+
+    #[test]
+    fn barcode_debug_format_contains_value() {
+        let bc = Barcode::new("4901234567890").unwrap();
+        let debug = format!("{:?}", bc);
+        assert!(debug.contains("4901234567890"));
+    }
+
+    // ── FromStr error ──
+
+    #[test]
+    fn from_str_error_on_whitespace() {
+        let err: ValidationError = "   ".parse::<Barcode>().unwrap_err();
+        assert_eq!(err.field, "barcode");
+        assert!(err.message.contains("must not be empty"));
+    }
 }

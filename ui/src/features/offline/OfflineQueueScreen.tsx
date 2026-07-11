@@ -53,6 +53,7 @@ function statusLabel(status: string): string {
 
 // ── Component ───────────────────────────────────────────────────────
 
+/** Offline queue screen — view pending, synced, and failed offline operations with retry and delete capabilities. */
 export default function OfflineQueueScreen() {
   const { l10n } = useLocalization();
   const [items, setItems] = useState<OfflineQueueItemDto[]>([]);

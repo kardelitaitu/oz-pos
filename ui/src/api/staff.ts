@@ -4,11 +4,13 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ── Auth ──────────────────────────────────────────────────────────
 
+/** Arguments for staff login with PIN. */
 export interface StaffLoginArgs {
   username: string;
   pin: string;
 }
 
+/** A login session with user and role info. */
 export interface LoginSessionDto {
   user_id: string;
   display_name: string;
@@ -16,15 +18,18 @@ export interface LoginSessionDto {
   role_id: string;
 }
 
+/** Result of a successful staff login. */
 export interface StaffLoginResult {
   session: LoginSessionDto;
 }
 
+/** Authenticate a staff member with username and PIN. */
 export const staffLogin = (args: StaffLoginArgs): Promise<StaffLoginResult> =>
   invoke<StaffLoginResult>('staff_login', { args });
 
 // ── Staff Management ──────────────────────────────────────────────
 
+/** A staff member record. */
 export interface StaffMemberDto {
   id: string;
   username: string;
@@ -34,12 +39,14 @@ export interface StaffMemberDto {
   is_active: boolean;
 }
 
+/** A role definition with display name and description. */
 export interface RoleDto {
   id: string;
   name: string;
   description: string;
 }
 
+/** Arguments for creating a new staff member. */
 export interface CreateStaffArgs {
   username: string;
   pin: string;
@@ -49,6 +56,7 @@ export interface CreateStaffArgs {
   caller_user_id: string;
 }
 
+/** Arguments for updating an existing staff member. */
 export interface UpdateStaffArgs {
   id: string;
   username: string;
@@ -59,15 +67,19 @@ export interface UpdateStaffArgs {
   caller_user_id: string;
 }
 
+/** List all staff members. */
 export const listStaff = (): Promise<StaffMemberDto[]> =>
   invoke<StaffMemberDto[]>('list_staff');
 
+/** List all roles. */
 export const listRoles = (): Promise<RoleDto[]> =>
   invoke<RoleDto[]>('list_roles');
 
+/** Create a new staff member. */
 export const createStaff = (args: CreateStaffArgs): Promise<StaffMemberDto> =>
   invoke<StaffMemberDto>('create_staff', { args });
 
+/** Update an existing staff member. */
 export const updateStaff = (args: UpdateStaffArgs): Promise<StaffMemberDto> =>
   invoke<StaffMemberDto>('update_staff', { args });
 

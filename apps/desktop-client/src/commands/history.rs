@@ -16,13 +16,21 @@ use crate::state::AppState;
 // ── Sale list / detail ───────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Salelistitem.
 pub struct SaleListItem {
+    /// Unique identifier.
     pub id: String,
+    /// Total amount in minor currency units.
     pub total: Money,
+    /// Line Count.
     pub line_count: i64,
+    /// Current status.
     pub status: String,
+    /// Payment Method.
     pub payment_method: Option<String>,
+    /// ID of the associated user.
     pub user_id: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
@@ -73,17 +81,29 @@ fn map_sale_to_item(s: oz_core::Sale) -> SaleListItem {
 }
 
 #[derive(Debug, Serialize)]
+/// Saledetail.
 pub struct SaleDetail {
+    /// Unique identifier.
     pub id: String,
+    /// Total amount in minor currency units.
     pub total: Money,
+    /// Subtotal.
     pub subtotal: Money,
+    /// Tax Total.
     pub tax_total: Money,
+    /// Line Count.
     pub line_count: i64,
+    /// Current status.
     pub status: String,
+    /// Payment Method.
     pub payment_method: Option<String>,
+    /// Tendered Minor.
     pub tendered_minor: Option<i64>,
+    /// ID of the associated user.
     pub user_id: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// Lines.
     pub lines: Vec<oz_core::SaleLine>,
 }
 
@@ -211,22 +231,36 @@ pub async fn export_sales_by_hour_scoped(
 // ── EOD (End-of-Day) Report ──────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Eodreport.
 pub struct EodReport {
+    /// Total Sales.
     pub total_sales: i64,
+    /// Total Revenue.
     pub total_revenue: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Payment Breakdown.
     pub payment_breakdown: Vec<PaymentBreakdown>,
+    /// Void Count.
     pub void_count: i64,
+    /// Void Total.
     pub void_total: i64,
+    /// Discount Count.
     pub discount_count: i64,
+    /// Discount Total.
     pub discount_total: i64,
+    /// Hourly Breakdown.
     pub hourly_breakdown: Vec<SalesByHourRow>,
 }
 
 #[derive(Debug, Serialize)]
+/// Paymentbreakdown.
 pub struct PaymentBreakdown {
+    /// Method.
     pub method: String,
+    /// Count.
     pub count: i64,
+    /// Total amount in minor currency units.
     pub total: i64,
 }
 

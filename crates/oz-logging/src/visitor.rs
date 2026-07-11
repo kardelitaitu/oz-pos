@@ -8,7 +8,10 @@
 ///
 /// The `message` field is formatted without quotes. Other fields are
 /// appended as `name=value` pairs.
-pub struct MessageVisitor<'a>(pub &'a mut String);
+pub struct MessageVisitor<'a>(
+    /// Output buffer — formatted event fields are appended into this string.
+    pub &'a mut String,
+);
 
 impl<'a> tracing::field::Visit for MessageVisitor<'a> {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {

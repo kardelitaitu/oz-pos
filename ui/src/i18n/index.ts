@@ -52,6 +52,7 @@ import giftCardsId from '../locales/gift-cards.id.ftl?raw';
 import purchasingId from '../locales/purchasing.id.ftl?raw';
 import stockCountingId from '../locales/stock-counting.id.ftl?raw';
 
+/** Supported application locale codes. */
 export type LocaleCode = 'en' | 'id';
 
 const enFTL = [
@@ -77,6 +78,7 @@ const RESOURCES: Record<LocaleCode, string> = {
 
 const bundles = new Map<LocaleCode, FluentBundle>();
 
+/** Get (or create) a cached FluentBundle for the given locale. */
 export function getBundle(locale: LocaleCode): FluentBundle {
   let bundle = bundles.get(locale);
   if (!bundle) {
@@ -91,10 +93,12 @@ export function getBundle(locale: LocaleCode): FluentBundle {
   return bundle;
 }
 
+/** Return the list of locale codes the application supports. */
 export function getAvailableLocales(): LocaleCode[] {
   return ['en', 'id'];
 }
 
+/** Return the Fluent i18n key for a locale's display label. */
 export function getLocaleLabel(locale: LocaleCode): string {
   const labels: Record<LocaleCode, string> = { en: 'locale-en', id: 'locale-id' };
   return labels[locale];

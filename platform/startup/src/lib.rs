@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 // Allow `cfg(feature = "metrics")` from the transitive dependency on
 // `oz-reporting` without requiring platform-startup to declare the feature.
 #![allow(unexpected_cfgs)]

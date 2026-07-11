@@ -2,6 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+/** A registered POS terminal. */
 export interface TerminalDto {
   id: string;
   name: string;
@@ -13,6 +14,7 @@ export interface TerminalDto {
   updatedAt: string;
 }
 
+/** Arguments for registering a new POS terminal. */
 export interface RegisterTerminalArgs {
   name: string;
   deviceId: string;
@@ -20,6 +22,7 @@ export interface RegisterTerminalArgs {
   metadata?: string | null;
 }
 
+/** Arguments for updating an existing terminal. */
 export interface UpdateTerminalArgs {
   id: string;
   name: string;
@@ -28,6 +31,7 @@ export interface UpdateTerminalArgs {
   metadata?: string | null;
 }
 
+/** List all registered terminals. */
 export const listTerminals = (): Promise<TerminalDto[]> =>
   invoke<TerminalDto[]>('list_terminals');
 
@@ -35,6 +39,7 @@ export const listTerminals = (): Promise<TerminalDto[]> =>
 export const listTerminalsScoped = (sessionToken: string): Promise<TerminalDto[]> =>
   invoke<TerminalDto[]>('list_terminals_scoped', { sessionToken });
 
+/** Get a single terminal by its identifier. */
 export const getTerminal = (id: string): Promise<TerminalDto | null> =>
   invoke<TerminalDto | null>('get_terminal', { id });
 
@@ -42,6 +47,7 @@ export const getTerminal = (id: string): Promise<TerminalDto | null> =>
 export const getTerminalScoped = (sessionToken: string, id: string): Promise<TerminalDto | null> =>
   invoke<TerminalDto | null>('get_terminal_scoped', { sessionToken, id });
 
+/** Register a new POS terminal. */
 export const registerTerminal = (userId: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
   invoke<{ id: string }>('register_terminal', { userId, args });
 
@@ -49,6 +55,7 @@ export const registerTerminal = (userId: string, args: RegisterTerminalArgs): Pr
 export const registerTerminalScoped = (sessionToken: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
   invoke<{ id: string }>('register_terminal_scoped', { sessionToken, args });
 
+/** Update an existing terminal's details. */
 export const updateTerminal = (userId: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
   invoke<{ id: string }>('update_terminal', { userId, args });
 
@@ -56,6 +63,7 @@ export const updateTerminal = (userId: string, args: UpdateTerminalArgs): Promis
 export const updateTerminalScoped = (sessionToken: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
   invoke<{ id: string }>('update_terminal_scoped', { sessionToken, args });
 
+/** Ping a terminal to check it is reachable. */
 export const pingTerminal = (id: string): Promise<void> =>
   invoke<void>('ping_terminal', { id });
 
@@ -63,6 +71,7 @@ export const pingTerminal = (id: string): Promise<void> =>
 export const pingTerminalScoped = (sessionToken: string, id: string): Promise<void> =>
   invoke<void>('ping_terminal_scoped', { sessionToken, id });
 
+/** Delete a terminal registration. */
 export const deleteTerminal = (userId: string, id: string): Promise<void> =>
   invoke('delete_terminal', { userId, id });
 
@@ -72,6 +81,7 @@ export const deleteTerminalScoped = (sessionToken: string, id: string): Promise<
 
 // ── Feature Overrides ──────────────────────────────────────────────
 
+/** A feature override applied to a specific terminal. */
 export interface TerminalFeatureOverride {
   terminalId: string;
   feature: string;
@@ -80,6 +90,7 @@ export interface TerminalFeatureOverride {
   updatedAt: string;
 }
 
+/** List feature overrides for a terminal. */
 export const listTerminalOverrides = (terminalId: string): Promise<TerminalFeatureOverride[]> =>
   invoke<TerminalFeatureOverride[]>('list_terminal_overrides', { terminalId });
 
@@ -87,6 +98,7 @@ export const listTerminalOverrides = (terminalId: string): Promise<TerminalFeatu
 export const listTerminalOverridesScoped = (sessionToken: string, terminalId: string): Promise<TerminalFeatureOverride[]> =>
   invoke<TerminalFeatureOverride[]>('list_terminal_overrides_scoped', { sessionToken, terminalId });
 
+/** Enable or disable a feature override for a terminal. */
 export const setTerminalOverride = (
   userId: string,
   terminalId: string,
@@ -104,6 +116,7 @@ export const setTerminalOverrideScoped = (
 ): Promise<void> =>
   invoke<void>('set_terminal_override_scoped', { sessionToken, terminalId, feature, enabled });
 
+/** Remove a feature override from a terminal. */
 export const deleteTerminalOverride = (
   userId: string,
   terminalId: string,
@@ -121,6 +134,7 @@ export const deleteTerminalOverrideScoped = (
 
 // ── Terminal Profiles ───────────────────────────────────────────────
 
+/** A terminal profile defining its locked screen and profile type. */
 export interface TerminalProfileDto {
   terminalId: string;
   profileType: string;
@@ -128,6 +142,7 @@ export interface TerminalProfileDto {
   updatedAt: string;
 }
 
+/** Get the profile for a terminal. */
 export const getTerminalProfile = (
   terminalId: string,
 ): Promise<TerminalProfileDto | null> =>
@@ -140,6 +155,7 @@ export const getTerminalProfileScoped = (
 ): Promise<TerminalProfileDto | null> =>
   invoke<TerminalProfileDto | null>('get_terminal_profile_scoped', { sessionToken, terminalId });
 
+/** Set or update a terminal's profile. */
 export const setTerminalProfile = (
   userId: string,
   terminalId: string,
@@ -163,6 +179,7 @@ export const setTerminalProfileScoped = (
     args: { terminalId, profileType, lockedScreen },
   });
 
+/** List all terminal profiles. */
 export const listTerminalProfiles = (): Promise<TerminalProfileDto[]> =>
   invoke<TerminalProfileDto[]>('list_terminal_profiles');
 
@@ -170,6 +187,7 @@ export const listTerminalProfiles = (): Promise<TerminalProfileDto[]> =>
 export const listTerminalProfilesScoped = (sessionToken: string): Promise<TerminalProfileDto[]> =>
   invoke<TerminalProfileDto[]>('list_terminal_profiles_scoped', { sessionToken });
 
+/** Delete a terminal's profile. */
 export const deleteTerminalProfile = (
   userId: string,
   terminalId: string,
@@ -185,6 +203,7 @@ export const deleteTerminalProfileScoped = (
 
 // ── Device Binding (ADR #4 Phase 3) ────────────────────────────────
 
+/** Device binding status with HMAC signature validation result. */
 export interface DeviceBindingDto {
   bounded: boolean;
   boundStoreId: string | null;

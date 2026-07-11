@@ -1,3 +1,10 @@
+//! Restaurant table domain type — floor plan positions and statuses.
+//!
+//! A [`Table`] represents a physical table in the restaurant's floor plan
+//! with position coordinates, capacity, and current status (available,
+//! occupied, reserved, cleaning). The [`TableStatus`] enum drives the
+//! state machine that prevents double-seating.
+
 use serde::{Deserialize, Serialize};
 
 /// Status of a restaurant table in the floor plan.

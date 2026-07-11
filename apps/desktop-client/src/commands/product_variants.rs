@@ -19,22 +19,34 @@ use crate::state::AppState;
 /// Money DTO matching the front-end `Money` type (snake_case keys).
 #[derive(Debug, Serialize)]
 pub struct MoneyDto {
+    /// Minor Units.
     pub minor_units: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
 }
 
 /// Product variant DTO for the front-end.
 #[derive(Debug, Serialize)]
 pub struct ProductVariantDto {
+    /// Unique identifier.
     pub id: String,
+    /// Parent Sku.
     pub parent_sku: String,
+    /// Display name.
     pub name: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Unit price in minor currency units.
     pub price: Option<MoneyDto>,
+    /// Barcode string.
     pub barcode: Option<String>,
+    /// Display sort order.
     pub sort_order: i64,
+    /// Whether this is active.
     pub is_active: bool,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -103,19 +115,30 @@ pub async fn get_product_variant(
 // ── Create ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Createproductvariantargs.
 pub struct CreateProductVariantArgs {
+    /// Parent Sku.
     pub parent_sku: String,
+    /// Display name.
     pub name: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Price Minor.
     pub price_minor: Option<i64>,
+    /// ISO-4217 currency code.
     pub currency: Option<String>,
+    /// Barcode string.
     pub barcode: Option<String>,
+    /// Display sort order.
     pub sort_order: Option<i64>,
+    /// Whether this is active.
     pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
+/// Createproductvariantresult.
 pub struct CreateProductVariantResult {
+    /// Stock-keeping unit identifier.
     pub sku: String,
 }
 
@@ -168,18 +191,28 @@ pub async fn create_product_variant(
 // ── Update ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Updateproductvariantargs.
 pub struct UpdateProductVariantArgs {
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Display name.
     pub name: Option<String>,
+    /// Price Minor.
     pub price_minor: Option<i64>,
+    /// ISO-4217 currency code.
     pub currency: Option<String>,
+    /// Barcode string.
     pub barcode: Option<String>,
+    /// Display sort order.
     pub sort_order: Option<i64>,
+    /// Whether this is active.
     pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
+/// Updateproductvariantresult.
 pub struct UpdateProductVariantResult {
+    /// Stock-keeping unit identifier.
     pub sku: String,
 }
 

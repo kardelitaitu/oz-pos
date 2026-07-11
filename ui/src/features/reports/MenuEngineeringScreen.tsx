@@ -137,6 +137,7 @@ function ScatterTooltip({
   );
 }
 
+/** Menu engineering report — scatter chart of menu items by popularity and profitability with quadrant classification (Star, Plowhorse, Puzzle, Dog). */
 export default function MenuEngineeringScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

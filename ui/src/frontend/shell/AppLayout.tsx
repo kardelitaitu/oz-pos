@@ -12,6 +12,7 @@ import './AppLayout.css';
 
 // ── Route type ──────────────────────────────────────────────────────
 
+/** Route name used for application navigation. */
 export type AppRoute = string;
 
 // ── Section ordering ─────────────────────────────────────────────────
@@ -45,6 +46,7 @@ function groupBySection<T extends { section?: SectionName }>(items: T[]): { sect
 
 // ── Props ───────────────────────────────────────────────────────────
 
+/** Props for the AppLayout sidebar shell component. */
 export interface AppLayoutProps {
   /** Current active route. */
   route: AppRoute;

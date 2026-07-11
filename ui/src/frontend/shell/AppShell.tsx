@@ -52,12 +52,14 @@ export default function AppShell() {
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [hasActiveLicense, setHasActiveLicense] = useState(false);
+  const [licenseError, setLicenseError] = useState<string | null>(null);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session, logout } = useAuth();
   const { activeWorkspace } = useWorkspace();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { isKdsKiosk } = useTerminalProfile();
+  const { addToast } = useToast();
 
   useIdleTimer(() => {
     if (activeWorkspace) {
@@ -79,16 +81,22 @@ export default function AppShell() {
         const licenseStatus = await getLicenseStatus();
         if (!cancelled) {
           setHasActiveLicense(licenseStatus.is_active);
+          if (licenseStatus.status === 'gracePeriod') {
+            addToast({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
+          } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
+            setLicenseError(licenseStatus.message);
+          }
         }
 
         const status = await getSetupStatus();
         if (!cancelled) {
           setHasCompletedSetup(status.completed);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setHasCompletedSetup(false);
           setHasActiveLicense(false);
+          setLicenseError(String(err));
         }
       } finally {
         if (!cancelled) {
@@ -97,7 +105,7 @@ export default function AppShell() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [addToast]);
 
   // Navigate to workspace-appropriate route on selection.
   const prevWorkspaceRef = useRef(activeWorkspace);
@@ -132,7 +140,6 @@ export default function AppShell() {
   }, []);
 
   // ── F11 toggles fullscreen across all workpaces ───────────────
-  const { addToast } = useToast();
   useFullscreen((isFullscreen) => {
     addToast({
       type: 'info',
@@ -186,7 +193,10 @@ export default function AppShell() {
 
   if (!hasActiveLicense) {
     return (
-      <LicenseActivationScreen onActivated={() => setHasActiveLicense(true)} />
+      <LicenseActivationScreen 
+        initialError={licenseError}
+        onActivated={() => setHasActiveLicense(true)} 
+      />
     );
   }
 

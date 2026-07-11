@@ -15,14 +15,23 @@ use crate::state::AppState;
 /// JSON-safe representation of a store profile for the front-end.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoreProfileDto {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Street address.
     pub address: String,
+    /// ID of the associated tax.
     pub tax_id: String,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Timezone.
     pub timezone: String,
+    /// Whether this is primary.
     pub is_primary: bool,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -43,22 +52,36 @@ impl From<StoreProfile> for StoreProfileDto {
 }
 
 #[derive(Debug, Deserialize)]
+/// Createstoreprofileargs.
 pub struct CreateStoreProfileArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Street address.
     pub address: Option<String>,
+    /// ID of the associated tax.
     pub tax_id: Option<String>,
+    /// ISO-4217 currency code.
     pub currency: Option<String>,
+    /// Timezone.
     pub timezone: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Updatestoreprofileargs.
 pub struct UpdateStoreProfileArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Street address.
     pub address: String,
+    /// ID of the associated tax.
     pub tax_id: String,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Timezone.
     pub timezone: String,
 }
 

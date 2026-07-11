@@ -1,3 +1,6 @@
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square)
+
+
 # OZ-POS
 
 > **A modular, offline-first Point-of-Sale platform built with Rust and Tauri v2.**

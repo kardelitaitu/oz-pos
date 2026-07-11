@@ -4,6 +4,11 @@ import { listStores, setPrimaryStore, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import './StoreSwitcher.css';
 
+/**
+ * Dropdown to switch between available stores.
+ * Loads the store list from the backend on mount and updates the
+ * primary store selection. Hidden when only one store exists.
+ */
 export default function StoreSwitcher() {
   const { l10n } = useLocalization();
   const { switchStore } = useWorkspace();

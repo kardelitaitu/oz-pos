@@ -1,16 +1,22 @@
 package main
 
 import (
+	"log"
+	"os"
 	"sync"
 	"time"
 )
 
 // rateLimiter is a simple in-memory token bucket per IP.
 // Not persisted; resets on server restart (acceptable for activation volume).
+// Background cleanup via a goroutine avoids O(N) lock contention on every
+// request. Stale buckets (>2h idle) are swept every 30 minutes.
 type rateLimiter struct {
-	mu       sync.Mutex
-	buckets  map[string]*tokenBucket
-	maxPerHr int
+	mu             sync.Mutex
+	buckets        map[string]*tokenBucket
+	maxPerHr       int
+	stopCleanup    chan struct{}
+	cleanupRunning bool
 }
 
 type tokenBucket struct {
@@ -18,10 +24,65 @@ type tokenBucket struct {
 	lastFill time.Time
 }
 
+const ipCleanupInterval = 30 * time.Minute
+const ipBucketTTL = 2 * time.Hour
+
 // ipRateLimiter limits activation attempts to 5 per IP per hour.
 var ipRateLimiter = &rateLimiter{
 	buckets:  make(map[string]*tokenBucket),
 	maxPerHr: 5,
+}
+
+// startCleanup launches a background goroutine that periodically sweeps
+// expired buckets to prevent unbounded memory growth. Call stopCleanup
+// to shut it down (e.g. in tests). Idempotent; no-op if already running.
+func (rl *rateLimiter) startCleanup() {
+	rl.mu.Lock()
+	if rl.cleanupRunning {
+		rl.mu.Unlock()
+		return
+	}
+	rl.stopCleanup = make(chan struct{})
+	rl.cleanupRunning = true
+	ch := rl.stopCleanup
+	rl.mu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(ipCleanupInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				rl.sweep()
+			case <-ch:
+				return
+			}
+		}
+	}()
+}
+
+// stop terminates the background cleanup goroutine. Idempotent.
+func (rl *rateLimiter) stop() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if !rl.cleanupRunning {
+		return
+	}
+	close(rl.stopCleanup)
+	rl.cleanupRunning = false
+}
+
+// sweep removes buckets that haven't been used in ipBucketTTL.
+// Called by the background goroutine; also exposed for tests.
+func (rl *rateLimiter) sweep() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	for k, v := range rl.buckets {
+		if now.Sub(v.lastFill) > ipBucketTTL {
+			delete(rl.buckets, k)
+		}
+	}
 }
 
 func (rl *rateLimiter) allow(ip string) bool {
@@ -49,22 +110,110 @@ func (rl *rateLimiter) allow(ip string) bool {
 
 // keyFailureTracker tracks per-key brute-force attempts with a TTL.
 type keyFailureTracker struct {
-	mu          sync.Mutex
-	failures    map[string]*keyFailures
-	maxAttempts int
-	cooldown    time.Duration
+	mu             sync.Mutex
+	failures        map[string]*keyFailures
+	maxAttempts    int
+	cooldown        time.Duration
+	stopCleanup    chan struct{}
+	cleanupRunning bool
 }
 
 type keyFailures struct {
-	count      int
-	cooldownAt time.Time
+	count       int
+	cooldownAt  time.Time
+	lastAttempt time.Time
 }
 
-// keyFailTracker limits to 3 failed attempts per key, then 15-minute cooldown.
+const keyCleanupInterval = 1 * time.Hour
+const keyPartialFailureTTL = 1 * time.Hour // decay partial failures after 1h idle
+
+// defaultKeyCooldown is the cooldown applied after maxAttempts failures
+// are recorded against a single key. Production default; overridable via
+// the LICENSE_KEY_COOLDOWN env var (e.g. for development to use a much
+// shorter cooldown that doesn't punish legitimate retries).
+const defaultKeyCooldown = 15 * time.Minute
+
+// parseCooldown returns the cooldown duration to apply to keyFailTracker,
+// honoring the LICENSE_KEY_COOLDOWN env var. Falls back to the production
+// default if the env var is unset or unparseable — never weakens security
+// implicitly.
+func parseCooldown() time.Duration {
+	v := os.Getenv("LICENSE_KEY_COOLDOWN")
+	if v == "" {
+		return defaultKeyCooldown
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		log.Printf("keyFailTracker: invalid LICENSE_KEY_COOLDOWN=%q (using default %v): %v",
+			v, defaultKeyCooldown, err)
+		return defaultKeyCooldown
+	}
+	log.Printf("keyFailTracker: cooldown overridden to %v via LICENSE_KEY_COOLDOWN", d)
+	return d
+}
+
+// keyFailTracker limits to 3 failed attempts per key, then a cooldown
+// (default 15 min; LICENSE_KEY_COOLDOWN env var overrides for dev).
 var keyFailTracker = &keyFailureTracker{
 	failures:    make(map[string]*keyFailures),
 	maxAttempts: 3,
-	cooldown:    15 * time.Minute,
+	cooldown:    defaultKeyCooldown,
+}
+
+// startCleanup launches a background goroutine that sweeps expired entries.
+// Idempotent; no-op if already running.
+func (kf *keyFailureTracker) startCleanup() {
+	kf.mu.Lock()
+	if kf.cleanupRunning {
+		kf.mu.Unlock()
+		return
+	}
+	kf.stopCleanup = make(chan struct{})
+	kf.cleanupRunning = true
+	ch := kf.stopCleanup
+	kf.mu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(keyCleanupInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				kf.sweep()
+			case <-ch:
+				return
+			}
+		}
+	}()
+}
+
+// stop terminates the background cleanup goroutine. Idempotent.
+func (kf *keyFailureTracker) stop() {
+	kf.mu.Lock()
+	defer kf.mu.Unlock()
+	if !kf.cleanupRunning {
+		return
+	}
+	close(kf.stopCleanup)
+	kf.cleanupRunning = false
+}
+
+// sweep removes stale partial-failure entries and expired cooldowns.
+func (kf *keyFailureTracker) sweep() {
+	kf.mu.Lock()
+	defer kf.mu.Unlock()
+	now := time.Now()
+	for k, v := range kf.failures {
+		// Partial failures that haven't been seen in keyPartialFailureTTL are stale.
+		if v.count < kf.maxAttempts && now.Sub(v.lastAttempt) > keyPartialFailureTTL {
+			delete(kf.failures, k)
+			continue
+		}
+		// Cooldown entries that have passed their cooldown.
+		if v.count >= kf.maxAttempts && now.After(v.cooldownAt) {
+			delete(kf.failures, k)
+		}
+	}
 }
 
 func (kf *keyFailureTracker) isBlocked(key string) bool {
@@ -75,9 +224,17 @@ func (kf *keyFailureTracker) isBlocked(key string) bool {
 	if !ok {
 		return false
 	}
-	// Only clean up entries that have reached maxAttempts AND passed cooldown.
-	// Entries with partial failures (count < maxAttempts) persist to track
-	// progressive brute-force attempts.
+
+	// Decay partial failures: if the user made a few wrong attempts
+	// but hasn't tried again in keyPartialFailureTTL, reset the counter
+	// so they get a fresh start (prevents "one typo away from block" forever).
+	if f.count < kf.maxAttempts && time.Since(f.lastAttempt) > keyPartialFailureTTL {
+		f.count = 0
+		f.lastAttempt = time.Now()
+		return false
+	}
+
+	// Clean up entries that have reached maxAttempts AND passed cooldown.
 	if f.count >= kf.maxAttempts && time.Now().After(f.cooldownAt) {
 		delete(kf.failures, key)
 		return false
@@ -95,7 +252,44 @@ func (kf *keyFailureTracker) recordFailure(key string) {
 		kf.failures[key] = f
 	}
 	f.count++
+	f.lastAttempt = time.Now()
 	if f.count >= kf.maxAttempts {
 		f.cooldownAt = time.Now().Add(kf.cooldown)
 	}
+}
+
+func init() {
+	// Apply the LICENSE_KEY_COOLDOWN env override (or fall back to
+	// defaultKeyCooldown) before cleanup goroutines start.
+	keyFailTracker.cooldown = parseCooldown()
+
+	ipRateLimiter.startCleanup()
+	keyFailTracker.startCleanup()
+}
+
+// keyActivationLocks provides per-key mutual exclusion to prevent
+// concurrent activation of the same license key. Two goroutines
+// racing to activate the same key will be serialised.
+type keyActivationLocks struct {
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+var activationLocks = &keyActivationLocks{
+	locks: make(map[string]*sync.Mutex),
+}
+
+// lock acquires a mutex for the given key, creating one if needed.
+// Returns a function that must be called to release the lock.
+func (kal *keyActivationLocks) lock(key string) func() {
+	kal.mu.Lock()
+	mu, ok := kal.locks[key]
+	if !ok {
+		mu = &sync.Mutex{}
+		kal.locks[key] = mu
+	}
+	kal.mu.Unlock()
+
+	mu.Lock()
+	return func() { mu.Unlock() }
 }

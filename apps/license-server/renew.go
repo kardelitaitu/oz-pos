@@ -13,6 +13,7 @@ import (
 type RenewRequest struct {
 	TenantID string `json:"tenant_id"`
 	APIKey   string `json:"api_key"`
+	Key      string `json:"key"` // newly purchased key to extend subscription
 }
 
 func handleRenew(app core.App) func(e *core.RequestEvent) error {
@@ -25,9 +26,22 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Validate required fields ──────────────────────────────
-		if req.TenantID == "" || req.APIKey == "" {
+		if req.TenantID == "" || req.APIKey == "" || req.Key == "" {
 			return e.JSON(http.StatusBadRequest, map[string]any{
-				"error": "tenant_id and api_key are required",
+				"error": "tenant_id, api_key, and key are required",
+			})
+		}
+
+		clientIP := e.RealIP()
+		if !ipRateLimiter.allow(clientIP) {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error": "rate limit exceeded, try again later",
+			})
+		}
+
+		if keyFailTracker.isBlocked(req.Key) {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error": "too many attempts for this key, try again in 15 minutes",
 			})
 		}
 
@@ -44,6 +58,15 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Validate the NEW license key ──────────────────────────
+		keyRecord, err := app.FindFirstRecordByData("license_keys", "key", req.Key)
+		if err != nil || keyRecord.GetString("status") != "unused" {
+			keyFailTracker.recordFailure(req.Key)
+			return e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "invalid or already used license key",
+			})
+		}
+
 		// ── Find the latest active subscription ───────────────────
 		subs, err := app.FindRecordsByFilter(
 			"subscriptions",
@@ -53,22 +76,51 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		)
 		if err != nil || len(subs) == 0 {
 			return e.JSON(http.StatusNotFound, map[string]any{
-				"error": "no active subscription found",
+				"error": "no active subscription found to renew",
 			})
 		}
 		currentSub := subs[0]
 
-		// ── Parse current subscription data ───────────────────────
-		tierKey := currentSub.GetString("tier_key")
-		expiresAt := calculateExpiry(tierKey)
+		// ── Parse current subscription data & extend expiry ───────
+		tierKey := keyRecord.GetString("tier_key")
+		currentExpiresAt := currentSub.GetDateTime("expires_at").Time()
+		
+		// If the current subscription has already expired, start from time.Now()
+		// If it's still active, append the new duration to the current expiry
+		baseTime := currentExpiresAt
+		if baseTime.Before(time.Now().UTC()) {
+			baseTime = time.Now().UTC()
+		}
+
+		// Calculate new expiry manually based on tier
+		var newExpiresAt time.Time
+		switch tierKey {
+		case "free":
+			newExpiresAt = baseTime.AddDate(100, 0, 0)
+		case "pro", "premium":
+			newExpiresAt = baseTime.AddDate(1, 0, 0)
+		case "enterprise":
+			newExpiresAt = baseTime.AddDate(3, 0, 0)
+		default:
+			newExpiresAt = baseTime.AddDate(1, 0, 0)
+		}
+
+		var allowedTypes []string
+		if err := json.Unmarshal([]byte(currentSub.GetString("allowed_types")), &allowedTypes); err != nil {
+			allowedTypes = []string{}
+		}
+
 		sub := SubscriptionPayload{
-			TenantID:   req.TenantID,
-			TierKey:    tierKey,
-			Status:     "active",
-			StartsAt:   time.Now().UTC().Format(time.RFC3339),
-			ExpiresAt:  expiresAt.Format(time.RFC3339),
-			GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
-			IssuedAt:   time.Now().UTC().Format(time.RFC3339),
+			TenantID:        req.TenantID,
+			TierKey:         tierKey,
+			Status:          "active",
+			MaxStores:       currentSub.GetInt("max_stores"),
+			MaxPOSInstances: currentSub.GetInt("max_pos_instances"),
+			AllowedTypes:    allowedTypes,
+			StartsAt:        time.Now().UTC().Format(time.RFC3339),
+			ExpiresAt:       newExpiresAt.Format(time.RFC3339),
+			GraceUntil:      calculateGraceUntil(newExpiresAt).Format(time.RFC3339),
+			IssuedAt:        time.Now().UTC().Format(time.RFC3339),
 		}
 
 		payloadStr, signature, err := signSubscription(sub)
@@ -107,6 +159,14 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			return e.JSON(http.StatusInternalServerError, map[string]any{
 				"error": "failed to save subscription",
 			})
+		}
+
+		// ── Mark key as activated ─────────────────────────────────
+		keyRecord.Set("status", "activated")
+		keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+		keyRecord.Set("activated_by", req.TenantID)
+		if err := app.Save(keyRecord); err != nil {
+			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{

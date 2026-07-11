@@ -5,8 +5,10 @@ import { useLocalization } from '@fluent/react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** Visual variant for a toast notification. */
 export type ToastVariant = 'success' | 'error' | 'warning' | 'info';
 
+/** A single toast notification with auto-incremented id. */
 export interface Toast {
   id: string;
   message: string;
@@ -27,6 +29,11 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 let toastCounter = 0;
 
+/**
+ * Provides toast notification context to the component tree.
+ * Renders a `<div className="toast-container">` portal for displaying
+ * toasts with auto-dismiss after 4 seconds.
+ */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const { l10n } = useLocalization();
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -70,6 +77,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 // ── Hook ───────────────────────────────────────────────────────────
 
+/** Access the toast context. Must be used within a `<ToastProvider>`. */
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) {

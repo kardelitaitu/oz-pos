@@ -6,14 +6,17 @@ import type { CartId, LineId, Money } from '@/types/domain';
 
 // ── Cart operations ────────────────────────────────────────────────
 
+/** Arguments for starting a new sale. */
 export interface StartSaleArgs {
   currency: string;
 }
 
+/** Result of starting a new sale, containing the new cart identifier. */
 export interface StartSaleResult {
   cartId: CartId;
 }
 
+/** Arguments for adding a line item to a cart. */
 export interface AddLineArgs {
   cartId: CartId;
   sku: string;
@@ -21,16 +24,19 @@ export interface AddLineArgs {
   unitPriceMinor: number;
 }
 
+/** Result of adding a line item to a cart. */
 export interface AddLineResult {
   lineId: LineId;
   lineTotal: Money | null;
 }
 
+/** A serial number captured at checkout for a tracked product. */
 export interface SerialNumberArg {
   sku: string;
   serial: string;
 }
 
+/** A single payment split for multi-method payments. */
 export interface PaymentSplitArg {
   method: string;
   amountMinor: number;
@@ -54,12 +60,14 @@ export interface CompleteSaleArgs {
   serialNumbers?: SerialNumberArg[];
 }
 
+/** Result of completing a sale. */
 export interface CompleteSaleResult {
   saleId: string;
   total: Money | null;
   lineCount: number;
 }
 
+/** Arguments for setting a discount on a cart. */
 export interface SetCartDiscountArgs {
   cartId: string;
   percent: number;
@@ -67,6 +75,7 @@ export interface SetCartDiscountArgs {
   userId: string;
 }
 
+/** Start a new sale and return the new cart identifier. */
 export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
   invoke<StartSaleResult>('start_sale', { args });
 
@@ -74,6 +83,7 @@ export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
 export const startSaleScoped = (sessionToken: string, args: StartSaleArgs): Promise<StartSaleResult> =>
   invoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
 
+/** Add a line item to a cart. */
 export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
   invoke<AddLineResult>('add_line', { args });
 
@@ -81,10 +91,11 @@ export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
 export const addLineScoped = (sessionToken: string, args: AddLineArgs): Promise<AddLineResult> =>
   invoke<AddLineResult>('add_line_scoped', { sessionToken, args });
 
+/** Complete a sale with the given payment details and return the sale record. */
 export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale', { args });
 
-/** ADR #7: Complete a sale in the store resolved from a session token — `userId` is read from session, not args. */
+/** Arguments for completing a sale scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface CompleteSaleScopedArgs {
   cartId: string;
   paymentMethod: string;
@@ -98,9 +109,11 @@ export interface CompleteSaleScopedArgs {
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
 
+/** Check whether a product is configured for serial number tracking. */
 export const getProductTrackSerial = (sku: string): Promise<boolean> =>
   invoke<boolean>('get_product_track_serial', { sku });
 
+/** Apply a percentage-based discount to a cart. */
 export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
   invoke<void>('set_cart_discount', { args });
 
@@ -114,6 +127,7 @@ export interface SetCartDiscountScopedArgs {
 export const setCartDiscountScoped = (sessionToken: string, args: SetCartDiscountScopedArgs): Promise<void> =>
   invoke<void>('set_cart_discount_scoped', { sessionToken, args });
 
+/** Arguments for overriding the price of a specific line in a cart. */
 export interface OverrideLinePriceArgs {
   cartId: string;
   lineId: string;
@@ -121,6 +135,7 @@ export interface OverrideLinePriceArgs {
   userId: string;
 }
 
+/** Override the unit price of a line item in a cart. */
 export const overrideLinePrice = (args: OverrideLinePriceArgs): Promise<void> =>
   invoke<void>('override_line_price', { args });
 
@@ -130,6 +145,7 @@ export const overrideLinePriceScoped = (sessionToken: string, cartId: string, li
 
 // ── Sales History ─────────────────────────────────────────────────
 
+/** A summary row for a sale in the sales history list. */
 export interface SaleListItem {
   id: string;
   total: Money;
@@ -140,6 +156,7 @@ export interface SaleListItem {
   createdAt: string;
 }
 
+/** A line item within a sale detail. */
 export interface SaleLineDto {
   id: string;
   sku: string;
@@ -151,6 +168,7 @@ export interface SaleLineDto {
   tax_rate_id: string | null;
 }
 
+/** Full detail of a completed sale, including line items. */
 export interface SaleDetail {
   id: string;
   total: Money;
@@ -165,6 +183,7 @@ export interface SaleDetail {
   lines: SaleLineDto[];
 }
 
+/** List all completed sales. */
 export const listSales = (): Promise<SaleListItem[]> =>
   invoke<SaleListItem[]>('list_sales');
 
@@ -172,6 +191,7 @@ export const listSales = (): Promise<SaleListItem[]> =>
 export const listSalesScoped = (sessionToken: string): Promise<SaleListItem[]> =>
   invoke<SaleListItem[]>('list_sales_scoped', { sessionToken });
 
+/** Fetch a single sale by its identifier. */
 export const getSale = (id: string): Promise<SaleDetail | null> =>
   invoke<SaleDetail | null>('get_sale', { id });
 
@@ -181,12 +201,14 @@ export const getSaleScoped = (sessionToken: string, id: string): Promise<SaleDet
 
 // ── Void Sale ─────────────────────────────────────────────────────
 
+/** Arguments for voiding a completed sale. */
 export interface VoidSaleArgs {
   saleId: string;
   userId: string;
   reason: string;
 }
 
+/** Result of voiding a sale. */
 export interface VoidSaleResult {
   id: string;
   status: string;
@@ -195,6 +217,7 @@ export interface VoidSaleResult {
   created_at: string;
 }
 
+/** Void a completed sale with a reason. */
 export const voidSale = (args: VoidSaleArgs): Promise<VoidSaleResult> =>
   invoke<VoidSaleResult>('void_sale', { args });
 
@@ -204,6 +227,7 @@ export const voidSaleScoped = (sessionToken: string, saleId: string, reason: str
 
 // ── Hold Order ────────────────────────────────────────────────────
 
+/** Arguments for holding (parking) a cart for later retrieval. */
 export interface HoldCartArgs {
   label: string;
   cart_data: string;
@@ -214,6 +238,7 @@ export interface HoldCartArgs {
   customer_name?: string;
 }
 
+/** A summary row of a held (parked) cart. */
 export interface HeldCartRow {
   id: string;
   label: string;
@@ -225,6 +250,7 @@ export interface HeldCartRow {
   customer_name: string | null;
 }
 
+/** Full detail of a held cart including serialised cart data. */
 export interface HeldCartFull {
   id: string;
   label: string;
@@ -237,6 +263,7 @@ export interface HeldCartFull {
   customer_name: string | null;
 }
 
+/** Park the current cart for later retrieval. */
 export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
   invoke<{ id: string }>('hold_cart', { args });
 
@@ -244,6 +271,7 @@ export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
 export const holdCartScoped = (sessionToken: string, args: HoldCartArgs): Promise<{ id: string }> =>
   invoke<{ id: string }>('hold_cart_scoped', { sessionToken, args });
 
+/** List all held (parked) carts. */
 export const listHeldCarts = (): Promise<HeldCartRow[]> =>
   invoke<HeldCartRow[]>('list_held_carts');
 
@@ -251,6 +279,7 @@ export const listHeldCarts = (): Promise<HeldCartRow[]> =>
 export const listHeldCartsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
   invoke<HeldCartRow[]>('list_held_carts_scoped', { sessionToken });
 
+/** List all open bills (table-based held carts). */
 export const listOpenBills = (): Promise<HeldCartRow[]> =>
   invoke<HeldCartRow[]>('list_open_bills');
 
@@ -258,6 +287,7 @@ export const listOpenBills = (): Promise<HeldCartRow[]> =>
 export const listOpenBillsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
   invoke<HeldCartRow[]>('list_open_bills_scoped', { sessionToken });
 
+/** Fetch the full detail of a held cart by its identifier. */
 export const getHeldCart = (id: string): Promise<HeldCartFull | null> =>
   invoke<HeldCartFull | null>('get_held_cart', { id });
 
@@ -265,6 +295,7 @@ export const getHeldCart = (id: string): Promise<HeldCartFull | null> =>
 export const getHeldCartScoped = (sessionToken: string, id: string): Promise<HeldCartFull | null> =>
   invoke<HeldCartFull | null>('get_held_cart_scoped', { sessionToken, id });
 
+/** Delete a held cart by its identifier. */
 export const deleteHeldCart = (id: string): Promise<void> =>
   invoke('delete_held_cart', { id });
 
@@ -274,6 +305,7 @@ export const deleteHeldCartScoped = (sessionToken: string, id: string): Promise<
 
 // ── Refunds ───────────────────────────────────────────────────────
 
+/** A single line item being refunded. */
 export interface RefundLineArg {
   saleLineId: string;
   sku: string;
@@ -283,6 +315,7 @@ export interface RefundLineArg {
   lineTotalMinor: number;
 }
 
+/** Arguments for processing a refund against a completed sale. */
 export interface ProcessRefundArgs {
   saleId: string;
   reason: string;
@@ -291,11 +324,13 @@ export interface ProcessRefundArgs {
   lines: RefundLineArg[];
 }
 
+/** Result of processing a refund. */
 export interface ProcessRefundResult {
   refundId: string;
   totalMinor: number;
 }
 
+/** A processed refund record with its associated line items. */
 export interface RefundDto {
   id: string;
   saleId: string;
@@ -307,6 +342,7 @@ export interface RefundDto {
   lines: RefundLineDto[];
 }
 
+/** A line item within a refund record. */
 export interface RefundLineDto {
   id: string;
   refundId: string;
@@ -317,6 +353,7 @@ export interface RefundLineDto {
   lineTotal: Money;
 }
 
+/** Look up a completed sale by its receipt barcode. */
 export const lookupSaleByReceiptBarcode = (barcode: string): Promise<SaleDetail | null> =>
   invoke<SaleDetail | null>('lookup_sale_by_receipt_barcode', { barcode });
 
@@ -324,10 +361,11 @@ export const lookupSaleByReceiptBarcode = (barcode: string): Promise<SaleDetail 
 export const lookupSaleByReceiptBarcodeScoped = (sessionToken: string, barcode: string): Promise<SaleDetail | null> =>
   invoke<SaleDetail | null>('lookup_sale_by_receipt_barcode_scoped', { sessionToken, barcode });
 
+/** Process a refund against a completed sale. */
 export const processRefund = (args: ProcessRefundArgs): Promise<ProcessRefundResult> =>
   invoke<ProcessRefundResult>('process_refund', { args });
 
-/** ADR #7: Scoped refund processing — `userId` is read from session, not args. */
+/** Arguments for processing a refund scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface ProcessRefundScopedArgs {
   saleId: string;
   reason: string;
@@ -338,6 +376,7 @@ export interface ProcessRefundScopedArgs {
 export const processRefundScoped = (sessionToken: string, args: ProcessRefundScopedArgs): Promise<ProcessRefundResult> =>
   invoke<ProcessRefundResult>('process_refund_scoped', { sessionToken, args });
 
+/** List all refunds for a given sale. */
 export const listRefunds = (saleId: string): Promise<RefundDto[]> =>
   invoke<RefundDto[]>('list_refunds', { saleId });
 
@@ -347,6 +386,7 @@ export const listRefundsScoped = (sessionToken: string, saleId: string): Promise
 
 // ── Dashboard & Reports ───────────────────────────────────────────
 
+/** A single row in the daily sales summary export. */
 export interface DailySummaryRow {
   sale_id: string;
   total_minor: number;
@@ -356,18 +396,21 @@ export interface DailySummaryRow {
   created_at: string;
 }
 
+/** A row in the sales-by-hour breakdown. */
 export interface SalesByHourRow {
   hour: number;
   total_minor: number;
   sale_count: number;
 }
 
+/** A payment method breakdown with count and total. */
 export interface PaymentBreakdown {
   method: string;
   count: number;
   total: number;
 }
 
+/** End-of-day report aggregating sales, voids, discounts, and hourly breakdown. */
 export interface EodReport {
   total_sales: number;
   total_revenue: number;
@@ -380,6 +423,7 @@ export interface EodReport {
   hourly_breakdown: SalesByHourRow[];
 }
 
+/** Export the daily sales summary. */
 export const exportDailySummary = (): Promise<DailySummaryRow[]> =>
   invoke<DailySummaryRow[]>('export_daily_summary');
 
@@ -387,6 +431,7 @@ export const exportDailySummary = (): Promise<DailySummaryRow[]> =>
 export const exportDailySummaryScoped = (sessionToken: string): Promise<DailySummaryRow[]> =>
   invoke<DailySummaryRow[]>('export_daily_summary_scoped', { sessionToken });
 
+/** Export the sales-by-hour breakdown. */
 export const exportSalesByHour = (): Promise<SalesByHourRow[]> =>
   invoke<SalesByHourRow[]>('export_sales_by_hour');
 
@@ -394,6 +439,7 @@ export const exportSalesByHour = (): Promise<SalesByHourRow[]> =>
 export const exportSalesByHourScoped = (sessionToken: string): Promise<SalesByHourRow[]> =>
   invoke<SalesByHourRow[]>('export_sales_by_hour_scoped', { sessionToken });
 
+/** Export the end-of-day report. */
 export const exportEodReport = (): Promise<EodReport> =>
   invoke<EodReport>('export_eod_report');
 
@@ -403,6 +449,7 @@ export const exportEodReportScoped = (sessionToken: string): Promise<EodReport> 
 
 // ── Receipt Printing ──────────────────────────────────────────────
 
+/** A line item for receipt printing. */
 export interface LineItemDto {
   name: string;
   quantity: number;
@@ -411,17 +458,20 @@ export interface LineItemDto {
   taxAmount?: MoneyDto;
 }
 
+/** A payment entry for receipt printing. */
 export interface PaymentDto {
   method: string;
   amount: MoneyDto;
   change: MoneyDto | null;
 }
 
+/** Monetary value representation for receipt printing. */
 export interface MoneyDto {
   minorUnits: number;
   currency: string;
 }
 
+/** Arguments for printing a sales receipt. */
 export interface PrintSalesReceiptArgs {
   date: string;
   receiptNumber: string;
@@ -433,12 +483,15 @@ export interface PrintSalesReceiptArgs {
   tableNumber?: string;
 }
 
+/** Result of a receipt print request. */
 export interface PrintSalesReceiptResult {
   printed: boolean;
 }
 
+/** Print a formatted sales receipt. */
 export const printSalesReceipt = (args: PrintSalesReceiptArgs): Promise<PrintSalesReceiptResult> =>
   invoke<PrintSalesReceiptResult>('print_sales_receipt', { args });
 
+/** Subscribe to receipt-printed events from the backend. Returns an unsubscribe function. */
 export const onReceiptPrinted = (handler: (lines: number) => void): Promise<UnlistenFn> =>
   listen<{ lines: number }>('receipt:printed', (e) => handler(e.payload.lines));

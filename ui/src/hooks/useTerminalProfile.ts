@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getTerminalProfile, listTerminals, type TerminalProfileDto } from '@/api/terminals';
 
+/** Return type of the `useTerminalProfile` hook. */
 export interface UseTerminalProfileResult {
   /** The loaded terminal profile, or null if not set / not found. */
   profile: TerminalProfileDto | null;

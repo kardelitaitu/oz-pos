@@ -23,7 +23,9 @@ use crate::state::AppState;
 // ── Discount ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Setcartdiscountargs.
 pub struct SetCartDiscountArgs {
+    /// ID of the associated cart.
     pub cart_id: CartId,
     /// Discount percentage (0-100). Pass 0 to clear.
     pub percent: i64,
@@ -70,6 +72,7 @@ pub async fn set_cart_discount(
 // ── Start Sale ───────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Startsaleargs.
 pub struct StartSaleArgs {
     /// ISO-4217 currency code for the new cart.
     #[serde(default)]
@@ -77,11 +80,14 @@ pub struct StartSaleArgs {
 }
 
 #[derive(Debug, Serialize)]
+/// Startsaleresult.
 pub struct StartSaleResult {
+    /// ID of the associated cart.
     pub cart_id: CartId,
 }
 
 #[command]
+/// Start sale.
 pub async fn start_sale(
     args: StartSaleArgs,
     state: State<'_, AppState>,
@@ -137,20 +143,29 @@ pub async fn get_active_cart(
 // ── Add Line ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Addlineargs.
 pub struct AddLineArgs {
+    /// ID of the associated cart.
     pub cart_id: CartId,
+    /// Stock-keeping unit identifier.
     pub sku: Sku,
+    /// Quantity.
     pub qty: i64,
+    /// Unit Price Minor.
     pub unit_price_minor: i64,
 }
 
 #[derive(Debug, Serialize)]
+/// Addlineresult.
 pub struct AddLineResult {
+    /// ID of the associated line.
     pub line_id: LineId,
+    /// Line Total.
     pub line_total: Option<Money>,
 }
 
 #[command]
+/// Add line.
 pub async fn add_line(
     args: AddLineArgs,
     state: State<'_, AppState>,
@@ -184,8 +199,11 @@ pub async fn add_line(
 // ── Override Line Price ──────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Overridelinepriceargs.
 pub struct OverrideLinePriceArgs {
+    /// ID of the associated cart.
     pub cart_id: CartId,
+    /// ID of the associated line.
     pub line_id: LineId,
     /// The new unit price in minor units (e.g. cents).
     pub new_price_minor: i64,
@@ -237,16 +255,24 @@ pub async fn override_line_price(
 // ── Complete Sale ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Serialnumberarg.
 pub struct SerialNumberArg {
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Serial.
     pub serial: String,
 }
 
 #[derive(Debug, Deserialize)]
+/// Completesaleargs.
 pub struct CompleteSaleArgs {
+    /// ID of the associated cart.
     pub cart_id: CartId,
+    /// Payment Method.
     pub payment_method: String,
+    /// Tendered Minor.
     pub tendered_minor: Option<i64>,
+    /// ID of the associated user.
     pub user_id: String,
     /// Optional customer id to link this sale to a customer
     /// for loyalty tracking and purchase history.
@@ -258,13 +284,18 @@ pub struct CompleteSaleArgs {
 }
 
 #[derive(Debug, Serialize)]
+/// Completesaleresult.
 pub struct CompleteSaleResult {
+    /// ID of the associated sale.
     pub sale_id: String,
+    /// Total amount in minor currency units.
     pub total: Option<Money>,
+    /// Line Count.
     pub line_count: usize,
 }
 
 #[command]
+/// Complete sale.
 pub async fn complete_sale(
     args: CompleteSaleArgs,
     state: State<'_, AppState>,
@@ -378,14 +409,22 @@ pub async fn compute_cart_tax(
 // ── Hold Orders ──────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Holdcartargs.
 pub struct HoldCartArgs {
+    /// Label.
     pub label: String,
+    /// Cart Data.
     pub cart_data: String,
+    /// Item Count.
     pub item_count: i64,
+    /// Total amount in minor currency units.
     pub total_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
     #[serde(default = "default_bill_type")]
+    /// Bill Type.
     pub bill_type: String,
+    /// Customer Name.
     pub customer_name: Option<String>,
 }
 
@@ -394,7 +433,9 @@ fn default_bill_type() -> String {
 }
 
 #[derive(Debug, Serialize)]
+/// Holdcartresult.
 pub struct HoldCartResult {
+    /// Unique identifier.
     pub id: String,
 }
 

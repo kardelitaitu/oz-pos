@@ -1,3 +1,9 @@
+//! Per-user display preferences — card size, font size, theme, locale, etc.
+//!
+//! Preferences are stored as key-value pairs in the `user_preferences` table,
+//! scoped by `user_id`. Each staff member can have their own settings that
+//! persist across sessions and terminals.
+
 use std::collections::HashMap;
 
 use rusqlite::Connection;

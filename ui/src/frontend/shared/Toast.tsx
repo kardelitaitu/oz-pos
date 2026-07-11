@@ -11,8 +11,10 @@ import { useAnimatedToastQueue } from '@/hooks/useAnimatedToastQueue';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** Visual variant for a toast notification in the animated queue. */
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+/** A single toast in the animated queue with auto-dismiss support. */
 export interface Toast {
   id: string;
   type: ToastType;
@@ -39,6 +41,7 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 // ── Hook ────────────────────────────────────────────────────────────
 
+/** Access the animated toast context. Must be used within a `<ToastProvider>`. */
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) {

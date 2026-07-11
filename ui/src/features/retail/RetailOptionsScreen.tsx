@@ -194,6 +194,7 @@ function ReceiptPreview({
   );
 }
 
+/** Retail options / settings screen — multi-tab configuration panel for general, receipt, printer, scanner, credit, payments, system, appearance, features, data, and sync settings. */
 export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeChange }: RetailOptionsScreenProps) {
   const { addToast } = useToast();
   const { session } = useAuth();

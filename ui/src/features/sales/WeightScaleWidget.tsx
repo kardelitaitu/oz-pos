@@ -5,6 +5,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
 import './WeightScaleWidget.css';
 
+/** Props for the WeightScaleWidget — optional callback for when a stable weight is obtained, plus device identifiers. */
 export interface WeightScaleWidgetProps {
   onWeightObtained?: (reading: WeightReading) => void;
   vendorId?: string;

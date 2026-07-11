@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import currencyFtl from '@/locales/currency.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ function makeCurrency(code: string, name: string) {
 }
 
 const wrap = (children: React.ReactNode) =>
-  withFluent(children, currencyFtl);
+  withFluent(children, currencyFtl, sharedFtl);
 
 function renderScreen() {
   return render(wrap(<ExchangeRateScreen />));
@@ -214,16 +214,16 @@ describe('ExchangeRateScreen', () => {
     });
 
     // Fill the rate field
-    const rateInput = document.querySelector('#er-field-rate') as HTMLInputElement;
-    await user.type(rateInput, '16000');
+    const rateInput = document.querySelector('#er-field-rate') as HTMLElement as HTMLInputElement | null;
+    await user.type(rateInput!, '16000');
 
     // Select From currency
-    const fromSelect = document.querySelector('#er-field-from') as HTMLSelectElement;
-    await user.selectOptions(fromSelect, 'USD');
+    const fromSelect = document.querySelector('#er-field-from') as HTMLElement as HTMLSelectElement | null;
+    await user.selectOptions(fromSelect!, 'USD');
 
     // Select To currency
-    const toSelect = document.querySelector('#er-field-to') as HTMLSelectElement;
-    await user.selectOptions(toSelect, 'IDR');
+    const toSelect = document.querySelector('#er-field-to') as HTMLElement as HTMLSelectElement | null;
+    await user.selectOptions(toSelect!, 'IDR');
 
     await user.click(screen.getByText('Save'));
 

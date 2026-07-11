@@ -1,31 +1,37 @@
 import { useState } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
-import { activateLicense } from '@/api/license';
+import { activateLicense, getMachineId } from '@/api/license';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import './LicenseActivationScreen.css';
 
+/** Props for the LicenseActivationScreen component. */
 export interface LicenseActivationScreenProps {
+  /** Optional pre-existing error message to display on mount. */
+  initialError?: string | null;
+  /** Callback invoked after successful license activation. */
   onActivated: () => void;
 }
 
-export default function LicenseActivationScreen({ onActivated }: LicenseActivationScreenProps) {
+/** License activation screen — form for entering a license key and email to activate the POS software. */
+export default function LicenseActivationScreen({ initialError, onActivated }: LicenseActivationScreenProps) {
   const [key, setKey] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
   const { addToast } = useToast();
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
     if (!key.trim() || !email.trim()) {
-      addToast({ type: 'error', message: 'License key and Email are required.' });
+      setErrorMsg('License key and Email are required.');
       return;
     }
 
     setLoading(true);
     try {
-      // In a real app we might fetch machineId using a hardware profile API, 
-      // but for now we generate a random one or use a placeholder.
-      const machineId = 'MACH-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+      // Get the persistent, cryptographically-generated machine ID from Rust.
+      const machineId = await getMachineId();
 
       const success = await activateLicense(
         key.trim(),
@@ -37,10 +43,18 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
         addToast({ type: 'success', message: 'License activated successfully!' });
         onActivated();
       } else {
-        addToast({ type: 'error', message: 'Failed to activate license.' });
+        setErrorMsg('Failed to activate license.');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An error occurred during activation.';
+      let message = 'An error occurred during activation.';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'string') {
+        message = err;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        message = String((err as Record<string, unknown>)['message']);
+      }
+      
       addToast({ 
         type: 'error', 
         message,
@@ -57,6 +71,12 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
           <h1>Activate OZ-POS</h1>
           <p>Enter your license key to unlock your terminal</p>
         </div>
+
+        {errorMsg && (
+          <div className="license-error-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
+            {errorMsg}
+          </div>
+        )}
 
         <form onSubmit={handleActivate}>
           <div className="license-form-group">

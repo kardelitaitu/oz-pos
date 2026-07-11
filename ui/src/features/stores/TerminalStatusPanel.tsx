@@ -23,6 +23,7 @@ interface TerminalStatusPanelProps {
   refreshTrigger?: number;
 }
 
+/** Terminal status panel card — displays live online/offline status of all terminals with auto-refresh every 30 seconds. */
 export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPanelProps) {
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);

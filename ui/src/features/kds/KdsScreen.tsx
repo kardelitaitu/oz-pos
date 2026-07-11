@@ -15,6 +15,7 @@ const STATUS_LABELS: Record<KdsStatus, string> = {
   cancelled: 'kds-cancelled',
 };
 
+/** KDS (Kitchen Display System) screen — real-time order queue with status advancement (pending, preparing, ready, served) and auto-refresh. */
 export default function KdsScreen() {
   const { session } = useAuth();
   const workspaceScope = useWorkspaceScope();

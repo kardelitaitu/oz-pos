@@ -67,6 +67,7 @@ export function rgba(hex: string, alpha: number): string {
 
 // ── Palette derivation ──────────────────────────────────────────────
 
+/** Derived accent colour palette from a single brand colour. */
 export interface AccentPalette {
   base: string;
   hover: string;

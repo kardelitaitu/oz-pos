@@ -81,13 +81,21 @@ fn verify_binding(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalDto {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// ID of the associated device.
     pub device_id: String,
+    /// Whether this is active.
     pub is_active: bool,
+    /// Last Seen At.
     pub last_seen_at: Option<String>,
+    /// Metadata.
     pub metadata: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -110,9 +118,13 @@ impl From<Terminal> for TerminalDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterTerminalArgs {
+    /// Display name.
     pub name: String,
+    /// ID of the associated device.
     pub device_id: String,
+    /// Terminal Secret.
     pub terminal_secret: Option<String>,
+    /// Metadata.
     pub metadata: Option<String>,
 }
 
@@ -120,6 +132,7 @@ pub struct RegisterTerminalArgs {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterTerminalResult {
+    /// Unique identifier.
     pub id: String,
 }
 
@@ -127,11 +140,17 @@ pub struct RegisterTerminalResult {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateTerminalArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: Option<String>,
+    /// ID of the associated device.
     pub device_id: Option<String>,
+    /// Terminal Secret.
     pub terminal_secret: Option<String>,
+    /// Whether this is active.
     pub is_active: Option<bool>,
+    /// Metadata.
     pub metadata: Option<String>,
 }
 
@@ -139,6 +158,7 @@ pub struct UpdateTerminalArgs {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateTerminalResult {
+    /// Unique identifier.
     pub id: String,
 }
 
@@ -797,9 +817,13 @@ pub async fn delete_terminal_override_scoped(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalProfileDto {
+    /// ID of the associated terminal.
     pub terminal_id: String,
+    /// Profile Type.
     pub profile_type: String,
+    /// Locked Screen.
     pub locked_screen: Option<String>,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -818,8 +842,11 @@ impl From<TerminalProfile> for TerminalProfileDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetTerminalProfileArgs {
+    /// ID of the associated terminal.
     pub terminal_id: String,
+    /// Profile Type.
     pub profile_type: String,
+    /// Locked Screen.
     pub locked_screen: Option<String>,
 }
 
@@ -957,8 +984,11 @@ pub async fn delete_terminal_profile_scoped(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetDeviceBindingArgs {
+    /// ID of the associated terminal.
     pub terminal_id: String,
+    /// ID of the associated bound store.
     pub bound_store_id: String,
+    /// ID of the associated bound instance.
     pub bound_instance_id: String,
 }
 
@@ -1071,9 +1101,13 @@ pub async fn set_device_binding_scoped(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceBindingDto {
+    /// Bounded.
     pub bounded: bool,
+    /// ID of the associated bound store.
     pub bound_store_id: Option<String>,
+    /// ID of the associated bound instance.
     pub bound_instance_id: Option<String>,
+    /// Signature Valid.
     pub signature_valid: bool,
 }
 

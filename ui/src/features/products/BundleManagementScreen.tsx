@@ -36,6 +36,7 @@ const EMPTY_FORM: FormData = {
 
 const EMPTY_ITEM: BundleItemForm = { sku: '', qty: '1', unitPriceMinor: '' };
 
+/** Bundle management screen — create and manage product bundles with multiple items, custom pricing, and SKU assignment. */
 export default function BundleManagementScreen() {
   const [bundles, setBundles] = useState<BundleWithItems[]>([]);
   const [loading, setLoading] = useState(true);

@@ -16,6 +16,7 @@ use crate::state::AppState;
 // ── Args ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Completesetupargs.
 pub struct CompleteSetupArgs {
     /// Store preset name (e.g. `"simple-retail"`, `"restaurant"`).
     pub preset: String,
@@ -33,6 +34,7 @@ fn default_currency() -> String {
 // ── Response types ───────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Setupstatus.
 pub struct SetupStatus {
     /// Whether the setup wizard has been completed.
     pub completed: bool,

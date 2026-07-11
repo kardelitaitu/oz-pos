@@ -11,7 +11,10 @@ use rusqlite::Connection;
 // ── Helpers ───────────────────────────────────────────────────────────
 
 fn setup() -> Connection {
-    migrations::fresh_db()
+    let mut conn = Connection::open_in_memory().unwrap();
+    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+    migrations::run(&mut conn).unwrap();
+    conn
 }
 
 fn store(conn: &Connection) -> Store<'_> {

@@ -5,27 +5,33 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 // ── Cash Drawer ──────────────────────────────────────────────────
 
+/** Arguments for opening a cash drawer. */
 export interface OpenCashDrawerArgs {
   deviceId?: string;
 }
 
+/** Result of attempting to open a cash drawer. */
 export interface OpenCashDrawerResult {
   opened: boolean;
 }
 
+/** Open a cash drawer. */
 export const openCashDrawer = (args: OpenCashDrawerArgs = {}): Promise<OpenCashDrawerResult> =>
   invoke<OpenCashDrawerResult>('open_cash_drawer', { args });
 
 // ── Receipt Printing (raw) ───────────────────────────────────────
 
+/** Arguments for printing a raw receipt. */
 export interface PrintReceiptArgs {
   body: string;
 }
 
+/** Result of printing a raw receipt. */
 export interface PrintReceiptResult {
   printedLines: number;
 }
 
+/** Print a raw text receipt on the configured printer. */
 export const printReceipt = (args: PrintReceiptArgs): Promise<PrintReceiptResult> =>
   invoke<PrintReceiptResult>('print_receipt', { args });
 
@@ -66,31 +72,39 @@ export class ScannerError extends Error {
   } as const;
 }
 
+/** Information about a connected barcode scanner. */
 export interface ScannerInfo {
   id: string;
 }
 
+/** Payload delivered when a barcode is scanned. */
 export interface BarcodeScannedPayload {
   code: string;
   symbology: string;
 }
 
+/** List all connected barcode scanners. */
 export const listScanners = (): Promise<ScannerInfo[]> =>
   invoke<ScannerInfo[]>('list_scanners');
 
+/** Start listening for barcode scans on a specific scanner. */
 export const startScanner = (scannerId: string): Promise<void> =>
   invoke('start_scanner', { scannerId });
 
+/** Stop listening for barcode scans. */
 export const stopScanner = (): Promise<void> => invoke('stop_scanner');
 
+/** Subscribe to barcode-scanned events. Returns an unsubscribe function. */
 export const onBarcodeScanned = (handler: (payload: BarcodeScannedPayload) => void): Promise<UnlistenFn> =>
   listen<BarcodeScannedPayload>('barcode:scanned', (e) => handler(e.payload));
 
+/** Subscribe to barcode scanner error events. Returns an unsubscribe function. */
 export const onBarcodeError = (handler: (error: string) => void): Promise<UnlistenFn> =>
   listen<{ error: string }>('barcode:error', (e) => handler(e.payload.error));
 
 // ── Customer Display ──────────────────────────────────────────────
 
+/** Arguments for showing content on a customer-facing display. */
 export interface DisplayShowArgs {
   displayId: string;
   line1: string;
@@ -111,6 +125,7 @@ export const displayClear = (displayId: string): Promise<void> =>
 
 // ── Weight Scale ────────────────────────────────────────────────────
 
+/** A weight reading from a connected scale. */
 export interface WeightReading {
   weightGrams: number;
   stable: boolean;

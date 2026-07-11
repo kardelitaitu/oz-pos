@@ -68,6 +68,7 @@ interface VoidOrdersScreenProps {
   initialSaleId?: string;
 }
 
+/** Void orders screen — lists active, completed, and pending sales with reason selection and manager-authorised voiding. */
 export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProps) {
   const { l10n } = useLocalization();
   const { session } = useAuth();

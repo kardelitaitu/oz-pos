@@ -22,6 +22,7 @@ use crate::state::AppState;
 // ── Adjust stock ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Adjuststockargs.
 pub struct AdjustStockArgs {
     /// SKU of the product to adjust.
     pub sku: String,
@@ -106,7 +107,9 @@ pub struct ProductDto {
 /// Money DTO matching the front-end `Money` type (snake_case keys).
 #[derive(Debug, Serialize)]
 pub struct MoneyDto {
+    /// Minor Units.
     pub minor_units: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
 }
 
@@ -248,17 +251,28 @@ fn map_pwd_to_dto(
 // ── Create product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Createproductargs.
 pub struct CreateProductArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Display name.
     pub name: String,
+    /// Price Minor.
     pub price_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// ID of the associated category.
     pub category_id: Option<String>,
+    /// Barcode string.
     pub barcode: Option<String>,
+    /// Initial Stock.
     pub initial_stock: i64,
+    /// Tax Rate Ids.
     pub tax_rate_ids: Vec<String>,
     #[serde(default = "default_product_type")]
+    /// Product Type.
     pub product_type: String,
 }
 
@@ -267,11 +281,14 @@ fn default_product_type() -> String {
 }
 
 #[derive(Debug, Serialize)]
+/// Createproductresult.
 pub struct CreateProductResult {
+    /// Stock-keeping unit identifier.
     pub sku: String,
 }
 
 #[command]
+/// Create product.
 pub async fn create_product(
     args: CreateProductArgs,
     state: State<'_, AppState>,
@@ -338,24 +355,37 @@ pub async fn create_product(
 // ── Update product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Updateproductargs.
 pub struct UpdateProductArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Display name.
     pub name: String,
+    /// Price Minor.
     pub price_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// ID of the associated category.
     pub category_id: Option<String>,
+    /// Barcode string.
     pub barcode: Option<String>,
+    /// Tax Rate Ids.
     pub tax_rate_ids: Vec<String>,
+    /// Product Type.
     pub product_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
+/// Updateproductresult.
 pub struct UpdateProductResult {
+    /// Stock-keeping unit identifier.
     pub sku: String,
 }
 
 #[command]
+/// Update product.
 pub async fn update_product(
     args: UpdateProductArgs,
     state: State<'_, AppState>,
@@ -406,12 +436,16 @@ pub async fn get_product_track_serial(
 // ── Delete product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Deleteproductargs.
 pub struct DeleteProductArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
 }
 
 #[command]
+/// Delete product.
 pub async fn delete_product(
     args: DeleteProductArgs,
     state: State<'_, AppState>,

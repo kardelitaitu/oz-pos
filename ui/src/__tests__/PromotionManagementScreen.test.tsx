@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
 import promotionsFtl from '@/locales/promotions.ftl?raw';
-
+import sharedFtl from '@/locales/shared.ftl?raw';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ function makePromo(overrides: Record<string, unknown> = {}) {
 }
 
 const wrap = (children: React.ReactNode) =>
-  withFluent(children, promotionsFtl);
+  withFluent(children, promotionsFtl, sharedFtl);
 
 function renderScreen() {
   return render(wrap(<PromotionManagementScreen />));
@@ -144,9 +144,9 @@ describe('PromotionManagementScreen', () => {
     renderScreen();
 
     await waitFor(() => {
-      const checkbox = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      const checkbox = document.querySelector('input[type="checkbox"]') as HTMLElement as HTMLInputElement | null;
       expect(checkbox).toBeTruthy();
-      expect(checkbox.checked).toBe(true);
+      expect(checkbox!.checked).toBe(true);
     });
   });
 
@@ -290,8 +290,8 @@ describe('PromotionManagementScreen', () => {
     });
 
     // Fill the name field via aria-label
-    const nameInput = document.querySelector('input[aria-label="Name"]') as HTMLInputElement;
-    await user.type(nameInput, 'New Promo');
+    const nameInput = document.querySelector('input[aria-label="Name"]') as HTMLElement as HTMLInputElement | null;
+    await user.type(nameInput!, 'New Promo');
 
     await user.click(screen.getByText('Save'));
 
@@ -311,10 +311,10 @@ describe('PromotionManagementScreen', () => {
     });
 
     const user = userEvent.setup();
-    const checkbox = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    const checkbox = document.querySelector('input[type="checkbox"]') as HTMLElement as HTMLInputElement | null;
+    expect(checkbox!.checked).toBe(true);
 
-    await user.click(checkbox);
+    await user.click(checkbox!);
 
     await waitFor(() => {
       expect(mockUpdatePromotion).toHaveBeenCalled();

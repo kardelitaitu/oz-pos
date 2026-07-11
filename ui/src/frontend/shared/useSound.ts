@@ -16,6 +16,12 @@ function getAudioCtx(): AudioContext | null {
   return audioCtx;
 }
 
+/**
+ * Hook that provides sound-effect playback functions (beep, error,
+ * success, alert) using the Web Audio API. Each callback synthesises
+ * a short tone — no audio files required. Respects the `setSoundEnabled`
+ * mute toggle.
+ */
 export function useSound() {
   const enabledRef = useRef(true);
 

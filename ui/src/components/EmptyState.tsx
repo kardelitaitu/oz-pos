@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button } from './Button';
 
+/** Props for the EmptyState placeholder component. */
 export interface EmptyStateProps {
   /** Optional icon/illustration displayed above the title. */
   icon?: ReactNode;
@@ -17,6 +18,11 @@ export interface EmptyStateProps {
   children?: ReactNode;
 }
 
+/**
+ * Placeholder screen shown when a list or view has no data.
+ * Renders an optional icon, title, description, action button,
+ * and additional children.
+ */
 export function EmptyState({
   icon,
   title,

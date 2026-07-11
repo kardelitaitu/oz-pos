@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"time"
+	"log"
 )
 
 // jsonMarshal is a thin wrapper around json.Marshal for readability.
@@ -17,8 +17,10 @@ func jsonMarshal(v any) ([]byte, error) {
 func generateAPIKey() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback: use timestamp-based key if CSPRNG fails
-		return hex.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano)))
+		// CSPRNG failure means the OS entropy source is broken.
+		// A predictable fallback is worse than crashing — the system
+		// is in an unsafe state and should not generate API keys.
+		log.Fatalf("crypto/rand.Read failed: %v — cannot generate secure API key", err)
 	}
 	return "oz_" + hex.EncodeToString(b)
 }

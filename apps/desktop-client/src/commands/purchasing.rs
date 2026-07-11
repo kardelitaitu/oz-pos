@@ -12,19 +12,33 @@ use crate::state::AppState;
 // ── Supplier DTO ────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Supplierdto.
 pub struct SupplierDto {
+    /// Unique identifier.
     pub id: String,
+    /// Code.
     pub code: String,
+    /// Display name.
     pub name: String,
+    /// Contact Person.
     pub contact_person: String,
+    /// Phone number.
     pub phone: String,
+    /// Email address.
     pub email: String,
+    /// Street address.
     pub address: String,
+    /// ID of the associated tax.
     pub tax_id: String,
+    /// Payment Terms.
     pub payment_terms: String,
+    /// Notes.
     pub notes: String,
+    /// Current status.
     pub status: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -51,33 +65,58 @@ impl From<Supplier> for SupplierDto {
 // ── Purchase Order DTOs ─────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Purchaseorderlinedto.
 pub struct PurchaseOrderLineDto {
+    /// Unique identifier.
     pub id: String,
+    /// ID of the associated po.
     pub po_id: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Product Name.
     pub product_name: String,
+    /// Quantity.
     pub qty: i64,
+    /// Unit Cost Minor.
     pub unit_cost_minor: i64,
+    /// Total amount in minor currency units.
     pub line_total_minor: i64,
 }
 
 #[derive(Debug, Serialize)]
+/// Purchaseorderdto.
 pub struct PurchaseOrderDto {
+    /// Unique identifier.
     pub id: String,
+    /// Po Number.
     pub po_number: String,
+    /// ID of the associated supplier.
     pub supplier_id: String,
+    /// Current status.
     pub status: String,
+    /// Order Date.
     pub order_date: String,
+    /// Expected Date.
     pub expected_date: String,
+    /// Received Date.
     pub received_date: Option<String>,
+    /// Total amount in minor currency units.
     pub subtotal_minor: i64,
+    /// Tax Minor.
     pub tax_minor: i64,
+    /// Total amount in minor currency units.
     pub total_minor: i64,
+    /// Notes.
     pub notes: String,
+    /// Created By.
     pub created_by: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
+    /// Lines.
     pub lines: Vec<PurchaseOrderLineDto>,
+    /// Supplier Name.
     pub supplier_name: Option<String>,
 }
 
@@ -125,59 +164,96 @@ impl From<PurchaseOrderWithLines> for PurchaseOrderDto {
 // ── Input DTOs ──────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Createsupplierargs.
 pub struct CreateSupplierArgs {
+    /// Code.
     pub code: String,
+    /// Display name.
     pub name: String,
+    /// Contact Person.
     pub contact_person: Option<String>,
+    /// Phone number.
     pub phone: Option<String>,
+    /// Email address.
     pub email: Option<String>,
+    /// Street address.
     pub address: Option<String>,
+    /// ID of the associated tax.
     pub tax_id: Option<String>,
+    /// Payment Terms.
     pub payment_terms: Option<String>,
+    /// Notes.
     pub notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Updatesupplierargs.
 pub struct UpdateSupplierArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Code.
     pub code: String,
+    /// Display name.
     pub name: String,
+    /// Contact Person.
     pub contact_person: Option<String>,
+    /// Phone number.
     pub phone: Option<String>,
+    /// Email address.
     pub email: Option<String>,
+    /// Street address.
     pub address: Option<String>,
+    /// ID of the associated tax.
     pub tax_id: Option<String>,
+    /// Payment Terms.
     pub payment_terms: Option<String>,
+    /// Notes.
     pub notes: Option<String>,
+    /// Current status.
     pub status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Polineinput.
 pub struct PoLineInput {
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Product Name.
     pub product_name: String,
+    /// Quantity.
     pub qty: i64,
+    /// Unit Cost Minor.
     pub unit_cost_minor: i64,
 }
 
 #[derive(Debug, Deserialize)]
+/// Createpurchaseorderargs.
 pub struct CreatePurchaseOrderArgs {
+    /// Po Number.
     pub po_number: String,
+    /// ID of the associated supplier.
     pub supplier_id: String,
+    /// Expected Date.
     pub expected_date: Option<String>,
+    /// Notes.
     pub notes: Option<String>,
+    /// Lines.
     pub lines: Vec<PoLineInput>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Updatepostatusargs.
 pub struct UpdatePoStatusArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Current status.
     pub status: String,
 }
 
 // ── Supplier commands ───────────────────────────────────────────────
 
 #[command]
+/// List suppliers.
 pub async fn list_suppliers(state: State<'_, AppState>) -> Result<Vec<SupplierDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -187,6 +263,7 @@ pub async fn list_suppliers(state: State<'_, AppState>) -> Result<Vec<SupplierDt
 }
 
 #[command]
+/// Get supplier.
 pub async fn get_supplier(
     id: String,
     state: State<'_, AppState>,
@@ -199,6 +276,7 @@ pub async fn get_supplier(
 }
 
 #[command]
+/// Create supplier.
 pub async fn create_supplier(
     args: CreateSupplierArgs,
     state: State<'_, AppState>,
@@ -224,6 +302,7 @@ pub async fn create_supplier(
 }
 
 #[command]
+/// Update supplier.
 pub async fn update_supplier(
     args: UpdateSupplierArgs,
     state: State<'_, AppState>,
@@ -253,6 +332,7 @@ pub async fn update_supplier(
 // ── Purchase Order commands ─────────────────────────────────────────
 
 #[command]
+/// List purchase orders.
 pub async fn list_purchase_orders(
     state: State<'_, AppState>,
 ) -> Result<Vec<PurchaseOrderDto>, AppError> {
@@ -264,6 +344,7 @@ pub async fn list_purchase_orders(
 }
 
 #[command]
+/// Get purchase order.
 pub async fn get_purchase_order(
     id: String,
     state: State<'_, AppState>,
@@ -276,6 +357,7 @@ pub async fn get_purchase_order(
 }
 
 #[command]
+/// Create purchase order.
 pub async fn create_purchase_order(
     args: CreatePurchaseOrderArgs,
     state: State<'_, AppState>,
@@ -308,6 +390,7 @@ pub async fn create_purchase_order(
 }
 
 #[command]
+/// Update po status.
 pub async fn update_po_status(
     args: UpdatePoStatusArgs,
     state: State<'_, AppState>,
@@ -320,6 +403,7 @@ pub async fn update_po_status(
 }
 
 #[command]
+/// Receive purchase order.
 pub async fn receive_purchase_order(
     id: String,
     state: State<'_, AppState>,

@@ -3,6 +3,7 @@ import { getEnabledFeatures } from '@/api/settings';
 
 // ── Feature key constants (must match the Rust Feature enum kebab-case keys) ─
 
+/** Feature key constants that must match the Rust Feature enum kebab-case keys. */
 export const FEATURES = {
   SIMPLE_RETAIL: 'simple-retail',
   RESTAURANT: 'restaurant',
@@ -45,6 +46,7 @@ export const FEATURES = {
   PLUGIN_SYSTEM: 'plugin-system',
 } as const;
 
+/** Valid feature key derived from the FEATURES constant. */
 export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 
 // ── Nav item to feature key mapping ──────────────────────────────────
@@ -52,6 +54,7 @@ export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 // Which feature must be enabled for each nav route to appear.
 // If a route is not listed here, it's always visible.
 
+/** Maps nav route names to the feature key required for visibility. */
 export const ROUTE_FEATURE: Record<string, FeatureKey | undefined> = {
   sales: FEATURES.SIMPLE_RETAIL,
   'stock-transfers': FEATURES.STOCK_TRANSFERS,
@@ -59,6 +62,7 @@ export const ROUTE_FEATURE: Record<string, FeatureKey | undefined> = {
 
 // ── Hook ─────────────────────────────────────────────────────────────
 
+/** Return type of the `useFeatures` hook. */
 export interface UseFeaturesResult {
   /** Set of enabled feature keys (kebab-case). */
   enabled: Set<string>;

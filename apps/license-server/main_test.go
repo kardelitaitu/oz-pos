@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -115,10 +116,10 @@ func TestSignAndVerify_RoundTrip(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-roundtrip", TierKey: "pro", Status: "active",
-		StartsAt: time.Now().UTC().Format(time.RFC3339),
-		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
+		StartsAt:   time.Now().UTC().Format(time.RFC3339),
+		ExpiresAt:  time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
-		IssuedAt: time.Now().UTC().Format(time.RFC3339),
+		IssuedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 	payload, sig, err := signSubscription(sub)
 	if err != nil {
@@ -132,10 +133,10 @@ func TestSignAndVerify_TamperedPayload(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-tamper", TierKey: "pro", Status: "active",
-		StartsAt: time.Now().UTC().Format(time.RFC3339),
-		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
+		StartsAt:   time.Now().UTC().Format(time.RFC3339),
+		ExpiresAt:  time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
-		IssuedAt: time.Now().UTC().Format(time.RFC3339),
+		IssuedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 	payload, sig, err := signSubscription(sub)
 	if err != nil {
@@ -466,6 +467,119 @@ func TestRateLimiter_DefaultMaxPerHr(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_SweepRemovesExpiredBuckets(t *testing.T) {
+	rl := &rateLimiter{buckets: make(map[string]*tokenBucket), maxPerHr: 3}
+
+	// Insert old buckets.
+	rl.mu.Lock()
+	rl.buckets["10.0.0.1"] = &tokenBucket{tokens: 1, lastFill: time.Now().Add(-3 * time.Hour)}
+	rl.buckets["10.0.0.2"] = &tokenBucket{tokens: 2, lastFill: time.Now()} // fresh
+	rl.mu.Unlock()
+
+	// Sweep should remove only the expired bucket.
+	rl.sweep()
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if _, ok := rl.buckets["10.0.0.1"]; ok {
+		t.Error("expired bucket 10.0.0.1 should have been swept")
+	}
+	if _, ok := rl.buckets["10.0.0.2"]; !ok {
+		t.Error("fresh bucket 10.0.0.2 should NOT be swept")
+	}
+}
+
+func TestRateLimiter_SweepEmpty(t *testing.T) {
+	rl := &rateLimiter{buckets: make(map[string]*tokenBucket), maxPerHr: 3}
+	rl.sweep() // should not panic on empty map
+	if len(rl.buckets) != 0 {
+		t.Error("sweeping empty map should leave it empty")
+	}
+}
+
+func TestKeyFailureTracker_SweepRemovesExpiredEntries(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+
+	// Insert a partial failure that's very old.
+	kf.mu.Lock()
+	kf.failures["old-partial"] = &keyFailures{count: 1, lastAttempt: time.Now().Add(-48 * time.Hour)}
+	// Insert a cooldown entry that's past its cooldown.
+	kf.failures["cooled-down"] = &keyFailures{
+		count: 5, cooldownAt: time.Now().Add(-1 * time.Hour), lastAttempt: time.Now(),
+	}
+	// Insert a fresh blocked entry (still in cooldown).
+	kf.failures["fresh-blocked"] = &keyFailures{
+		count: 5, cooldownAt: time.Now().Add(1 * time.Hour), lastAttempt: time.Now(),
+	}
+	kf.mu.Unlock()
+
+	kf.sweep()
+
+	kf.mu.Lock()
+	defer kf.mu.Unlock()
+	if _, ok := kf.failures["old-partial"]; ok {
+		t.Error("old partial failure should have been swept")
+	}
+	if _, ok := kf.failures["cooled-down"]; ok {
+		t.Error("cooled-down entry should have been swept")
+	}
+	if _, ok := kf.failures["fresh-blocked"]; !ok {
+		t.Error("fresh blocked entry should NOT be swept")
+	}
+}
+
+func TestKeyFailureTracker_SweepEmpty(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+	kf.sweep() // should not panic on empty map
+	if len(kf.failures) != 0 {
+		t.Error("sweeping empty map should leave it empty")
+	}
+}
+
+// ── Tests: Key Activation Locks ───────────────────────────────────
+
+func TestActivationLocks_SerialisesSameKey(t *testing.T) {
+	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
+	key := "OZ-CONCURRENT"
+
+	unlock1 := kal.lock(key)
+
+	// Try to lock the same key from a goroutine — must block.
+	done := make(chan bool, 1)
+	go func() {
+		unlock2 := kal.lock(key)
+		unlock2()
+		done <- true
+	}()
+
+	// Give goroutine time to attempt lock acquisition.
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-done:
+		t.Error("second lock should block until first is released")
+	default:
+	}
+
+	unlock1()
+
+	// Now the second lock should succeed.
+	select {
+	case <-done:
+		// expected
+	case <-time.After(200 * time.Millisecond):
+		t.Error("second lock should succeed after first is released")
+	}
+}
+
+func TestActivationLocks_DifferentKeysAreIndependent(t *testing.T) {
+	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
+
+	unlock1 := kal.lock("KEY-A")
+	unlock2 := kal.lock("KEY-B") // different key, should not block
+	unlock1()
+	unlock2()
+}
+
 // ── Tests: Key Failure Tracker Edge Cases ─────────────────────────
 
 func TestKeyFailureTracker_IsolatedByKey(t *testing.T) {
@@ -500,6 +614,50 @@ func TestKeyFailureTracker_PartialFailures(t *testing.T) {
 	kf.recordFailure(key)
 	if !kf.isBlocked(key) {
 		t.Error("should be blocked after 3rd failure")
+	}
+}
+
+func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+	key := "OZ-DECAY"
+
+	// Record 2 failures.
+	kf.recordFailure(key)
+	kf.recordFailure(key)
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after 2 failures")
+	}
+
+	// Manually age the lastAttempt past the decay TTL.
+	kf.mu.Lock()
+	kf.failures[key].lastAttempt = time.Now().Add(-2 * time.Hour)
+	kf.mu.Unlock()
+
+	// After TTL expires, the counter should reset, and the key should NOT be blocked.
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after partial failures decay")
+	}
+
+	// The entry should still exist but with count reset to 0.
+	kf.mu.Lock()
+	f, ok := kf.failures[key]
+	kf.mu.Unlock()
+	if !ok {
+		t.Error("entry should still exist after decay (counter reset, not deleted)")
+	}
+	if f.count != 0 {
+		t.Errorf("counter should be reset to 0 after decay, got %d", f.count)
+	}
+
+	// Fresh failures should count from 0 (not from 2).
+	kf.recordFailure(key)
+	kf.recordFailure(key)
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after 2 fresh failures post-decay")
+	}
+	kf.recordFailure(key)
+	if !kf.isBlocked(key) {
+		t.Error("should be blocked after 3 fresh failures post-decay")
 	}
 }
 

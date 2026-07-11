@@ -5,6 +5,11 @@ interface SwipeHandlers {
   onSwipeRight?: () => void;
 }
 
+/**
+ * Detect horizontal swipe gestures on a touch surface.
+ * Returns `onTouchStart` and `onTouchEnd` handlers to spread onto the
+ * target element. Swipes shorter than 60 px are ignored.
+ */
 export function useSwipe({ onSwipeLeft, onSwipeRight }: SwipeHandlers) {
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const SWIPE_THRESHOLD = 60;

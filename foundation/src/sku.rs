@@ -3,8 +3,6 @@
 //! `Sku` is `#[serde(transparent)]` so it serializes as its inner
 //! `String`. `LineId` is a fresh UUID per line item.
 
-#![allow(missing_docs)]
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -61,6 +59,7 @@ impl From<&str> for Sku {
 pub struct LineId(pub Uuid);
 
 impl LineId {
+    /// Create a new line identifier backed by a UUID v7.
     #[must_use]
     pub fn new() -> Self {
         Self(Uuid::now_v7())
@@ -122,5 +121,75 @@ mod tests {
         assert!(json.starts_with('"') && json.ends_with('"'));
         let back: LineId = serde_json::from_str(&json).unwrap();
         assert_eq!(back, id);
+    }
+
+    // ── Display / From / Clone / Eq ──
+
+    #[test]
+    fn sku_display_formats_as_inner_string() {
+        let s = Sku::new("COFFEE");
+        assert_eq!(s.to_string(), "COFFEE");
+    }
+
+    #[test]
+    fn sku_from_str_trait() {
+        let s: Sku = "TEA".into();
+        assert_eq!(s.as_str(), "TEA");
+    }
+
+    #[test]
+    fn sku_clone_preserves_value() {
+        let s = Sku::new("LATTE");
+        let c = s.clone();
+        assert_eq!(s, c);
+        assert_eq!(c.as_str(), "LATTE");
+    }
+
+    #[test]
+    fn sku_equality_compares_inner_value() {
+        let a = Sku::new("COFFEE");
+        let b = Sku::new("COFFEE");
+        let c = Sku::new("TEA");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn sku_try_new_trims_whitespace() {
+        let s = Sku::try_new("  MOCHA  ").unwrap();
+        assert_eq!(s.as_str(), "MOCHA");
+    }
+
+    #[test]
+    fn sku_try_new_whitespace_only_returns_none() {
+        assert!(Sku::try_new("   ").is_none());
+        assert!(Sku::try_new("\t\n").is_none());
+    }
+
+    // ── LineId ──
+
+    #[test]
+    fn line_id_default_creates_new() {
+        let a = LineId::default();
+        let b = LineId::default();
+        assert_ne!(a, b, "each default() should produce a unique UUIDv7");
+    }
+
+    #[test]
+    fn line_id_display_formats_as_uuid() {
+        let id = LineId::new();
+        let s = id.to_string();
+        assert_eq!(s.len(), 36, "UUIDv7 string should be 36 chars");
+        assert!(s.contains('-'), "UUID string should contain hyphens");
+    }
+
+    #[test]
+    #[allow(clippy::clone_on_copy)]
+    fn line_id_clone_and_copy() {
+        let a = LineId::new();
+        let b = a; // Copy
+        let c = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
     }
 }

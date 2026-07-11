@@ -46,6 +46,7 @@ pub struct ReceiptSettingsDto {
 // ── Get receipt settings ──────────────────────────────────
 
 #[command]
+/// Get receipt settings.
 pub async fn get_receipt_settings(
     state: State<'_, AppState>,
 ) -> Result<ReceiptSettingsDto, AppError> {
@@ -71,6 +72,7 @@ fn run_get_receipt_settings(conn: &rusqlite::Connection) -> Result<ReceiptSettin
 // ── Set receipt settings ──────────────────────────────────
 
 #[command]
+/// Set receipt settings.
 pub async fn set_receipt_settings(
     args: ReceiptSettingsDto,
     user_id: String,
@@ -109,17 +111,24 @@ fn run_set_receipt_settings(
 /// Store name, address, tax ID, currency, branch, and logo – shown on printed receipts.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StoreSettingsDto {
+    /// Display name.
     pub name: String,
+    /// Street address.
     pub address: String,
+    /// ID of the associated tax.
     pub tax_id: String,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Branch.
     pub branch: String,
+    /// Logo.
     pub logo: String,
 }
 
 // ── Get store settings ────────────────────────────────────────
 
 #[command]
+/// Get store settings.
 pub async fn get_store_settings(state: State<'_, AppState>) -> Result<StoreSettingsDto, AppError> {
     let conn = state.db.lock().await;
     run_get_store_settings(&conn)
@@ -140,6 +149,7 @@ fn run_get_store_settings(conn: &rusqlite::Connection) -> Result<StoreSettingsDt
 // ── Set store settings ────────────────────────────────────────
 
 #[command]
+/// Set store settings.
 pub async fn set_store_settings(
     args: StoreSettingsDto,
     user_id: String,
@@ -173,13 +183,18 @@ fn run_set_store_settings(
 // ── Credit Settings DTO ─────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
+/// Creditsettingsdto.
 pub struct CreditSettingsDto {
+    /// Enabled.
     pub enabled: bool,
+    /// Reminder Interval Hours.
     pub reminder_interval_hours: i64,
+    /// Max Limit Minor.
     pub max_limit_minor: i64,
 }
 
 #[command]
+/// Get credit settings.
 pub async fn get_credit_settings(
     state: State<'_, AppState>,
 ) -> Result<CreditSettingsDto, AppError> {
@@ -192,6 +207,7 @@ pub async fn get_credit_settings(
 }
 
 #[command]
+/// Set credit settings.
 pub async fn set_credit_settings(
     args: CreditSettingsDto,
     user_id: String,
@@ -211,17 +227,26 @@ pub async fn set_credit_settings(
 // ── Credit sale DTO ──────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
+/// Creditsaledto.
 pub struct CreditSaleDto {
+    /// ID of the associated sale.
     pub sale_id: String,
+    /// Customer Name.
     pub customer_name: String,
+    /// Total amount in minor currency units.
     pub total_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// Settled At.
     pub settled_at: Option<String>,
+    /// Cashier Name.
     pub cashier_name: String,
 }
 
 #[command]
+/// List credit sales.
 pub async fn list_credit_sales(state: State<'_, AppState>) -> Result<Vec<CreditSaleDto>, AppError> {
     let conn = state.db.lock().await;
     let mut stmt = conn.prepare(
@@ -249,6 +274,7 @@ pub async fn list_credit_sales(state: State<'_, AppState>) -> Result<Vec<CreditS
 }
 
 #[command]
+/// Settle credit.
 pub async fn settle_credit(
     sale_id: String,
     user_id: String,
@@ -270,15 +296,22 @@ pub async fn settle_credit(
 // ── Hardware settings (printer + scanner) ───────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
+/// Hardwaresettingsdto.
 pub struct HardwareSettingsDto {
+    /// Printer Connection.
     pub printer_connection: String,
+    /// Printer Device Path.
     pub printer_device_path: String,
+    /// Printer Paper Size.
     pub printer_paper_size: String,
+    /// ID of the associated scanner device.
     pub scanner_device_id: String,
+    /// Scanner Input Mode.
     pub scanner_input_mode: String,
 }
 
 #[command]
+/// Get hardware settings.
 pub async fn get_hardware_settings(
     state: State<'_, AppState>,
 ) -> Result<HardwareSettingsDto, AppError> {
@@ -293,6 +326,7 @@ pub async fn get_hardware_settings(
 }
 
 #[command]
+/// Set hardware settings.
 pub async fn set_hardware_settings(
     args: HardwareSettingsDto,
     user_id: String,
@@ -316,11 +350,14 @@ pub async fn set_hardware_settings(
 /// One key-value pair within a user's preferences.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserPrefEntry {
+    /// Key.
     pub key: String,
+    /// Value.
     pub value: String,
 }
 
 #[command]
+/// Get user preferences.
 pub async fn get_user_preferences(
     user_id: String,
     state: State<'_, AppState>,
@@ -330,6 +367,7 @@ pub async fn get_user_preferences(
 }
 
 #[command]
+/// Set user preferences.
 pub async fn set_user_preferences(
     user_id: String,
     prefs: Vec<UserPrefEntry>,

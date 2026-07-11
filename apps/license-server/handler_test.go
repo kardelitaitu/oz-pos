@@ -57,7 +57,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "activated", "expired", "revoked"}},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "activated_at"},
-		&core.RelationField{Name: "activated_by", CollectionId: tenants.Id},
+		&core.RelationField{Name: "activated_by", CollectionId: tenants.Id, MaxSelect: 1},
 		&core.DateField{Name: "revoked_at"},
 		&core.TextField{Name: "notes"},
 	)
@@ -73,6 +73,9 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	subscriptions.Fields.Add(
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.NumberField{Name: "max_stores"},
+		&core.NumberField{Name: "max_pos_instances"},
+		&core.JSONField{Name: "allowed_types"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
 		&core.DateField{Name: "starts_at", Required: true},
 		&core.DateField{Name: "expires_at", Required: true},
@@ -132,7 +135,10 @@ func seedTenant(t *testing.T, app *tests.TestApp, tenantID, apiKey, status strin
 	}
 	rec := core.NewRecord(col)
 	rec.Set("id", tenantID)
-	rec.Set("email", tenantID+"@example.com")
+	// Stored emails are normalized to lowercase to match the
+	// case-insensitive lookup performed by the activate handler
+	// (which lowercases incoming requests before searching by email).
+	rec.Set("email", strings.ToLower(tenantID+"@example.com"))
 	rec.Set("phone", "-")
 	rec.Set("api_key", apiKey)
 	rec.Set("status", status)
@@ -221,7 +227,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		&core.TextField{Name: "notes"},
 	)
 	if tenantsID != "" {
-		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID})
+		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID, MaxSelect: 1})
 	}
 	licenseKeys.CreateRule = types.Pointer("")
 	licenseKeys.ListRule = types.Pointer("")
@@ -251,6 +257,9 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		subscriptions.Fields.Add(
 			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
 			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+			&core.NumberField{Name: "max_stores"},
+			&core.NumberField{Name: "max_pos_instances"},
+			&core.JSONField{Name: "allowed_types"},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
 			&core.DateField{Name: "starts_at", Required: true},
 			&core.DateField{Name: "expires_at", Required: true},
@@ -362,7 +371,7 @@ func seedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expi
 func TestStatusHandler_TenantNotFound(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
 		Method:          "GET",
-		URL:             "/api/v1/license/status/n0t4f0und000000",
+		URL:             "/api/v1/license/status/n0t4f0und000000?api_key=test",
 		ExpectedStatus:  404,
 		ExpectedContent: []string{`"error"`, "tenant not found"},
 	})
@@ -373,7 +382,7 @@ func TestStatusHandler_TenantNoSubscription(t *testing.T) {
 	// fallback response with active:false and tier:"unknown".
 	runScenario(t, &tests.ApiScenario{
 		Method:          "GET",
-		URL:             "/api/v1/license/status/nosubtest000001",
+		URL:             "/api/v1/license/status/nosubtest000001?api_key=nosubapikey0001",
 		ExpectedStatus:  200,
 		ExpectedContent: []string{`"tenant_id":"nosubtest000001"`, `"active":false`, `"tier":"unknown"`},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
@@ -496,7 +505,8 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "tsxinvalid00001",
-			"api_key": "invalidkey00001"
+			"api_key": "invalidkey00001",
+			"key": "OZ-RENEW-KEY"
 		}`),
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`},
@@ -506,7 +516,7 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 func TestRenewHandler_InvalidJSON(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
 		Method:          "POST",
-		URL:            "/api/v1/license/renew",
+		URL:             "/api/v1/license/renew",
 		Body:            strings.NewReader(`not json`),
 		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`},
@@ -514,6 +524,7 @@ func TestRenewHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestRenewHandler_WrongTenantID(t *testing.T) {
+	resetRateLimiters()
 	// Seed a tenant with api_key "wrongapik000001" and id "wrongtenant0002",
 	// then send a request with a different tenant_id.
 	// The handler should authenticate via api_key but reject the mismatched tenant_id.
@@ -522,7 +533,8 @@ func TestRenewHandler_WrongTenantID(t *testing.T) {
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "wrongtenant0001",
-			"api_key": "wrongapik000001"
+			"api_key": "wrongapik000001",
+			"key": "OZ-RENEW-KEY"
 		}`),
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`tenant_id does not match api_key`},
@@ -533,13 +545,15 @@ func TestRenewHandler_WrongTenantID(t *testing.T) {
 }
 
 func TestRenewHandler_SuspendedTenant(t *testing.T) {
+	resetRateLimiters()
 	// Seed a tenant with status "suspended" — the handler should reject renewal.
 	runScenario(t, &tests.ApiScenario{
 		Method: "POST",
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "susptest0000001",
-			"api_key": "suspapikey00001"
+			"api_key": "suspapikey00001",
+			"key": "OZ-RENEW-KEY"
 		}`),
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`not active`},
@@ -564,7 +578,7 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 	seedTenant(t, app, "stathappy000001", "stathappykey001", "active")
 	seedSubscription(t, app, "stathappy000001", "pro", "active")
 
-	req := httptest.NewRequest("GET", "/api/v1/license/status/stathappy000001", nil)
+	req := httptest.NewRequest("GET", "/api/v1/license/status/stathappy000001?api_key=stathappykey001", nil)
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -598,14 +612,34 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 	}
 }
 
+func resetRateLimiters() {
+	ipRateLimiter.stop()
+	keyFailTracker.stop()
+
+	ipRateLimiter.mu.Lock()
+	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	ipRateLimiter.mu.Unlock()
+
+	keyFailTracker.mu.Lock()
+	keyFailTracker.failures = make(map[string]*keyFailures)
+	keyFailTracker.mu.Unlock()
+
+	ipRateLimiter.startCleanup()
+	keyFailTracker.startCleanup()
+}
+
 func TestRenewHandler_NoSubscription(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 
 	// Seed an active tenant but NO subscription.
 	seedTenant(t, app, "rnwsub000000001", "rnwsubkey000001", "active")
 
-	body := strings.NewReader(`{"tenant_id":"rnwsub000000001","api_key":"rnwsubkey000001"}`)
+	// Need a seeded unused key too so it passes key validation before checking subscriptions
+	seedLicenseKey(t, app, "rnwsubkey000001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{"tenant_id":"rnwsub000000001","api_key":"rnwsubkey000001","key":"rnwsubkey000001-key"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -624,6 +658,7 @@ func TestRenewHandler_NoSubscription(t *testing.T) {
 }
 
 func TestRenewHandler_WithSubscription(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 
@@ -631,7 +666,10 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	seedTenant(t, app, "rnwhappy0000001", "rnwhappykey0001", "active")
 	seedSubscription(t, app, "rnwhappy0000001", "pro", "active")
 
-	body := strings.NewReader(`{"tenant_id":"rnwhappy0000001","api_key":"rnwhappykey0001"}`)
+	// Seed valid unused key for renewal
+	seedLicenseKey(t, app, "rnwhappykey0001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{"tenant_id":"rnwhappy0000001","api_key":"rnwhappykey0001","key":"rnwhappykey0001-key"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -655,6 +693,21 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	}
 	if _, ok := resp["signature"]; !ok {
 		t.Error("expected signature in response")
+	}
+
+	// Verify the signed payload includes quota fields carried over from the old subscription.
+	if payloadStr, ok := resp["signed_payload"].(string); ok {
+		var sp SubscriptionPayload
+		if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+			t.Errorf("failed to parse signed_payload: %v", err)
+		} else {
+			if sp.MaxStores != 5 {
+				t.Errorf("expected max_stores=5 in renewal payload, got %d", sp.MaxStores)
+			}
+			if sp.MaxPOSInstances != 3 {
+				t.Errorf("expected max_pos_instances=3 in renewal payload, got %d", sp.MaxPOSInstances)
+			}
+		}
 	}
 
 	// Verify old subscription is now expired.
@@ -687,14 +740,6 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	if !foundExpired {
 		t.Error("expected one expired subscription after renewal")
 	}
-}
-
-// resetRateLimiters clears the package-level rate limiter and key failure
-// tracker so that tests manipulating these globals don't interfere with
-// each other.
-func resetRateLimiters() {
-	ipRateLimiter.buckets = make(map[string]*tokenBucket)
-	keyFailTracker.failures = make(map[string]*keyFailures)
 }
 
 func TestActivateHandler_RateLimited(t *testing.T) {
@@ -801,6 +846,24 @@ func TestActivateHandler_Success(t *testing.T) {
 		t.Error("expected api_key in response")
 	}
 
+	// Verify the signed payload includes quota fields.
+	if payloadStr, ok := resp["signed_payload"].(string); ok {
+		var sp SubscriptionPayload
+		if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+			t.Errorf("failed to parse signed_payload: %v", err)
+		} else {
+			if sp.MaxStores != 5 {
+				t.Errorf("expected max_stores=5 in payload, got %d", sp.MaxStores)
+			}
+			if sp.MaxPOSInstances != 3 {
+				t.Errorf("expected max_pos_instances=3 in payload, got %d", sp.MaxPOSInstances)
+			}
+			if len(sp.AllowedTypes) != 2 || sp.AllowedTypes[0] != "restaurant-pos" || sp.AllowedTypes[1] != "store-pos" {
+				t.Errorf("expected allowed_types=[restaurant-pos, store-pos] in payload, got %v", sp.AllowedTypes)
+			}
+		}
+	}
+
 	// Verify tenant was created.
 	tenant, err := app.FindFirstRecordByData("tenants", "email", "hppytenant00001@example.com")
 	if err != nil {
@@ -843,6 +906,59 @@ func TestActivateHandler_Success(t *testing.T) {
 	)
 	if err != nil || len(machines) == 0 {
 		t.Fatal("machine should have been registered")
+	}
+}
+
+func TestActivateHandler_ExistingTenantNoApiKeyLeak(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed a pre-existing tenant with a known api_key.
+	seedTenant(t, app, "existtenan00001", "existapikey0001", "active")
+
+	// Seed an unused license key.
+	seedLicenseKey(t, app, "OZ-EXIST-KEY001", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	// Activate with the existing tenant's email.
+	body := strings.NewReader(`{
+		"key": "OZ-EXIST-KEY001",
+		"email": "existtenan00001@example.com",
+		"machine_id": "existmachin0001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// The response must NOT include api_key for an existing tenant.
+	if _, ok := resp["api_key"]; ok {
+		t.Error("api_key must NOT be returned for an existing tenant (prevents credential leakage)")
+	}
+
+	// Core fields must still be present.
+	if _, ok := resp["signed_payload"]; !ok {
+		t.Error("expected signed_payload in response")
+	}
+	if _, ok := resp["signature"]; !ok {
+		t.Error("expected signature in response")
+	}
+	if _, ok := resp["tenant_id"]; !ok {
+		t.Error("expected tenant_id in response")
 	}
 }
 
@@ -954,15 +1070,19 @@ func TestActivateHandler_MissingSubscriptionsCollection(t *testing.T) {
 // This test verifies that defensive behavior.
 
 func TestRenewHandler_MissingSubscriptionsCollection(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectAppWithoutCollection(t, map[string]bool{"subscriptions": true})
 	defer app.Cleanup()
 
 	// Seed an active tenant so authentication succeeds.
 	seedTenant(t, app, "rnwmiscfg000001", "rnwmiscfgkey001", "active")
+	// Seed an unused key so key validation succeeds
+	seedLicenseKey(t, app, "rnwmiscfgkey001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
 
 	body := strings.NewReader(`{
 		"tenant_id": "rnwmiscfg000001",
-		"api_key": "rnwmiscfgkey001"
+		"api_key": "rnwmiscfgkey001",
+		"key": "rnwmiscfgkey001-key"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -979,5 +1099,208 @@ func TestRenewHandler_MissingSubscriptionsCollection(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "no active subscription found") {
 		t.Errorf("expected 'no active subscription found', got: %s", rec.Body.String())
+	}
+}
+
+// ── Tests: Activate handler regression coverage ───────────────────
+//
+
+// seedActivatedLicenseKey seeds a license key with a non-empty
+// activated_by relation field, simulating a key that was already
+// activated by the given tenant_id. Use this in tests that exercise
+// the "key reused by same tenant" branch of the handler.
+func seedActivatedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expiresAt, activatedBy string) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("license_keys")
+	if err != nil {
+		t.Fatalf("license_keys collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("key", key)
+	rec.Set("tier_key", tierKey)
+	rec.Set("max_stores", 5)
+	rec.Set("max_pos_instances", 3)
+	rec.Set("allowed_types", `["restaurant-pos", "store-pos"]`)
+	rec.Set("status", status)
+	rec.Set("expires_at", expiresAt)
+	rec.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+	if activatedBy != "" {
+		// Relation fields are stored as JSON arrays internally;
+		// pass a single-element slice to match PocketBase's layout.
+		rec.Set("activated_by", []string{activatedBy})
+	}
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed activated license key %q: %v", key, err)
+	}
+}
+
+// TestActivateHandler_SameTenantKeyReuse verifies that a tenant who
+// already activated a key can re-activate it (after re-install /
+// new-machine setup) and receive the cached subscription payload.
+// Previously broken: the activated_by relation field was stored as a
+// JSON-encoded array (no MaxSelect), so keyRecord.GetString("activated_by")
+// returned "[\"<id>\"]" which never string-matched the bare tenantID,
+// causing spurious 401 "invalid or already used" errors on legitimate
+// re-activation.
+func TestActivateHandler_SameTenantKeyReuse(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed an active tenant.
+	seedTenant(t, app, "reuseten0000001", "reuseApikey00001", "active")
+
+	// Seed an active subscription for the tenant — the reuse
+	// branch in activate.go looks up an existing subscription
+	// to return its already-signed payload.
+	seedSubscription(t, app, "reuseten0000001", "pro", "active")
+
+	// Seed a license key already activated by that tenant.
+	seedActivatedLicenseKey(t, app, "OZ-REUSE-KEY0001", "pro", "activated",
+		"2099-12-31 23:59:59.000Z", "reuseten0000001")
+
+	body := strings.NewReader(`{
+		"key": "OZ-REUSE-KEY0001",
+		"email": "reuseTen0000001@example.com",
+		"machine_id": "newmachine00001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (same-tenant reuse), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if _, ok := resp["signed_payload"]; !ok {
+		t.Error("expected signed_payload in response")
+	}
+	if _, ok := resp["signature"]; !ok {
+		t.Error("expected signature in response")
+	}
+	// api_key is included because keyStatus was "activated" — caller
+	// proved they know a key already bound to this tenant.
+	if _, ok := resp["api_key"]; !ok {
+		t.Error("expected api_key in response on key reuse by same tenant")
+	}
+}
+
+// TestActivateHandler_EmailCaseInsensitive verifies that the activate
+// handler normalizes incoming email so an arbitrary casing matches the
+// existing tenant. Without this, "User@…com" and "user@…com" create
+// duplicate tenants — each with its own api_key — and the user sees
+// "invalid or already used license key" when their key was bound to
+// the lower-case variant they originally typed.
+func TestActivateHandler_EmailCaseInsensitive(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed an existing tenant at lowercase email.
+	seedTenant(t, app, "caseinsen000001", "caseInsenKey0001", "active")
+
+	// Seed an unused license key.
+	seedLicenseKey(t, app, "OZ-CASE-INSEN01", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	// POST with UPPERCASE email — handler should normalize it to
+	// lowercase and reuse the existing tenant (not create a new one).
+	body := strings.NewReader(`{
+		"key": "OZ-CASE-INSEN01",
+		"email": "CASEINSEN000001@EXAMPLE.COM",
+		"machine_id": "casemachin00001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (case-insensitive email match), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// api_key must NOT be returned — if it is, that means a NEW tenant
+	// was created (isNewTenant=true), which would mean our
+	// normalization failed and we leaked credentials.
+	if _, ok := resp["api_key"]; ok {
+		t.Error("api_key must NOT be returned (existing tenant must be matched, no new tenant created)")
+	}
+
+	// Confirm only ONE tenant exists at the lowercase email — a
+	// failure here means our normalization didn't take effect.
+	tenants, err := app.FindRecordsByFilter(
+		"tenants", "email = {:email}", "", 0, 0,
+		map[string]any{"email": "caseinsen000001@example.com"},
+	)
+	if err != nil {
+		t.Fatalf("failed to query tenants: %v", err)
+	}
+	if len(tenants) != 1 {
+		t.Errorf("expected exactly 1 tenant matching lowercased email, got %d", len(tenants))
+	}
+}
+
+// ── Tests: keyFailTracker cooldown env override ───────────────────
+
+// TestKeyFailureTracker_CooldownEnvOverride verifies that the
+// LICENSE_KEY_COOLDOWN env var shortens the per-key cooldown for
+// development use, while preserving the production default (15
+// minutes) when the env is unset.
+func TestKeyFailureTracker_CooldownEnvOverride(t *testing.T) {
+	// 1) Override path: short cooldown via env var.
+	t.Setenv("LICENSE_KEY_COOLDOWN", "200ms")
+	kf := &keyFailureTracker{
+		failures:    make(map[string]*keyFailures),
+		maxAttempts: 3,
+		cooldown:    parseCooldown(),
+	}
+	if kf.cooldown != 200*time.Millisecond {
+		t.Fatalf("expected cooldown=200ms after env override, got %v", kf.cooldown)
+	}
+
+	kf.recordFailure("OZ-COOL-OVR-001")
+	kf.recordFailure("OZ-COOL-OVR-001")
+	kf.recordFailure("OZ-COOL-OVR-001")
+
+	if !kf.isBlocked("OZ-COOL-OVR-001") {
+		t.Error("expected key to be blocked immediately after 3 failures")
+	}
+
+	// Wait past the short cooldown and confirm the lock releases.
+	time.Sleep(250 * time.Millisecond)
+
+	if kf.isBlocked("OZ-COOL-OVR-001") {
+		t.Error("expected key to be unblocked after 200ms cooldown expired")
+	}
+
+	// 2) Default path: unset env falls back to production default.
+	t.Setenv("LICENSE_KEY_COOLDOWN", "")
+	if got := parseCooldown(); got != defaultKeyCooldown {
+		t.Errorf("expected defaultKeyCooldown=%v with empty env, got %v", defaultKeyCooldown, got)
+	}
+
+	// 3) Malformed env falls back to default (and logs a warning
+	//    that's acceptable to ignore here).
+	t.Setenv("LICENSE_KEY_COOLDOWN", "not-a-duration")
+	if got := parseCooldown(); got != defaultKeyCooldown {
+		t.Errorf("expected defaultKeyCooldown=%v with malformed env, got %v", defaultKeyCooldown, got)
 	}
 }

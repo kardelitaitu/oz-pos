@@ -111,6 +111,7 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
   );
 }
 
+/** Sales history screen — filters by status, staff, and date range with swipable rows for manager void actions and detail drill-down. */
 export default function SalesHistoryScreen() {
   const { l10n } = useLocalization();
   const [sales, setSales] = useState<SaleListItem[]>([]);

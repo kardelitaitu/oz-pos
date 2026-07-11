@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
+/** A promotion definition (buy-one-get-one, percentage off, etc). */
 export interface Promotion {
   id: string;
   name: string;
@@ -19,6 +20,7 @@ export interface Promotion {
   updated_at: string;
 }
 
+/** A promotion that was applied to a specific sale. */
 export interface PromotionApplication {
   id: string;
   promotion_id: string;
@@ -28,6 +30,7 @@ export interface PromotionApplication {
   created_at: string;
 }
 
+/** Arguments for creating a new promotion. */
 export interface CreatePromotionArgs {
   name: string;
   description?: string;
@@ -43,6 +46,7 @@ export interface CreatePromotionArgs {
   category_id?: string | null;
 }
 
+/** List all promotions. */
 export const listPromotions = (): Promise<Promotion[]> =>
   invoke<Promotion[]>('list_promotions');
 
@@ -50,6 +54,7 @@ export const listPromotions = (): Promise<Promotion[]> =>
 export const listPromotionsScoped = (sessionToken: string): Promise<Promotion[]> =>
   invoke<Promotion[]>('list_promotions_scoped', { sessionToken });
 
+/** Get a single promotion by its identifier. */
 export const getPromotion = (id: string): Promise<Promotion | null> =>
   invoke<Promotion | null>('get_promotion', { id });
 
@@ -57,6 +62,7 @@ export const getPromotion = (id: string): Promise<Promotion | null> =>
 export const getPromotionScoped = (sessionToken: string, id: string): Promise<Promotion | null> =>
   invoke<Promotion | null>('get_promotion_scoped', { sessionToken, id });
 
+/** Create a new promotion. */
 export const createPromotion = (userId: string, args: CreatePromotionArgs): Promise<Promotion> =>
   invoke<Promotion>('create_promotion', { userId, args });
 
@@ -64,6 +70,7 @@ export const createPromotion = (userId: string, args: CreatePromotionArgs): Prom
 export const createPromotionScoped = (sessionToken: string, args: CreatePromotionArgs): Promise<Promotion> =>
   invoke<Promotion>('create_promotion_scoped', { sessionToken, args });
 
+/** Update an existing promotion. */
 export const updatePromotion = (userId: string, promotion: Promotion): Promise<Promotion> =>
   invoke<Promotion>('update_promotion', { userId, promotion });
 
@@ -71,6 +78,7 @@ export const updatePromotion = (userId: string, promotion: Promotion): Promise<P
 export const updatePromotionScoped = (sessionToken: string, promotion: Promotion): Promise<Promotion> =>
   invoke<Promotion>('update_promotion_scoped', { sessionToken, promotion });
 
+/** Delete a promotion by its identifier. */
 export const deletePromotion = (userId: string, id: string): Promise<void> =>
   invoke<void>('delete_promotion', { userId, id });
 
@@ -78,6 +86,7 @@ export const deletePromotion = (userId: string, id: string): Promise<void> =>
 export const deletePromotionScoped = (sessionToken: string, id: string): Promise<void> =>
   invoke<void>('delete_promotion_scoped', { sessionToken, id });
 
+/** Apply a promotion to a sale. */
 export const applyPromotion = (userId: string, saleId: string, promotionId: string): Promise<PromotionApplication> =>
   invoke<PromotionApplication>('apply_promotion', { userId, saleId, promotionId });
 
@@ -85,6 +94,7 @@ export const applyPromotion = (userId: string, saleId: string, promotionId: stri
 export const applyPromotionScoped = (sessionToken: string, saleId: string, promotionId: string): Promise<PromotionApplication> =>
   invoke<PromotionApplication>('apply_promotion_scoped', { sessionToken, saleId, promotionId });
 
+/** Get all promotions applied to a given sale. */
 export const getSalePromotions = (saleId: string): Promise<PromotionApplication[]> =>
   invoke<PromotionApplication[]>('get_sale_promotions', { saleId });
 

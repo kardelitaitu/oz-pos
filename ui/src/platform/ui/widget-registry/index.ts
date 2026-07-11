@@ -20,6 +20,7 @@ import type { ComponentType } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** A dashboard widget registered with the widget system. */
 export interface WidgetRegistration {
   /** Unique widget identifier. */
   id: string;

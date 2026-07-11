@@ -20,8 +20,10 @@ import type { ComponentType } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** Role levels used for page access gating. */
 export type RequiredRole = 'manager' | 'owner';
 
+/** A page registered with the dynamic routing system. */
 export interface PageRegistration {
   /** Route name used for navigation (e.g. 'sales', 'products'). */
   route: string;

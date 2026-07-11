@@ -21,6 +21,7 @@ interface Props {
   onSaved: () => void;
 }
 
+/** Purchase order creation / editing form — supplier selection, line items with SKU, quantity, unit cost, and expected delivery date. */
 export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props) {
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [poNumber, setPoNumber] = useState('');

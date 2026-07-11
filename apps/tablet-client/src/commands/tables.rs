@@ -8,6 +8,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[command]
+/// List tables.
 pub async fn list_tables(
     section: Option<String>,
     state: State<'_, AppState>,
@@ -20,6 +21,7 @@ pub async fn list_tables(
 }
 
 #[command]
+/// Get table.
 pub async fn get_table(id: String, state: State<'_, AppState>) -> Result<Option<Table>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -29,6 +31,7 @@ pub async fn get_table(id: String, state: State<'_, AppState>) -> Result<Option<
 }
 
 #[command]
+/// Create table.
 pub async fn create_table(
     user_id: String,
     args: Table,
@@ -43,6 +46,7 @@ pub async fn create_table(
 }
 
 #[command]
+/// Update table.
 pub async fn update_table(
     user_id: String,
     table: Table,
@@ -57,6 +61,7 @@ pub async fn update_table(
 }
 
 #[command]
+/// Delete table.
 pub async fn delete_table(
     user_id: String,
     id: String,
@@ -71,6 +76,7 @@ pub async fn delete_table(
 }
 
 #[command]
+/// Update table status.
 pub async fn update_table_status(
     user_id: String,
     id: String,
@@ -86,6 +92,7 @@ pub async fn update_table_status(
 }
 
 #[command]
+/// Assign table order.
 pub async fn assign_table_order(
     user_id: String,
     table_id: String,
@@ -101,6 +108,7 @@ pub async fn assign_table_order(
 }
 
 #[command]
+/// Release table.
 pub async fn release_table(
     user_id: String,
     table_id: String,
@@ -115,6 +123,7 @@ pub async fn release_table(
 }
 
 #[command]
+/// List sections.
 pub async fn list_sections(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
