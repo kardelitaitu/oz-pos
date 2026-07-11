@@ -37,6 +37,8 @@ const { invokeMock } = vi.hoisted(() => ({
         return Promise.resolve(null);
       case 'print_sales_receipt':
         return Promise.resolve({ printed: true });
+      case 'hold_cart':
+        return Promise.resolve();
       case 'get_enabled_features':
         return Promise.resolve({ features: [] });
       default:
@@ -255,5 +257,335 @@ describe('PaymentModal', () => {
     // The done state should appear after printSalesReceipt resolves.
     expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
+  });
+
+  // ── Split payment mode ──
+
+  it('shows split payment UI when toggle is checked', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('checkbox'));
+
+    expect(screen.getByText(/Split Payments/)).toBeInTheDocument();
+    expect(screen.getByText(/Split Evenly/)).toBeInTheDocument();
+    expect(screen.getByText(/\+ Add Split/)).toBeInTheDocument();
+    expect(screen.getByText(/Remaining/)).toBeInTheDocument();
+  });
+
+  it('hides split UI when toggle is unchecked', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole('checkbox');
+    await userEvent.click(toggle);
+    await userEvent.click(toggle);
+
+    expect(screen.queryByText(/Split Payments/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Cash/)).toBeInTheDocument();
+  });
+
+  it('adds a new split row', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getAllByRole('radio', { name: 'Cash' })).toHaveLength(2);
+
+    await userEvent.click(screen.getByText(/\+ Add Split/));
+    expect(screen.getAllByRole('radio', { name: 'Cash' })).toHaveLength(3);
+  });
+
+  it('removes a split row when remove is clicked', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('checkbox'));
+    const removeBtns = screen.getAllByRole('button', { name: /remove split/i });
+    expect(removeBtns).toHaveLength(2);
+
+    await userEvent.click(removeBtns[0]!);
+    expect(screen.getAllByRole('radio', { name: 'Cash' })).toHaveLength(1);
+  });
+
+  it('split evenly distributes total across rows', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByText(/Split Evenly/));
+
+    const splitInputs = screen.getAllByPlaceholderText('0.00') as unknown as HTMLInputElement[];
+    expect(splitInputs).toHaveLength(2);
+    expect(splitInputs[0]!.value).toBe('3.50');
+    expect(splitInputs[1]!.value).toBe('3.50');
+  });
+
+  it('shows remaining amount when splits do not cover total', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('checkbox'));
+    const splitInputs = screen.getAllByPlaceholderText('0.00') as unknown as HTMLInputElement[];
+    await userEvent.type(splitInputs[0]!, '2');
+
+    await waitFor(() => {
+      expect(screen.getByText('$ 5,00')).toBeInTheDocument();
+    });
+  });
+
+  it('enables complete when split amounts sum to total', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('checkbox'));
+    const splitInputs = screen.getAllByPlaceholderText('0.00') as unknown as HTMLInputElement[];
+    await userEvent.type(splitInputs[0]!, '3.50');
+    await userEvent.type(splitInputs[1]!, '3.50');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
+    });
+  });
+
+  // ── Other payment method ──
+
+  it('disables complete when other method has no label', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Select "other" radio — the text input is disabled until the radio is selected
+    const otherRadio = document.querySelector<HTMLInputElement>('input[type="radio"][value="other"]')!;
+    await userEvent.click(otherRadio);
+
+    expect(screen.getByRole('button', { name: /^complete$/i })).toBeDisabled();
+  });
+
+  it('enables complete when other method has a label', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const otherRadio = document.querySelector<HTMLInputElement>('input[type="radio"][value="other"]')!;
+    await userEvent.click(otherRadio);
+    const otherInput = screen.getByPlaceholderText(/^Other/);
+    await userEvent.type(otherInput, 'Voucher');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
+    });
+  });
+
+  // ── Open Bill ──
+
+  it('shows customer name input for open bill', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const openBillRadio = screen.getByLabelText(/Open Bill/);
+    await userEvent.click(openBillRadio);
+
+    expect(screen.getByLabelText(/customer name/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open bill/i })).toBeInTheDocument();
+  });
+
+  it('disables Open Bill complete when customer name is empty', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText(/Open Bill/));
+
+    expect(screen.getByRole('button', { name: /open bill/i })).toBeDisabled();
+  });
+
+  // ── Credit ──
+
+  it('shows customer name input and Credit Sale button for credit', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const creditRadio = screen.getByLabelText(/Credit/);
+    await userEvent.click(creditRadio);
+
+    expect(screen.getByLabelText(/customer name/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /credit sale/i })).toBeInTheDocument();
+  });
+
+  // ── QRIS ──
+
+  it('shows Pay with QR button for QRIS method', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText(/QRIS/));
+
+    expect(screen.getByRole('button', { name: /generate qris/i })).toBeInTheDocument();
+  });
+
+  // ── Close button ──
+
+  it('calls onClose after close button click and animation', async () => {
+    const onClose = vi.fn();
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    const closeBtn = screen.getByRole('button', { name: /cancel payment/i });
+    await userEvent.click(closeBtn);
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    }, { timeout: 2000 });
+  });
+
+  // ── Quick tender presets ──
+
+  it('clicking a quick tender preset sets the tendered amount', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // For 700 minor units (7.00), the 10000-preset rounds up to 10000.00
+    const presetBtn = screen.getByText(/USD 10\.000/);
+    await userEvent.click(presetBtn);
+
+    const tenderInput = screen.getByLabelText(/amount tendered/i) as unknown as HTMLInputElement;
+    expect(tenderInput.value).toBe('10000.00');
+  });
+
+  it('clicking exact tender sets the exact total amount', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const exactBtn = screen.getByRole('button', { name: /tend exact amount/i });
+    await userEvent.click(exactBtn);
+
+    const tenderInput = screen.getByLabelText(/amount tendered/i) as unknown as HTMLInputElement;
+    expect(tenderInput.value).toBe('7.00');
   });
 });

@@ -45,19 +45,10 @@ pub fn license_server_url() -> String {
 pub struct ActivateLicenseRequest {
     /// The license key purchased by the customer.
     pub key: String,
-    /// The tenant ID (client-generated UUID).
-    pub tenant_id: String,
     /// The machine/hardware fingerprint.
     pub machine_id: String,
-    /// Optional business name from setup wizard.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub business_name: Option<String>,
-    /// Optional contact name.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub contact_name: Option<String>,
-    /// Optional contact email.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    /// The contact email (used as primary tenant identifier).
+    pub email: String,
 }
 
 /// Response from `POST /api/v1/license/activate`.
@@ -67,6 +58,8 @@ pub struct ActivateLicenseResponse {
     pub signed_payload: String,
     /// Base64-encoded RSA-2048 signature.
     pub signature: String,
+    /// The Tenant ID returned by the server.
+    pub tenant_id: String,
     /// The API key for subsequent renew/status calls.
     pub api_key: String,
 }
