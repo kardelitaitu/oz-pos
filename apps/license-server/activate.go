@@ -114,10 +114,13 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				"error": "server misconfiguration: tenant_machines collection not found",
 			})
 		}
-		machine := core.NewRecord(machineColl)
-		machine.Set("id", req.MachineID)
-		machine.Set("tenant_id", []string{tenantID})
-		machine.Set("first_seen_at", time.Now().UTC())
+		machine, err := app.FindRecordById("tenant_machines", req.MachineID)
+		if err != nil {
+			machine = core.NewRecord(machineColl)
+			machine.Set("id", req.MachineID)
+			machine.Set("first_seen_at", time.Now().UTC())
+		}
+		machine.Set("tenant_id", tenantID)
 		machine.Set("last_seen_at", time.Now().UTC())
 		if err := app.Save(machine); err != nil {
 			return e.JSON(http.StatusInternalServerError, map[string]any{
@@ -125,54 +128,68 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Build and sign subscription ───────────────────────────
-		tierKey := keyRecord.GetString("tier_key")
-		expiresAt := calculateExpiry(tierKey)
-		sub := SubscriptionPayload{
-			TenantID:   tenantID,
-			TierKey:    tierKey,
-			Status:     "active",
-			StartsAt:   time.Now().UTC().Format(time.RFC3339),
-			ExpiresAt:  expiresAt.Format(time.RFC3339),
-			GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
-			IssuedAt:   time.Now().UTC().Format(time.RFC3339),
-		}
+		var payloadStr, signature string
 
-		payloadStr, signature, err := signSubscription(sub)
-		if err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "signing failed",
-			})
-		}
+		if keyStatus == "activated" {
+			// Find existing active subscription for this tenant
+			subRecord, err := app.FindFirstRecordByData("subscriptions", "tenant_id", tenantID)
+			if err != nil || subRecord.GetString("status") != "active" {
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to find active subscription for reused key",
+				})
+			}
+			payloadStr = subRecord.GetString("signed_payload")
+			signature = subRecord.GetString("signature")
+		} else {
+			// ── Build and sign subscription ───────────────────────────
+			tierKey := keyRecord.GetString("tier_key")
+			expiresAt := calculateExpiry(tierKey)
+			sub := SubscriptionPayload{
+				TenantID:   tenantID,
+				TierKey:    tierKey,
+				Status:     "active",
+				StartsAt:   time.Now().UTC().Format(time.RFC3339),
+				ExpiresAt:  expiresAt.Format(time.RFC3339),
+				GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
+				IssuedAt:   time.Now().UTC().Format(time.RFC3339),
+			}
 
-		// ── Save subscription record ──────────────────────────────
-		subColl, err := app.FindCollectionByNameOrId("subscriptions")
-		if err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "server misconfiguration: subscriptions collection not found",
-			})
-		}
-		subRecord := core.NewRecord(subColl)
-		subRecord.Set("tenant_id", []string{tenantID})
-		subRecord.Set("tier_key", tierKey)
-		subRecord.Set("status", "active")
-		subRecord.Set("starts_at", sub.StartsAt)
-		subRecord.Set("expires_at", sub.ExpiresAt)
-		subRecord.Set("grace_until", sub.GraceUntil)
-		subRecord.Set("signed_payload", payloadStr)
-		subRecord.Set("signature", signature)
-		if err := app.Save(subRecord); err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "failed to save subscription",
-			})
-		}
+			payloadStr, signature, err = signSubscription(sub)
+			if err != nil {
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "signing failed",
+				})
+			}
 
-		// ── Mark key as activated ─────────────────────────────────
-		keyRecord.Set("status", "activated")
-		keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
-		keyRecord.Set("activated_by", tenantID)
-		if err := app.Save(keyRecord); err != nil {
-			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+			// ── Save subscription record ──────────────────────────────
+			subColl, err := app.FindCollectionByNameOrId("subscriptions")
+			if err != nil {
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "server misconfiguration: subscriptions collection not found",
+				})
+			}
+			subRecord := core.NewRecord(subColl)
+			subRecord.Set("tenant_id", tenantID)
+			subRecord.Set("tier_key", tierKey)
+			subRecord.Set("status", "active")
+			subRecord.Set("starts_at", sub.StartsAt)
+			subRecord.Set("expires_at", sub.ExpiresAt)
+			subRecord.Set("grace_until", sub.GraceUntil)
+			subRecord.Set("signed_payload", payloadStr)
+			subRecord.Set("signature", signature)
+			if err := app.Save(subRecord); err != nil {
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to save subscription",
+				})
+			}
+
+			// ── Mark key as activated ─────────────────────────────────
+			keyRecord.Set("status", "activated")
+			keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+			keyRecord.Set("activated_by", tenantID)
+			if err := app.Save(keyRecord); err != nil {
+				log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+			}
 		}
 
 		// ── Return signed subscription to POS ─────────────────────

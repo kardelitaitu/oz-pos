@@ -226,4 +226,94 @@ mod tests {
         let err = CoreError::Platform(platform_core::PlatformError::Internal("test".into()));
         assert!(matches!(err.kind(), CoreErrorKind::Platform));
     }
+
+    // ── Subscription / license variants ──
+
+    #[test]
+    fn subscription_limit_exceeded_kind_and_display() {
+        let err = CoreError::SubscriptionLimitExceeded("max 5 terminals".into());
+        assert!(matches!(
+            err.kind(),
+            CoreErrorKind::SubscriptionLimitExceeded
+        ));
+        let msg = err.to_string();
+        assert!(msg.contains("subscription limit exceeded"));
+        assert!(msg.contains("max 5 terminals"));
+    }
+
+    #[test]
+    fn invalid_subscription_signature_kind_and_display() {
+        let err = CoreError::InvalidSubscriptionSignature("key mismatch".into());
+        assert!(matches!(
+            err.kind(),
+            CoreErrorKind::InvalidSubscriptionSignature
+        ));
+        let msg = err.to_string();
+        assert!(msg.contains("invalid subscription signature"));
+        assert!(msg.contains("key mismatch"));
+    }
+
+    #[test]
+    fn subscription_upgrade_required_kind_and_display() {
+        let err = CoreError::SubscriptionUpgradeRequired("tier: pro required".into());
+        assert!(matches!(
+            err.kind(),
+            CoreErrorKind::SubscriptionUpgradeRequired
+        ));
+        let msg = err.to_string();
+        assert!(msg.contains("subscription upgrade required"));
+        assert!(msg.contains("pro required"));
+    }
+
+    #[test]
+    fn system_clock_tampered_kind_and_display() {
+        let err = CoreError::SystemClockTampered("clock rolled back".into());
+        assert!(matches!(err.kind(), CoreErrorKind::SystemClockTampered));
+        let msg = err.to_string();
+        assert!(msg.contains("system clock tampered"));
+        assert!(msg.contains("clock rolled back"));
+    }
+
+    // ── CoreErrorKind serde ──
+
+    #[test]
+    fn core_error_kind_serde_camel_case() {
+        let kinds = [
+            CoreErrorKind::Db,
+            CoreErrorKind::Platform,
+            CoreErrorKind::MoneyOverflow,
+            CoreErrorKind::CurrencyMismatch,
+            CoreErrorKind::NotFound,
+            CoreErrorKind::Conflict,
+            CoreErrorKind::Validation,
+            CoreErrorKind::Internal,
+            CoreErrorKind::SubscriptionLimitExceeded,
+            CoreErrorKind::InvalidSubscriptionSignature,
+            CoreErrorKind::SubscriptionUpgradeRequired,
+            CoreErrorKind::SystemClockTampered,
+        ];
+        for kind in &kinds {
+            let json = serde_json::to_string(kind).unwrap();
+            assert!(!json.is_empty(), "CoreErrorKind should serialize: {kind:?}");
+        }
+    }
+
+    // ── Debug output ──
+
+    #[test]
+    fn core_error_debug_contains_variant_info() {
+        let err = CoreError::NotFound {
+            entity: "customer",
+            id: "cust-99".into(),
+        };
+        let debug = format!("{err:?}");
+        assert!(
+            debug.contains("NotFound"),
+            "debug should contain variant: {debug}"
+        );
+        assert!(
+            debug.contains("cust-99"),
+            "debug should contain id: {debug}"
+        );
+    }
 }
