@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -31,9 +32,10 @@ func main() {
 		log.Fatal("OZ_LICENSE_PRIVATE_KEY environment variable is required")
 	}
 
-	block, _ := pem.Decode([]byte(keyPEM))
+	block, _ := pem.Decode([]byte(normalizePEM(keyPEM)))
 	if block == nil {
-		log.Fatal("failed to decode PEM block from OZ_LICENSE_PRIVATE_KEY")
+		log.Fatalf("failed to decode PEM block from OZ_LICENSE_PRIVATE_KEY (key length: %d bytes, starts with: %q)",
+			len(keyPEM), safePrefix(keyPEM, 40))
 	}
 
 	var err error
@@ -63,6 +65,84 @@ func main() {
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// normalizePEM attempts to repair common formatting issues that occur when
+// a multi-line PEM key is stored as an environment variable (e.g. in
+// Northflank, Docker secrets, or CI/CD variables). It handles:
+//   - The entire PEM on a single line (newlines stripped by the platform)
+//   - Literal "\\n" escape sequences (double-escaped in JSON/YAML)
+//   - Surrounding whitespace and quotes
+func normalizePEM(raw string) string {
+	// Strip surrounding whitespace and quotes.
+	raw = strings.TrimSpace(raw)
+	raw = strings.Trim(raw, "\"'")
+
+	// Replace literal backslash-n sequences with real newlines.
+	raw = strings.ReplaceAll(raw, "\\n", "\n")
+
+	// If the PEM already has newlines in the expected places, return as-is.
+	if strings.Contains(raw, "-----\n") || strings.Contains(raw, "-----\r\n") {
+		return raw
+	}
+
+	// The PEM is on a single line. Find the BEGIN and END marker boundaries.
+	// Format: -----BEGIN <TYPE>-----<base64>-----END <TYPE>-----
+	// The header line is everything from the first "-----" through the next "-----".
+	beginMarker := strings.Index(raw, "-----BEGIN ")
+	if beginMarker == -1 {
+		return raw // not a recognizable PEM, let pem.Decode fail naturally
+	}
+
+	// The header closes with "-----" after the type name.
+	// Skip past "-----BEGIN " (11 chars) to find the closing "-----".
+	afterType := raw[beginMarker+11:]
+	headerClose := strings.Index(afterType, "-----")
+	if headerClose == -1 {
+		return raw
+	}
+	headerClose += beginMarker + 11 + 5
+	header := raw[beginMarker:headerClose]
+
+	// Find the footer: "-----END " through its closing "-----".
+	endMarker := strings.LastIndex(raw, "-----END ")
+	if endMarker == -1 || endMarker < headerClose {
+		return raw
+	}
+	afterEndType := raw[endMarker+9:] // skip "-----END "
+	footerClose := strings.Index(afterEndType, "-----")
+	if footerClose == -1 {
+		return raw
+	}
+	footerClose += endMarker + 9 + 5
+	footer := raw[endMarker:footerClose]
+
+	base64data := raw[headerClose:endMarker]
+
+	// Reconstruct with proper line breaks (64-char base64 lines).
+	var sb strings.Builder
+	sb.WriteString(header)
+	sb.WriteByte('\n')
+	for i := 0; i < len(base64data); i += 64 {
+		end := i + 64
+		if end > len(base64data) {
+			end = len(base64data)
+		}
+		sb.WriteString(base64data[i:end])
+		sb.WriteByte('\n')
+	}
+	sb.WriteString(footer)
+	sb.WriteByte('\n')
+	return sb.String()
+}
+
+// safePrefix returns the first n bytes of s, escaping non-printable chars
+// for safe inclusion in log messages.
+func safePrefix(s string, n int) string {
+	if len(s) > n {
+		s = s[:n]
+	}
+	return strings.ReplaceAll(s, "\n", "\\n")
 }
 
 // SubscriptionPayload is the JSON structure signed by the license server.
