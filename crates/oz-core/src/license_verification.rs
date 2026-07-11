@@ -59,8 +59,10 @@ pub struct ActivateLicenseResponse {
     /// Base64-encoded RSA-2048 signature.
     pub signature: String,
     /// The Tenant ID returned by the server.
+    #[serde(default)]
     pub tenant_id: String,
     /// The API key for subsequent renew/status calls.
+    #[serde(default)]
     pub api_key: String,
 }
 
