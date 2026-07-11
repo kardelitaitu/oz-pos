@@ -418,4 +418,78 @@ mod tests {
         let result = state.resolve_session("nonexistent");
         assert!(matches!(result, Err(AppError::InvalidSession)));
     }
+
+    #[test]
+    fn resolve_session_with_empty_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn resolve_session_returns_full_context() {
+        let state = AppState::for_test();
+        let ctx = SessionContext::new(
+            "user-full".into(),
+            "role-manager".into(),
+            "term-kitchen".into(),
+            "store-main".into(),
+            "instance-1".into(),
+            "kds".into(),
+        );
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("tok-full".into(), ctx);
+
+        let resolved = state.resolve_session("tok-full").unwrap();
+        assert_eq!(resolved.user_id, "user-full");
+        assert_eq!(resolved.role_id, "role-manager");
+        assert_eq!(resolved.terminal_id, "term-kitchen");
+        assert_eq!(resolved.store_id, "store-main");
+        assert_eq!(resolved.instance_id, "instance-1");
+        assert_eq!(resolved.type_key, "kds");
+    }
+
+    #[test]
+    fn resolve_session_clone_preserves_all_fields() {
+        let state = AppState::for_test();
+        let ctx = SessionContext::new(
+            "u1".into(),
+            "r1".into(),
+            "t1".into(),
+            "s1".into(),
+            "i1".into(),
+            "type1".into(),
+        );
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("tok".into(), ctx.clone());
+
+        let resolved = state.resolve_session("tok").unwrap();
+        // Clone should produce identical values
+        let cloned = resolved.clone();
+        assert_eq!(cloned.store_id, "s1");
+        assert_eq!(cloned.user_id, "u1");
+        assert_eq!(cloned.type_key, "type1");
+    }
+
+    #[tokio::test]
+    async fn store_method_creates_store_with_cache() {
+        let state = AppState::for_test();
+        let conn = state.db.lock().await;
+        let store = state.store(&conn);
+        let _ = store;
+    }
+
+    #[test]
+    fn for_test_creates_valid_state() {
+        let state = AppState::for_test();
+        assert_eq!(state.db_path.to_str(), Some(":memory:"));
+        assert!(state.app.is_none());
+        assert!(state.plugin_watcher.is_none());
+    }
 }

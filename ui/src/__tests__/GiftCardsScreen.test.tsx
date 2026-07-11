@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { withFluent } from '@/locales/test-utils';
@@ -454,6 +454,169 @@ describe('GiftCardsScreen', () => {
 
     await waitFor(() => {
       expect(mockListGiftCards).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // -- Search & filter --
+  it('re-fetches cards when search input changes', async () => {
+    mockListGiftCards.mockResolvedValue([]);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(mockListGiftCards).toHaveBeenCalledTimes(1);
+    });
+
+    const searchInput = screen.getByRole('textbox');
+    fireEvent.change(searchInput, { target: { value: 'GC-001' } });
+
+    await waitFor(() => {
+      expect(mockListGiftCards).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('re-fetches cards when status filter changes', async () => {
+    const user = userEvent.setup();
+    mockListGiftCards.mockResolvedValue([]);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(mockListGiftCards).toHaveBeenCalledTimes(1);
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'active');
+
+    await waitFor(() => {
+      expect(mockListGiftCards).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // -- Keyboard a11y --
+  it('expands card details with Enter key', async () => {
+    const user = userEvent.setup();
+    mockListGiftCards.mockResolvedValue(sampleCards);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('GC-001')).toBeInTheDocument();
+    });
+
+    // Focus the summary button (role=button) and press Enter
+    const summaryBtns = screen.getAllByRole('button');
+    const gc001Btn = summaryBtns.find((btn) => btn.textContent?.includes('GC-001'));
+    expect(gc001Btn).toBeTruthy();
+    gc001Btn!.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(screen.getByText('Initial Balance')).toBeInTheDocument();
+    });
+  });
+
+  // -- Balance formatting --
+  it('displays formatted balance for each card', async () => {
+    mockListGiftCards.mockResolvedValue(sampleCards);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      // 75000 minor / 100 = 750 (IDR has 2 decimal places)
+      expect(screen.getByText(/IDR\s+750/)).toBeInTheDocument();
+    });
+  });
+
+  // -- No expiry date --
+  it('does not show Expires row when card has no expiry_date', async () => {
+    const user = userEvent.setup();
+    // GC-002 has expiry_date: null
+    mockListGiftCards.mockResolvedValue([sampleCards[1]!]);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('GC-002')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('GC-002'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Initial Balance')).toBeInTheDocument();
+      expect(screen.queryByText('Expires')).not.toBeInTheDocument();
+    });
+  });
+
+  // -- Top-up restrictions --
+  it('does not show Top Up button for frozen cards', async () => {
+    const user = userEvent.setup();
+    mockListGiftCards.mockResolvedValue([sampleCards[2]!]);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('GC-003')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('GC-003'));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /top up/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('does not show Top Up button for redeemed cards', async () => {
+    const user = userEvent.setup();
+    mockListGiftCards.mockResolvedValue([sampleCards[1]!]);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('GC-002')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('GC-002'));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /top up/i })).not.toBeInTheDocument();
+    });
+  });
+
+  // -- Status CSS classes --
+  it('applies correct status CSS classes', async () => {
+    mockListGiftCards.mockResolvedValue(sampleCards);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('GC-001')).toBeInTheDocument();
+      expect(document.querySelector('.gift-card-status--active')).toBeTruthy();
+      expect(document.querySelector('.gift-card-status--redeemed')).toBeTruthy();
+      expect(document.querySelector('.gift-card-status--frozen')).toBeTruthy();
+    });
+  });
+
+  // -- Transaction details --
+  it('shows transaction columns: type, amount, balance, notes, date', async () => {
+    const user = userEvent.setup();
+    mockListGiftCards.mockResolvedValue(sampleCards);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('GC-001')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('GC-001'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Type')).toBeInTheDocument();
+      expect(screen.getByText('Amount')).toBeInTheDocument();
+      expect(screen.getByText('Balance')).toBeInTheDocument();
+      expect(screen.getByText('Notes')).toBeInTheDocument();
+      expect(screen.getByText('Date')).toBeInTheDocument();
+    });
+  });
+
+  // -- Expand arrow --
+  it('shows expand arrow on each card summary', async () => {
+    mockListGiftCards.mockResolvedValue(sampleCards);
+    await renderInAct(wrap(<GiftCardsScreen />));
+
+    await waitFor(() => {
+      const arrows = document.querySelectorAll('.gift-card-expand');
+      expect(arrows.length).toBe(3);
     });
   });
 });

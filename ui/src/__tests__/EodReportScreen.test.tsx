@@ -241,4 +241,250 @@ describe('EodReportScreen', () => {
       expect(screen.getByText('Shift in progress')).toBeTruthy();
     });
   });
+
+  // -- Payment breakdown: empty state --
+  it('shows empty payment data when no payment breakdown', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport({ payment_breakdown: [] }));
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Payment Breakdown')).toBeTruthy();
+      expect(screen.getByText('No payment data')).toBeTruthy();
+    });
+  });
+
+  // -- Payment breakdown: ARIA progress bars --
+  it('renders payment bars with role progressbar', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport());
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      const bars = screen.getAllByRole('progressbar');
+      expect(bars.length).toBe(2);
+    });
+  });
+
+  // -- Hourly chart: empty state --
+  it('shows empty hourly data when no hourly breakdown', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport({ hourly_breakdown: [] }));
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('No hourly data')).toBeTruthy();
+    });
+  });
+
+  // -- Summary table --
+  it('renders Today\'s Summary section with all rows', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport());
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      const summaryEls = screen.getAllByText("Today's Summary");
+      expect(summaryEls.length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.getByText('Completed Sales')).toBeTruthy();
+    expect(screen.getByText('Voided Sales')).toBeTruthy();
+    expect(screen.getByText('Voided Value')).toBeTruthy();
+    expect(screen.getByText('Sales with Discounts')).toBeTruthy();
+    expect(screen.getByText('Payment Methods Used')).toBeTruthy();
+  });
+
+  // -- Date display --
+  it('renders the date in the header', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport());
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      const dateEl = document.querySelector('.eod-report-date');
+      expect(dateEl).toBeTruthy();
+      expect(dateEl!.textContent).toBeTruthy();
+    });
+  });
+
+  // -- Print button --
+  it('calls printReceipt when Print button is clicked', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport());
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Print')).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Print'));
+
+    expect(mockPrintReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining('END-OF-DAY REPORT') }),
+    );
+  });
+
+  // -- Discounts KPI shows counts --
+  it('displays discount count in KPI', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport({ discount_count: 3 }));
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows "No discounts applied" when discount_count is 0', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport({ discount_count: 0 }));
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('No discounts applied')).toBeTruthy();
+    });
+  });
+
+  // -- Voids KPI --
+  it('displays void count in KPI', async () => {
+    mockEodReport.mockResolvedValue(makeEodReport({ void_count: 5 }));
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      const voidCounts = screen.getAllByText('5');
+      expect(voidCounts.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // -- Active shift details --
+  it('shows active shift opening balance and sales', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    mockEodReport.mockResolvedValue(makeEodReport({ total_sales: 0 }));
+    mockListShifts.mockResolvedValue([
+      makeShift({
+        status: 'open',
+        closedAt: null,
+        closingBalanceMinor: null,
+        openedAt: `${today}T08:00:00.000Z`,
+        openingBalanceMinor: 150000,
+        totalSalesMinor: 350000,
+      }),
+    ]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Opening balance')).toBeTruthy();
+      expect(screen.getByText('Sales this shift')).toBeTruthy();
+    });
+  });
+
+  // -- Closed shifts table: diff tags --
+  it('shows over/short tags on shift cash differences', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    mockEodReport.mockResolvedValue(makeEodReport({ total_sales: 5 }));
+    mockListShifts.mockResolvedValue([
+      makeShift({
+        openedAt: `${today}T08:00:00.000Z`,
+        closedAt: `${today}T18:00:00.000Z`,
+        cashDifferenceMinor: 50000,
+      }),
+    ]);
+    renderScreen();
+
+    await waitFor(() => {
+      const tags = document.querySelectorAll('.eod-report-shift-tag');
+      expect(tags.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // -- Negative cash diff class --
+  it('applies negative diff class for short cash differences', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    mockEodReport.mockResolvedValue(makeEodReport({ total_sales: 5 }));
+    mockListShifts.mockResolvedValue([
+      makeShift({
+        openedAt: `${today}T08:00:00.000Z`,
+        closedAt: `${today}T18:00:00.000Z`,
+        cashDifferenceMinor: -30000,
+      }),
+    ]);
+    renderScreen();
+
+    await waitFor(() => {
+      const negDiffs = document.querySelectorAll('.eod-report-shift-diff--negative');
+      expect(negDiffs.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // -- Cash reconciliation with 2+ closed shifts --
+  it('shows cash reconciliation when multiple shifts closed today', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    mockEodReport.mockResolvedValue(makeEodReport({ total_sales: 5 }));
+    mockListShifts.mockResolvedValue([
+      makeShift({
+        id: 'shift-1',
+        openedAt: `${today}T08:00:00.000Z`,
+        closedAt: `${today}T12:00:00.000Z`,
+        cashDifferenceMinor: 10000,
+      }),
+      makeShift({
+        id: 'shift-2',
+        openedAt: `${today}T12:00:00.000Z`,
+        closedAt: `${today}T18:00:00.000Z`,
+        cashDifferenceMinor: 20000,
+      }),
+    ]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Reconciliation')).toBeTruthy();
+      expect(screen.getByText('Total opening')).toBeTruthy();
+      expect(screen.getByText('Total counted')).toBeTruthy();
+      expect(screen.getByText('Total expected')).toBeTruthy();
+      expect(screen.getByText('Net difference')).toBeTruthy();
+    });
+  });
+
+  // -- Shift totals row --
+  it('renders totals row in shift table', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    mockEodReport.mockResolvedValue(makeEodReport({ total_sales: 5 }));
+    mockListShifts.mockResolvedValue([
+      makeShift({
+        openedAt: `${today}T08:00:00.000Z`,
+        closedAt: `${today}T18:00:00.000Z`,
+      }),
+    ]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Total')).toBeTruthy();
+    });
+  });
+
+  // -- Print button disabled when no report --
+  it('disables Print button when report is null', async () => {
+    mockEodReport.mockResolvedValue(null);
+    mockListShifts.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      const printBtn = document.querySelector('.eod-report-print-btn');
+      expect(printBtn).toBeTruthy();
+      expect((printBtn as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
+  // -- Refresh shows spinner/indicator during load --
+  it('disables Refresh button while loading', async () => {
+    mockEodReport.mockImplementation(() => new Promise(() => {}));
+    mockListShifts.mockImplementation(() => new Promise(() => {}));
+    renderScreen();
+
+    const refreshBtn = document.querySelector('.eod-report-refresh-btn') as HTMLButtonElement;
+    expect(refreshBtn).toBeTruthy();
+    expect(refreshBtn.disabled).toBe(true);
+  });
 });

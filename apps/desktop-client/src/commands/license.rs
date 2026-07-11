@@ -21,19 +21,13 @@ pub struct LicenseStatusDto {
 pub async fn activate_license(
     state: State<'_, AppState>,
     key: String,
-    tenant_id: String,
+    email: String,
     machine_id: String,
-    business_name: Option<String>,
-    contact_name: Option<String>,
-    email: Option<String>,
 ) -> Result<bool, AppError> {
     let req = ActivateLicenseRequest {
         key,
-        tenant_id,
-        machine_id,
-        business_name,
-        contact_name,
         email,
+        machine_id,
     };
 
     let resp = core_activate_license(&req)
@@ -47,7 +41,8 @@ pub async fn activate_license(
         &[
             ("license.payload".to_string(), resp.signed_payload),
             ("license.signature".to_string(), resp.signature),
-            ("license.tenant_id".to_string(), req.tenant_id),
+            ("license.tenant_id".to_string(), resp.tenant_id),
+            ("license.api_key".to_string(), resp.api_key),
         ],
     )?;
 

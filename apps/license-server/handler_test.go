@@ -35,18 +35,8 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 
 	tenants := core.NewBaseCollection("tenants")
 	tenants.Fields.Add(
-		&core.TextField{Name: "business_name", Required: true},
-		&core.TextField{Name: "contact_name", Required: true},
 		&core.EmailField{Name: "email", Required: true},
-		&core.TextField{Name: "phone"},
-		&core.TextField{Name: "company"},
-		&core.TextField{Name: "address_line1"},
-		&core.TextField{Name: "address_line2"},
-		&core.TextField{Name: "city"},
-		&core.TextField{Name: "state"},
-		&core.TextField{Name: "postal_code"},
-		&core.TextField{Name: "country"},
-		&core.TextField{Name: "notes"},
+		&core.TextField{Name: "phone", Required: true},
 		&core.TextField{Name: "api_key", Required: true},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 	)
@@ -83,9 +73,6 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	subscriptions.Fields.Add(
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
-		&core.NumberField{Name: "max_stores", Required: true},
-		&core.NumberField{Name: "max_pos_instances", Required: true},
-		&core.JSONField{Name: "allowed_types", Required: true},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
 		&core.DateField{Name: "starts_at", Required: true},
 		&core.DateField{Name: "expires_at", Required: true},
@@ -145,9 +132,8 @@ func seedTenant(t *testing.T, app *tests.TestApp, tenantID, apiKey, status strin
 	}
 	rec := core.NewRecord(col)
 	rec.Set("id", tenantID)
-	rec.Set("business_name", "Test Business")
-	rec.Set("contact_name", "Test Contact")
-	rec.Set("email", "test@example.com")
+	rec.Set("email", tenantID+"@example.com")
+	rec.Set("phone", "-")
 	rec.Set("api_key", apiKey)
 	rec.Set("status", status)
 	if err := app.Save(rec); err != nil {
@@ -204,18 +190,8 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 	if !skip["tenants"] {
 		tenants := core.NewBaseCollection("tenants")
 		tenants.Fields.Add(
-			&core.TextField{Name: "business_name", Required: true},
-			&core.TextField{Name: "contact_name", Required: true},
 			&core.EmailField{Name: "email", Required: true},
-			&core.TextField{Name: "phone"},
-			&core.TextField{Name: "company"},
-			&core.TextField{Name: "address_line1"},
-			&core.TextField{Name: "address_line2"},
-			&core.TextField{Name: "city"},
-			&core.TextField{Name: "state"},
-			&core.TextField{Name: "postal_code"},
-			&core.TextField{Name: "country"},
-			&core.TextField{Name: "notes"},
+			&core.TextField{Name: "phone", Required: true},
 			&core.TextField{Name: "api_key", Required: true},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 		)
@@ -275,9 +251,6 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		subscriptions.Fields.Add(
 			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
 			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
-			&core.NumberField{Name: "max_stores", Required: true},
-			&core.NumberField{Name: "max_pos_instances", Required: true},
-			&core.JSONField{Name: "allowed_types", Required: true},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
 			&core.DateField{Name: "starts_at", Required: true},
 			&core.DateField{Name: "expires_at", Required: true},
@@ -427,7 +400,7 @@ func TestActivateHandler_InvalidKey(t *testing.T) {
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
 			"key": "OZINVALIDKEY001",
-			"tenant_id": "testactivate001",
+			"email": "testactivate001@example.com",
 			"machine_id": "machinetest0001"
 		}`),
 		ExpectedStatus:  401,
@@ -452,7 +425,7 @@ func TestActivateHandler_AlreadyUsedKey(t *testing.T) {
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
 			"key": "OZ-USED-KEY-00001",
-			"tenant_id": "usedkeytest0001",
+			"email": "usedkeytest0001@example.com",
 			"machine_id": "usedmachin00001"
 		}`),
 		ExpectedStatus:  401,
@@ -472,7 +445,7 @@ func TestActivateHandler_ExpiredKey(t *testing.T) {
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
 			"key": "OZ-EXPIRED-KEY01",
-			"tenant_id": "expiredkeytes001",
+			"email": "expiredkeytes001@example.com",
 			"machine_id": "expmachint00001"
 		}`),
 		ExpectedStatus:  410,
@@ -492,7 +465,7 @@ func TestActivateHandler_RevokedKey(t *testing.T) {
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
 			"key": "OZ-REVOKED-KEY01",
-			"tenant_id": "revokedkeyte0001",
+			"email": "revokedkeyte0001@example.com",
 			"machine_id": "revmachint00001"
 		}`),
 		ExpectedStatus:  401,
@@ -738,7 +711,7 @@ func TestActivateHandler_RateLimited(t *testing.T) {
 		ipRateLimiter.allow(testIP)
 	}
 
-	body := strings.NewReader(`{"key":"OZ-RATELIM-KEY01","tenant_id":"rlimtenant00001","machine_id":"rlimmachin00001"}`)
+	body := strings.NewReader(`{"key":"OZ-RATELIM-KEY01","email":"rlimtenant00001@example.com","machine_id":"rlimmachin00001"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = testAddr
@@ -769,7 +742,7 @@ func TestActivateHandler_KeyBruteForceBlocked(t *testing.T) {
 		keyFailTracker.recordFailure("OZ-BRUTE-KEY001")
 	}
 
-	body := strings.NewReader(`{"key":"OZ-BRUTE-KEY001","tenant_id":"brutteten00001","machine_id":"bruttemach00001"}`)
+	body := strings.NewReader(`{"key":"OZ-BRUTE-KEY001","email":"brutteten00001@example.com","machine_id":"bruttemach00001"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -797,10 +770,8 @@ func TestActivateHandler_Success(t *testing.T) {
 
 	body := strings.NewReader(`{
 		"key": "OZ-HAPPY-KEY0001",
-		"tenant_id": "hppytenant00001",
-		"machine_id": "hppymachine0001",
-		"contact_name": "Test Contact",
-		"email": "test@example.com"
+		"email": "hppytenant00001@example.com",
+		"machine_id": "hppymachine0001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -831,10 +802,11 @@ func TestActivateHandler_Success(t *testing.T) {
 	}
 
 	// Verify tenant was created.
-	tenant, err := app.FindRecordById("tenants", "hppytenant00001")
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "hppytenant00001@example.com")
 	if err != nil {
 		t.Fatalf("tenant should be created: %v", err)
 	}
+	tenantID := tenant.Id
 	if tenant.GetString("status") != "active" {
 		t.Errorf("tenant status should be active, got %s", tenant.GetString("status"))
 	}
@@ -853,7 +825,7 @@ func TestActivateHandler_Success(t *testing.T) {
 		"subscriptions",
 		"tenant_id = {:tenant_id}",
 		"-starts_at", 1, 0,
-		map[string]any{"tenant_id": "hppytenant00001"},
+		map[string]any{"tenant_id": tenantID},
 	)
 	if err != nil || len(subs) == 0 {
 		t.Fatal("subscription should have been created")
@@ -867,7 +839,7 @@ func TestActivateHandler_Success(t *testing.T) {
 		"tenant_machines",
 		"tenant_id = {:tenant_id}",
 		"", 1, 0,
-		map[string]any{"tenant_id": "hppytenant00001"},
+		map[string]any{"tenant_id": tenantID},
 	)
 	if err != nil || len(machines) == 0 {
 		t.Fatal("machine should have been registered")
@@ -890,10 +862,8 @@ func TestActivateHandler_MissingTenantsCollection(t *testing.T) {
 
 	body := strings.NewReader(`{
 		"key": "OZ-MISCFG-KEY01",
-		"tenant_id": "miscfgtenan0001",
-		"machine_id": "miscfgmachin001",
-		"contact_name": "Test",
-		"email": "test@example.com"
+		"email": "miscfgtenan0001@example.com",
+		"machine_id": "miscfgmachin001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")

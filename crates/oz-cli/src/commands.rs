@@ -1670,6 +1670,26 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[test]
+    fn run_init_db_restaurant() {
+        let conn = oz_core::migrations::fresh_db();
+        let args = InitDbArgs {
+            preset: "restaurant".into(),
+        };
+        let result = run_init_db(&conn, &args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_init_db_custom() {
+        let conn = oz_core::migrations::fresh_db();
+        let args = InitDbArgs {
+            preset: "custom".into(),
+        };
+        let result = run_init_db(&conn, &args);
+        assert!(result.is_ok());
+    }
+
     // ── Migrate ───────────────────────────────────────────────────────
 
     #[test]
