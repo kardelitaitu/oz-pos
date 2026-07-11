@@ -1,104 +1,128 @@
 [
   {
-    "id": "57817e44817b0ad",
+    "id": "098b800a0a2835a",
     "name": "license_keys",
     "type": "base",
     "system": false,
     "schema": [
       {
-        "id": "c104e0dd3029f59",
+        "id": "af044ec7984a865",
         "name": "key",
         "type": "text",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": true,
         "options": {
           "min": 10,
-          "max": 100
+          "max": 100,
+          "pattern": ""
         }
       },
       {
-        "id": "976e670dd5e48fa",
+        "id": "59b679ea73a6729",
         "name": "tier_key",
         "type": "select",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
+          "maxSelect": 1,
           "values": [
             "free",
             "pro",
             "premium",
             "enterprise"
-          ],
-          "maxSelect": 1
+          ]
         }
       },
       {
-        "id": "fb9d6d8bc3cf700",
+        "id": "4f950bb08fa6d5e",
         "name": "status",
         "type": "select",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
+          "maxSelect": 1,
           "values": [
             "unused",
             "activated",
             "expired",
             "revoked"
-          ],
-          "maxSelect": 1
+          ]
         }
       },
       {
-        "id": "889779945002c0c",
+        "id": "eb24b9b69bb5837",
         "name": "expires_at",
         "type": "date",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": "",
+          "max": ""
+        }
       },
       {
-        "id": "dc35cc6a08bf4d6",
+        "id": "91e7162030cf3b8",
         "name": "activated_at",
         "type": "date",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "953e44c20cb5138",
-        "name": "activated_by",
-        "type": "relation",
+        "system": false,
         "required": false,
         "presentable": false,
         "unique": false,
         "options": {
-          "collectionId": "tenants",
-          "cascadeDelete": false,
-          "maxSelect": 1
+          "min": "",
+          "max": ""
         }
       },
       {
-        "id": "867a70a8a7e7bcf",
-        "name": "revoked_at",
-        "type": "date",
+        "id": "c5104eaa56335a5",
+        "name": "activated_by",
+        "type": "relation",
+        "system": false,
         "required": false,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "collectionId": "64d11bd2cc57a18",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": null
+        }
       },
       {
-        "id": "8af793427a08a13",
-        "name": "notes",
-        "type": "text",
+        "id": "645a042694c20f5",
+        "name": "revoked_at",
+        "type": "date",
+        "system": false,
         "required": false,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "id": "123417a8af39507",
+        "name": "notes",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
       }
     ],
     "indexes": [],
@@ -110,142 +134,207 @@
     "options": {}
   },
   {
-    "id": "54642da2afd7d05",
+    "id": "64d11bd2cc57a18",
     "name": "tenants",
     "type": "base",
     "system": false,
     "schema": [
       {
-        "id": "6474a7724cbc0fc",
+        "id": "e2a6ad8418b7ac1",
         "name": "business_name",
         "type": "text",
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "7a313f0a998ae73",
-        "name": "contact_name",
-        "type": "text",
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "f09858583ae88dc",
-        "name": "email",
-        "type": "email",
-        "required": true,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "cc8945693134cd0",
-        "name": "phone",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "cd4be6235cef4d5",
-        "name": "company",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "346044ed0504d59",
-        "name": "address_line1",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "00edfb4564c5c21",
-        "name": "address_line2",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "519e9713ea2cfd5",
-        "name": "city",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "155e77930898e65",
-        "name": "state",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "24162f3f668aa1f",
-        "name": "postal_code",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "0b3db7dde7b013d",
-        "name": "country",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "2a1d528621a8d1a",
-        "name": "notes",
-        "type": "text",
-        "required": false,
-        "presentable": false,
-        "unique": false,
-        "options": {}
-      },
-      {
-        "id": "d80e62a504f04c3",
-        "name": "api_key",
-        "type": "text",
-        "required": true,
-        "presentable": false,
-        "unique": true,
-        "options": {}
-      },
-      {
-        "id": "da86ba205566fe0",
-        "name": "status",
-        "type": "select",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "c9804c103217408",
+        "name": "contact_name",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "184590b72d16748",
+        "name": "email",
+        "type": "email",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "exceptDomains": null,
+          "onlyDomains": null
+        }
+      },
+      {
+        "id": "e57f1957afa5851",
+        "name": "phone",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "04cb6fb42ded25a",
+        "name": "company",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "95c8f57d6ceb5d2",
+        "name": "address_line1",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "fb56ceb5cd6fb58",
+        "name": "address_line2",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "7e88e220be52da5",
+        "name": "city",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "6689988afe9d267",
+        "name": "state",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "3e1c301f6f2aa1d",
+        "name": "postal_code",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "7f202e738a4d1bc",
+        "name": "country",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "55647b37eeeabf0",
+        "name": "notes",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "f798424ab71e74f",
+        "name": "api_key",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": true,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "3c83351e1ed8a89",
+        "name": "status",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
           "values": [
             "active",
             "suspended",
             "revoked"
-          ],
-          "maxSelect": 1
+          ]
         }
       }
     ],
@@ -258,102 +347,129 @@
     "options": {}
   },
   {
-    "id": "d9da3f4dc73bf28",
+    "id": "c70451d421d53cf",
     "name": "subscriptions",
     "type": "base",
     "system": false,
     "schema": [
       {
-        "id": "29d1e546ba41bf0",
+        "id": "b415aead5f62ff6",
         "name": "tenant_id",
         "type": "relation",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
-          "collectionId": "tenants",
+          "collectionId": "64d11bd2cc57a18",
           "cascadeDelete": false,
-          "maxSelect": 1
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": null
         }
       },
       {
-        "id": "9dc76b5b2e57bc6",
+        "id": "959c6d415bbc13a",
         "name": "tier_key",
         "type": "select",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
+          "maxSelect": 1,
           "values": [
             "free",
             "pro",
             "premium",
             "enterprise"
-          ],
-          "maxSelect": 1
+          ]
         }
       },
       {
-        "id": "6e597c36f7193b7",
+        "id": "368eb441fe01789",
         "name": "status",
         "type": "select",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
+          "maxSelect": 1,
           "values": [
             "active",
             "expired",
             "grace_period",
             "revoked"
-          ],
-          "maxSelect": 1
+          ]
         }
       },
       {
-        "id": "6d599b3fd6d32ea",
+        "id": "39118b0e7c3df91",
         "name": "starts_at",
         "type": "date",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": "",
+          "max": ""
+        }
       },
       {
-        "id": "f5ff80096452f1d",
+        "id": "745f72b034ac1cf",
         "name": "expires_at",
         "type": "date",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": "",
+          "max": ""
+        }
       },
       {
-        "id": "abdc50324e3a26d",
+        "id": "ed955428ec3db94",
         "name": "grace_until",
         "type": "date",
+        "system": false,
         "required": false,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": "",
+          "max": ""
+        }
       },
       {
-        "id": "cde2d53da4be3fa",
+        "id": "c2e4c95fb873032",
         "name": "signed_payload",
         "type": "text",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
       },
       {
-        "id": "2aa69348a95ae4c",
+        "id": "02f21bbeeaa744a",
         "name": "signature",
         "type": "text",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
       }
     ],
     "indexes": [],
@@ -365,41 +481,52 @@
     "options": {}
   },
   {
-    "id": "c2162fc9c1c401f",
+    "id": "cc353d653cfd74a",
     "name": "tenant_machines",
     "type": "base",
     "system": false,
     "schema": [
       {
-        "id": "9c69c9ff4a1f359",
+        "id": "a9d7b8b89695edb",
         "name": "tenant_id",
         "type": "relation",
+        "system": false,
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
-          "collectionId": "tenants",
+          "collectionId": "64d11bd2cc57a18",
           "cascadeDelete": false,
-          "maxSelect": 1
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": null
         }
       },
       {
-        "id": "0a78f5720ac4448",
+        "id": "990496f49d296c1",
         "name": "first_seen_at",
         "type": "date",
+        "system": false,
         "required": false,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": "",
+          "max": ""
+        }
       },
       {
-        "id": "f574b1d421a20fd",
+        "id": "507c61236a83d3f",
         "name": "last_seen_at",
         "type": "date",
+        "system": false,
         "required": false,
         "presentable": false,
         "unique": false,
-        "options": {}
+        "options": {
+          "min": "",
+          "max": ""
+        }
       }
     ],
     "indexes": [],
