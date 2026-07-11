@@ -20,6 +20,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **Currency auto-detection**: USD/IDR seeded in migration 006; default currency auto-detected from system locale; currency picker in setup wizard.
 - **Test coverage**: Go license server test suite with 84+ tests (handleActivate 92.6%, handleStatus 100%, handleRenew 90.5%, total 85.5%) covering handler integration, rate limiting, brute-force protection, and misconfiguration error paths; front-end test suite grew from 103 to 112 test files and 1539 to 1658 tests with 9 new test files (useWorkspaceNav, useToast, useAnimatedToastQueue, ScaleIndicator, MultiStoreDashboardScreen, useTerminalProfile, useFullscreen, AppearanceSettings, DesignSystem).
 - **Fast build configuration**: `sccache` + 32-thread Cargo config for local dev; `mold`/`lld` fast linker configs for Linux and macOS.
+- **Adaptive Rendering & Fluid Scaling**: Redesigned `ZoomContext` to provide fluid typography scaling using `window.innerWidth` with a 1920px baseline and 14px-28px clamp; intercepted `Ctrl +/-/0` to allow keyboard zoom without fighting native browser behavior. Added `docs/UX_GUIDELINES.md` detailing the fluid typography standard.
+- **Enterprise Connection Polling**: Upgraded `ConnectionStatus.tsx` to use instant OS network detection (`navigator.onLine` event listeners), exponential backoff for failed pings (up to 60s), and 30-120s randomized jitter for idle polling to prevent backend thundering herds. Added `ConnectionStatus.test.tsx` to verify OS network integration.
 
 ### Changed
 - **Session token migration (ADR #7)**: Every Tauri command across all modules (POS, products, inventory, sales, settings, staff, shifts, terminals, tables, workspaces, KDS, promotions, reporting) migrated from raw `user_id`/`store_id` params to session token lookup pattern with `resolve_scope()` and `resolve_store()` helpers; `Data Scope Guard` ADR documenting the pattern.
@@ -36,6 +38,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **Workspace type DTO**: Removed deprecated attribute from `WorkspaceTypeDto`, resolving 14 pre-existing Clippy warnings.
 - **Documentation**: Fixed `WHITEPAPER.md` case sensitivity; moved `ARCHITECTURE.md`, `ROADMAP.md`, and `WHITEPAPER.md` into `docs/`.
 - **License server**: Fixed Docker Go version from non-existent 1.26.3 to 1.25-alpine with toolchain pin; `normalizePEM` handles single-line PEM keys in env vars (Northflank strips newlines); `wrapPEM` strips whitespace from raw base64 before re-wrapping; removed conflicting duplicate `/api/health` route.
+- **UI Layout Scaling**: Fixed `LicenseActivationScreen.css` breaking layout severely at high resolutions by converting hardcoded `500px` `max-width` to `31.25rem`.
 
 ## [0.0.4] — 2026-07-10
 
