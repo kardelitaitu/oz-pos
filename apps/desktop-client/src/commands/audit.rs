@@ -61,6 +61,11 @@ pub struct ListAuditLogArgs {
     pub offset: i64,
 }
 
+/// Default `limit` value for [`ListAuditLogArgs`].
+fn default_limit() -> i64 {
+    100
+}
+
 /// Fetch audit log entries in reverse chronological order.
 ///
 /// Supports pagination via `limit` and `offset`. Returns an array of

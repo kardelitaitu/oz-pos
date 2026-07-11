@@ -17,33 +17,40 @@ use crate::state::AppState;
 /// PocketBase requires IDs to be exactly 15 lowercase alphanumeric chars.
 const MACHINE_ID_LEN: usize = 15;
 
+/// Represents the front-end state of a license.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LicenseVerificationStatus {
+    /// License is active and within the expiry window.
     Valid,
+    /// License is past expiry and past the grace period limit.
     Expired,
+    /// License is past expiry but remains active within the 14-day grace window.
     GracePeriod,
+    /// Signature verification failed, indicating possible tampering or corruption.
     InvalidSignature,
+    /// System clock tampering detected via ledger timestamps.
     ClockTampered,
+    /// No license has been activated for this installation.
     Missing,
 }
 
+/// Data transfer object representing the current state of the local license.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-/// Licensestatusdto.
 pub struct LicenseStatusDto {
-    /// Whether this is active.
+    /// Whether the license is currently active and usable.
     pub is_active: bool,
-    /// Current status.
+    /// Categorized verification status of the license.
     pub status: LicenseVerificationStatus,
-    /// Payload.
+    /// Raw JSON payload of the signed license, if available.
     pub payload: Option<String>,
-    /// Message.
+    /// Human-readable message explaining the status or providing error details.
     pub message: Option<String>,
 }
 
+/// Activates a license key for the given email and machine ID.
 #[command]
-/// Activate license.
 pub async fn activate_license(
     state: State<'_, AppState>,
     key: String,
@@ -75,8 +82,8 @@ pub async fn activate_license(
     Ok(true)
 }
 
+/// Retrieves the unique hardware identifier for this installation.
 #[command]
-/// Get machine id.
 pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().await;
     // Return the persisted machine ID if one already exists.
@@ -106,8 +113,8 @@ fn generate_machine_id() -> String {
     hex_str[..MACHINE_ID_LEN].to_string()
 }
 
+/// Analyzes the local license state and returns a comprehensive status response.
 #[command]
-/// Get license status.
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseStatusDto, AppError> {
     let conn = state.db.lock().await;
     let payload_str = Settings::get(&conn, "license.payload")?;
