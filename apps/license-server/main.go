@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 
@@ -56,6 +57,10 @@ func main() {
 
 	// ── Register custom license API routes ───────────────────────
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Health check endpoint for orchestration platforms (Northflank, K8s, etc.)
+		se.Router.GET("/api/health", func(e *core.RequestEvent) error {
+			return e.JSON(http.StatusOK, map[string]string{"status": "healthy"})
+		})
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
