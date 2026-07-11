@@ -4,6 +4,37 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.5] — 2026-07-11
+
+### Added
+- **Store-first tenancy (ADR #4)**: Workspace type/instance separation with `SessionContext`, `StoreDatabaseManager` for per-store SQLite files, device-bound auto-boot (`device_bindings` table, HMAC signing), boot resolution engine, and store switcher integration with workspace re-resolution. Tablet shell redesigned with device-bound auto-boot and dynamic workspace tabs.
+- **Session token infrastructure (ADR #4)**: `create_session`, `destroy_session`, `resolve_session` commands; frontend session token integration (create/destroy on workspace selection + store switch); `verify-no-raw-params.sh` CI enforcement script integrated into `check.sh`.
+- **Subscription tier entitlement (ADR #5)**: Tier infrastructure with quota enforcement, `InstanceStatus` enum (Active/Suspended/Expired), bootstrap free tier; entitlement checks during workspace listing that filter by subscription tier allowed types; clock rollback detection, 14-day offline grace period, effective tier enforcement; auto-recovery on upgrade, safe suspension on downgrade, transaction-safe status transitions with `last_accessed_at` tracking.
+- **CRDT delta ledger for inventory (ADR #6)**: `stock_movements` table with CRDT delta ledger pattern; `adjust_stock_with_reason` and `get_stock_from_ledger` commands; `rebuild_stock_summary()` to recompute stock from delta ledger (sync-ready); source terminal/user audit fields populated from session context; version optimistic concurrency on products and sales tables (`version` column, wired into `update_product`, `update_sale_status`, `void_sale`); cross-store delta routing via `platform/sync`.
+- **UUIDv7 migration (ADR #6 Phase 2)**: All 158 `Uuid::new_v4()` calls replaced with `Uuid::now_v7()` for time-ordered IDs; `oz_core::new_id()` helper added; `uuid` crate v7 feature enabled workspace-wide.
+- **Multi-store security hardening (ADR #4 Phase 2, ADR #6)**: Data scoping columns (`store_id`/`warehouse_id`) on 15+ tables with compound B-Tree indexes (migration 069); `ON DELETE RESTRICT` on `store_profiles` foreign keys (migration 066); `FastPINOverlay` for shared touchscreen user switching with store isolation.
+- **Scoped real-time event bus (ADR #8)**: `store_id` added to `SaleCompleted` and `CourseFired` events; KDS store-level filtering (legacy nulls pass through, matching stores pass through, mismatched stores dropped); defense-in-depth multi-store isolation for real-time events.
+- **License server (ADR #9)**: PocketBase-based license server with RSA-2048 PKCS1v15 signing, rate limiting, and collections schema (`licenses`, `devices`, `audit_log`); Go-based license server binary (`apps/license-server/`) with activate/renew/status/expiry endpoints; RSA-2048 license verification + HTTP client in `oz-core` (`reqwest`, `store_subscription`); production multi-stage Dockerfile with CGO + healthcheck for PocketBase; Northflank deployment guide, key generation scripts (PowerShell + Bash).
+- **UI design token system**: 88+ non-existent tokens fixed across 33 CSS files; 90+ mismatched CSS fallbacks corrected; hardcoded colors replaced with design tokens across all screens (Login, Retail POS, KDS, Loyalty, Shift Management, EOD Report, Void Orders, Suppliers, Staff Management, Promotions, Offline Queue, and more); CSS token scanner scripts (`scan-css-tokens.py`, `fix-css-fallbacks.py`, `fix-non-existent-tokens.py`).
+- **Tooltip component**: React `Tooltip` component with theme-aware colors; integrated into StatusBar, ThemeToggle, RoleBadge logout button, and sidebar collapse button; Tooltip Preview showcase page.
+- **Currency auto-detection**: USD/IDR seeded in migration 006; default currency auto-detected from system locale; currency picker in setup wizard.
+- **Fast build configuration**: `sccache` + 32-thread Cargo config for local dev; `mold`/`lld` fast linker configs for Linux and macOS.
+
+### Changed
+- **Session token migration (ADR #7)**: Every Tauri command across all modules (POS, products, inventory, sales, settings, staff, shifts, terminals, tables, workspaces, KDS, promotions, reporting) migrated from raw `user_id`/`store_id` params to session token lookup pattern with `resolve_scope()` and `resolve_store()` helpers; `Data Scope Guard` ADR documenting the pattern.
+- **UI screen polish**: Final 11 screens polished with font-weight tokens, overlay tokens, and non-existent token fixes; Login screen, Retail POS, and KDS screens received comprehensive design token cleanup.
+- **AGENTS.md**: Added branch-switching rule (never switch branches without user request).
+
+### Fixed
+- **TypeScript errors**: Resolved 7 TypeScript errors blocking typecheck in `StoreSwitcher.tsx`, `WorkspaceContext.tsx`, and `currency.ts`.
+- **Stale `verify_signature()` calls**: Removed stray argument from `verify_signature()` in workspace commands.
+- **CI build configuration**: Commented out fast linker configs (`mold`/`ld64.lld`) for CI; fixed sccache rustc-wrapper config for CI.
+- **Vite config**: Fixed path aliases and test assertions for CI compatibility.
+- **Fluent imports**: Updated `FluentBundle`/`FluentResource` imports from `@fluent/bundle`.
+- **Test setup**: Fixed `currency_integration` tests for migration 006 seed (USD + IDR); restored `last_accessed_at` in migration 066; seeded `store_profiles` in migration 025; added missing `default_currency` field in `CompleteSetupArgs` test initializer.
+- **Workspace type DTO**: Removed deprecated attribute from `WorkspaceTypeDto`, resolving 14 pre-existing Clippy warnings.
+- **Documentation**: Fixed `WHITEPAPER.md` case sensitivity; moved `ARCHITECTURE.md`, `ROADMAP.md`, and `WHITEPAPER.md` into `docs/`.
+
 ## [0.0.4] — 2026-07-10
 
 ### Added
@@ -140,7 +171,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.4
 [0.0.3]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.3
 [0.0.2]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.2
