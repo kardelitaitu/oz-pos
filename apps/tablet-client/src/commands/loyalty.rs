@@ -10,12 +10,16 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
+/// Redeemresult.
 pub struct RedeemResult {
+    /// Transaction.
     pub transaction: LoyaltyTransaction,
+    /// Discount Minor.
     pub discount_minor: i64,
 }
 
 #[command]
+/// Get loyalty account.
 pub async fn get_loyalty_account(
     customer_id: String,
     state: State<'_, AppState>,
@@ -28,6 +32,7 @@ pub async fn get_loyalty_account(
 }
 
 #[command]
+/// List loyalty accounts.
 pub async fn list_loyalty_accounts(
     state: State<'_, AppState>,
 ) -> Result<Vec<LoyaltyAccountWithDetails>, AppError> {
@@ -39,6 +44,7 @@ pub async fn list_loyalty_accounts(
 }
 
 #[command]
+/// Earn loyalty points.
 pub async fn earn_loyalty_points(
     customer_id: String,
     sale_id: String,
@@ -53,6 +59,7 @@ pub async fn earn_loyalty_points(
 }
 
 #[command]
+/// Redeem loyalty points.
 pub async fn redeem_loyalty_points(
     customer_id: String,
     points: i64,
@@ -70,6 +77,7 @@ pub async fn redeem_loyalty_points(
 }
 
 #[command]
+/// List loyalty tiers.
 pub async fn list_loyalty_tiers(state: State<'_, AppState>) -> Result<Vec<LoyaltyTier>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -79,6 +87,7 @@ pub async fn list_loyalty_tiers(state: State<'_, AppState>) -> Result<Vec<Loyalt
 }
 
 #[command]
+/// Update loyalty tier.
 pub async fn update_loyalty_tier(
     tier: LoyaltyTier,
     state: State<'_, AppState>,
@@ -98,6 +107,7 @@ pub async fn update_loyalty_tier(
 }
 
 #[command]
+/// Get points value.
 pub async fn get_points_value(points: i64, state: State<'_, AppState>) -> Result<i64, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -107,6 +117,7 @@ pub async fn get_points_value(points: i64, state: State<'_, AppState>) -> Result
 }
 
 #[command]
+/// Get or create loyalty account.
 pub async fn get_or_create_loyalty_account(
     customer_id: String,
     state: State<'_, AppState>,

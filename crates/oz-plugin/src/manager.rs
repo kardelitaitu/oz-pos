@@ -9,12 +9,19 @@ use crate::error::PluginError;
 use crate::loader::PluginRegistry;
 use crate::loader::load_plugins;
 
+/// A discount queued by a plugin script for later application.
 #[derive(Debug, Clone)]
 pub struct PendingDiscount {
+    /// Discount target — `"cart"` or `"line:<SKU>"`.
     pub target: String,
+    /// Discount percentage (0–100).
     pub percent: i64,
 }
 
+/// Runtime manager for Lua plugin scripts.
+///
+/// Manages the Lua sandbox, plugin lifecycle, hook registration,
+/// discount accumulation, and event dispatching.
 pub struct PluginManager {
     runtime: LuaRuntime,
     _registry: PluginRegistry,
@@ -30,6 +37,7 @@ impl std::fmt::Debug for PluginManager {
 }
 
 impl PluginManager {
+    /// Create a new `PluginManager`, loading all plugins from `plugins_dir`.
     pub fn new(plugins_dir: &Path) -> Result<Self, PluginError> {
         let registry = load_plugins(plugins_dir)?;
         let runtime = LuaRuntime::new().map_err(|e| PluginError::Lua(e.to_string()))?;
@@ -173,6 +181,7 @@ impl PluginManager {
         })
     }
 
+    /// Delegate to `LuaRuntime::validate_order`.
     pub fn validate_order(
         &self,
         lines: &[CartLineData],
@@ -182,6 +191,7 @@ impl PluginManager {
         self.runtime.validate_order(lines, total_minor, currency)
     }
 
+    /// Delegate to `LuaRuntime::apply_discount`.
     pub fn apply_discount(
         &self,
         lines: &[CartLineData],
@@ -189,6 +199,7 @@ impl PluginManager {
         self.runtime.apply_discount(lines)
     }
 
+    /// Delegate to `LuaRuntime::calc_line_tax`.
     pub fn calc_line_tax(
         &self,
         sku: &str,
@@ -200,6 +211,7 @@ impl PluginManager {
             .calc_line_tax(sku, qty, unit_price_minor, currency)
     }
 
+    /// Drain all queued discounts, returning them and clearing the queue.
     pub fn drain_pending_discounts(&self) -> Vec<PendingDiscount> {
         self.pending_discounts
             .lock()
@@ -268,6 +280,7 @@ impl PluginManager {
         }
     }
 
+    /// Fire an event to all registered hook functions by name.
     pub fn fire_event(&self, event: &str, args: rlua::Value) -> Result<(), LuaError> {
         let func_names = self
             .hook_names

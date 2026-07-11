@@ -13,9 +13,13 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+/// Voidsaleargs.
 pub struct VoidSaleArgs {
+    /// ID of the associated sale.
     pub sale_id: String,
+    /// ID of the associated user.
     pub user_id: String,
+    /// Reason.
     pub reason: String,
 }
 
@@ -23,7 +27,9 @@ pub struct VoidSaleArgs {
 /// `user_id` (read from the session token instead).
 #[derive(Debug, Deserialize)]
 pub struct VoidSaleScopedArgs {
+    /// ID of the associated sale.
     pub sale_id: String,
+    /// Reason.
     pub reason: String,
 }
 

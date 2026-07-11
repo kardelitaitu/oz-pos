@@ -15,73 +15,115 @@ use crate::state::AppState;
 // ── DTOs ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Backupstatus.
 pub struct BackupStatus {
+    /// Last Backup.
     pub last_backup: Option<String>,
+    /// Last Backup Size.
     pub last_backup_size: Option<String>,
+    /// Db Path.
     pub db_path: String,
 }
 
 #[derive(Debug, Serialize)]
+/// Backupresult.
 pub struct BackupResult {
+    /// Path.
     pub path: String,
+    /// Size Bytes.
     pub size_bytes: u64,
 }
 
 #[derive(Debug, Deserialize)]
+/// Exportdataargs.
 pub struct ExportDataArgs {
+    /// Types.
     pub types: Vec<String>,
+    /// Password.
     pub password: String,
+    /// Output Path.
     pub output_path: String,
+    /// Date From.
     pub date_from: Option<String>,
+    /// Date To.
     pub date_to: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
+/// Exportdataresult.
 pub struct ExportDataResult {
+    /// Path.
     pub path: String,
+    /// Size Bytes.
     pub size_bytes: u64,
+    /// Types.
     pub types: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Importpreviewargs.
 pub struct ImportPreviewArgs {
+    /// File Path.
     pub file_path: String,
+    /// Password.
     pub password: String,
 }
 
 #[derive(Debug, Serialize)]
+/// Importpreviewresult.
 pub struct ImportPreviewResult {
+    /// Store Name.
     pub store_name: String,
+    /// App Version.
     pub app_version: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// Types.
     pub types: Vec<String>,
+    /// Product Count.
     pub product_count: usize,
+    /// Category Count.
     pub category_count: usize,
+    /// Sale Count.
     pub sale_count: Option<usize>,
+    /// Customer Count.
     pub customer_count: Option<usize>,
+    /// User Count.
     pub user_count: Option<usize>,
+    /// Setting Count.
     pub setting_count: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Importdataargs.
 pub struct ImportDataArgs {
+    /// File Path.
     pub file_path: String,
+    /// Password.
     pub password: String,
 }
 
 #[derive(Debug, Serialize)]
+/// Importdataresult.
 pub struct ImportDataResult {
+    /// Products Imported.
     pub products_imported: usize,
+    /// Categories Imported.
     pub categories_imported: usize,
+    /// Sales Imported.
     pub sales_imported: usize,
+    /// Customers Imported.
     pub customers_imported: usize,
+    /// Users Imported.
     pub users_imported: usize,
+    /// Settings Imported.
     pub settings_imported: usize,
 }
 
 // ── Commands ──────────────────────────────────────────────────────
 
 #[tauri::command]
+/// Get backup status.
 pub async fn get_backup_status(state: State<'_, AppState>) -> Result<BackupStatus, AppError> {
     let db_path = state.db_path.display().to_string();
     let backup_path = default_backup_path(&state);
@@ -104,6 +146,7 @@ pub async fn get_backup_status(state: State<'_, AppState>) -> Result<BackupStatu
 }
 
 #[tauri::command]
+/// Create backup.
 pub async fn create_backup(state: State<'_, AppState>) -> Result<BackupResult, AppError> {
     let output = default_backup_path(&state);
     let conn = state.db.lock().await;
@@ -117,6 +160,7 @@ pub async fn create_backup(state: State<'_, AppState>) -> Result<BackupResult, A
 }
 
 #[tauri::command]
+/// Export data.
 pub async fn export_data(
     args: ExportDataArgs,
     state: State<'_, AppState>,
@@ -262,6 +306,7 @@ pub async fn export_data(
 }
 
 #[tauri::command]
+/// Import preview.
 pub async fn import_preview(args: ImportPreviewArgs) -> Result<ImportPreviewResult, AppError> {
     let data = std::fs::read(&args.file_path)
         .map_err(|e| AppError::Internal(format!("reading file: {e}")))?;
@@ -282,6 +327,7 @@ pub async fn import_preview(args: ImportPreviewArgs) -> Result<ImportPreviewResu
 }
 
 #[tauri::command]
+/// Import data.
 pub async fn import_data(
     args: ImportDataArgs,
     state: State<'_, AppState>,

@@ -21,11 +21,17 @@ use crate::state::AppState;
 /// Staff member as seen by the front-end (no pin_hash exposed).
 #[derive(Debug, Serialize)]
 pub struct StaffMemberDto {
+    /// Unique identifier.
     pub id: String,
+    /// Username.
     pub username: String,
+    /// Display Name.
     pub display_name: String,
+    /// ID of the associated role.
     pub role_id: String,
+    /// Role Name.
     pub role_name: String,
+    /// Whether this is active.
     pub is_active: bool,
 }
 
@@ -48,6 +54,7 @@ fn to_staff_dto(user: &User, roles: &[Role]) -> StaffMemberDto {
 // ── List staff ─────────────────────────────────────────────────────
 
 #[command]
+/// List staff.
 pub async fn list_staff(state: State<'_, AppState>) -> Result<Vec<StaffMemberDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -60,13 +67,18 @@ pub async fn list_staff(state: State<'_, AppState>) -> Result<Vec<StaffMemberDto
 // ── List roles ─────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Roledto.
 pub struct RoleDto {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Human-readable description.
     pub description: String,
 }
 
 #[command]
+/// List roles.
 pub async fn list_roles(state: State<'_, AppState>) -> Result<Vec<RoleDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -85,16 +97,22 @@ pub async fn list_roles(state: State<'_, AppState>) -> Result<Vec<RoleDto>, AppE
 // ── Create staff member ────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Createstaffargs.
 pub struct CreateStaffArgs {
+    /// Username.
     pub username: String,
+    /// Pin.
     pub pin: String,
+    /// Display Name.
     pub display_name: String,
+    /// ID of the associated role.
     pub role_id: String,
     /// User ID of the caller (from `LoginSession`). Used for permission check.
     pub caller_user_id: String,
 }
 
 #[command]
+/// Create staff.
 pub async fn create_staff(
     args: CreateStaffArgs,
     state: State<'_, AppState>,
@@ -127,17 +145,24 @@ pub async fn create_staff(
 // ── Update staff member ────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Updatestaffargs.
 pub struct UpdateStaffArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Username.
     pub username: String,
+    /// Display Name.
     pub display_name: String,
+    /// ID of the associated role.
     pub role_id: String,
+    /// Whether this is active.
     pub is_active: bool,
     /// User ID of the caller (from `LoginSession`). Used for permission check.
     pub caller_user_id: String,
 }
 
 #[command]
+/// Update staff.
 pub async fn update_staff(
     args: UpdateStaffArgs,
     state: State<'_, AppState>,

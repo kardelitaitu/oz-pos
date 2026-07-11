@@ -14,17 +14,28 @@ use crate::state::AppState;
 /// A single audit log entry sent to the front-end.
 #[derive(Debug, Serialize)]
 pub struct AuditEntryDto {
+    /// Unique identifier.
     pub id: String,
+    /// ID of the user who performed the action.
     pub user_id: String,
+    /// Action.
     pub action: String,
+    /// Target Type.
     pub target_type: Option<String>,
+    /// ID of the entity acted upon (sale, product, shift, etc.), if any.
     pub target_id: Option<String>,
+    /// Free-form context or metadata describing the action (e.g., void
+    /// reason, adjustment amount, error summary).
     pub details: String,
+    /// Result of the action — typically `"success"` or `"failure"`
+    /// followed by an error summary when relevant.
     pub outcome: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
 impl From<oz_core::AuditEntry> for AuditEntryDto {
+    /// Converts a core [`oz_core::AuditEntry`] into a front-end [`AuditEntryDto`].
     fn from(e: oz_core::AuditEntry) -> Self {
         Self {
             id: e.id,
@@ -39,6 +50,7 @@ impl From<oz_core::AuditEntry> for AuditEntryDto {
     }
 }
 
+/// Arguments for paginating the audit log query.
 #[derive(Debug, Deserialize)]
 pub struct ListAuditLogArgs {
     /// Maximum number of entries to return (default: 100).
@@ -47,10 +59,6 @@ pub struct ListAuditLogArgs {
     /// Number of entries to skip for pagination (default: 0).
     #[serde(default)]
     pub offset: i64,
-}
-
-fn default_limit() -> i64 {
-    100
 }
 
 /// Fetch audit log entries in reverse chronological order.

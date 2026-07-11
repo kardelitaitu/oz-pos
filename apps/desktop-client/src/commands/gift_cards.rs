@@ -10,9 +10,13 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
+/// Balanceresult.
 pub struct BalanceResult {
+    /// Balance Minor.
     pub balance_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Current status.
     pub status: String,
 }
 

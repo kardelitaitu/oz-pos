@@ -10,8 +10,11 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
+/// Redeemresult.
 pub struct RedeemResult {
+    /// Transaction.
     pub transaction: LoyaltyTransaction,
+    /// Discount Minor.
     pub discount_minor: i64,
 }
 

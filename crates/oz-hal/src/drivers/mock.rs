@@ -28,9 +28,13 @@ use crate::types::{Barcode, DeviceInfo};
 #[derive(Clone)]
 pub struct MockBarcodeScanner {
     queue: Arc<Mutex<VecDeque<Barcode>>>,
+    /// Number of times `connect` has been called.
     pub connect_calls: Arc<AtomicUsize>,
+    /// Number of times `poll` has been called.
     pub poll_calls: Arc<AtomicUsize>,
+    /// Number of times `cancel` has been called.
     pub cancel_calls: Arc<AtomicUsize>,
+    /// Device identity reported by `device_info()`.
     pub info: DeviceInfo,
 }
 
@@ -111,21 +115,26 @@ impl BarcodeScanner for MockBarcodeScanner {
 /// so tests can assert what the system tried to print.
 #[derive(Clone)]
 pub struct MockReceiptPrinter {
+    /// Captured receipt body strings from `print_receipt` calls.
     pub printed: Arc<Mutex<Vec<String>>>,
     /// Captured raw bytes from `print_raw` calls.
     pub printed_raw: Arc<Mutex<Vec<Vec<u8>>>>,
+    /// Number of times `cut` has been called.
     pub cut_calls: Arc<AtomicUsize>,
+    /// Device identity reported by `device_info()`.
     pub info: DeviceInfo,
     /// If set, every `print_receipt` returns this error instead of Ok.
     pub fail_with: Arc<Mutex<Option<HalError>>>,
 }
 
 impl MockReceiptPrinter {
+    /// Construct a mock with default identity `("mock", "MockPrinter", "0000")`.
     #[must_use]
     pub fn new() -> Self {
         Self::with_info(DeviceInfo::new("mock", "MockPrinter", "0000"))
     }
 
+    /// Construct a mock with custom identity.
     #[must_use]
     pub fn with_info(info: DeviceInfo) -> Self {
         Self {
@@ -187,19 +196,24 @@ impl ReceiptPrinter for MockReceiptPrinter {
 /// pushed and supports brightness control.
 #[derive(Clone)]
 pub struct MockCustomerDisplay {
+    /// Number of times `show` has been called.
     pub show_calls: Arc<AtomicUsize>,
+    /// Number of times `clear` has been called.
     pub clear_calls: Arc<AtomicUsize>,
     last_content: Arc<Mutex<Option<DisplayContent>>>,
     brightness: Arc<Mutex<f32>>,
+    /// Device identity reported by `device_info()`.
     pub info: DeviceInfo,
 }
 
 impl MockCustomerDisplay {
+    /// Construct a mock with default identity `("mock", "MockDisplay", "0000")`.
     #[must_use]
     pub fn new() -> Self {
         Self::with_info(DeviceInfo::new("mock", "MockDisplay", "0000"))
     }
 
+    /// Construct a mock with custom identity.
     #[must_use]
     pub fn with_info(info: DeviceInfo) -> Self {
         Self {
@@ -264,17 +278,22 @@ impl CustomerDisplay for MockCustomerDisplay {
 /// programmed to fail.
 #[derive(Clone)]
 pub struct MockCashDrawer {
+    /// Number of times `open` has been called.
     pub open_calls: Arc<AtomicUsize>,
+    /// Device identity reported by `device_info()`.
     pub info: DeviceInfo,
+    /// If set, the next `open` call returns this error.
     pub fail_with: Arc<Mutex<Option<HalError>>>,
 }
 
 impl MockCashDrawer {
+    /// Construct a mock with default identity `("mock", "MockDrawer", "0000")`.
     #[must_use]
     pub fn new() -> Self {
         Self::with_info(DeviceInfo::new("mock", "MockDrawer", "0000"))
     }
 
+    /// Construct a mock with custom identity.
     #[must_use]
     pub fn with_info(info: DeviceInfo) -> Self {
         Self {
@@ -284,6 +303,7 @@ impl MockCashDrawer {
         }
     }
 
+    /// Program the next `open` to return `err` (consumed on first call).
     pub fn set_next_error(&self, err: HalError) {
         *self.fail_with.lock().expect("poisoned") = Some(err);
     }
@@ -315,16 +335,20 @@ impl CashDrawer for MockCashDrawer {
 /// Programmable mock for `WeightScale`. Always returns a stable zero reading.
 #[derive(Clone)]
 pub struct MockWeightScale {
+    /// Number of times `read_weight` has been called.
     pub read_calls: Arc<AtomicUsize>,
+    /// Device identity reported by `device_info()`.
     pub info: DeviceInfo,
 }
 
 impl MockWeightScale {
+    /// Construct a mock with default identity `("mock", "MockScale", "0000")`.
     #[must_use]
     pub fn new() -> Self {
         Self::with_info(DeviceInfo::new("mock", "MockScale", "0000"))
     }
 
+    /// Construct a mock with custom identity.
     #[must_use]
     pub fn with_info(info: DeviceInfo) -> Self {
         Self {

@@ -10,8 +10,11 @@
 //! the shared crates (`oz-core`, `platform-kernel`, `modules-*`).
 //! This file wires them into a Tauri v2 mobile app.
 
+/// All `#[tauri::command]` handlers.
 pub mod commands;
+/// Single error type for every Tauri command.
 pub mod error;
+/// Global application state (DB, kernel, sync daemon).
 pub mod state;
 
 #[cfg(not(test))]
@@ -25,6 +28,7 @@ use oz_core::sync_client::SyncConfig;
 #[cfg(not(test))]
 use tauri::Manager;
 
+/// Application entry point, called by `main.rs`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialise tokio-console before any other tracing setup.

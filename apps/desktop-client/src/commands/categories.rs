@@ -15,9 +15,13 @@ use crate::state::AppState;
 /// A category DTO for the front-end.
 #[derive(Debug, Serialize)]
 pub struct CategoryDto {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Colour.
     pub colour: String,
+    /// Icon.
     pub icon: String,
 }
 
@@ -44,6 +48,7 @@ pub async fn list_categories(state: State<'_, AppState>) -> Result<Vec<CategoryD
 // ── Create category ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Createcategoryargs.
 pub struct CreateCategoryArgs {
     /// Unique category id (e.g. "cat-drinks", "cat-bakery").
     pub id: String,
@@ -56,11 +61,14 @@ pub struct CreateCategoryArgs {
 }
 
 #[derive(Debug, Serialize)]
+/// Createcategoryresult.
 pub struct CreateCategoryResult {
+    /// Unique identifier.
     pub id: String,
 }
 
 #[command]
+/// Create category.
 pub async fn create_category(
     args: CreateCategoryArgs,
     state: State<'_, AppState>,
@@ -89,7 +97,9 @@ pub struct UpdateCategoryArgs {
 }
 
 #[derive(Debug, Serialize)]
+/// Updatecategoryresult.
 pub struct UpdateCategoryResult {
+    /// Unique identifier.
     pub id: String,
 }
 
@@ -108,11 +118,14 @@ pub async fn update_category(
 // ── Delete category ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Deletecategoryargs.
 pub struct DeleteCategoryArgs {
+    /// Unique identifier.
     pub id: String,
 }
 
 #[command]
+/// Delete category.
 pub async fn delete_category(
     args: DeleteCategoryArgs,
     state: State<'_, AppState>,

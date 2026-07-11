@@ -18,13 +18,21 @@ pub const CLASS_VENDOR_SPECIFIC: u8 = 0xFF;
 /// Static metadata about a discovered USB device.
 #[derive(Debug, Clone)]
 pub struct UsbDeviceInfo {
+    /// USB vendor ID.
     pub vid: u16,
+    /// USB product ID.
     pub pid: u16,
+    /// Manufacturer string descriptor.
     pub manufacturer: String,
+    /// Product name string descriptor.
     pub product: String,
+    /// Serial number string descriptor.
     pub serial: String,
+    /// Interface number (for `claim_interface`).
     pub interface_number: u8,
+    /// Bulk IN endpoint address.
     pub endpoint_in: u8,
+    /// Optional bulk OUT endpoint address.
     pub endpoint_out: Option<u8>,
 }
 

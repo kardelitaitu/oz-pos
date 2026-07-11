@@ -10,13 +10,18 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
+/// Balanceresult.
 pub struct BalanceResult {
+    /// Balance Minor.
     pub balance_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Current status.
     pub status: String,
 }
 
 #[command]
+/// Issue gift card.
 pub async fn issue_gift_card(
     input: IssueGiftCardInput,
     state: State<'_, AppState>,
@@ -29,6 +34,7 @@ pub async fn issue_gift_card(
 }
 
 #[command]
+/// Get gift card.
 pub async fn get_gift_card(
     card_number_or_id: String,
     state: State<'_, AppState>,
@@ -41,6 +47,7 @@ pub async fn get_gift_card(
 }
 
 #[command]
+/// List gift cards.
 pub async fn list_gift_cards(
     filter: GiftCardFilter,
     state: State<'_, AppState>,
@@ -53,6 +60,7 @@ pub async fn list_gift_cards(
 }
 
 #[command]
+/// Get gift card balance.
 pub async fn get_gift_card_balance(
     card_number_or_id: String,
     state: State<'_, AppState>,
@@ -71,6 +79,7 @@ pub async fn get_gift_card_balance(
 }
 
 #[command]
+/// Redeem gift card.
 pub async fn redeem_gift_card(
     card_number_or_id: String,
     amount_minor: i64,
@@ -85,6 +94,7 @@ pub async fn redeem_gift_card(
 }
 
 #[command]
+/// Top_up gift card.
 pub async fn top_up_gift_card(
     card_number_or_id: String,
     amount_minor: i64,
@@ -98,6 +108,7 @@ pub async fn top_up_gift_card(
 }
 
 #[command]
+/// Freeze gift card.
 pub async fn freeze_gift_card(
     card_number_or_id: String,
     state: State<'_, AppState>,
@@ -110,6 +121,7 @@ pub async fn freeze_gift_card(
 }
 
 #[command]
+/// Unfreeze gift card.
 pub async fn unfreeze_gift_card(
     card_number_or_id: String,
     state: State<'_, AppState>,

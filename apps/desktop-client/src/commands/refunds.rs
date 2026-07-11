@@ -12,16 +12,24 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+/// Refundlinearg.
 pub struct RefundLineArg {
+    /// ID of the associated sale line.
     pub sale_line_id: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Quantity.
     pub qty: i64,
+    /// Unit Price Minor.
     pub unit_price_minor: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
+    /// Total amount in minor currency units.
     pub line_total_minor: i64,
 }
 
 #[derive(Debug, Deserialize)]
+/// Processrefundargs.
 pub struct ProcessRefundArgs {
     /// ID of the original completed sale.
     pub sale_id: String,
@@ -39,15 +47,22 @@ pub struct ProcessRefundArgs {
 /// but without `user_id` (read from the session token instead).
 #[derive(Debug, Deserialize)]
 pub struct ProcessRefundScopedArgs {
+    /// ID of the associated sale.
     pub sale_id: String,
+    /// Reason.
     pub reason: String,
+    /// Note.
     pub note: Option<String>,
+    /// Lines.
     pub lines: Vec<RefundLineArg>,
 }
 
 #[derive(Debug, Serialize)]
+/// Processrefundresult.
 pub struct ProcessRefundResult {
+    /// ID of the associated refund.
     pub refund_id: String,
+    /// Total amount in minor currency units.
     pub total_minor: i64,
 }
 

@@ -17,8 +17,11 @@ use crate::state::AppState;
 /// Get the current sync configuration settings.
 #[derive(Debug, Serialize)]
 pub struct SyncSettingsDto {
+    /// Server Url.
     pub server_url: Option<String>,
+    /// Has Api Key.
     pub has_api_key: bool,
+    /// Enabled.
     pub enabled: bool,
 }
 
@@ -40,12 +43,16 @@ pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSetting
 /// Update sync settings.
 #[derive(Debug, Deserialize)]
 pub struct UpdateSyncSettingsArgs {
+    /// Server Url.
     pub server_url: Option<String>,
+    /// Api Key.
     pub api_key: Option<String>,
+    /// Enabled.
     pub enabled: bool,
 }
 
 #[command]
+/// Update sync settings.
 pub async fn update_sync_settings(
     args: UpdateSyncSettingsArgs,
     state: State<'_, AppState>,

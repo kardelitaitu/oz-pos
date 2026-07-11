@@ -117,11 +117,17 @@ pub struct CreateSessionResult {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionContextDto {
+    /// ID of the associated user.
     pub user_id: String,
+    /// ID of the associated role.
     pub role_id: String,
+    /// ID of the associated store.
     pub store_id: String,
+    /// ID of the associated instance.
     pub instance_id: String,
+    /// Type Key.
     pub type_key: String,
+    /// ID of the associated terminal.
     pub terminal_id: String,
 }
 

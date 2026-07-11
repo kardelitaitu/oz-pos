@@ -22,6 +22,7 @@ pub mod drivers;
 pub mod error;
 pub mod registry;
 pub mod traits;
+/// USB transport helpers for device enumeration.
 pub mod transport;
 pub mod types;
 

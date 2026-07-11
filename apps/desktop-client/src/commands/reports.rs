@@ -15,6 +15,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[command]
+/// Get menu engineering.
 pub async fn get_menu_engineering(
     state: State<'_, AppState>,
     start_date: String,
@@ -28,6 +29,7 @@ pub async fn get_menu_engineering(
 }
 
 #[command]
+/// Get daily revenue.
 pub async fn get_daily_revenue(
     state: State<'_, AppState>,
     start_date: String,
@@ -41,6 +43,7 @@ pub async fn get_daily_revenue(
 }
 
 #[command]
+/// Get weekly revenue.
 pub async fn get_weekly_revenue(
     state: State<'_, AppState>,
     start_date: String,
@@ -54,6 +57,7 @@ pub async fn get_weekly_revenue(
 }
 
 #[command]
+/// Get monthly revenue.
 pub async fn get_monthly_revenue(
     state: State<'_, AppState>,
     start_date: String,
@@ -67,6 +71,7 @@ pub async fn get_monthly_revenue(
 }
 
 #[command]
+/// Get top products.
 pub async fn get_top_products(
     state: State<'_, AppState>,
     start_date: String,
@@ -81,6 +86,7 @@ pub async fn get_top_products(
 }
 
 #[command]
+/// Get hourly heatmap.
 pub async fn get_hourly_heatmap(
     state: State<'_, AppState>,
     start_date: String,
@@ -94,6 +100,7 @@ pub async fn get_hourly_heatmap(
 }
 
 #[command]
+/// Get low stock alerts.
 pub async fn get_low_stock_alerts(
     state: State<'_, AppState>,
     threshold: i64,
@@ -106,6 +113,7 @@ pub async fn get_low_stock_alerts(
 }
 
 #[command]
+/// Get category breakdown.
 pub async fn get_category_breakdown(
     state: State<'_, AppState>,
     start_date: String,

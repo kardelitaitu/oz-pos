@@ -6,26 +6,33 @@ use crate::manifest::PluginManifest;
 /// A loaded plugin with its manifest and script paths.
 #[derive(Debug, Clone)]
 pub struct LoadedPlugin {
+    /// The parsed plugin manifest.
     pub manifest: PluginManifest,
+    /// Absolute path to the plugin directory.
     pub directory: PathBuf,
+    /// List of script files found on disk that match the manifest.
     pub scripts: Vec<PathBuf>,
 }
 
 /// A registry of all loaded plugins.
 #[derive(Debug, Default)]
 pub struct PluginRegistry {
+    /// All loaded plugins.
     pub plugins: Vec<LoadedPlugin>,
 }
 
 impl PluginRegistry {
+    /// Create an empty registry.
     pub fn new() -> Self {
         Self { plugins: vec![] }
     }
 
+    /// Returns `true` when no plugins are loaded.
     pub fn is_empty(&self) -> bool {
         self.plugins.is_empty()
     }
 
+    /// Returns the number of loaded plugins.
     pub fn len(&self) -> usize {
         self.plugins.len()
     }

@@ -14,13 +14,21 @@ use crate::state::AppState;
 /// A single audit log entry sent to the front-end.
 #[derive(Debug, Serialize)]
 pub struct AuditEntryDto {
+    /// Unique identifier.
     pub id: String,
+    /// ID of the associated user.
     pub user_id: String,
+    /// Action.
     pub action: String,
+    /// Target Type.
     pub target_type: Option<String>,
+    /// ID of the associated target.
     pub target_id: Option<String>,
+    /// Details.
     pub details: String,
+    /// Outcome.
     pub outcome: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
@@ -40,6 +48,7 @@ impl From<oz_core::AuditEntry> for AuditEntryDto {
 }
 
 #[derive(Debug, Deserialize)]
+/// Listauditlogargs.
 pub struct ListAuditLogArgs {
     /// Maximum number of entries to return (default: 100).
     #[serde(default = "default_limit")]

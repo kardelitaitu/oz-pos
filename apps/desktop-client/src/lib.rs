@@ -13,15 +13,24 @@
 //!    `commands` module re-exports.
 //! 3. Document the command in the `tauri-ipc` skill.
 
+/// All `#[tauri::command]` handlers, organised by domain.
 pub mod commands;
+/// Single error type for every Tauri command.
 pub mod error;
+/// LAN event forwarding for multi-terminal setups.
 pub mod lan_server;
+/// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;
 
 use crate::error::AppError;
 use crate::state::AppState;
 use tauri::Manager;
 
+/// Application entry point, called by `main.rs`.
+///
+/// Initialises logging, loads the database, starts the sync daemon,
+/// registers all Tauri commands, and starts the event loop. Mobile
+/// builds use the same code via `#[cfg_attr(mobile, tauri::mobile_entry_point)]`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialise tokio-console before any other tracing setup.

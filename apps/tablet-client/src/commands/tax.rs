@@ -17,13 +17,21 @@ use crate::state::AppState;
 /// DTO for a tax rate sent to the front-end.
 #[derive(Debug, Serialize)]
 pub struct TaxRateDto {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Rate Bps.
     pub rate_bps: i64,
+    /// Whether this is default.
     pub is_default: bool,
+    /// Whether this is inclusive.
     pub is_inclusive: bool,
+    /// Display Rate.
     pub display_rate: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -42,37 +50,55 @@ fn to_dto(r: oz_core::tax_rate::TaxRate) -> TaxRateDto {
 }
 
 #[derive(Debug, Deserialize)]
+/// Createtaxrateargs.
 pub struct CreateTaxRateArgs {
+    /// Display name.
     pub name: String,
+    /// Rate Bps.
     pub rate_bps: i64,
+    /// Whether this is default.
     pub is_default: bool,
+    /// Whether this is inclusive.
     pub is_inclusive: bool,
 }
 
 #[derive(Debug, Deserialize)]
+/// Updatetaxrateargs.
 pub struct UpdateTaxRateArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Rate Bps.
     pub rate_bps: i64,
+    /// Whether this is default.
     pub is_default: bool,
+    /// Whether this is inclusive.
     pub is_inclusive: bool,
 }
 
 #[derive(Debug, Deserialize)]
+/// Setcategorytaxratesargs.
 pub struct SetCategoryTaxRatesArgs {
+    /// ID of the associated category.
     pub category_id: String,
+    /// Tax Rate Ids.
     pub tax_rate_ids: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
+/// Categorytaxraterow.
 pub struct CategoryTaxRateRow {
+    /// ID of the associated category.
     pub category_id: String,
+    /// Tax Rate Ids.
     pub tax_rate_ids: Vec<String>,
 }
 
 // ── Tax Rate CRUD ─────────────────────────────────────────────────────
 
 #[command]
+/// List tax rates.
 pub async fn list_tax_rates(state: State<'_, AppState>) -> Result<Vec<TaxRateDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -82,6 +108,7 @@ pub async fn list_tax_rates(state: State<'_, AppState>) -> Result<Vec<TaxRateDto
 }
 
 #[command]
+/// Create tax rate.
 pub async fn create_tax_rate(
     args: CreateTaxRateArgs,
     state: State<'_, AppState>,
@@ -99,6 +126,7 @@ pub async fn create_tax_rate(
 }
 
 #[command]
+/// Update tax rate.
 pub async fn update_tax_rate(
     args: UpdateTaxRateArgs,
     state: State<'_, AppState>,
@@ -117,6 +145,7 @@ pub async fn update_tax_rate(
 }
 
 #[command]
+/// Delete tax rate.
 pub async fn delete_tax_rate(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);

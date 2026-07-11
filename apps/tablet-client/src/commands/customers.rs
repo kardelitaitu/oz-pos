@@ -21,12 +21,19 @@ use crate::state::AppState;
 /// Customer as seen by the front-end.
 #[derive(Debug, Serialize)]
 pub struct CustomerDto {
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Email address.
     pub email: Option<String>,
+    /// Phone number.
     pub phone: Option<String>,
+    /// Notes.
     pub notes: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -47,6 +54,7 @@ impl From<Customer> for CustomerDto {
 // ── List customers ──────────────────────────────────────────────────
 
 #[command]
+/// List customers.
 pub async fn list_customers(state: State<'_, AppState>) -> Result<Vec<CustomerDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -58,6 +66,7 @@ pub async fn list_customers(state: State<'_, AppState>) -> Result<Vec<CustomerDt
 // ── Get single customer ─────────────────────────────────────────────
 
 #[command]
+/// Get customer.
 pub async fn get_customer(
     id: String,
     state: State<'_, AppState>,
@@ -72,15 +81,22 @@ pub async fn get_customer(
 // ── Create customer ─────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Createcustomerargs.
 pub struct CreateCustomerArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// Display name.
     pub name: String,
+    /// Email address.
     pub email: Option<String>,
+    /// Phone number.
     pub phone: Option<String>,
+    /// Notes.
     pub notes: Option<String>,
 }
 
 #[command]
+/// Create customer.
 pub async fn create_customer(
     args: CreateCustomerArgs,
     state: State<'_, AppState>,
@@ -111,16 +127,24 @@ pub async fn create_customer(
 // ── Update customer ─────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Updatecustomerargs.
 pub struct UpdateCustomerArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// Unique identifier.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Email address.
     pub email: Option<String>,
+    /// Phone number.
     pub phone: Option<String>,
+    /// Notes.
     pub notes: Option<String>,
 }
 
 #[command]
+/// Update customer.
 pub async fn update_customer(
     args: UpdateCustomerArgs,
     state: State<'_, AppState>,
@@ -152,12 +176,16 @@ pub async fn update_customer(
 // ── Delete customer ─────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Deletecustomerargs.
 pub struct DeleteCustomerArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// Unique identifier.
     pub id: String,
 }
 
 #[command]
+/// Delete customer.
 pub async fn delete_customer(
     args: DeleteCustomerArgs,
     state: State<'_, AppState>,

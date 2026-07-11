@@ -14,15 +14,25 @@ use crate::state::AppState;
 // ── DTOs ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Stockcountdto.
 pub struct StockCountDto {
+    /// Unique identifier.
     pub id: String,
+    /// Count Number.
     pub count_number: String,
+    /// Current status.
     pub status: String,
+    /// Count Type.
     pub count_type: String,
+    /// Notes.
     pub notes: String,
+    /// Counted By.
     pub counted_by: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// Completed At.
     pub completed_at: Option<String>,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -43,14 +53,23 @@ impl From<StockCount> for StockCountDto {
 }
 
 #[derive(Debug, Serialize)]
+/// Stockcountlinedto.
 pub struct StockCountLineDto {
+    /// Unique identifier.
     pub id: String,
+    /// ID of the associated count.
     pub count_id: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Product Name.
     pub product_name: String,
+    /// Expected Qty.
     pub expected_qty: i64,
+    /// Counted Qty.
     pub counted_qty: Option<i64>,
+    /// Difference.
     pub difference: i64,
+    /// Notes.
     pub notes: String,
 }
 
@@ -70,15 +89,25 @@ impl From<StockCountLine> for StockCountLineDto {
 }
 
 #[derive(Debug, Serialize)]
+/// Stockadjustmentdto.
 pub struct StockAdjustmentDto {
+    /// Unique identifier.
     pub id: String,
+    /// ID of the associated count.
     pub count_id: Option<String>,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Product Name.
     pub product_name: String,
+    /// Previous Qty.
     pub previous_qty: i64,
+    /// Adjusted Qty.
     pub adjusted_qty: i64,
+    /// Reason.
     pub reason: String,
+    /// Created By.
     pub created_by: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
@@ -101,35 +130,53 @@ impl From<StockAdjustment> for StockAdjustmentDto {
 // ── Command args ───────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Createstockcountargs.
 pub struct CreateStockCountArgs {
+    /// Count Type.
     pub count_type: String,
+    /// Notes.
     pub notes: String,
+    /// Counted By.
     pub counted_by: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Addcountlineargs.
 pub struct AddCountLineArgs {
+    /// ID of the associated count.
     pub count_id: String,
+    /// Stock-keeping unit identifier.
     pub sku: String,
+    /// Product Name.
     pub product_name: String,
+    /// Expected Qty.
     pub expected_qty: i64,
 }
 
 #[derive(Debug, Deserialize)]
+/// Updatecountlineargs.
 pub struct UpdateCountLineArgs {
+    /// ID of the associated line.
     pub line_id: String,
+    /// Counted Qty.
     pub counted_qty: Option<i64>,
+    /// Notes.
     pub notes: String,
 }
 
 #[derive(Debug, Deserialize)]
+/// Removecountlineargs.
 pub struct RemoveCountLineArgs {
+    /// ID of the associated line.
     pub line_id: String,
 }
 
 #[derive(Debug, Deserialize)]
+/// Completestockcountargs.
 pub struct CompleteStockCountArgs {
+    /// ID of the associated count.
     pub count_id: String,
+    /// Completed By.
     pub completed_by: Option<String>,
 }
 

@@ -19,13 +19,21 @@ use crate::state::AppState;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OfflineQueueItemDto {
+    /// Unique identifier.
     pub id: String,
+    /// Action.
     pub action: String,
+    /// Payload.
     pub payload: String,
+    /// Current status.
     pub status: String,
+    /// Retry Count.
     pub retry_count: i64,
+    /// Last Error.
     pub last_error: Option<String>,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// Synced At.
     pub synced_at: Option<String>,
 }
 

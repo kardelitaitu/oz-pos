@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::{TokenResponse, create_token};
 
+/// Request body for creating a new API token.
 #[derive(Deserialize)]
 pub struct CreateTokenRequest {
     /// Human-readable label for this token (e.g. "kitchen-display-1").
@@ -21,11 +22,14 @@ pub struct CreateTokenRequest {
     pub tenant_id: Option<String>,
 }
 
+/// Response body containing the newly created token.
 #[derive(Serialize)]
 pub struct CreateTokenResponse {
+    /// The token details (JWT string, expiry, id).
     pub token: TokenResponse,
 }
 
+/// `POST /api/v1/tokens` — create a new API token.
 pub async fn create_token_handler(Json(body): Json<CreateTokenRequest>) -> impl IntoResponse {
     let resp = create_token(&body.label, body.expiry_hours, body.tenant_id.as_deref());
     Json(CreateTokenResponse { token: resp })

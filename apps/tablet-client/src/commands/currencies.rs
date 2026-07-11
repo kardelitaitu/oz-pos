@@ -17,6 +17,7 @@ pub struct CurrencyInfo {
 }
 
 #[command]
+/// Currency info.
 pub async fn currency_info(code: String) -> Result<CurrencyInfo, AppError> {
     let currency: oz_core::Currency = code
         .parse()
@@ -30,13 +31,18 @@ pub async fn currency_info(code: String) -> Result<CurrencyInfo, AppError> {
 /// A currency DTO for the front-end.
 #[derive(Debug, Serialize)]
 pub struct CurrencyDto {
+    /// Code.
     pub code: String,
+    /// Display name.
     pub name: String,
+    /// Minor Exponent.
     pub minor_exponent: u32,
+    /// Symbol.
     pub symbol: String,
 }
 
 #[command]
+/// List currencies.
 pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyDto>, AppError> {
     let db = state.db.lock().await;
     let store = oz_core::db::Store::new(&db);
@@ -53,11 +59,14 @@ pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyD
 }
 
 #[derive(Debug, Deserialize)]
+/// Setdefaultcurrencyargs.
 pub struct SetDefaultCurrencyArgs {
+    /// Code.
     pub code: String,
 }
 
 #[command]
+/// Get default currency.
 pub async fn get_default_currency(state: State<'_, AppState>) -> Result<Option<String>, AppError> {
     let db = state.db.lock().await;
     let store = oz_core::db::Store::new(&db);
@@ -65,6 +74,7 @@ pub async fn get_default_currency(state: State<'_, AppState>) -> Result<Option<S
 }
 
 #[command]
+/// Set default currency.
 pub async fn set_default_currency(
     args: SetDefaultCurrencyArgs,
     state: State<'_, AppState>,

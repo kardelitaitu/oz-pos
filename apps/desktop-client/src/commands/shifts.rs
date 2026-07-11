@@ -22,25 +22,45 @@ use crate::state::AppState;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftDto {
+    /// Unique identifier.
     pub id: String,
+    /// ID of the associated user.
     pub user_id: String,
+    /// ID of the associated terminal.
     pub terminal_id: Option<String>,
+    /// Opened At.
     pub opened_at: String,
+    /// Closed At.
     pub closed_at: Option<String>,
+    /// Opening Balance Minor.
     pub opening_balance_minor: i64,
+    /// Closing Balance Minor.
     pub closing_balance_minor: Option<i64>,
+    /// Expected Cash Minor.
     pub expected_cash_minor: Option<i64>,
+    /// Cash Difference Minor.
     pub cash_difference_minor: Option<i64>,
+    /// Total Sales Minor.
     pub total_sales_minor: i64,
+    /// Total Cash Minor.
     pub total_cash_minor: i64,
+    /// Total Card Minor.
     pub total_card_minor: i64,
+    /// Total Other Minor.
     pub total_other_minor: i64,
+    /// Total Voids Minor.
     pub total_voids_minor: i64,
+    /// Total Refunds Minor.
     pub total_refunds_minor: i64,
+    /// Total Payouts Minor.
     pub total_payouts_minor: i64,
+    /// Notes.
     pub notes: String,
+    /// Current status.
     pub status: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
@@ -75,8 +95,11 @@ impl From<Shift> for ShiftDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenShiftArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// ID of the associated terminal.
     pub terminal_id: Option<String>,
+    /// Opening Balance Minor.
     pub opening_balance_minor: i64,
 }
 
@@ -84,7 +107,9 @@ pub struct OpenShiftArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenShiftScopedArgs {
+    /// ID of the associated terminal.
     pub terminal_id: Option<String>,
+    /// Opening Balance Minor.
     pub opening_balance_minor: i64,
 }
 
@@ -149,9 +174,13 @@ pub async fn open_shift_scoped(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloseShiftArgs {
+    /// ID of the associated user.
     pub user_id: String,
+    /// Unique identifier.
     pub id: String,
+    /// Closing Balance Minor.
     pub closing_balance_minor: i64,
+    /// Notes.
     pub notes: Option<String>,
 }
 
@@ -159,8 +188,11 @@ pub struct CloseShiftArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloseShiftScopedArgs {
+    /// Unique identifier.
     pub id: String,
+    /// Closing Balance Minor.
     pub closing_balance_minor: i64,
+    /// Notes.
     pub notes: Option<String>,
 }
 
@@ -286,11 +318,17 @@ pub async fn get_shift(
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Cashpayoutdto.
 pub struct CashPayoutDto {
+    /// Unique identifier.
     pub id: String,
+    /// ID of the associated shift.
     pub shift_id: String,
+    /// Amount Minor.
     pub amount_minor: i64,
+    /// Reason.
     pub reason: String,
+    /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
@@ -310,12 +348,19 @@ impl From<CashPayout> for CashPayoutDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftReportDto {
+    /// Shift.
     pub shift: ShiftDto,
+    /// Payment Breakdown.
     pub payment_breakdown: Vec<ShiftPaymentBreakdownDto>,
+    /// Hourly Breakdown.
     pub hourly_breakdown: Vec<ShiftSalesByHourDto>,
+    /// Cash Payouts.
     pub cash_payouts: Vec<CashPayoutDto>,
+    /// Sale Count.
     pub sale_count: i64,
+    /// Void Count.
     pub void_count: i64,
+    /// Refund Count.
     pub refund_count: i64,
 }
 
@@ -335,9 +380,13 @@ impl From<ShiftReport> for ShiftReportDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Shiftpaymentbreakdowndto.
 pub struct ShiftPaymentBreakdownDto {
+    /// Method.
     pub method: String,
+    /// Count.
     pub count: i64,
+    /// Total amount in minor currency units.
     pub total_minor: i64,
 }
 
@@ -353,9 +402,13 @@ impl From<ShiftPaymentBreakdown> for ShiftPaymentBreakdownDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Shiftsalesbyhourdto.
 pub struct ShiftSalesByHourDto {
+    /// Hour.
     pub hour: i64,
+    /// Total amount in minor currency units.
     pub total_minor: i64,
+    /// Sale Count.
     pub sale_count: i64,
 }
 
@@ -373,8 +426,11 @@ impl From<ShiftSalesByHour> for ShiftSalesByHourDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateCashPayoutArgs {
+    /// ID of the associated shift.
     pub shift_id: String,
+    /// Amount Minor.
     pub amount_minor: i64,
+    /// Reason.
     pub reason: String,
 }
 

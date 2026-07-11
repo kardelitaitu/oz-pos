@@ -18,6 +18,7 @@ use crate::state::AppState;
 // ── Cash drawer ─────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Opencashdrawerargs.
 pub struct OpenCashDrawerArgs {
     /// Optional device id; defaults to "default" which is the mock drawer
     /// registered at startup.
@@ -26,11 +27,14 @@ pub struct OpenCashDrawerArgs {
 }
 
 #[derive(Debug, Serialize)]
+/// Opencashdrawerresult.
 pub struct OpenCashDrawerResult {
+    /// Opened.
     pub opened: bool,
 }
 
 #[command]
+/// Open cash drawer.
 pub async fn open_cash_drawer(
     args: OpenCashDrawerArgs,
     state: State<'_, AppState>,
@@ -48,6 +52,7 @@ pub async fn open_cash_drawer(
 // ── Raw text receipt (legacy) ───────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Printreceiptargs.
 pub struct PrintReceiptArgs {
     /// Raw receipt text (lines separated by '\n'). ESC/POS commands are
     /// added by the printer driver; the command layer only knows about
@@ -56,11 +61,14 @@ pub struct PrintReceiptArgs {
 }
 
 #[derive(Debug, Serialize)]
+/// Printreceiptresult.
 pub struct PrintReceiptResult {
+    /// Printed Lines.
     pub printed_lines: usize,
 }
 
 #[command]
+/// Print receipt.
 pub async fn print_receipt(
     args: PrintReceiptArgs,
     state: State<'_, AppState>,
@@ -83,32 +91,51 @@ pub async fn print_receipt(
 // ── Structured sales receipt ────────────────────────────
 
 #[derive(Debug, Deserialize)]
+/// Printsalesreceiptargs.
 pub struct PrintSalesReceiptArgs {
+    /// Date.
     pub date: String,
+    /// Receipt Number.
     pub receipt_number: String,
+    /// Items.
     pub items: Vec<LineItemDto>,
+    /// Subtotal.
     pub subtotal: MoneyDto,
+    /// Tax.
     pub tax: Option<MoneyDto>,
+    /// Total amount in minor currency units.
     pub total: MoneyDto,
+    /// Payments.
     pub payments: Vec<PaymentDto>,
     #[serde(default)]
+    /// Table Number.
     pub table_number: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Lineitemdto.
 pub struct LineItemDto {
+    /// Display name.
     pub name: String,
+    /// Quantity.
     pub quantity: u32,
+    /// Unit price in minor currency units.
     pub unit_price: MoneyDto,
+    /// Total Price.
     pub total_price: MoneyDto,
     #[serde(default)]
+    /// Tax Amount.
     pub tax_amount: Option<MoneyDto>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Paymentdto.
 pub struct PaymentDto {
+    /// Method.
     pub method: String,
+    /// Amount.
     pub amount: MoneyDto,
+    /// Change.
     pub change: Option<MoneyDto>,
 }
 
@@ -116,7 +143,9 @@ pub struct PaymentDto {
 /// these instead of a nested Money object for simplicity.
 #[derive(Debug, Deserialize)]
 pub struct MoneyDto {
+    /// Minor Units.
     pub minor_units: i64,
+    /// ISO-4217 currency code.
     pub currency: String,
 }
 
@@ -134,11 +163,14 @@ impl MoneyDto {
 }
 
 #[derive(Debug, Serialize)]
+/// Printsalesreceiptresult.
 pub struct PrintSalesReceiptResult {
+    /// Printed.
     pub printed: bool,
 }
 
 #[command]
+/// Print sales receipt.
 pub async fn print_sales_receipt(
     args: PrintSalesReceiptArgs,
     state: State<'_, AppState>,
@@ -233,7 +265,9 @@ pub async fn print_sales_receipt(
 // ── Barcode scanner ──────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+/// Scannerinfo.
 pub struct ScannerInfo {
+    /// Unique identifier.
     pub id: String,
 }
 

@@ -30,14 +30,20 @@ pub enum LicenseVerificationStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Licensestatusdto.
 pub struct LicenseStatusDto {
+    /// Whether this is active.
     pub is_active: bool,
+    /// Current status.
     pub status: LicenseVerificationStatus,
+    /// Payload.
     pub payload: Option<String>,
+    /// Message.
     pub message: Option<String>,
 }
 
 #[command]
+/// Activate license.
 pub async fn activate_license(
     state: State<'_, AppState>,
     key: String,
@@ -70,6 +76,7 @@ pub async fn activate_license(
 }
 
 #[command]
+/// Get machine id.
 pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().await;
     // Return the persisted machine ID if one already exists.
@@ -100,6 +107,7 @@ fn generate_machine_id() -> String {
 }
 
 #[command]
+/// Get license status.
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseStatusDto, AppError> {
     let conn = state.db.lock().await;
     let payload_str = Settings::get(&conn, "license.payload")?;
