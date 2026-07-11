@@ -11,18 +11,12 @@ export async function getLicenseStatus(): Promise<LicenseStatusDto> {
 
 export async function activateLicense(
   key: string,
-  tenantId: string,
-  machineId: string,
-  businessName?: string,
-  contactName?: string,
-  email?: string
+  email: string,
+  machineId: string
 ): Promise<boolean> {
   return invoke('activate_license', {
     key,
-    tenantId,
+    email,
     machineId,
-    businessName: businessName || null,
-    contactName: contactName || null,
-    email: email || null,
   });
 }

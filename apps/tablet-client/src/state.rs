@@ -163,3 +163,86 @@ impl AppState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oz_core::session::SessionContext;
+
+    #[test]
+    fn for_test_creates_valid_state() {
+        let state = AppState::for_test();
+        assert_eq!(state.db_path, std::path::PathBuf::from(":memory:"));
+        assert!(state.app.is_none());
+    }
+
+    #[test]
+    fn for_test_with_conn_preserves_connection() {
+        let conn = Connection::open_in_memory().unwrap();
+        let state = AppState::for_test_with_conn(conn);
+        // Lock the mutex to verify the connection is accessible.
+        let _guard = state.db.try_lock().expect("db mutex should be available");
+    }
+
+    #[test]
+    fn resolve_session_empty_token_returns_invalid() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn resolve_session_missing_token_returns_invalid() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn resolve_session_valid_token_returns_context() {
+        let state = AppState::for_test();
+        let ctx = SessionContext {
+            user_id: "user-1".into(),
+            store_id: "store-1".into(),
+            workspace_id: "ws-1".into(),
+            warehouse_id: "wh-1".into(),
+            terminal_id: "term-1".into(),
+            role: "cashier".into(),
+        };
+        {
+            let mut store = state.session_store.write().unwrap();
+            store.insert("valid-token".into(), ctx.clone());
+        }
+        let result = state.resolve_session("valid-token");
+        assert!(result.is_ok());
+        let resolved = result.unwrap();
+        assert_eq!(resolved.user_id, "user-1");
+        assert_eq!(resolved.store_id, "store-1");
+    }
+
+    #[test]
+    fn resolve_session_returns_clone_not_reference() {
+        let state = AppState::for_test();
+        let original = SessionContext {
+            user_id: "u1".into(),
+            store_id: "s1".into(),
+            workspace_id: "w1".into(),
+            warehouse_id: "wh1".into(),
+            terminal_id: "t1".into(),
+            role: "cashier".into(),
+        };
+        {
+            let mut store = state.session_store.write().unwrap();
+            store.insert("tok".into(), original.clone());
+        }
+        let resolved = state.resolve_session("tok").unwrap();
+        // Mutating the original in the store should not affect the resolved clone.
+        {
+            let mut store = state.session_store.write().unwrap();
+            if let Some(ctx) = store.get_mut("tok") {
+                ctx.user_id = "changed".into();
+            }
+        }
+        assert_eq!(resolved.user_id, "u1");
+    }
+}

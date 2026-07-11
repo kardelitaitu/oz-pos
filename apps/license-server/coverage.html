@@ -1,0 +1,826 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>license-server: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/oz-pos/license-server/activate.go (88.2%)</option>
+				
+				<option value="file1">github.com/oz-pos/license-server/expiry.go (100.0%)</option>
+				
+				<option value="file2">github.com/oz-pos/license-server/helpers.go (87.5%)</option>
+				
+				<option value="file3">github.com/oz-pos/license-server/main.go (69.7%)</option>
+				
+				<option value="file4">github.com/oz-pos/license-server/ratelimit.go (100.0%)</option>
+				
+				<option value="file5">github.com/oz-pos/license-server/renew.go (90.5%)</option>
+				
+				<option value="file6">github.com/oz-pos/license-server/status.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "encoding/json"
+        "log"
+        "net/http"
+        "time"
+
+        "github.com/pocketbase/pocketbase/core"
+)
+
+// ActivateRequest is the JSON body for POST /api/v1/license/activate.
+type ActivateRequest struct {
+        Key          string `json:"key"`
+        TenantID     string `json:"tenant_id"`
+        MachineID    string `json:"machine_id"`
+        BusinessName string `json:"business_name"` // optional, from setup wizard
+        ContactName  string `json:"contact_name"`  // optional
+        Email        string `json:"email"`         // optional
+}
+
+func handleActivate(app core.App) func(e *core.RequestEvent) error <span class="cov8" title="1">{
+        return func(e *core.RequestEvent) error </span><span class="cov8" title="1">{
+                var req ActivateRequest
+                if err := json.NewDecoder(e.Request.Body).Decode(&amp;req); err != nil </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusBadRequest, map[string]any{
+                                "error": "invalid request body",
+                        })
+                }</span>
+
+                // ── Validate required fields ──────────────────────────────
+                <span class="cov8" title="1">if req.Key == "" || req.TenantID == "" || req.MachineID == "" </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusBadRequest, map[string]any{
+                                "error": "key, tenant_id, and machine_id are required",
+                        })
+                }</span>
+
+                <span class="cov8" title="1">clientIP := e.RealIP()
+
+                // ── Rate limit: 5 activations per IP per hour ─────────────
+                if !ipRateLimiter.allow(clientIP) </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusTooManyRequests, map[string]any{
+                                "error": "rate limit exceeded, try again later",
+                        })
+                }</span>
+
+                // ── Per-key brute-force: 3 failures → 15-min cooldown ────
+                <span class="cov8" title="1">if keyFailTracker.isBlocked(req.Key) </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusTooManyRequests, map[string]any{
+                                "error": "too many attempts for this key, try again in 15 minutes",
+                        })
+                }</span>
+
+                // ── Validate license key ──────────────────────────────────
+                <span class="cov8" title="1">keyRecord, err := app.FindFirstRecordByData("license_keys", "key", req.Key)
+                if err != nil || keyRecord.GetString("status") != "unused" </span><span class="cov8" title="1">{
+                        keyFailTracker.recordFailure(req.Key)
+                        return e.JSON(http.StatusUnauthorized, map[string]any{
+                                "error": "invalid or already used license key",
+                        })
+                }</span>
+                <span class="cov8" title="1">if keyRecord.GetDateTime("expires_at").Time().Before(time.Now()) </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusGone, map[string]any{
+                                "error": "license key has expired",
+                        })
+                }</span>
+
+                // ── Create tenant record ──────────────────────────────────
+                <span class="cov8" title="1">tenantColl, err := app.FindCollectionByNameOrId("tenants")
+                if err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "server misconfiguration: tenants collection not found",
+                        })
+                }</span>
+                <span class="cov8" title="1">tenant := core.NewRecord(tenantColl)
+                tenant.Set("id", req.TenantID)
+                tenant.Set("business_name", strDefault(req.BusinessName, req.TenantID))
+                tenant.Set("contact_name", req.ContactName)
+                tenant.Set("email", req.Email)
+                tenant.Set("api_key", generateAPIKey())
+                tenant.Set("status", "active")
+                if err := app.Save(tenant); err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "failed to create tenant",
+                        })
+                }</span>
+
+                // ── Register machine ──────────────────────────────────────
+                <span class="cov8" title="1">machineColl, err := app.FindCollectionByNameOrId("tenant_machines")
+                if err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "server misconfiguration: tenant_machines collection not found",
+                        })
+                }</span>
+                <span class="cov8" title="1">machine := core.NewRecord(machineColl)
+                machine.Set("id", req.MachineID)
+                machine.Set("tenant_id", []string{req.TenantID})
+                machine.Set("first_seen_at", time.Now().UTC())
+                machine.Set("last_seen_at", time.Now().UTC())
+                if err := app.Save(machine); err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "failed to register machine",
+                        })
+                }</span>
+
+                // ── Build and sign subscription ───────────────────────────
+                <span class="cov8" title="1">tierKey := keyRecord.GetString("tier_key")
+                expiresAt := calculateExpiry(tierKey)
+                sub := SubscriptionPayload{
+                        TenantID:   req.TenantID,
+                        TierKey:    tierKey,
+                        Status:     "active",
+                        StartsAt:   time.Now().UTC().Format(time.RFC3339),
+                        ExpiresAt:  expiresAt.Format(time.RFC3339),
+                        GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
+                        IssuedAt:   time.Now().UTC().Format(time.RFC3339),
+                }
+
+                payloadStr, signature, err := signSubscription(sub)
+                if err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "signing failed",
+                        })
+                }</span>
+
+                // ── Save subscription record ──────────────────────────────
+                <span class="cov8" title="1">subColl, err := app.FindCollectionByNameOrId("subscriptions")
+                if err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "server misconfiguration: subscriptions collection not found",
+                        })
+                }</span>
+                <span class="cov8" title="1">subRecord := core.NewRecord(subColl)
+                subRecord.Set("tenant_id", []string{req.TenantID})
+                subRecord.Set("tier_key", tierKey)
+                subRecord.Set("max_stores", keyRecord.GetInt("max_stores"))
+                subRecord.Set("max_pos_instances", keyRecord.GetInt("max_pos_instances"))
+                subRecord.Set("allowed_types", keyRecord.GetString("allowed_types"))
+                subRecord.Set("status", "active")
+                subRecord.Set("starts_at", sub.StartsAt)
+                subRecord.Set("expires_at", sub.ExpiresAt)
+                subRecord.Set("grace_until", sub.GraceUntil)
+                subRecord.Set("signed_payload", payloadStr)
+                subRecord.Set("signature", signature)
+                if err := app.Save(subRecord); err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "failed to save subscription",
+                        })
+                }</span>
+
+                // ── Mark key as activated ─────────────────────────────────
+                <span class="cov8" title="1">keyRecord.Set("status", "activated")
+                keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+                keyRecord.Set("activated_by", req.TenantID)
+                if err := app.Save(keyRecord); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+                }</span>
+
+                // ── Return signed subscription to POS ─────────────────────
+                <span class="cov8" title="1">return e.JSON(http.StatusOK, map[string]any{
+                        "signed_payload": payloadStr,
+                        "signature":      signature,
+                        "api_key":        tenant.GetString("api_key"),
+                })</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package main
+
+import "time"
+
+// calculateExpiry returns the subscription expiration time for the given tier.
+//
+// Tier durations:
+//   - free:      lifetime (100 years from now)
+//   - pro:       1 year
+//   - premium:   1 year
+//   - enterprise: 3 years (configurable per contract)
+func calculateExpiry(tier string) time.Time <span class="cov8" title="1">{
+        now := time.Now().UTC()
+        switch tier </span>{
+        case "free":<span class="cov8" title="1">
+                return now.AddDate(100, 0, 0)</span> // effectively never expires
+        case "pro", "premium":<span class="cov8" title="1">
+                return now.AddDate(1, 0, 0)</span>
+        case "enterprise":<span class="cov8" title="1">
+                return now.AddDate(3, 0, 0)</span>
+        default:<span class="cov8" title="1">
+                return now.AddDate(1, 0, 0)</span> // safe default: 1 year
+        }
+}
+
+// calculateGraceUntil returns expires_at + 14 days (per ADR #5 offline grace).
+func calculateGraceUntil(expiresAt time.Time) time.Time <span class="cov8" title="1">{
+        return expiresAt.AddDate(0, 0, 14)
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package main
+
+import (
+        "crypto/rand"
+        "encoding/hex"
+        "encoding/json"
+        "time"
+)
+
+// jsonMarshal is a thin wrapper around json.Marshal for readability.
+func jsonMarshal(v any) ([]byte, error) <span class="cov8" title="1">{
+        return json.Marshal(v)
+}</span>
+
+// generateAPIKey returns a 32-byte hex-encoded random string used as the
+// tenant's API key for renew and status endpoints.
+func generateAPIKey() string <span class="cov8" title="1">{
+        b := make([]byte, 32)
+        if _, err := rand.Read(b); err != nil </span><span class="cov0" title="0">{
+                // Fallback: use timestamp-based key if CSPRNG fails
+                return hex.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano)))
+        }</span>
+        <span class="cov8" title="1">return "oz_" + hex.EncodeToString(b)</span>
+}
+
+// strDefault returns s if non-empty, otherwise returns d.
+func strDefault(s, d string) string <span class="cov8" title="1">{
+        if s != "" </span><span class="cov8" title="1">{
+                return s
+        }</span>
+        <span class="cov8" title="1">return d</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">// Package main is the entry point for the OZ-POS license server.
+// It extends PocketBase with custom Go hooks for license activation,
+// renewal, and status checks with RSA-2048 signing.
+package main
+
+import (
+        "crypto"
+        "crypto/rand"
+        "crypto/rsa"
+        "crypto/sha256"
+        "crypto/x509"
+        "encoding/base64"
+        "encoding/pem"
+        "log"
+        "os"
+        "strings"
+
+        "github.com/pocketbase/pocketbase"
+        "github.com/pocketbase/pocketbase/core"
+)
+
+// privateKey is the RSA-2048 private key loaded from the
+// OZ_LICENSE_PRIVATE_KEY environment variable at startup.
+var privateKey *rsa.PrivateKey
+
+func main() <span class="cov0" title="0">{
+        app := pocketbase.New()
+
+        // ── Bootstrap: load RSA private key ──────────────────────────
+        keyPEM := os.Getenv("OZ_LICENSE_PRIVATE_KEY")
+        if keyPEM == "" </span><span class="cov0" title="0">{
+                log.Fatal("OZ_LICENSE_PRIVATE_KEY environment variable is required")
+        }</span>
+
+        <span class="cov0" title="0">block, _ := pem.Decode([]byte(normalizePEM(keyPEM)))
+        if block == nil </span><span class="cov0" title="0">{
+                log.Fatalf("failed to decode PEM block from OZ_LICENSE_PRIVATE_KEY (key length: %d bytes, starts with: %q)",
+                        len(keyPEM), safePrefix(keyPEM, 40))
+        }</span>
+
+        <span class="cov0" title="0">var err error
+        privateKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+        if err != nil </span><span class="cov0" title="0">{
+                // Try PKCS8 format (more common with modern tools)
+                pkcs8Key, err2 := x509.ParsePKCS8PrivateKey(block.Bytes)
+                if err2 != nil </span><span class="cov0" title="0">{
+                        log.Fatalf("failed to parse RSA private key (PKCS1: %v, PKCS8: %v)", err, err2)
+                }</span>
+                <span class="cov0" title="0">var ok bool
+                privateKey, ok = pkcs8Key.(*rsa.PrivateKey)
+                if !ok </span><span class="cov0" title="0">{
+                        log.Fatal("key is not an RSA private key")
+                }</span>
+        }
+        <span class="cov0" title="0">log.Println("RSA private key loaded successfully")
+
+        // ── Register custom license API routes ───────────────────────
+        app.OnServe().BindFunc(func(se *core.ServeEvent) error </span><span class="cov0" title="0">{
+                se.Router.POST("/api/v1/license/activate", handleActivate(app))
+                se.Router.POST("/api/v1/license/renew", handleRenew(app))
+                se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
+                return se.Next()
+        }</span>)
+
+        <span class="cov0" title="0">if err := app.Start(); err != nil </span><span class="cov0" title="0">{
+                log.Fatal(err)
+        }</span>
+}
+
+// normalizePEM attempts to repair common formatting issues that occur when
+// a multi-line PEM key is stored as an environment variable (e.g. in
+// Northflank, Docker secrets, or CI/CD variables). It handles:
+//   - The entire PEM on a single line (newlines stripped by the platform)
+//   - Literal "\\n" escape sequences (double-escaped in JSON/YAML)
+//   - Surrounding whitespace and quotes
+func normalizePEM(raw string) string <span class="cov8" title="1">{
+        // Strip surrounding whitespace.
+        raw = strings.TrimSpace(raw)
+        // Strip surrounding quotes, then re-trim in case quotes hid whitespace.
+        raw = strings.TrimSpace(strings.Trim(raw, "\"'"))
+
+        // Replace literal backslash-n sequences with real newlines.
+        raw = strings.ReplaceAll(raw, "\\n", "\n")
+
+        // If the PEM already has newlines in the expected places, return as-is.
+        if strings.Contains(raw, "-----\n") || strings.Contains(raw, "-----\r\n") </span><span class="cov8" title="1">{
+                return raw
+        }</span>
+
+        // If there are no PEM markers at all, the user may have pasted only
+        // the raw base64 body. Wrap it in a PKCS#8 PEM envelope.
+        <span class="cov8" title="1">if !strings.Contains(raw, "-----BEGIN") &amp;&amp; !strings.Contains(raw, "-----END") </span><span class="cov8" title="1">{
+                return wrapPEM(raw, "PRIVATE KEY")
+        }</span>
+
+        // The PEM is on a single line. Find the BEGIN and END marker boundaries.
+        // Format: -----BEGIN &lt;TYPE&gt;-----&lt;base64&gt;-----END &lt;TYPE&gt;-----
+        // The header line is everything from the first "-----" through the next "-----".
+        <span class="cov8" title="1">beginMarker := strings.Index(raw, "-----BEGIN ")
+        if beginMarker == -1 </span><span class="cov8" title="1">{
+                return raw // not a recognizable PEM, let pem.Decode fail naturally
+        }</span>
+
+        // The header closes with "-----" after the type name.
+        // Skip past "-----BEGIN " (11 chars) to find the closing "-----".
+        <span class="cov8" title="1">afterType := raw[beginMarker+11:]
+        headerClose := strings.Index(afterType, "-----")
+        if headerClose == -1 </span><span class="cov8" title="1">{
+                return raw
+        }</span>
+        <span class="cov8" title="1">headerClose += beginMarker + 11 + 5
+        header := raw[beginMarker:headerClose]
+
+        // Find the footer: "-----END " through its closing "-----".
+        endMarker := strings.LastIndex(raw, "-----END ")
+        if endMarker == -1 || endMarker &lt; headerClose </span><span class="cov8" title="1">{
+                return raw
+        }</span>
+        <span class="cov8" title="1">afterEndType := raw[endMarker+9:] // skip "-----END "
+        footerClose := strings.Index(afterEndType, "-----")
+        if footerClose == -1 </span><span class="cov8" title="1">{
+                return raw
+        }</span>
+        <span class="cov8" title="1">footerClose += endMarker + 9 + 5
+        footer := raw[endMarker:footerClose]
+
+        base64data := raw[headerClose:endMarker]
+
+        // Reconstruct with proper line breaks (64-char base64 lines).
+        var sb strings.Builder
+        sb.WriteString(header)
+        sb.WriteByte('\n')
+        for i := 0; i &lt; len(base64data); i += 64 </span><span class="cov8" title="1">{
+                end := i + 64
+                if end &gt; len(base64data) </span><span class="cov8" title="1">{
+                        end = len(base64data)
+                }</span>
+                <span class="cov8" title="1">sb.WriteString(base64data[i:end])
+                sb.WriteByte('\n')</span>
+        }
+        <span class="cov8" title="1">sb.WriteString(footer)
+        sb.WriteByte('\n')
+        return sb.String()</span>
+}
+
+// wrapPEM wraps raw base64 data in a PEM envelope with the given type label
+// and standard 64-character line width. Any existing whitespace or newlines
+// in the base64 data are stripped before re-wrapping.
+func wrapPEM(base64data, label string) string <span class="cov8" title="1">{
+        // Strip any existing whitespace/newlines from the base64 body.
+        base64data = strings.NewReplacer("\n", "", "\r", "", " ", "", "\t", "").Replace(base64data)
+
+        var sb strings.Builder
+        sb.WriteString("-----BEGIN ")
+        sb.WriteString(label)
+        sb.WriteString("-----\n")
+        for i := 0; i &lt; len(base64data); i += 64 </span><span class="cov8" title="1">{
+                end := i + 64
+                if end &gt; len(base64data) </span><span class="cov8" title="1">{
+                        end = len(base64data)
+                }</span>
+                <span class="cov8" title="1">sb.WriteString(base64data[i:end])
+                sb.WriteByte('\n')</span>
+        }
+        <span class="cov8" title="1">sb.WriteString("-----END ")
+        sb.WriteString(label)
+        sb.WriteString("-----\n")
+        return sb.String()</span>
+}
+
+// safePrefix returns the first n bytes of s, escaping non-printable chars
+// for safe inclusion in log messages.
+func safePrefix(s string, n int) string <span class="cov8" title="1">{
+        if len(s) &gt; n </span><span class="cov8" title="1">{
+                s = s[:n]
+        }</span>
+        <span class="cov8" title="1">return strings.ReplaceAll(s, "\n", "\\n")</span>
+}
+
+// SubscriptionPayload is the JSON structure signed by the license server.
+// This is the payload the POS stores locally and verifies against the
+// embedded public key.
+type SubscriptionPayload struct {
+        TenantID   string `json:"tenant_id"`
+        TierKey    string `json:"tier_key"`
+        Status     string `json:"status"`
+        StartsAt   string `json:"starts_at"`
+        ExpiresAt  string `json:"expires_at"`
+        GraceUntil string `json:"grace_until"`
+        IssuedAt   string `json:"issued_at"`
+}
+
+// signSubscription marshals the payload to JSON, SHA-256 hashes it,
+// and signs it with the RSA-2048 private key using PKCS1v15.
+func signSubscription(sub SubscriptionPayload) (payload string, signature string, err error) <span class="cov8" title="1">{
+        payloadBytes, err := jsonMarshal(sub)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", "", err
+        }</span>
+        <span class="cov8" title="1">hash := sha256.Sum256(payloadBytes)
+        sig, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
+        if err != nil </span><span class="cov0" title="0">{
+                return "", "", err
+        }</span>
+        <span class="cov8" title="1">return string(payloadBytes), base64.StdEncoding.EncodeToString(sig), nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package main
+
+import (
+        "sync"
+        "time"
+)
+
+// rateLimiter is a simple in-memory token bucket per IP.
+// Not persisted; resets on server restart (acceptable for activation volume).
+type rateLimiter struct {
+        mu       sync.Mutex
+        buckets  map[string]*tokenBucket
+        maxPerHr int
+}
+
+type tokenBucket struct {
+        tokens   int
+        lastFill time.Time
+}
+
+// ipRateLimiter limits activation attempts to 5 per IP per hour.
+var ipRateLimiter = &amp;rateLimiter{
+        buckets:  make(map[string]*tokenBucket),
+        maxPerHr: 5,
+}
+
+func (rl *rateLimiter) allow(ip string) bool <span class="cov8" title="1">{
+        rl.mu.Lock()
+        defer rl.mu.Unlock()
+
+        bucket, ok := rl.buckets[ip]
+        if !ok </span><span class="cov8" title="1">{
+                bucket = &amp;tokenBucket{tokens: rl.maxPerHr, lastFill: time.Now()}
+                rl.buckets[ip] = bucket
+        }</span>
+
+        // Refill tokens if an hour has passed
+        <span class="cov8" title="1">if time.Since(bucket.lastFill) &gt;= time.Hour </span><span class="cov8" title="1">{
+                bucket.tokens = rl.maxPerHr
+                bucket.lastFill = time.Now()
+        }</span>
+
+        <span class="cov8" title="1">if bucket.tokens &gt; 0 </span><span class="cov8" title="1">{
+                bucket.tokens--
+                return true
+        }</span>
+        <span class="cov8" title="1">return false</span>
+}
+
+// keyFailureTracker tracks per-key brute-force attempts with a TTL.
+type keyFailureTracker struct {
+        mu          sync.Mutex
+        failures    map[string]*keyFailures
+        maxAttempts int
+        cooldown    time.Duration
+}
+
+type keyFailures struct {
+        count      int
+        cooldownAt time.Time
+}
+
+// keyFailTracker limits to 3 failed attempts per key, then 15-minute cooldown.
+var keyFailTracker = &amp;keyFailureTracker{
+        failures:    make(map[string]*keyFailures),
+        maxAttempts: 3,
+        cooldown:    15 * time.Minute,
+}
+
+func (kf *keyFailureTracker) isBlocked(key string) bool <span class="cov8" title="1">{
+        kf.mu.Lock()
+        defer kf.mu.Unlock()
+
+        f, ok := kf.failures[key]
+        if !ok </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        // Only clean up entries that have reached maxAttempts AND passed cooldown.
+        // Entries with partial failures (count &lt; maxAttempts) persist to track
+        // progressive brute-force attempts.
+        <span class="cov8" title="1">if f.count &gt;= kf.maxAttempts &amp;&amp; time.Now().After(f.cooldownAt) </span><span class="cov8" title="1">{
+                delete(kf.failures, key)
+                return false
+        }</span>
+        <span class="cov8" title="1">return f.count &gt;= kf.maxAttempts</span>
+}
+
+func (kf *keyFailureTracker) recordFailure(key string) <span class="cov8" title="1">{
+        kf.mu.Lock()
+        defer kf.mu.Unlock()
+
+        f, ok := kf.failures[key]
+        if !ok </span><span class="cov8" title="1">{
+                f = &amp;keyFailures{count: 0}
+                kf.failures[key] = f
+        }</span>
+        <span class="cov8" title="1">f.count++
+        if f.count &gt;= kf.maxAttempts </span><span class="cov8" title="1">{
+                f.cooldownAt = time.Now().Add(kf.cooldown)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package main
+
+import (
+        "encoding/json"
+        "log"
+        "net/http"
+        "time"
+
+        "github.com/pocketbase/pocketbase/core"
+)
+
+// RenewRequest is the JSON body for POST /api/v1/license/renew.
+type RenewRequest struct {
+        TenantID string `json:"tenant_id"`
+        APIKey   string `json:"api_key"`
+}
+
+func handleRenew(app core.App) func(e *core.RequestEvent) error <span class="cov8" title="1">{
+        return func(e *core.RequestEvent) error </span><span class="cov8" title="1">{
+                var req RenewRequest
+                if err := json.NewDecoder(e.Request.Body).Decode(&amp;req); err != nil </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusBadRequest, map[string]any{
+                                "error": "invalid request body",
+                        })
+                }</span>
+
+                // ── Validate required fields ──────────────────────────────
+                <span class="cov8" title="1">if req.TenantID == "" || req.APIKey == "" </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusBadRequest, map[string]any{
+                                "error": "tenant_id and api_key are required",
+                        })
+                }</span>
+
+                // ── Authenticate tenant by api_key ────────────────────────
+                <span class="cov8" title="1">tenant, err := app.FindFirstRecordByData("tenants", "api_key", req.APIKey)
+                if err != nil || tenant.GetString("status") != "active" </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusUnauthorized, map[string]any{
+                                "error": "invalid api_key or tenant is not active",
+                        })
+                }</span>
+                <span class="cov8" title="1">if tenant.GetString("id") != req.TenantID </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusUnauthorized, map[string]any{
+                                "error": "tenant_id does not match api_key",
+                        })
+                }</span>
+
+                // ── Find the latest active subscription ───────────────────
+                <span class="cov8" title="1">subs, err := app.FindRecordsByFilter(
+                        "subscriptions",
+                        "tenant_id = {:tenant_id} &amp;&amp; status = 'active'",
+                        "-starts_at", 1, 0,
+                        map[string]any{"tenant_id": req.TenantID},
+                )
+                if err != nil || len(subs) == 0 </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusNotFound, map[string]any{
+                                "error": "no active subscription found",
+                        })
+                }</span>
+                <span class="cov8" title="1">currentSub := subs[0]
+
+                // ── Parse current subscription data ───────────────────────
+                tierKey := currentSub.GetString("tier_key")
+                expiresAt := calculateExpiry(tierKey)
+                sub := SubscriptionPayload{
+                        TenantID:   req.TenantID,
+                        TierKey:    tierKey,
+                        Status:     "active",
+                        StartsAt:   time.Now().UTC().Format(time.RFC3339),
+                        ExpiresAt:  expiresAt.Format(time.RFC3339),
+                        GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
+                        IssuedAt:   time.Now().UTC().Format(time.RFC3339),
+                }
+
+                payloadStr, signature, err := signSubscription(sub)
+                if err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "signing failed",
+                        })
+                }</span>
+
+                // ── Mark old subscription as expired ──────────────────────
+                <span class="cov8" title="1">currentSub.Set("status", "expired")
+                if err := app.Save(currentSub); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("WARNING: failed to mark old subscription as expired: %v", err)
+                }</span>
+
+                // ── Save new subscription ─────────────────────────────────
+                <span class="cov8" title="1">subColl, err := app.FindCollectionByNameOrId("subscriptions")
+                if err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "server misconfiguration: subscriptions collection not found",
+                        })
+                }</span>
+                <span class="cov8" title="1">newSub := core.NewRecord(subColl)
+                newSub.Set("tenant_id", req.TenantID)
+                newSub.Set("tier_key", tierKey)
+                newSub.Set("max_stores", currentSub.GetInt("max_stores"))
+                newSub.Set("max_pos_instances", currentSub.GetInt("max_pos_instances"))
+                newSub.Set("allowed_types", currentSub.GetString("allowed_types"))
+                newSub.Set("status", "active")
+                newSub.Set("starts_at", sub.StartsAt)
+                newSub.Set("expires_at", sub.ExpiresAt)
+                newSub.Set("grace_until", sub.GraceUntil)
+                newSub.Set("signed_payload", payloadStr)
+                newSub.Set("signature", signature)
+                if err := app.Save(newSub); err != nil </span><span class="cov0" title="0">{
+                        return e.JSON(http.StatusInternalServerError, map[string]any{
+                                "error": "failed to save subscription",
+                        })
+                }</span>
+
+                <span class="cov8" title="1">return e.JSON(http.StatusOK, map[string]any{
+                        "signed_payload": payloadStr,
+                        "signature":      signature,
+                })</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package main
+
+import (
+        "net/http"
+
+        "github.com/pocketbase/pocketbase/core"
+)
+
+func handleStatus(app core.App) func(e *core.RequestEvent) error <span class="cov8" title="1">{
+        return func(e *core.RequestEvent) error </span><span class="cov8" title="1">{
+                tenantID := e.Request.PathValue("tenant_id")
+
+                // ── Find tenant ───────────────────────────────────────────
+                tenant, err := app.FindRecordById("tenants", tenantID)
+                if err != nil </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusNotFound, map[string]any{
+                                "error": "tenant not found",
+                        })
+                }</span>
+
+                // ── Find latest subscription ──────────────────────────────
+                <span class="cov8" title="1">subs, err := app.FindRecordsByFilter(
+                        "subscriptions",
+                        "tenant_id = {:tenant_id}",
+                        "-starts_at", 1, 0,
+                        map[string]any{"tenant_id": tenantID},
+                )
+                if err != nil || len(subs) == 0 </span><span class="cov8" title="1">{
+                        return e.JSON(http.StatusOK, map[string]any{
+                                "tenant_id": tenantID,
+                                "status":    tenant.GetString("status"),
+                                "tier":      "unknown",
+                                "active":    false,
+                        })
+                }</span>
+
+                <span class="cov8" title="1">sub := subs[0]
+                return e.JSON(http.StatusOK, map[string]any{
+                        "tenant_id":     tenantID,
+                        "status":        tenant.GetString("status"),
+                        "tier":          sub.GetString("tier_key"),
+                        "active":        sub.GetString("status") == "active",
+                        "expires_at":    sub.GetString("expires_at"),
+                        "grace_until":   sub.GetString("grace_until"),
+                        "max_stores":    sub.GetInt("max_stores"),
+                })</span>
+        }
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

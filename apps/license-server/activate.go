@@ -14,9 +14,7 @@ type ActivateRequest struct {
 	Key          string `json:"key"`
 	TenantID     string `json:"tenant_id"`
 	MachineID    string `json:"machine_id"`
-	BusinessName string `json:"business_name"` // optional, from setup wizard
-	ContactName  string `json:"contact_name"`  // optional
-	Email        string `json:"email"`         // optional
+	Email        string `json:"email"`         // required
 }
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
@@ -29,9 +27,9 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Validate required fields ──────────────────────────────
-		if req.Key == "" || req.TenantID == "" || req.MachineID == "" {
+		if req.Key == "" || req.Email == "" || req.MachineID == "" {
 			return e.JSON(http.StatusBadRequest, map[string]any{
-				"error": "key, tenant_id, and machine_id are required",
+				"error": "key, email, and machine_id are required",
 			})
 		}
 
@@ -65,25 +63,37 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Create tenant record ──────────────────────────────────
-		tenantColl, err := app.FindCollectionByNameOrId("tenants")
+		// ── Find or Create tenant record by Email ─────────────────
+		tenant, err := app.FindFirstRecordByData("tenants", "email", req.Email)
 		if err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "server misconfiguration: tenants collection not found",
-			})
+			// Not found, create new tenant
+			tenantColl, collErr := app.FindCollectionByNameOrId("tenants")
+			if collErr != nil {
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "server misconfiguration: tenants collection not found",
+				})
+			}
+			tenant = core.NewRecord(tenantColl)
+			tenant.Set("email", req.Email)
+			tenant.Set("phone", "-")
+			tenant.Set("api_key", generateAPIKey())
+			tenant.Set("status", "active")
+			if saveErr := app.Save(tenant); saveErr != nil {
+				log.Printf("Failed to save tenant: %v", saveErr)
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to create tenant",
+				})
+			}
+		} else {
+			// Tenant exists, check status
+			if tenant.GetString("status") != "active" {
+				return e.JSON(http.StatusForbidden, map[string]any{
+					"error": "tenant account is suspended or revoked",
+				})
+			}
 		}
-		tenant := core.NewRecord(tenantColl)
-		tenant.Set("id", req.TenantID)
-		tenant.Set("business_name", strDefault(req.BusinessName, req.TenantID))
-		tenant.Set("contact_name", req.ContactName)
-		tenant.Set("email", req.Email)
-		tenant.Set("api_key", generateAPIKey())
-		tenant.Set("status", "active")
-		if err := app.Save(tenant); err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "failed to create tenant",
-			})
-		}
+
+		tenantID := tenant.Id
 
 		// ── Register machine ──────────────────────────────────────
 		machineColl, err := app.FindCollectionByNameOrId("tenant_machines")
@@ -94,7 +104,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 		machine := core.NewRecord(machineColl)
 		machine.Set("id", req.MachineID)
-		machine.Set("tenant_id", []string{req.TenantID})
+		machine.Set("tenant_id", []string{tenantID})
 		machine.Set("first_seen_at", time.Now().UTC())
 		machine.Set("last_seen_at", time.Now().UTC())
 		if err := app.Save(machine); err != nil {
@@ -107,7 +117,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		tierKey := keyRecord.GetString("tier_key")
 		expiresAt := calculateExpiry(tierKey)
 		sub := SubscriptionPayload{
-			TenantID:   req.TenantID,
+			TenantID:   tenantID,
 			TierKey:    tierKey,
 			Status:     "active",
 			StartsAt:   time.Now().UTC().Format(time.RFC3339),
@@ -131,11 +141,8 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 		subRecord := core.NewRecord(subColl)
-		subRecord.Set("tenant_id", []string{req.TenantID})
+		subRecord.Set("tenant_id", []string{tenantID})
 		subRecord.Set("tier_key", tierKey)
-		subRecord.Set("max_stores", keyRecord.GetInt("max_stores"))
-		subRecord.Set("max_pos_instances", keyRecord.GetInt("max_pos_instances"))
-		subRecord.Set("allowed_types", keyRecord.GetString("allowed_types"))
 		subRecord.Set("status", "active")
 		subRecord.Set("starts_at", sub.StartsAt)
 		subRecord.Set("expires_at", sub.ExpiresAt)

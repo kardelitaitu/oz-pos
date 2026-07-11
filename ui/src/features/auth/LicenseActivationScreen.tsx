@@ -10,14 +10,14 @@ export interface LicenseActivationScreenProps {
 
 export default function LicenseActivationScreen({ onActivated }: LicenseActivationScreenProps) {
   const [key, setKey] = useState('');
-  const [tenantId, setTenantId] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!key.trim() || !tenantId.trim()) {
-      addToast({ type: 'error', message: 'License key and Tenant ID are required.' });
+    if (!key.trim() || !email.trim()) {
+      addToast({ type: 'error', message: 'License key and Email are required.' });
       return;
     }
 
@@ -29,7 +29,7 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
 
       const success = await activateLicense(
         key.trim(),
-        tenantId.trim(),
+        email.trim(),
         machineId
       );
 
@@ -60,6 +60,19 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
 
         <form onSubmit={handleActivate}>
           <div className="license-form-group">
+            <label htmlFor="email">Email Address</label>
+            <input
+              id="email"
+              type="email"
+              className="license-input"
+              placeholder="store@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="license-form-group">
             <label htmlFor="licenseKey">License Key</label>
             <input
               id="licenseKey"
@@ -72,23 +85,10 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
             />
           </div>
 
-          <div className="license-form-group">
-            <label htmlFor="tenantId">Tenant / Store ID</label>
-            <input
-              id="tenantId"
-              type="text"
-              className="license-input"
-              placeholder="e.g. Store 1 or Main Register"
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-
           <button 
             type="submit" 
             className="license-submit-btn" 
-            disabled={loading || !key || !tenantId}
+            disabled={loading || !key || !email}
           >
             {loading ? (
               <>
