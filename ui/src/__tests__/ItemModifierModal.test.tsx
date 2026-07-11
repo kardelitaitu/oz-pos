@@ -261,4 +261,169 @@ describe('ItemModifierModal', () => {
       );
     });
   });
+
+  // ── Close button ──
+
+  it('calls onClose when the X close button is clicked', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderModal({ onClose });
+    await user.click(screen.getByRole('button', { name: /Close/ }));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  // ── Free / paid labels ──
+
+  it('shows "Free" label for a selected zero-price modifier', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    // Rare has priceMinor = 0. Select it; Medium (also price=0) is deselected.
+    await user.click(screen.getByTestId('modifier-mod-rare'));
+    await waitFor(() => {
+      // "Free" should appear inside the Rare button specifically.
+      expect(screen.getByTestId('modifier-mod-rare').textContent).toContain('Free');
+    });
+  });
+
+  it('shows price suffix for paid modifier options', () => {
+    renderModal();
+    // French Fries has priceMinor = 5000 → +IDR 50,00 (always visible)
+    expect(screen.getByText(/\+IDR 50/)).toBeInTheDocument();
+  });
+
+  // ── Add-ons row ──
+
+  it('shows add-ons row when surcharge is present', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    // Select French Fries to add 5000 surcharge.
+    await user.click(screen.getByTestId('modifier-mod-fries'));
+    await waitFor(() => {
+      expect(screen.getByText('Add-ons')).toBeInTheDocument();
+    });
+  });
+
+  it('hides add-ons row when no surcharge applies', () => {
+    renderModal();
+    // Default selection (Medium, price=0) → no surcharge.
+    expect(screen.queryByText('Add-ons')).not.toBeInTheDocument();
+  });
+
+  // ── Group count display ──
+
+  it('displays "N required" when min equals max', () => {
+    renderModal();
+    // Doneness group: min=1, max=1 → "1 required"
+    expect(screen.getByText('1 required')).toBeInTheDocument();
+  });
+
+  it('displays "N/M" format when min differs from max', () => {
+    renderModal();
+    // Sides group: min=0, max=2, initially 0 selected → "0/2"
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
+  it('updates group count when selections change', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await user.click(screen.getByTestId('modifier-mod-fries'));
+    // Sides group: now 1 selected → "1/2"
+    await waitFor(() => {
+      expect(screen.getByText('1/2')).toBeInTheDocument();
+    });
+  });
+
+  // ── Group count CSS classes ──
+
+  it('applies valid CSS class when group selection is valid', () => {
+    renderModal();
+    // Doneness group has Medium selected → 1/1 → valid.
+    const countEls = document.querySelectorAll('.modifier-group-count--valid');
+    expect(countEls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('applies invalid CSS class when group selection is invalid', () => {
+    const invalidGroups: ModifierGroup[] = [{
+      ...donenessGroup,
+      minSelections: 1,
+      maxSelections: 1,
+      modifiers: donenessGroup.modifiers.map((m) => ({ ...m, isDefault: false })),
+    }];
+    renderModal({ groups: invalidGroups });
+    // No default, min=1 → invalid.
+    const countEls = document.querySelectorAll('.modifier-group-count--invalid');
+    expect(countEls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Modifier option CSS classes ──
+
+  it('applies selected CSS class to chosen modifiers', () => {
+    renderModal();
+    // Medium is the default selection.
+    const mediumBtn = screen.getByTestId('modifier-mod-medium');
+    expect(mediumBtn.className).toContain('modifier-option--selected');
+  });
+
+  it('applies disabled CSS class to options at max selections', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    // Fill sides group (max=2) to block the 3rd option.
+    await user.click(screen.getByTestId('modifier-mod-fries'));
+    await user.click(screen.getByTestId('modifier-mod-salad'));
+    await waitFor(() => {
+      const onionBtn = screen.getByTestId('modifier-mod-onion');
+      expect(onionBtn.className).toContain('modifier-option--disabled');
+    });
+  });
+
+  it('does not apply disabled class before max is reached', () => {
+    renderModal();
+    // At 0 selections, all sides options should be enabled.
+    const onionBtn = screen.getByTestId('modifier-mod-onion');
+    expect(onionBtn.className).not.toContain('modifier-option--disabled');
+  });
+
+  // ── Aria attributes ──
+
+  it('dialog has aria-modal="true"', () => {
+    renderModal();
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it('dialog aria-label includes product name', () => {
+    renderModal();
+    expect(screen.getByRole('dialog')).toHaveAttribute(
+      'aria-label',
+      'Customise Grilled Ribeye',
+    );
+  });
+
+  // ── Overlay click behaviour ──
+
+  it('does not call onClose when clicking inside the dialog', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderModal({ onClose });
+    // Click the dialog itself (not the backdrop).
+    await user.click(screen.getByRole('dialog'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ── Confirm blocked when invalid ──
+
+  it('does not call onConfirm when button is clicked while disabled', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const invalidGroups: ModifierGroup[] = [{
+      ...donenessGroup,
+      minSelections: 1,
+      maxSelections: 1,
+      modifiers: donenessGroup.modifiers.map((m) => ({ ...m, isDefault: false })),
+    }];
+    renderModal({ groups: invalidGroups, onConfirm });
+    const confirmBtn = screen.getByRole('button', { name: /Add to Order/ });
+    expect(confirmBtn).toBeDisabled();
+    await user.click(confirmBtn);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });
