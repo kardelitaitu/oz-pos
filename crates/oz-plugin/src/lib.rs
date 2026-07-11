@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Plugin discovery, loading, and sandboxing.
 //!
 //! Plugins are Lua scripts packaged with a `plugin.toml` manifest.

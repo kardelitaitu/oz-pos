@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! OZ-POS tablet shell (Tauri v2 mobile).
 //!
 //! Registers the same business modules as the desktop client but

@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Tauri v2 application entry point.
 //!
 //! Wires the [`AppState`] (DB connection, driver registry, config) into the

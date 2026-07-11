@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! OZ-POS OpenAPI REST server.
 //!
 //! Starts an axum HTTP server on `OZ_API_PORT` (default 3099) with JWT
