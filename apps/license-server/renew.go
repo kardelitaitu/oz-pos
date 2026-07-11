@@ -48,7 +48,7 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		subs, err := app.FindRecordsByFilter(
 			"subscriptions",
 			"tenant_id = {:tenant_id} && status = 'active'",
-			"-created", 1, 0,
+			"-starts_at", 1, 0,
 			map[string]any{"tenant_id": req.TenantID},
 		)
 		if err != nil || len(subs) == 0 {
@@ -94,6 +94,9 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		newSub := core.NewRecord(subColl)
 		newSub.Set("tenant_id", req.TenantID)
 		newSub.Set("tier_key", tierKey)
+		newSub.Set("max_stores", currentSub.GetInt("max_stores"))
+		newSub.Set("max_pos_instances", currentSub.GetInt("max_pos_instances"))
+		newSub.Set("allowed_types", currentSub.GetString("allowed_types"))
 		newSub.Set("status", "active")
 		newSub.Set("starts_at", sub.StartsAt)
 		newSub.Set("expires_at", sub.ExpiresAt)

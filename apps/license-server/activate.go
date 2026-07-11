@@ -94,7 +94,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 		machine := core.NewRecord(machineColl)
 		machine.Set("id", req.MachineID)
-		machine.Set("tenant_id", req.TenantID)
+		machine.Set("tenant_id", []string{req.TenantID})
 		machine.Set("first_seen_at", time.Now().UTC())
 		machine.Set("last_seen_at", time.Now().UTC())
 		if err := app.Save(machine); err != nil {
@@ -131,8 +131,11 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 		subRecord := core.NewRecord(subColl)
-		subRecord.Set("tenant_id", req.TenantID)
+		subRecord.Set("tenant_id", []string{req.TenantID})
 		subRecord.Set("tier_key", tierKey)
+		subRecord.Set("max_stores", keyRecord.GetInt("max_stores"))
+		subRecord.Set("max_pos_instances", keyRecord.GetInt("max_pos_instances"))
+		subRecord.Set("allowed_types", keyRecord.GetString("allowed_types"))
 		subRecord.Set("status", "active")
 		subRecord.Set("starts_at", sub.StartsAt)
 		subRecord.Set("expires_at", sub.ExpiresAt)
