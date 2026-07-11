@@ -114,13 +114,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				"error": "server misconfiguration: tenant_machines collection not found",
 			})
 		}
-		machine, err := app.FindRecordById("tenant_machines", req.MachineID)
-		if err != nil {
-			machine = core.NewRecord(machineColl)
-			machine.Set("id", req.MachineID)
-			machine.Set("first_seen_at", time.Now().UTC())
-		}
+		machine := core.NewRecord(machineColl)
+		machine.Set("id", req.MachineID)
 		machine.Set("tenant_id", tenantID)
+		machine.Set("first_seen_at", time.Now().UTC())
 		machine.Set("last_seen_at", time.Now().UTC())
 		if err := app.Save(machine); err != nil {
 			return e.JSON(http.StatusInternalServerError, map[string]any{
@@ -154,12 +151,27 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				IssuedAt:   time.Now().UTC().Format(time.RFC3339),
 			}
 
-			payloadStr, signature, err = signSubscription(sub)
-			if err != nil {
-				return e.JSON(http.StatusInternalServerError, map[string]any{
-					"error": "signing failed",
-				})
-			}
+		// ── Save subscription record ──────────────────────────────
+		subColl, err := app.FindCollectionByNameOrId("subscriptions")
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]any{
+				"error": "server misconfiguration: subscriptions collection not found",
+			})
+		}
+		subRecord := core.NewRecord(subColl)
+		subRecord.Set("tenant_id", tenantID)
+		subRecord.Set("tier_key", tierKey)
+		subRecord.Set("status", "active")
+		subRecord.Set("starts_at", sub.StartsAt)
+		subRecord.Set("expires_at", sub.ExpiresAt)
+		subRecord.Set("grace_until", sub.GraceUntil)
+		subRecord.Set("signed_payload", payloadStr)
+		subRecord.Set("signature", signature)
+		if err := app.Save(subRecord); err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]any{
+				"error": "failed to save subscription",
+			})
+		}
 
 			// ── Save subscription record ──────────────────────────────
 			subColl, err := app.FindCollectionByNameOrId("subscriptions")
@@ -196,6 +208,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		return e.JSON(http.StatusOK, map[string]any{
 			"signed_payload": payloadStr,
 			"signature":      signature,
+			"tenant_id":      tenantID,
 			"api_key":        tenant.GetString("api_key"),
 		})
 	}
