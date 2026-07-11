@@ -4,8 +4,8 @@ import { useFullscreen } from '@/hooks/useFullscreen';
 
 // ── Mocks ────────────────────────────────────────────────────────
 
-const mockIsFullscreen = vi.fn<() => Promise<boolean>>();
-const mockSetFullscreen = vi.fn<(fs: boolean) => Promise<void>>();
+const mockIsFullscreen = vi.fn<[], Promise<boolean>>();
+const mockSetFullscreen = vi.fn<[boolean], Promise<void>>();
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
@@ -29,8 +29,10 @@ function setTauriMode() {
 // ── Tests ────────────────────────────────────────────────────────
 
 describe('useFullscreen', () => {
-  let exitSpy: ReturnType<typeof vi.spyOn>;
-  let requestSpy: ReturnType<typeof vi.spyOn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let exitSpy: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let requestSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();

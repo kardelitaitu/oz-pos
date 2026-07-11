@@ -5,8 +5,8 @@ import type { TerminalDto, TerminalProfileDto } from '@/api/terminals';
 
 // ── Mocks ────────────────────────────────────────────────────────
 
-const mockListTerminals = vi.fn<() => Promise<TerminalDto[]>>();
-const mockGetTerminalProfile = vi.fn<(id: string) => Promise<TerminalProfileDto | null>>();
+const mockListTerminals = vi.fn<[], Promise<TerminalDto[]>>();
+const mockGetTerminalProfile = vi.fn<[string], Promise<TerminalProfileDto | null>>();
 
 vi.mock('@/api/terminals', () => ({
   listTerminals: () => mockListTerminals(),

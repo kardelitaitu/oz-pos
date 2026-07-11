@@ -139,7 +139,7 @@ describe('ToastProvider', () => {
 
     expect(capturedApi).not.toBeNull();
     act(() => {
-      capturedApi!.removeToast(capturedApi!.toasts[0].id);
+      capturedApi!.removeToast(capturedApi!.toasts[0]!.id);
     });
 
     await waitFor(() => {

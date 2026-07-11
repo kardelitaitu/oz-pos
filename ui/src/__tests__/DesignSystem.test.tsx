@@ -6,7 +6,7 @@ import DesignSystem from '@/features/design/DesignSystem';
 // ── Mocks ────────────────────────────────────────────────────────
 
 vi.mock('@/components/Localized', () => ({
-  Localized: ({ id, children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+  Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('@/frontend/shell/ThemeToggle', () => ({

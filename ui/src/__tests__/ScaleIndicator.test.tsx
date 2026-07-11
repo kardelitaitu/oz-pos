@@ -4,7 +4,8 @@
 // readings, weigh-target add/clear buttons, and weight formatting.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import type { Sku } from '@/types/domain';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ScaleIndicator from '@/features/retail/ScaleIndicator';
 import type { WeightReading } from '@/api/hardware';
@@ -20,7 +21,7 @@ vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
     l10n: {
       getString: (id: string, vars?: Record<string, string>) => {
-        if (vars?.name) return `Weigh & add ${vars.name}`;
+        if (vars?.['name']) return `Weigh & add ${vars['name']}`;
         return id;
       },
     },
@@ -30,7 +31,7 @@ vi.mock('@fluent/react', () => ({
 
 // ── Test data ──────────────────────────────────────────────────────
 
-const testSku = 'TEST-001' as string;
+const testSku = 'TEST-001' as Sku;
 
 const stableReading: WeightReading = { weightGrams: 500, stable: true };
 const unstableReading: WeightReading = { weightGrams: 320, stable: false };

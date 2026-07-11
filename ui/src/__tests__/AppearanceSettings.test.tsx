@@ -20,6 +20,10 @@ vi.mock('@/api/branding', () => ({
   pickLogoFile: () => mockPickLogoFile(),
 }));
 
+vi.mock('@/contexts/ZoomContext', () => ({
+  useAppZoom: () => ({ zoomLevel: 'auto', setZoomLevel: vi.fn() }),
+}));
+
 vi.mock('@/contexts/BrandContext', () => ({
   useBrand: () => ({
     settings: {
@@ -35,7 +39,7 @@ vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
     l10n: { getString: (id: string) => id },
   }),
-  Localized: ({ id, children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+  Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
 }));
 
 const mockDeriveAccentPalette = vi.fn();

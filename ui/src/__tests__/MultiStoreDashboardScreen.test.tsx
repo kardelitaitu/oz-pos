@@ -29,7 +29,7 @@ vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
     l10n: { getString: (id: string) => id },
   }),
-  Localized: ({ id, children }: { id: string; children: React.ReactNode }) => (
+  Localized: ({ children }: { id: string; children: React.ReactNode }) => (
     <>{children}</>
   ),
 }));
@@ -50,6 +50,8 @@ const sampleStores: StoreProfile[] = [
     tax_id: 'TAX-001',
     currency: 'USD',
     timezone: 'America/New_York',
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-01T00:00:00Z',
   },
   {
     id: 'store-2',
@@ -59,6 +61,8 @@ const sampleStores: StoreProfile[] = [
     tax_id: '',
     currency: 'USD',
     timezone: 'America/Chicago',
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-01T00:00:00Z',
   },
 ];
 
@@ -66,18 +70,22 @@ const sampleTerminals: TerminalDto[] = [
   {
     id: 'term-1',
     name: 'Register 1',
+    deviceId: 'dev-term-1',
     isActive: true,
     lastSeenAt: new Date().toISOString(),
-    storeId: 'store-1',
-    profileType: 'pos',
+    metadata: null,
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z',
   },
   {
     id: 'term-2',
     name: 'Register 2',
+    deviceId: 'dev-term-2',
     isActive: false,
     lastSeenAt: null,
-    storeId: 'store-1',
-    profileType: 'pos',
+    metadata: null,
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z',
   },
 ];
 
