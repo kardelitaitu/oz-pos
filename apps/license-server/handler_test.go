@@ -28,7 +28,6 @@ func newTestAppFactory(t *testing.T) *tests.TestApp {
 func createTestCollections(t *testing.T, app *tests.TestApp) {
 	t.Helper()
 
-	// ── tenants collection ──────────────────────────────────────
 	tenants := core.NewBaseCollection("tenants")
 	tenants.Fields.Add(
 		&core.TextField{Name: "business_name", Required: true},
@@ -46,7 +45,6 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.TextField{Name: "api_key", Required: true},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 	)
-	// Allow public create/read for testing.
 	tenants.CreateRule = types.Pointer("")
 	tenants.ListRule = types.Pointer("")
 	tenants.ViewRule = types.Pointer("")
@@ -54,7 +52,6 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		t.Fatalf("failed to create tenants collection: %v", err)
 	}
 
-	// ── license_keys collection ─────────────────────────────────
 	licenseKeys := core.NewBaseCollection("license_keys")
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
@@ -77,7 +74,6 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		t.Fatalf("failed to create license_keys collection: %v", err)
 	}
 
-	// ── subscriptions collection ────────────────────────────────
 	subscriptions := core.NewBaseCollection("subscriptions")
 	subscriptions.Fields.Add(
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id},
@@ -100,7 +96,6 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		t.Fatalf("failed to create subscriptions collection: %v", err)
 	}
 
-	// ── tenant_machines collection ──────────────────────────────
 	tenantMachines := core.NewBaseCollection("tenant_machines")
 	tenantMachines.Fields.Add(
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id},
@@ -117,7 +112,6 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 
 func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 	t.Helper()
-
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
@@ -126,7 +120,6 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 	})
 }
 
-// runScenario is a helper to run an ApiScenario with a TestAppFactory.
 func runScenario(t *testing.T, scenario *tests.ApiScenario) {
 	t.Helper()
 	if scenario.TestAppFactory == nil {
@@ -142,7 +135,7 @@ func runScenario(t *testing.T, scenario *tests.ApiScenario) {
 func TestStatusHandler_TenantNotFound(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
 		Method:         "GET",
-		URL:            "/api/v1/license/status/nonexistent-000",
+		URL:            "/api/v1/license/status/nonexistent_000",
 		ExpectedStatus: 404,
 		ExpectedContent: []string{`"error"`, "tenant not found"},
 	})
@@ -165,9 +158,9 @@ func TestActivateHandler_InvalidKey(t *testing.T) {
 		Method: "POST",
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
-			"key": "OZ-INVALID-KEY",
-			"tenant_id": "ts-test--000001",
-			"machine_id": "mach-0000000001"
+			"key": "OZ_INVALID_KEY_",
+			"tenant_id": "tstest___0000001",
+			"machine_id": "mach_00000000001"
 		}`),
 		ExpectedStatus: 401,
 		ExpectedContent: []string{`"error"`},
@@ -201,8 +194,8 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 		Method: "POST",
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
-			"tenant_id": "ts-x----0000001",
-			"api_key": "invalid-key-001"
+			"tenant_id": "tsx_____0000001",
+			"api_key": "invalid_key_001"
 		}`),
 		ExpectedStatus: 401,
 		ExpectedContent: []string{`"error"`},
