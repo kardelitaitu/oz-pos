@@ -13,27 +13,23 @@ vi.mock('@/api/inventoryCounts', () => ({
   removeCountLine: vi.fn(),
   completeStockCount: vi.fn(),
   updateStockCountStatus: vi.fn(),
-  listProducts: vi.fn(),
   getCountLines: vi.fn(),
 }));
 
-// Products module imports only type ProductDto — no runtime exports needed.
-vi.mock('@/api/products', () => ({}));
+// listProducts lives in @/api/products; mock it there so the
+// StockCountDetail component can call it without hitting the Tauri backend.
+vi.mock('@/api/products', () => ({ listProducts: vi.fn() }));
 
 import StockCountDetail from '@/features/inventory/StockCountDetail';
+import { listProducts } from '@/api/products';
 import {
   getStockCount,
-  addCountLine,
-  updateCountLine,
   completeStockCount,
   updateStockCountStatus,
-  listProducts,
   getCountLines,
 } from '@/api/inventoryCounts';
 
 const mockGetStockCount = getStockCount as ReturnType<typeof vi.fn>;
-const mockAddCountLine = addCountLine as ReturnType<typeof vi.fn>;
-const mockUpdateLine = updateCountLine as ReturnType<typeof vi.fn>;
 const mockComplete = completeStockCount as ReturnType<typeof vi.fn>;
 const mockUpdateStatus = updateStockCountStatus as ReturnType<typeof vi.fn>;
 const mockListProducts = listProducts as ReturnType<typeof vi.fn>;

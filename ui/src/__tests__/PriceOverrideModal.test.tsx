@@ -53,7 +53,6 @@ describe('PriceOverrideModal', () => {
 
   it('disables Next button when price is zero or negative', () => {
     renderModal();
-    const input = screen.getByLabelText('Enter new price in minor units');
     const nextBtn = screen.getByText('Next');
 
     // Initially enabled (50000 > 0).

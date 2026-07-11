@@ -21,20 +21,19 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
-import { listShifts, getActiveShift, openShift, getShiftReport } from '@/api/shifts';
+import { listShifts, getActiveShift, getShiftReport } from '@/api/shifts';
 
 const mockListShifts = listShifts as ReturnType<typeof vi.fn>;
 const mockGetActiveShift = getActiveShift as ReturnType<typeof vi.fn>;
-const mockOpenShift = openShift as ReturnType<typeof vi.fn>;
 const mockGetShiftReport = getShiftReport as ReturnType<typeof vi.fn>;
 
 const wrap = (children: React.ReactNode) => withFluent(children, shiftsFtl, sharedFtl);
 
 const activeShift = {
   id: 'shift-1', userId: 'user-1', terminalId: null,
-  openedAt: '2026-07-07T08:00:00.000Z', closedAt: null,
-  openingBalanceMinor: 50000, closingBalanceMinor: null,
-  expectedCashMinor: 55000, cashDifferenceMinor: null,
+  openedAt: '2026-07-07T08:00:00.000Z', closedAt: null as string | null,
+  openingBalanceMinor: 50000, closingBalanceMinor: null as number | null,
+  expectedCashMinor: 55000, cashDifferenceMinor: null as number | null,
   totalSalesMinor: 150000, totalCashMinor: 80000, totalCardMinor: 70000,
   totalOtherMinor: 0, totalVoidsMinor: 0, totalRefundsMinor: 0,
   totalPayoutsMinor: 0, notes: '', status: 'open',
