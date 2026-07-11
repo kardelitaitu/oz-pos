@@ -17,7 +17,7 @@ pub type ModuleResult<T = ()> = Result<T, anyhow::Error>;
 /// A deployable feature module.
 ///
 /// Each module in OZ-POS implements this trait to participate in the
-/// module lifecycle managed by the [`Kernel`].
+/// module lifecycle managed by the Kernel (see `platform/kernel`).
 pub trait Module: Debug + Send + Sync {
     /// Stable identifier for this module (e.g. `"sales"`, `"inventory"`).
     fn id(&self) -> ModuleId;

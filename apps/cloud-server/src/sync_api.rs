@@ -158,8 +158,11 @@ async fn status_handler(
 /// Response from the status endpoint.
 #[derive(Debug, serde::Serialize)]
 pub struct SyncStatusResponse {
+    /// Server health status (e.g. `"ok"`).
     pub status: String,
+    /// Server package version.
     pub version: String,
+    /// Number of items in the queue with status `pending`.
     pub pending_count: i64,
 }
 
