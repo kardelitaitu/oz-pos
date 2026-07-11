@@ -411,6 +411,8 @@ pub fn run() {
             commands::workspaces::resolve_boot_store,
             commands::workspaces::list_workspace_screens_scoped,
             commands::workspaces::list_workspace_screens,
+            commands::license::activate_license,
+            commands::license::get_license_status,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);

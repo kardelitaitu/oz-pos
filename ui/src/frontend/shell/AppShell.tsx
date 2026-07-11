@@ -19,6 +19,8 @@ import type { WizardState } from '@/features/setup/SetupWizard';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import PosScreen from '@/features/sales/PosScreen';
 import KdsScreen from '@/features/kds/KdsScreen';
+import { getLicenseStatus } from '@/api/license';
+import LicenseActivationScreen from '@/features/auth/LicenseActivationScreen';
 
 // ── Workspace navigation keyboard shortcuts ───────────────────────
 // Escape: return to workspace picker (only when no modal is open).
@@ -49,6 +51,7 @@ function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
 export default function AppShell() {
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
+  const [hasActiveLicense, setHasActiveLicense] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session, logout } = useAuth();
@@ -73,6 +76,11 @@ export default function AppShell() {
     let cancelled = false;
     (async () => {
       try {
+        const licenseStatus = await getLicenseStatus();
+        if (!cancelled) {
+          setHasActiveLicense(licenseStatus.is_active);
+        }
+
         const status = await getSetupStatus();
         if (!cancelled) {
           setHasCompletedSetup(status.completed);
@@ -80,6 +88,7 @@ export default function AppShell() {
       } catch {
         if (!cancelled) {
           setHasCompletedSetup(false);
+          setHasActiveLicense(false);
         }
       } finally {
         if (!cancelled) {
@@ -172,6 +181,12 @@ export default function AppShell() {
       >
         <Localized id="shared-loading">Loading&hellip;</Localized>
       </div>
+    );
+  }
+
+  if (!hasActiveLicense) {
+    return (
+      <LicenseActivationScreen onActivated={() => setHasActiveLicense(true)} />
     );
   }
 

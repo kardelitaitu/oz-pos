@@ -22,6 +22,7 @@ pub mod health;
 pub mod history;
 pub mod inventory_counts;
 pub mod kds;
+pub mod license;
 pub mod loyalty;
 pub mod offline;
 pub mod plugins;
