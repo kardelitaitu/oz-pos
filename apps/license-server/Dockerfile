@@ -10,6 +10,7 @@
 # minimal runtime image. CGO is required by PocketBase's SQLite driver.
 
 # ── Stage 1: Build ────────────────────────────────────────────────────
+# Uses golang:1.25-alpine to satisfy fatih/color@v1.19.0 (requires go >= 1.25)
 FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev
