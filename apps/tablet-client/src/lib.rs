@@ -23,8 +23,8 @@ pub fn run() {
     // Initialise tokio-console before any other tracing setup.
     platform_startup::console::init_console_subscriber();
 
-    oz_logging::init();
-
+    oz_logging::init(); // Gated out of test builds to keep the test binary free of WebView2Loader.dll
+    // linkage (see commit 562f1f0 for full diagnosis).
     #[cfg(not(test))]
     {
         let result: Result<(), AppError> = tauri::Builder::default()
