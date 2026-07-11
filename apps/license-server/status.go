@@ -36,13 +36,13 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 
 		sub := subs[0]
 		return e.JSON(http.StatusOK, map[string]any{
-			"tenant_id":     tenantID,
-			"status":        tenant.GetString("status"),
-			"tier":          sub.GetString("tier_key"),
-			"active":        sub.GetString("status") == "active",
-			"expires_at":    sub.GetString("expires_at"),
-			"grace_until":   sub.GetString("grace_until"),
-			"max_stores":    sub.GetInt("max_stores"),
+			"tenant_id":   tenantID,
+			"status":      tenant.GetString("status"),
+			"tier":        sub.GetString("tier_key"),
+			"active":      sub.GetString("status") == "active",
+			"expires_at":  sub.GetString("expires_at"),
+			"grace_until": sub.GetString("grace_until"),
+			"max_stores":  sub.GetInt("max_stores"),
 		})
 	}
 }

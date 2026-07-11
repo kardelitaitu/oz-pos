@@ -506,7 +506,7 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 func TestRenewHandler_InvalidJSON(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
 		Method:          "POST",
-		URL:            "/api/v1/license/renew",
+		URL:             "/api/v1/license/renew",
 		Body:            strings.NewReader(`not json`),
 		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`},

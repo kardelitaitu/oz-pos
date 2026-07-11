@@ -115,10 +115,10 @@ func TestSignAndVerify_RoundTrip(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-roundtrip", TierKey: "pro", Status: "active",
-		StartsAt: time.Now().UTC().Format(time.RFC3339),
-		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
+		StartsAt:   time.Now().UTC().Format(time.RFC3339),
+		ExpiresAt:  time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
-		IssuedAt: time.Now().UTC().Format(time.RFC3339),
+		IssuedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 	payload, sig, err := signSubscription(sub)
 	if err != nil {
@@ -132,10 +132,10 @@ func TestSignAndVerify_TamperedPayload(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-tamper", TierKey: "pro", Status: "active",
-		StartsAt: time.Now().UTC().Format(time.RFC3339),
-		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
+		StartsAt:   time.Now().UTC().Format(time.RFC3339),
+		ExpiresAt:  time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
-		IssuedAt: time.Now().UTC().Format(time.RFC3339),
+		IssuedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 	payload, sig, err := signSubscription(sub)
 	if err != nil {

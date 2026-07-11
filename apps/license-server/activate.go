@@ -11,10 +11,10 @@ import (
 
 // ActivateRequest is the JSON body for POST /api/v1/license/activate.
 type ActivateRequest struct {
-	Key          string `json:"key"`
-	TenantID     string `json:"tenant_id"`
-	MachineID    string `json:"machine_id"`
-	Email        string `json:"email"`         // required
+	Key       string `json:"key"`
+	TenantID  string `json:"tenant_id"`
+	MachineID string `json:"machine_id"`
+	Email     string `json:"email"` // required
 }
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
@@ -49,20 +49,6 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Validate license key ──────────────────────────────────
-		keyRecord, err := app.FindFirstRecordByData("license_keys", "key", req.Key)
-		if err != nil || keyRecord.GetString("status") != "unused" {
-			keyFailTracker.recordFailure(req.Key)
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid or already used license key",
-			})
-		}
-		if keyRecord.GetDateTime("expires_at").Time().Before(time.Now()) {
-			return e.JSON(http.StatusGone, map[string]any{
-				"error": "license key has expired",
-			})
-		}
-
 		// ── Find or Create tenant record by Email ─────────────────
 		tenant, err := app.FindFirstRecordByData("tenants", "email", req.Email)
 		if err != nil {
@@ -94,6 +80,32 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		tenantID := tenant.Id
+
+		// ── Validate license key ──────────────────────────────────
+		keyRecord, err := app.FindFirstRecordByData("license_keys", "key", req.Key)
+		if err != nil {
+			keyFailTracker.recordFailure(req.Key)
+			return e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "invalid license key",
+			})
+		}
+
+		keyStatus := keyRecord.GetString("status")
+		if keyStatus != "unused" {
+			// Allow if already activated by this same tenant
+			if keyStatus != "activated" || keyRecord.GetString("activated_by") != tenantID {
+				keyFailTracker.recordFailure(req.Key)
+				return e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "invalid or already used license key",
+				})
+			}
+		}
+
+		if keyRecord.GetDateTime("expires_at").Time().Before(time.Now()) {
+			return e.JSON(http.StatusGone, map[string]any{
+				"error": "license key has expired",
+			})
+		}
 
 		// ── Register machine ──────────────────────────────────────
 		machineColl, err := app.FindCollectionByNameOrId("tenant_machines")
@@ -158,7 +170,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		// ── Mark key as activated ─────────────────────────────────
 		keyRecord.Set("status", "activated")
 		keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
-		keyRecord.Set("activated_by", req.TenantID)
+		keyRecord.Set("activated_by", tenantID)
 		if err := app.Save(keyRecord); err != nil {
 			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
 		}

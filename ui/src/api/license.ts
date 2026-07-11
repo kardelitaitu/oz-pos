@@ -1,8 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export type LicenseVerificationStatus = 'valid' | 'expired' | 'gracePeriod' | 'invalidSignature' | 'missing';
+
 export interface LicenseStatusDto {
   is_active: boolean;
+  status: LicenseVerificationStatus;
   payload: string | null;
+  message: string | null;
 }
 
 export async function getLicenseStatus(): Promise<LicenseStatusDto> {

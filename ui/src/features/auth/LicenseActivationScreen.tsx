@@ -5,19 +5,22 @@ import ConnectionStatus from '@/components/ConnectionStatus';
 import './LicenseActivationScreen.css';
 
 export interface LicenseActivationScreenProps {
+  initialError?: string | null;
   onActivated: () => void;
 }
 
-export default function LicenseActivationScreen({ onActivated }: LicenseActivationScreenProps) {
+export default function LicenseActivationScreen({ initialError, onActivated }: LicenseActivationScreenProps) {
   const [key, setKey] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
   const { addToast } = useToast();
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
     if (!key.trim() || !email.trim()) {
-      addToast({ type: 'error', message: 'License key and Email are required.' });
+      setErrorMsg('License key and Email are required.');
       return;
     }
 
@@ -37,14 +40,19 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
         addToast({ type: 'success', message: 'License activated successfully!' });
         onActivated();
       } else {
-        addToast({ type: 'error', message: 'Failed to activate license.' });
+        setErrorMsg('Failed to activate license.');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An error occurred during activation.';
-      addToast({ 
-        type: 'error', 
-        message,
-      });
+      let message = 'An error occurred during activation.';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'string') {
+        message = err;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        message = String((err as Record<string, unknown>).message);
+      }
+      
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }
@@ -57,6 +65,12 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
           <h1>Activate OZ-POS</h1>
           <p>Enter your license key to unlock your terminal</p>
         </div>
+
+        {errorMsg && (
+          <div className="license-error-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
+            {errorMsg}
+          </div>
+        )}
 
         <form onSubmit={handleActivate}>
           <div className="license-form-group">
