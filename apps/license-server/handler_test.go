@@ -343,3 +343,20 @@ func TestRenewHandler_WrongTenantID(t *testing.T) {
 		},
 	})
 }
+
+func TestRenewHandler_SuspendedTenant(t *testing.T) {
+	// Seed a tenant with status "suspended" — the handler should reject renewal.
+	runScenario(t, &tests.ApiScenario{
+		Method: "POST",
+		URL:    "/api/v1/license/renew",
+		Body: strings.NewReader(`{
+			"tenant_id": "susptest0000001",
+			"api_key": "suspapikey00001"
+		}`),
+		ExpectedStatus:  401,
+		ExpectedContent: []string{`not active`},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedTenant(t.(*testing.T), app, "susptest0000001", "suspapikey00001", "suspended")
+		},
+	})
+}
