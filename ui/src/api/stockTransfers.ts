@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
+/** A stock transfer between locations or terminals. */
 export interface StockTransfer {
   id: string;
   transfer_number: string;
@@ -17,6 +18,7 @@ export interface StockTransfer {
   updated_at: string;
 }
 
+/** A line item within a stock transfer. */
 export interface StockTransferLine {
   id: string;
   transfer_id: string;
@@ -26,16 +28,19 @@ export interface StockTransferLine {
   received_qty: number;
 }
 
+/** A stock transfer with its line items. */
 export interface TransferWithLines {
   transfer: StockTransfer;
   lines: StockTransferLine[];
 }
 
+/** Input for recording the received quantity of a transfer line. */
 export interface ReceivedLineInput {
   line_id: string;
   received_qty: number;
 }
 
+/** Create a new stock transfer between locations or terminals. */
 export const createStockTransfer = (
   sourceLocation: string | null,
   destinationLocation: string | null,
@@ -55,15 +60,19 @@ export const createStockTransfer = (
     lines,
   });
 
+/** Get a single stock transfer by its identifier. */
 export const getStockTransfer = (id: string): Promise<TransferWithLines | null> =>
   invoke<TransferWithLines | null>('get_stock_transfer', { id });
 
+/** List all stock transfers. */
 export const listStockTransfers = (): Promise<StockTransfer[]> =>
   invoke<StockTransfer[]>('list_stock_transfers');
 
+/** Get all line items for a stock transfer. */
 export const getStockTransferLines = (transferId: string): Promise<StockTransferLine[]> =>
   invoke<StockTransferLine[]>('get_stock_transfer_lines', { transferId });
 
+/** Add a line item to a stock transfer. */
 export const addStockTransferLine = (
   transferId: string,
   sku: string,
@@ -77,12 +86,15 @@ export const addStockTransferLine = (
     qty,
   });
 
+/** Remove a line item from a stock transfer. */
 export const removeStockTransferLine = (lineId: string): Promise<void> =>
   invoke<void>('remove_stock_transfer_line', { lineId });
 
+/** Mark a stock transfer as sent (dispatched from source). */
 export const sendStockTransfer = (id: string): Promise<StockTransfer> =>
   invoke<StockTransfer>('send_stock_transfer', { id });
 
+/** Mark a stock transfer as received, updating quantities for each line. */
 export const receiveStockTransfer = (
   id: string,
   receivedBy: string,
@@ -90,5 +102,6 @@ export const receiveStockTransfer = (
 ): Promise<StockTransfer> =>
   invoke<StockTransfer>('receive_stock_transfer', { id, receivedBy, receivedLines });
 
+/** Cancel a stock transfer. */
 export const cancelStockTransfer = (id: string): Promise<StockTransfer> =>
   invoke<StockTransfer>('cancel_stock_transfer', { id });

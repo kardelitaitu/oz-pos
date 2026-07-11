@@ -1,7 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 
+/** Status of a Kitchen Display System order. */
 export type KdsStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled';
 
+/** A Kitchen Display System order. */
 export interface KdsOrder {
   id: string;
   sale_id: string;
@@ -19,6 +21,7 @@ export interface KdsOrder {
   notes: string;
 }
 
+/** List KDS orders, optionally filtered by status. */
 export const listKdsOrders = (userId: string, status?: KdsStatus): Promise<KdsOrder[]> =>
   invoke<KdsOrder[]>('list_kds_orders', { userId, status: status ?? null });
 
@@ -26,6 +29,7 @@ export const listKdsOrders = (userId: string, status?: KdsStatus): Promise<KdsOr
 export const listKdsOrdersScoped = (sessionToken: string, status?: KdsStatus): Promise<KdsOrder[]> =>
   invoke<KdsOrder[]>('list_kds_orders_scoped', { sessionToken, status: status ?? null });
 
+/** Get the KDS queue for the current user. */
 export const getKdsQueue = (userId: string): Promise<KdsOrder[]> =>
   invoke<KdsOrder[]>('get_kds_queue', { userId });
 
@@ -33,6 +37,7 @@ export const getKdsQueue = (userId: string): Promise<KdsOrder[]> =>
 export const getKdsQueueScoped = (sessionToken: string): Promise<KdsOrder[]> =>
   invoke<KdsOrder[]>('get_kds_queue_scoped', { sessionToken });
 
+/** Update a KDS order's status (e.g. preparing, ready, served). */
 export const updateKdsStatus = (userId: string, id: string, status: KdsStatus): Promise<KdsOrder> =>
   invoke<KdsOrder>('update_kds_status', { userId, id, status });
 
@@ -40,6 +45,7 @@ export const updateKdsStatus = (userId: string, id: string, status: KdsStatus): 
 export const updateKdsStatusScoped = (sessionToken: string, id: string, status: KdsStatus): Promise<KdsOrder> =>
   invoke<KdsOrder>('update_kds_status_scoped', { sessionToken, id, status });
 
+/** Create a KDS order from a completed sale. */
 export const createKdsOrderFromSale = (userId: string, saleId: string): Promise<KdsOrder> =>
   invoke<KdsOrder>('create_kds_order_from_sale', { userId, saleId });
 
@@ -47,6 +53,7 @@ export const createKdsOrderFromSale = (userId: string, saleId: string): Promise<
 export const createKdsOrderFromSaleScoped = (sessionToken: string, saleId: string): Promise<KdsOrder> =>
   invoke<KdsOrder>('create_kds_order_from_sale_scoped', { sessionToken, saleId });
 
+/** Get a single KDS order by its identifier. */
 export const getKdsOrder = (userId: string, id: string): Promise<KdsOrder | null> =>
   invoke<KdsOrder | null>('get_kds_order', { userId, id });
 

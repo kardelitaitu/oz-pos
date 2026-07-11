@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
+/** A store profile with location and configuration info. */
 export interface StoreProfile {
   id: string;
   name: string;
@@ -12,6 +13,7 @@ export interface StoreProfile {
   updated_at: string;
 }
 
+/** Arguments for creating a new store profile. */
 export interface CreateStoreArgs {
   id: string;
   name: string;
@@ -21,6 +23,7 @@ export interface CreateStoreArgs {
   timezone?: string;
 }
 
+/** Arguments for updating an existing store profile. */
 export interface UpdateStoreArgs {
   id: string;
   name: string;
@@ -30,23 +33,30 @@ export interface UpdateStoreArgs {
   timezone: string;
 }
 
+/** List all store profiles. */
 export const listStores = (): Promise<StoreProfile[]> =>
   invoke<StoreProfile[]>('list_store_profiles');
 
+/** Get a single store profile by its identifier. */
 export const getStore = (id: string): Promise<StoreProfile | null> =>
   invoke<StoreProfile | null>('get_store_profile', { id });
 
+/** Get the primary store profile. */
 export const getPrimaryStore = (): Promise<StoreProfile | null> =>
   invoke<StoreProfile | null>('get_primary_store');
 
+/** Create a new store profile. */
 export const createStore = (args: CreateStoreArgs): Promise<StoreProfile> =>
   invoke<StoreProfile>('create_store_profile', { args });
 
+/** Update an existing store profile. */
 export const updateStore = (args: UpdateStoreArgs): Promise<StoreProfile> =>
   invoke<StoreProfile>('update_store_profile', { args });
 
+/** Set a store as the primary store. */
 export const setPrimaryStore = (id: string): Promise<StoreProfile> =>
   invoke<StoreProfile>('set_primary_store', { id });
 
+/** Delete a store profile by its identifier. */
 export const deleteStore = (id: string): Promise<void> =>
   invoke<void>('delete_store_profile', { id });

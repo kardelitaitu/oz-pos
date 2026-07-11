@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
+/** A table in the floor plan with position, capacity, and status. */
 export interface Table {
   id: string;
   name: string;
@@ -16,6 +17,7 @@ export interface Table {
   sort_order: number;
 }
 
+/** List all tables, optionally filtered by section. */
 export const listTables = (section?: string) =>
   invoke<Table[]>('list_tables', { section: section ?? null });
 
@@ -23,6 +25,7 @@ export const listTables = (section?: string) =>
 export const listTablesScoped = (sessionToken: string, section?: string) =>
   invoke<Table[]>('list_tables_scoped', { sessionToken, section: section ?? null });
 
+/** Get a single table by its identifier. */
 export const getTable = (id: string) =>
   invoke<Table | null>('get_table', { id });
 
@@ -30,6 +33,7 @@ export const getTable = (id: string) =>
 export const getTableScoped = (sessionToken: string, id: string) =>
   invoke<Table | null>('get_table_scoped', { sessionToken, id });
 
+/** Create a new table in the floor plan. */
 export const createTable = (userId: string, args: Table) =>
   invoke<Table>('create_table', { userId, args });
 
@@ -37,6 +41,7 @@ export const createTable = (userId: string, args: Table) =>
 export const createTableScoped = (sessionToken: string, table: Table) =>
   invoke<Table>('create_table_scoped', { sessionToken, table });
 
+/** Update an existing table. */
 export const updateTable = (userId: string, table: Table) =>
   invoke<Table>('update_table', { userId, table });
 
@@ -44,6 +49,7 @@ export const updateTable = (userId: string, table: Table) =>
 export const updateTableScoped = (sessionToken: string, table: Table) =>
   invoke<Table>('update_table_scoped', { sessionToken, table });
 
+/** Delete a table from the floor plan. */
 export const deleteTable = (userId: string, id: string) =>
   invoke<void>('delete_table', { userId, id });
 
@@ -51,6 +57,7 @@ export const deleteTable = (userId: string, id: string) =>
 export const deleteTableScoped = (sessionToken: string, id: string) =>
   invoke<void>('delete_table_scoped', { sessionToken, id });
 
+/** Update a table's status (e.g. free, occupied, reserved). */
 export const updateTableStatus = (userId: string, id: string, status: string) =>
   invoke<Table>('update_table_status', { userId, id, status });
 
@@ -58,6 +65,7 @@ export const updateTableStatus = (userId: string, id: string, status: string) =>
 export const updateTableStatusScoped = (sessionToken: string, id: string, status: string) =>
   invoke<Table>('update_table_status_scoped', { sessionToken, id, status });
 
+/** Assign an active sale (order) to a table. */
 export const assignTableOrder = (userId: string, tableId: string, saleId: string) =>
   invoke<Table>('assign_table_order', { userId, tableId, saleId });
 
@@ -65,6 +73,7 @@ export const assignTableOrder = (userId: string, tableId: string, saleId: string
 export const assignTableOrderScoped = (sessionToken: string, tableId: string, saleId: string) =>
   invoke<Table>('assign_table_order_scoped', { sessionToken, tableId, saleId });
 
+/** Release a table, clearing its active order assignment. */
 export const releaseTable = (userId: string, tableId: string) =>
   invoke<Table>('release_table', { userId, tableId });
 
@@ -72,6 +81,7 @@ export const releaseTable = (userId: string, tableId: string) =>
 export const releaseTableScoped = (sessionToken: string, tableId: string) =>
   invoke<Table>('release_table_scoped', { sessionToken, tableId });
 
+/** List all table sections. */
 export const listSections = () =>
   invoke<string[]>('list_sections');
 

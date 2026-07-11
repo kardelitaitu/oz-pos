@@ -3,6 +3,7 @@ import type { GatewayStatus } from '@/hooks/useGatewayStatus';
 
 export type { GatewayStatus };
 
+/** Get the configured status of all payment gateways (Stripe, Square, Midtrans). */
 export async function getGatewayStatus(): Promise<GatewayStatus[]> {
   try {
     const stripeKey: string | null = await invoke('get_setting', { key: 'stripe.api_key' });

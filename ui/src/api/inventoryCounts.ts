@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ── DTOs ────────────────────────────────────────────────────────────
 
+/** A physical stock count session. */
 export interface StockCountDto {
   id: string;
   count_number: string;
@@ -16,6 +17,7 @@ export interface StockCountDto {
   updated_at: string;
 }
 
+/** A single line within a stock count. */
 export interface StockCountLineDto {
   id: string;
   count_id: string;
@@ -27,6 +29,7 @@ export interface StockCountLineDto {
   notes: string;
 }
 
+/** A stock adjustment resulting from a count or manual correction. */
 export interface StockAdjustmentDto {
   id: string;
   count_id: string | null;
@@ -41,12 +44,14 @@ export interface StockAdjustmentDto {
 
 // ── Args ────────────────────────────────────────────────────────────
 
+/** Arguments for creating a new stock count. */
 export interface CreateStockCountArgs {
   countType: string;
   notes: string;
   countedBy?: string | null;
 }
 
+/** Arguments for adding a line to a stock count. */
 export interface AddCountLineArgs {
   countId: string;
   sku: string;
@@ -54,12 +59,14 @@ export interface AddCountLineArgs {
   expectedQty: number;
 }
 
+/** Arguments for updating a stock count line's counted quantity. */
 export interface UpdateCountLineArgs {
   lineId: string;
   countedQty?: number | null;
   notes: string;
 }
 
+/** Arguments for completing a stock count and generating adjustments. */
 export interface CompleteStockCountArgs {
   countId: string;
   completedBy?: string | null;
@@ -67,32 +74,42 @@ export interface CompleteStockCountArgs {
 
 // ── Commands ────────────────────────────────────────────────────────
 
+/** Create a new stock count session. */
 export const createStockCount = (args: CreateStockCountArgs): Promise<StockCountDto> =>
   invoke<StockCountDto>('create_stock_count', { args });
 
+/** Get a single stock count by its identifier. */
 export const getStockCount = (id: string): Promise<StockCountDto | null> =>
   invoke<StockCountDto | null>('get_stock_count', { id });
 
+/** List all stock counts. */
 export const listStockCounts = (): Promise<StockCountDto[]> =>
   invoke<StockCountDto[]>('list_stock_counts');
 
+/** Get all lines for a given stock count. */
 export const getCountLines = (countId: string): Promise<StockCountLineDto[]> =>
   invoke<StockCountLineDto[]>('get_count_lines', { countId });
 
+/** Add a line to a stock count. */
 export const addCountLine = (args: AddCountLineArgs): Promise<StockCountLineDto> =>
   invoke<StockCountLineDto>('add_count_line', { args });
 
+/** Update a stock count line's counted quantity. */
 export const updateCountLine = (args: UpdateCountLineArgs): Promise<void> =>
   invoke<void>('update_count_line', { args });
 
+/** Remove a line from a stock count. */
 export const removeCountLine = (args: { lineId: string }): Promise<void> =>
   invoke<void>('remove_count_line', { args });
 
+/** Complete a stock count, generating adjustments for any discrepancies. */
 export const completeStockCount = (args: CompleteStockCountArgs): Promise<StockAdjustmentDto[]> =>
   invoke<StockAdjustmentDto[]>('complete_stock_count', { args });
 
+/** Update a stock count's status directly (e.g. cancel). */
 export const updateStockCountStatus = (id: string, status: string): Promise<void> =>
   invoke<void>('update_stock_count_status', { id, status });
 
+/** List all stock adjustments. */
 export const listStockAdjustments = (): Promise<StockAdjustmentDto[]> =>
   invoke<StockAdjustmentDto[]>('list_stock_adjustments');

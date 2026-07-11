@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ── Products ──────────────────────────────────────────────────────
 
+/** A product as returned by the backend. */
 export interface ProductDto {
   sku: string;
   name: string;
@@ -18,6 +19,7 @@ export interface ProductDto {
   product_type: string;
 }
 
+/** Arguments for creating a new product. */
 export interface CreateProductArgs {
   userId: string;
   sku: string;
@@ -31,6 +33,7 @@ export interface CreateProductArgs {
   taxRateIds: string[];
 }
 
+/** Arguments for updating an existing product. */
 export interface UpdateProductArgs {
   userId: string;
   sku: string;
@@ -43,6 +46,7 @@ export interface UpdateProductArgs {
   taxRateIds: string[];
 }
 
+/** List all products. */
 export const listProducts = (): Promise<ProductDto[]> =>
   invoke<ProductDto[]>('list_products');
 
@@ -59,6 +63,7 @@ export const listProducts = (): Promise<ProductDto[]> =>
 export const listProductsScoped = (sessionToken: string): Promise<ProductDto[]> =>
   invoke<ProductDto[]>('list_products_scoped', { sessionToken });
 
+/** Create a new product. */
 export const createProduct = (args: CreateProductArgs): Promise<{ sku: string }> =>
   invoke('create_product', { args });
 
@@ -78,6 +83,7 @@ export interface CreateProductScopedArgs {
 export const createProductScoped = (sessionToken: string, args: CreateProductScopedArgs): Promise<{ sku: string }> =>
   invoke<{ sku: string }>('create_product_scoped', { sessionToken, args });
 
+/** Update an existing product. */
 export const updateProduct = (args: UpdateProductArgs): Promise<{ sku: string }> =>
   invoke('update_product', { args });
 
@@ -96,6 +102,7 @@ export interface UpdateProductScopedArgs {
 export const updateProductScoped = (sessionToken: string, args: UpdateProductScopedArgs): Promise<{ sku: string }> =>
   invoke<{ sku: string }>('update_product_scoped', { sessionToken, args });
 
+/** Delete a product by SKU. */
 export const deleteProduct = (args: { userId: string; sku: string }): Promise<void> =>
   invoke('delete_product', { args });
 
@@ -105,6 +112,7 @@ export const deleteProductScoped = (sessionToken: string, sku: string): Promise<
 
 // ── Barcode / SKU Lookup ───────────────────────────────────────────
 
+/** Look up a product by its barcode. */
 export const lookupByBarcode = (barcode: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_by_barcode', { barcode });
 
@@ -112,6 +120,7 @@ export const lookupByBarcode = (barcode: string): Promise<ProductDto | null> =>
 export const lookupByBarcodeScoped = (sessionToken: string, barcode: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_by_barcode_scoped', { sessionToken, barcode });
 
+/** Look up a product by its SKU. */
 export const lookupProductBySku = (sku: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_product_by_sku', { sku });
 
@@ -121,12 +130,14 @@ export const lookupProductBySkuScoped = (sessionToken: string, sku: string): Pro
 
 // ── Inventory Adjustment ──────────────────────────────────────────
 
+/** Arguments for adjusting a product's stock quantity. */
 export interface AdjustStockArgs {
   sku: string;
   delta: number;
   reason: string;
 }
 
+/** Adjust a product's stock level by a delta value. Returns the new stock quantity. */
 export const adjustStock = (args: AdjustStockArgs): Promise<number> =>
   invoke<number>('adjust_stock', { args });
 
@@ -140,6 +151,7 @@ export const adjustStockScoped = (sessionToken: string, args: AdjustStockArgs): 
 
 // ── Product Variants ──────────────────────────────────────────────
 
+/** A product variant linked to a parent product. */
 export interface ProductVariantDto {
   id: string;
   parent_sku: string;
@@ -153,6 +165,7 @@ export interface ProductVariantDto {
   updated_at: string;
 }
 
+/** Arguments for creating a new product variant. */
 export interface CreateProductVariantArgs {
   parentSku: string;
   name: string;
@@ -164,6 +177,7 @@ export interface CreateProductVariantArgs {
   isActive?: boolean;
 }
 
+/** Arguments for updating an existing product variant. */
 export interface UpdateProductVariantArgs {
   sku: string;
   name?: string;
@@ -174,18 +188,23 @@ export interface UpdateProductVariantArgs {
   isActive?: boolean;
 }
 
+/** List all variants for a given parent product SKU. */
 export const listProductVariants = (parentSku: string): Promise<ProductVariantDto[]> =>
   invoke<ProductVariantDto[]>('list_product_variants', { parentSku });
 
+/** Get a single product variant by its SKU. */
 export const getProductVariant = (sku: string): Promise<ProductVariantDto | null> =>
   invoke<ProductVariantDto | null>('get_product_variant', { sku });
 
+/** Create a new product variant. */
 export const createProductVariant = (args: CreateProductVariantArgs): Promise<{ sku: string }> =>
   invoke<{ sku: string }>('create_product_variant', { args });
 
+/** Update an existing product variant. */
 export const updateProductVariant = (args: UpdateProductVariantArgs): Promise<{ sku: string }> =>
   invoke<{ sku: string }>('update_product_variant', { args });
 
+/** Delete a product variant by SKU. */
 export const deleteProductVariant = (sku: string): Promise<void> =>
   invoke('delete_product_variant', { sku });
 
@@ -199,6 +218,7 @@ export interface CategoryDto {
   icon: string;
 }
 
+/** Arguments for creating a new product category. */
 export interface CreateCategoryArgs {
   id: string;
   name: string;
@@ -207,6 +227,7 @@ export interface CreateCategoryArgs {
   icon: string;
 }
 
+/** Arguments for updating an existing product category. */
 export interface UpdateCategoryArgs {
   id: string;
   name: string;
@@ -215,14 +236,18 @@ export interface UpdateCategoryArgs {
   icon: string;
 }
 
+/** List all product categories. */
 export const listCategories = (): Promise<CategoryDto[]> =>
   invoke<CategoryDto[]>('list_categories');
 
+/** Create a new product category. */
 export const createCategory = (args: CreateCategoryArgs): Promise<{ id: string }> =>
   invoke('create_category', { args });
 
+/** Update an existing product category. */
 export const updateCategory = (args: UpdateCategoryArgs): Promise<{ id: string }> =>
   invoke('update_category', { args });
 
+/** Delete a product category by its identifier. */
 export const deleteCategory = (id: string): Promise<void> =>
   invoke('delete_category', { args: { id } });

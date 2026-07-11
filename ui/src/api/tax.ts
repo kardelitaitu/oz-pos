@@ -2,6 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+/** A tax rate definition in basis points. */
 export interface TaxRateDto {
   id: string;
   name: string;
@@ -13,6 +14,7 @@ export interface TaxRateDto {
   updated_at: string;
 }
 
+/** Arguments for creating a new tax rate. */
 export interface CreateTaxRateArgs {
   name: string;
   rateBps: number;
@@ -20,6 +22,7 @@ export interface CreateTaxRateArgs {
   isInclusive: boolean;
 }
 
+/** Arguments for updating an existing tax rate. */
 export interface UpdateTaxRateArgs {
   id: string;
   name: string;
@@ -28,16 +31,19 @@ export interface UpdateTaxRateArgs {
   isInclusive: boolean;
 }
 
+/** A product category and its assigned tax rate identifiers. */
 export interface CategoryTaxRateRow {
   category_id: string;
   tax_rate_ids: string[];
 }
 
+/** Arguments for setting tax rates on a product category. */
 export interface SetCategoryTaxRatesArgs {
   categoryId: string;
   taxRateIds: string[];
 }
 
+/** A cart line for computing tax in a live preview. */
 export interface CartLineTaxInput {
   sku: string;
   qty: number;
@@ -51,21 +57,27 @@ export const computeCartTax = (
 ): Promise<number> =>
   invoke<number>('compute_cart_tax', { lines, currency });
 
+/** List all tax rates. */
 export const listTaxRates = (): Promise<TaxRateDto[]> =>
   invoke<TaxRateDto[]>('list_tax_rates');
 
+/** Create a new tax rate. */
 export const createTaxRate = (args: CreateTaxRateArgs): Promise<TaxRateDto> =>
   invoke<TaxRateDto>('create_tax_rate', { args });
 
+/** Update an existing tax rate. */
 export const updateTaxRate = (args: UpdateTaxRateArgs): Promise<TaxRateDto> =>
   invoke<TaxRateDto>('update_tax_rate', { args });
 
+/** Delete a tax rate by its identifier. */
 export const deleteTaxRate = (id: string): Promise<void> =>
   invoke('delete_tax_rate', { id });
 
+/** List all category-to-tax-rate assignments. */
 export const listCategoryTaxRates = (): Promise<CategoryTaxRateRow[]> =>
   invoke<CategoryTaxRateRow[]>('list_category_tax_rates');
 
+/** Set the tax rates assigned to a product category. */
 export const setCategoryTaxRates = (args: SetCategoryTaxRatesArgs): Promise<void> =>
   invoke<void>('set_category_tax_rates', {
     args: {
