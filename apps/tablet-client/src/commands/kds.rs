@@ -56,7 +56,7 @@ pub async fn create_kds_order_from_sale(
 ) -> Result<Option<KdsOrder>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let order = store.complete_sale_to_kds(&sale_id)?;
+    let order = store.complete_sale_to_kds(&sale_id, None)?;
     drop(db);
     Ok(order)
 }

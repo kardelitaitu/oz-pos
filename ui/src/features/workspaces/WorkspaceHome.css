@@ -186,9 +186,9 @@
   letter-spacing: 0.3px;
 }
 
-.role-badge--owner   { color: #f59e0b; }
-.role-badge--manager { color: #3b82f6; }
-.role-badge--cashier { color: #22c55e; }
+.role-badge--owner   { color: var(--color-warning); }
+.role-badge--manager { color: var(--color-info); }
+.role-badge--cashier { color: var(--color-success); }
 .role-badge--kitchen { color: #a855f7; }
 .role-badge--default { color: var(--color-fg-tertiary); }
 
@@ -264,9 +264,9 @@
   border-radius: var(--radius-lg);
   background: linear-gradient(
     90deg,
-    var(--color-bg-tertiary) 0%,
+    var(--color-bg-surface) 0%,
     var(--color-bg-elevated) 50%,
-    var(--color-bg-tertiary) 100%
+    var(--color-bg-surface) 100%
   );
   background-size: 200% 100%;
   animation: ws-shimmer 1.5s ease-in-out infinite;
@@ -278,9 +278,9 @@
   border-radius: var(--radius-sm);
   background: linear-gradient(
     90deg,
-    var(--color-bg-tertiary) 0%,
+    var(--color-bg-surface) 0%,
     var(--color-bg-elevated) 50%,
-    var(--color-bg-tertiary) 100%
+    var(--color-bg-surface) 100%
   );
   background-size: 200% 100%;
   animation: ws-shimmer 1.5s ease-in-out infinite;
@@ -292,9 +292,9 @@
   border-radius: var(--radius-sm);
   background: linear-gradient(
     90deg,
-    var(--color-bg-tertiary) 0%,
+    var(--color-bg-surface) 0%,
     var(--color-bg-elevated) 50%,
-    var(--color-bg-tertiary) 100%
+    var(--color-bg-surface) 100%
   );
   background-size: 200% 100%;
   animation: ws-shimmer 1.5s ease-in-out infinite;
@@ -524,7 +524,7 @@
   padding: var(--space-0_5) var(--space-2);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-danger-fg, #fff);
+  color: var(--color-danger-fg);
   background: var(--color-danger);
   border-radius: var(--radius-full);
   margin-top: var(--space-1);

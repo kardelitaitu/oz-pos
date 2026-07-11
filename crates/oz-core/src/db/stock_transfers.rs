@@ -28,7 +28,7 @@ impl Store<'_> {
         created_by: &str,
         lines: &[StockTransferLine],
     ) -> Result<StockTransfer, CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let ts = chrono::Utc::now().timestamp_millis();
         let short = &id[..8];
@@ -57,7 +57,7 @@ impl Store<'_> {
         )?;
 
         for line in lines {
-            let line_id = uuid::Uuid::new_v4().to_string();
+            let line_id = uuid::Uuid::now_v7().to_string();
             tx.execute(
                 "INSERT INTO stock_transfer_lines (id, transfer_id, sku, product_name, qty, received_qty)
                  VALUES (?1, ?2, ?3, ?4, ?5, 0)",
@@ -202,7 +202,7 @@ impl Store<'_> {
             });
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT INTO stock_transfer_lines (id, transfer_id, sku, product_name, qty, received_qty)
              VALUES (?1, ?2, ?3, ?4, ?5, 0)",
@@ -515,7 +515,7 @@ mod tests {
         conn.execute(
             "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
              VALUES (?1, ?2, ?3, 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-            params![uuid::Uuid::new_v4().to_string(), sku, name],
+            params![uuid::Uuid::now_v7().to_string(), sku, name],
         )
         .unwrap();
     }

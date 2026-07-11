@@ -26,23 +26,25 @@
 
 .sc-filter-btn {
   padding: 6px 14px;
-  border: 1px solid var(--border, #ddd);
-  border-radius: 6px;
-  background: var(--bg-card, #fff);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  transition: all var(--duration-150) var(--ease-out);
 }
 
 .sc-filter-btn--active {
-  background: var(--accent, #2563eb);
-  color: var(--color-accent-fg, #fff);
-  border-color: var(--accent, #2563eb);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  border-color: var(--color-accent);
 }
 
 .sc-loading,
 .sc-empty {
   text-align: center;
-  color: var(--text-muted, #666);
+  color: var(--color-fg-tertiary);
   padding: 40px 0;
 }
 
@@ -76,34 +78,34 @@
   font-weight: 500;
 }
 
-.sc-badge--draft { background: var(--color-bg-tertiary, #e5e7eb); color: var(--color-fg, #374151); }
-.sc-badge--in_progress { background: var(--color-accent-dim, #dbeafe); color: var(--color-accent, #1d4ed8); }
-.sc-badge--completed { background: var(--color-success-bg, #d1fae5); color: var(--color-success, #065f46); }
-.sc-badge--cancelled { background: var(--color-danger-bg, #fee2e2); color: var(--color-danger, #991b1b); }
+.sc-badge--draft { background: var(--color-bg-surface); color: var(--color-fg); border: 1px solid var(--color-border); }
+.sc-badge--in_progress { background: var(--color-accent-dim); color: var(--color-fg); }
+.sc-badge--completed { background: var(--color-success-bg); color: var(--color-fg); }
+.sc-badge--cancelled { background: var(--color-danger-bg); color: var(--color-fg); }
 
 .sc-card-meta {
   display: flex;
   gap: 12px;
-  font-size: 0.8rem;
-  color: var(--text-muted, #666);
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
   margin-bottom: 4px;
 }
 
 .sc-card-notes {
-  font-size: 0.85rem;
-  color: var(--text-muted, #666);
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
   margin: 4px 0;
 }
 
 .sc-card-type {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--accent, #2563eb);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-accent);
 }
 
 .sc-card-date {
-  font-size: 0.75rem;
-  color: var(--text-muted, #666);
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
 }
 
 .sc-card-actions {
@@ -113,10 +115,10 @@
 .sc-card-action {
   background: none;
   border: none;
-  color: var(--accent, #2563eb);
+  color: var(--color-accent);
   cursor: pointer;
-  font-size: 0.875rem;
-  padding: 4px 0;
+  font-size: var(--text-sm);
+  padding: var(--space-1) 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {

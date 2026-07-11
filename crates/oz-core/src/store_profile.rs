@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn store_profile_non_primary() {
         let p = StoreProfile {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: "Branch 2".into(),
             address: String::new(),
             tax_id: String::new(),

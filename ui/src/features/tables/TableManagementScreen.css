@@ -69,7 +69,7 @@
   background: var(--color-accent);
   color: var(--color-accent-fg);
   border-color: var(--color-accent);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
 /* ── Floorplan Area ──────────────────────────────── */
@@ -100,9 +100,9 @@
   justify-content: center;
   border: 2px solid rgba(255, 255, 255, 0.4);
   cursor: pointer;
-  color: var(--color-accent-fg, #ffffff);
+  color: var(--color-accent-fg);
   font-weight: var(--font-weight-semibold);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--color-fg) 40%, transparent);
   padding: var(--space-1);
   overflow: hidden;
   line-height: var(--leading-tight);
@@ -140,71 +140,71 @@
 
 /* Available */
 .tables-table--available {
-  background: linear-gradient(135deg, var(--color-success, #10b981) 0%, var(--color-success, #059669) 100%);
+  background: linear-gradient(135deg, var(--color-success) 0%, color-mix(in srgb, var(--color-success) 80%, black) 100%);
   box-shadow: 
-    0 4px 12px rgba(16, 185, 129, 0.25),
+    0 4px 12px color-mix(in srgb, var(--color-success) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .tables-table--available:hover {
   box-shadow: 
-    0 8px 20px rgba(16, 185, 129, 0.4),
+    0 8px 20px color-mix(in srgb, var(--color-success) 40%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Occupied */
 .tables-table--occupied {
-  background: linear-gradient(135deg, var(--color-danger, #f43f5e) 0%, var(--color-danger, #e11d48) 100%);
+  background: linear-gradient(135deg, var(--color-danger) 0%, color-mix(in srgb, var(--color-danger) 80%, black) 100%);
   box-shadow: 
-    0 4px 12px rgba(244, 63, 94, 0.25),
+    0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
   animation: table-occupied-pulse 2s infinite ease-in-out;
 }
 .tables-table--occupied:hover {
   box-shadow: 
-    0 8px 20px rgba(244, 63, 94, 0.4),
+    0 8px 20px color-mix(in srgb, var(--color-danger) 40%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Reserved */
 .tables-table--reserved {
-  background: linear-gradient(135deg, var(--color-warning, #f59e0b) 0%, var(--color-warning, #d97706) 100%);
+  background: linear-gradient(135deg, var(--color-warning) 0%, color-mix(in srgb, var(--color-warning) 80%, black) 100%);
   box-shadow: 
-    0 4px 12px rgba(245, 158, 11, 0.25),
+    0 4px 12px color-mix(in srgb, var(--color-warning) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .tables-table--reserved:hover {
   box-shadow: 
-    0 8px 20px rgba(245, 158, 11, 0.4),
+    0 8px 20px color-mix(in srgb, var(--color-warning) 40%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Cleaning */
 .tables-table--cleaning {
-  background: linear-gradient(135deg, var(--color-fg-tertiary, #94a3b8) 0%, var(--color-fg-tertiary, #64748b) 100%);
+  background: linear-gradient(135deg, var(--color-fg-tertiary) 0%, color-mix(in srgb, var(--color-fg-tertiary) 80%, black) 100%);
   box-shadow: 
-    0 4px 12px rgba(148, 163, 184, 0.2),
+    0 4px 12px color-mix(in srgb, var(--color-fg-tertiary) 20%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .tables-table--cleaning:hover {
   box-shadow: 
-    0 8px 20px rgba(148, 163, 184, 0.3),
+    0 8px 20px color-mix(in srgb, var(--color-fg-tertiary) 30%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 @keyframes table-occupied-pulse {
   0% {
     box-shadow: 
-      0 4px 12px rgba(244, 63, 94, 0.25),
+      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
       inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
   50% {
     box-shadow: 
-      0 4px 20px rgba(244, 63, 94, 0.45),
+      0 4px 20px color-mix(in srgb, var(--color-danger) 45%, transparent),
       inset 0 1px 0 rgba(255, 255, 255, 0.35);
   }
   100% {
     box-shadow: 
-      0 4px 12px rgba(244, 63, 94, 0.25),
+      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
       inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 }
@@ -268,7 +268,7 @@
   cursor: pointer;
   background: var(--color-accent);
   color: var(--color-accent-fg);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 20%, transparent);
   transition:
     background-color var(--duration-150) var(--ease-out),
     transform var(--duration-100) var(--ease-out),

@@ -34,6 +34,31 @@ fn row_to_product_with_details(row: &rusqlite::Row) -> rusqlite::Result<ProductW
     })
 }
 
+/// An immutable row in the stock movements delta ledger (ADR #6).
+///
+/// Each row records a single stock change (+N or -N) with audit
+/// metadata. The current stock is computed as `SUM(delta)` across
+/// all rows for a given `item_id`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StockMovement {
+    /// Unique UUID v7 identifier.
+    pub id: String,
+    /// Product ID this movement applies to.
+    pub item_id: String,
+    /// Quantity change: positive = restock, negative = removal.
+    pub delta: i64,
+    /// Human-readable reason: 'sale', 'restock', 'correction', etc.
+    pub reason: Option<String>,
+    /// Terminal that performed the operation (for audit/sync).
+    pub source_terminal_id: Option<String>,
+    /// User who performed the operation (for audit/sync).
+    pub source_user_id: Option<String>,
+    /// Store where the movement originated (ADR #6 cross-store routing).
+    pub store_id: String,
+    /// ISO-8601 timestamp of the movement.
+    pub created_at: String,
+}
+
 // ── Product CRUD ─────────────────────────────────────────────────────
 
 impl Store<'_> {
@@ -42,7 +67,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
-                     p.track_serial, p.product_type,
+                     p.track_serial, p.product_type, p.version,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -68,7 +93,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
-                     p.track_serial, p.product_type,
+                     p.track_serial, p.product_type, p.version,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -101,7 +126,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
-                     p.track_serial, p.product_type,
+                     p.track_serial, p.product_type, p.version,
                      c.name AS category_name,
                      i.qty AS stock_qty
              FROM products p
@@ -156,7 +181,7 @@ impl Store<'_> {
         }
 
         let product_type = product_type.unwrap_or("retail");
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let cur_str = std::str::from_utf8(&price.currency.0)
             .expect("currency bytes are valid UTF-8")
@@ -165,8 +190,8 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         let result = tx.execute(
-            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1)",
             params![
                 id,
                 sku.trim(),
@@ -201,6 +226,20 @@ impl Store<'_> {
                 "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)",
                 params![id, initial_stock, now],
             )?;
+            // ADR #6: Record initial stock in the delta ledger.
+            let movement_id = uuid::Uuid::now_v7().to_string();
+            tx.execute(
+                "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                              source_terminal_id, source_user_id, created_at)
+                 VALUES (?1, ?2, ?3, 'initial-stock', NULL, NULL, ?4)",
+                params![movement_id, id, initial_stock, now],
+            )?;
+            tx.execute(
+                "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
+                                                     updated_at = excluded.updated_at",
+                params![id, initial_stock, now],
+            )?;
         }
 
         tx.commit()?;
@@ -222,10 +261,19 @@ impl Store<'_> {
             price_updated_at: now,
             track_serial: false,
             product_type: parsed_pt,
+            version: 1,
         })
     }
 
     /// Update an existing product identified by SKU.
+    ///
+    /// Uses optimistic concurrency (ADR #6): when `expected_version` is
+    /// `Some`, includes `version` in the WHERE clause and increments it
+    /// on success. Returns [`CoreError::Conflict`] if another process
+    /// modified the product concurrently. When `None`, the update is
+    /// performed unconditionally (backward-compat for callers that do
+    /// not track versions).
+    #[allow(clippy::too_many_arguments)]
     pub fn update_product(
         &self,
         sku: &str,
@@ -234,6 +282,7 @@ impl Store<'_> {
         category_id: Option<&str>,
         barcode: Option<&str>,
         product_type: Option<&str>,
+        expected_version: Option<i64>,
     ) -> Result<Product, CoreError> {
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -253,26 +302,64 @@ impl Store<'_> {
             .expect("currency bytes are valid UTF-8")
             .to_owned();
 
-        let rows = self.conn.execute(
-            "UPDATE products
-             SET name = ?1, price_minor = ?2, currency = ?3,
-                 category_id = ?4, barcode = ?5, updated_at = ?6,
-                 product_type = COALESCE(?7, product_type),
-                 price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END
-             WHERE sku = ?8",
-            params![
-                name.trim(),
-                price.minor_units,
-                cur_str,
-                category_id,
-                barcode,
-                now,
-                product_type,
-                sku,
-            ],
-        )?;
+        let rows = if let Some(ver) = expected_version {
+            self.conn.execute(
+                "UPDATE products
+                 SET name = ?1, price_minor = ?2, currency = ?3,
+                     category_id = ?4, barcode = ?5, updated_at = ?6,
+                     product_type = COALESCE(?7, product_type),
+                     price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END,
+                     version = version + 1
+                 WHERE sku = ?8 AND version = ?9",
+                params![
+                    name.trim(),
+                    price.minor_units,
+                    cur_str,
+                    category_id,
+                    barcode,
+                    now,
+                    product_type,
+                    sku,
+                    ver,
+                ],
+            )?
+        } else {
+            self.conn.execute(
+                "UPDATE products
+                 SET name = ?1, price_minor = ?2, currency = ?3,
+                     category_id = ?4, barcode = ?5, updated_at = ?6,
+                     product_type = COALESCE(?7, product_type),
+                     price_updated_at = CASE WHEN price_minor <> ?2 OR currency <> ?3 THEN ?6 ELSE price_updated_at END,
+                     version = version + 1
+                 WHERE sku = ?8",
+                params![
+                    name.trim(),
+                    price.minor_units,
+                    cur_str,
+                    category_id,
+                    barcode,
+                    now,
+                    product_type,
+                    sku,
+                ],
+            )?
+        };
 
         if rows == 0 {
+            if expected_version.is_some() {
+                // Determine if it's a version conflict or a not-found.
+                let exists: bool = self.conn.query_row(
+                    "SELECT COUNT(*) > 0 FROM products WHERE sku = ?1",
+                    params![sku],
+                    |r| r.get(0),
+                )?;
+                if exists {
+                    return Err(CoreError::Conflict {
+                        entity: "product",
+                        field: "version",
+                    });
+                }
+            }
             return Err(CoreError::NotFound {
                 entity: "product",
                 id: sku.to_owned(),
@@ -284,7 +371,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -297,7 +384,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);
@@ -528,8 +615,70 @@ impl Store<'_> {
         }
     }
 
+    /// Insert a stock movement delta row directly into the ledger.
+    ///
+    /// This is the low-level insert used by the sync layer to apply
+    /// incoming remote deltas without triggering inventory or stock_summary
+    /// updates (those are reconciled later via [`rebuild_stock_summary`]).
+    ///
+    /// The `store_id` identifies which store the delta originated from
+    /// for cross-store routing (ADR #6).
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_stock_movement(
+        &self,
+        id: &str,
+        item_id: &str,
+        delta: i64,
+        reason: Option<&str>,
+        source_terminal_id: Option<&str>,
+        source_user_id: Option<&str>,
+        store_id: &str,
+        created_at: &str,
+    ) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id,
+                                          store_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                id,
+                item_id,
+                delta,
+                reason,
+                source_terminal_id,
+                source_user_id,
+                store_id,
+                created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Adjust stock for a product by SKU inside a transaction.
+    ///
+    /// Writes a delta row to the `stock_movements` ledger (ADR #6)
+    /// and updates the materialised `inventory` and `stock_summary` tables.
+    /// The `reason` parameter is recorded in the ledger for audit purposes.
     pub fn adjust_stock(&self, sku: &str, delta: i64) -> Result<i64, CoreError> {
+        self.adjust_stock_with_reason(sku, delta, None, None, None)
+    }
+
+    /// Adjust stock with an explicit reason for the delta ledger (ADR #6).
+    ///
+    /// Records the reason (e.g. "sale", "restock", "correction") in the
+    /// `stock_movements` row for audit and sync purposes.
+    ///
+    /// `source_terminal_id` and `source_user_id` are audit columns
+    /// populated from the caller's `SessionContext` (ADR #6). Pass
+    /// `None` for test/deprecated callers.
+    pub fn adjust_stock_with_reason(
+        &self,
+        sku: &str,
+        delta: i64,
+        reason: Option<&str>,
+        source_terminal_id: Option<&str>,
+        source_user_id: Option<&str>,
+    ) -> Result<i64, CoreError> {
         let product_id = self
             .product_id_by_sku(sku)?
             .ok_or_else(|| CoreError::NotFound {
@@ -550,14 +699,42 @@ impl Store<'_> {
             })?;
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let movement_id = uuid::Uuid::now_v7().to_string();
 
         let tx = self.conn.unchecked_transaction()?;
+
+        // 1. Write the immutable delta row (CRDT ledger — ADR #6).
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                movement_id,
+                product_id,
+                delta,
+                reason,
+                source_terminal_id,
+                source_user_id,
+                now
+            ],
+        )?;
+
+        // 2. Update the materialised inventory table (backward compat).
         tx.execute(
             "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
              ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
                                                      updated_at = excluded.updated_at",
             params![product_id, new_qty, now],
         )?;
+
+        // 3. Update the stock_summary materialised view (perf — ADR #6).
+        tx.execute(
+            "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
+                                                 updated_at = excluded.updated_at",
+            params![product_id, new_qty, now],
+        )?;
+
         tx.commit()?;
 
         if let Some(cache) = &self.cache {
@@ -566,6 +743,117 @@ impl Store<'_> {
         }
 
         Ok(new_qty)
+    }
+
+    /// Compute the current stock quantity from the delta ledger (ADR #6).
+    ///
+    /// Returns `SUM(delta)` from `stock_movements` for the given product.
+    /// Falls back to `inventory.qty` if the ledger table has no rows yet
+    /// (backward compatibility with pre-migration databases).
+    pub fn get_stock_from_ledger(&self, product_id: &str) -> Result<i64, CoreError> {
+        let result = self.conn.query_row(
+            "SELECT SUM(delta) FROM stock_movements WHERE item_id = ?1",
+            params![product_id],
+            |row| row.get::<_, Option<i64>>(0),
+        );
+
+        match result {
+            Ok(Some(sum)) => Ok(sum),
+            Ok(None) => {
+                // No deltas yet — fall back to inventory table.
+                self.get_stock(product_id)
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Rebuild the materialised `stock_summary` and `inventory` tables from the
+    /// delta ledger (ADR #6).
+    ///
+    /// This is called after a sync cycle receives new deltas from other
+    /// registers or the cloud, ensuring the materialised cache is consistent
+    /// with the authoritative ledger. Runs in a single transaction for atomicity.
+    ///
+    /// Returns the number of products whose stock was rebuilt.
+    pub fn rebuild_stock_summary(&self) -> Result<usize, CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        // Clear the materialised caches.
+        tx.execute("DELETE FROM stock_summary", [])?;
+
+        // Rebuild stock_summary from the delta ledger.
+        let rebuilt = tx.execute(
+            "INSERT INTO stock_summary (item_id, qty, updated_at)
+             SELECT item_id, SUM(delta), ?1
+             FROM stock_movements
+             GROUP BY item_id",
+            params![now],
+        )?;
+
+        // Rebuild the inventory table (backward compat) to match.
+        // Upsert: set qty for products with deltas, leave others untouched.
+        tx.execute(
+            "INSERT INTO inventory (product_id, qty, updated_at)
+             SELECT item_id, SUM(delta), ?1
+             FROM stock_movements
+             GROUP BY item_id
+             ON CONFLICT(product_id) DO UPDATE SET
+                qty = excluded.qty,
+                updated_at = excluded.updated_at",
+            params![now],
+        )?;
+
+        // Zero out inventory for products whose ledger SUM is 0 or negative
+        // (e.g., all stock was sold). The INSERT … ON CONFLICT above only
+        // handles items present in stock_movements; items with net-zero deltas
+        // need explicit zeroing.
+        tx.execute(
+            "UPDATE inventory SET qty = 0, updated_at = ?1
+             WHERE product_id IN (
+                SELECT item_id FROM stock_movements
+                GROUP BY item_id
+                HAVING SUM(delta) <= 0
+             )",
+            params![now],
+        )?;
+
+        tx.commit()?;
+
+        Ok(rebuilt)
+    }
+
+    /// List all stock movement rows for a product, ordered by time (ADR #6).
+    ///
+    /// Returns the complete immutable delta ledger for audit and sync.
+    pub fn list_stock_movements(
+        &self,
+        product_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<StockMovement>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, item_id, delta, reason, source_terminal_id, source_user_id,
+                    store_id, created_at
+             FROM stock_movements
+             WHERE item_id = ?1
+             ORDER BY created_at DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(params![product_id, limit, offset], |row| {
+            Ok(StockMovement {
+                id: row.get(0)?,
+                item_id: row.get(1)?,
+                delta: row.get(2)?,
+                reason: row.get(3)?,
+                source_terminal_id: row.get(4)?,
+                source_user_id: row.get(5)?,
+                store_id: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
     }
 }
 
@@ -912,7 +1200,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let updated = store(&conn)
-            .update_product("DRINK-001", "Latte", price(400), None, None, None)
+            .update_product("DRINK-001", "Latte", price(400), None, None, None, Some(1))
             .unwrap();
         assert_eq!(updated.name, "Latte");
         assert_eq!(updated.price.minor_units, 400);
@@ -923,7 +1211,7 @@ mod tests {
     fn update_product_not_found() {
         let conn = fresh();
         let err = store(&conn)
-            .update_product("NOPE", "X", price(1), None, None, None)
+            .update_product("NOPE", "X", price(1), None, None, None, Some(1))
             .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
@@ -933,7 +1221,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "", price(1), None, None, None)
+            .update_product("DRINK-001", "", price(1), None, None, None, Some(1))
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
@@ -943,7 +1231,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         let err = store(&conn)
-            .update_product("DRINK-001", "X", price(-1), None, None, None)
+            .update_product("DRINK-001", "X", price(-1), None, None, None, Some(1))
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "price"));
     }
@@ -960,6 +1248,7 @@ mod tests {
                 Some("cat-food"),
                 None,
                 None,
+                Some(1),
             )
             .unwrap();
         assert_eq!(updated.category_id.as_deref(), Some("cat-food"));
@@ -1213,8 +1502,8 @@ mod tests {
 
     fn seed_product_variant_parent(conn: &Connection) {
         conn.execute_batch(
-            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES
-                ('pv-parent', 'PARENT-001', 'Parent Product', 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at, price_updated_at) VALUES
+                ('pv-parent', 'PARENT-001', 'Parent Product', 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
     }
 
@@ -1225,7 +1514,7 @@ mod tests {
         let s = store(&conn);
 
         let v1 = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Small".into(),
             sku: "PARENT-001-SMALL".into(),
@@ -1238,7 +1527,7 @@ mod tests {
         };
 
         let v2 = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Large".into(),
             sku: "PARENT-001-LARGE".into(),
@@ -1281,7 +1570,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Medium".into(),
             sku: "PARENT-001-MED".into(),
@@ -1312,7 +1601,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Original".into(),
             sku: "VAR-001".into(),
@@ -1368,7 +1657,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "Delete Me".into(),
             sku: "VAR-TO-DEL".into(),
@@ -1398,7 +1687,7 @@ mod tests {
         seed_product_variant_parent(&conn);
         let s = store(&conn);
         let v = ProductVariant {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             parent_sku: "PARENT-001".into(),
             name: "No Price".into(),
             sku: "VAR-NO-PRICE".into(),
@@ -1412,5 +1701,267 @@ mod tests {
         s.create_product_variant(&v).unwrap();
         let found = s.get_product_variant("VAR-NO-PRICE").unwrap().unwrap();
         assert!(found.price.is_none());
+    }
+
+    // ── Stock Movements Delta Ledger (ADR #6) ───────────────────
+
+    #[test]
+    fn stock_movements_table_exists() {
+        let conn = fresh();
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_movements'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            exists, 1,
+            "stock_movements table should exist after migration"
+        );
+    }
+
+    #[test]
+    fn stock_summary_table_exists() {
+        let conn = fresh();
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_summary'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            exists, 1,
+            "stock_summary table should exist after migration"
+        );
+    }
+
+    #[test]
+    fn adjust_stock_writes_to_ledger() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        store(&conn)
+            .adjust_stock_with_reason(
+                "DRINK-001",
+                -3,
+                Some("sale"),
+                Some("term-1"),
+                Some("user-1"),
+            )
+            .unwrap();
+
+        // Verify ledger row was written.
+        let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].delta, -3);
+        assert_eq!(movements[0].reason.as_deref(), Some("sale"));
+        assert_eq!(movements[0].item_id, "prod-1");
+    }
+
+    #[test]
+    fn adjust_stock_without_reason_writes_to_ledger() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+
+        let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].delta, 5);
+        assert!(movements[0].reason.is_none());
+    }
+
+    #[test]
+    fn get_stock_from_ledger_computes_sum() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // The migration backfill runs against empty inventory (before seed_everything),
+        // so the ledger starts with no rows. get_stock_from_ledger falls back to
+        // inventory.qty = 50.
+        let initial = store(&conn).get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(initial, 50, "fallback to inventory returns 50");
+
+        // Adjustment writes a delta row. SUM(delta) = 10 (just the adjustment).
+        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+        let after = store(&conn).get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(after, 10, "SUM(delta) should be 10 (only adjustment row)");
+
+        // Multiple adjustments accumulate.
+        store(&conn).adjust_stock("DRINK-001", -5).unwrap();
+        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        let after2 = store(&conn).get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(after2, 25, "SUM of deltas: 10 + (-5) + 20 = 25");
+    }
+
+    #[test]
+    fn get_stock_from_ledger_zero_deltas() {
+        let conn = fresh();
+        // fresh DB has no products, so ledger should have no rows.
+        // Fallback to inventory table returns 0.
+        let qty = store(&conn).get_stock_from_ledger("nonexistent").unwrap();
+        assert_eq!(qty, 0);
+    }
+    #[test]
+    fn list_stock_movements_paginated() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // Write 5 movements (migration backfill ran against empty inventory,
+        // so only these 5 adjust_stock calls create rows).
+        for _i in 0..5 {
+            store(&conn)
+                .adjust_stock_with_reason(
+                    "DRINK-001",
+                    1,
+                    Some("restock"),
+                    Some("term-1"),
+                    Some("user-1"),
+                )
+                .unwrap();
+        }
+
+        // With limit 3, should return 3 most recent.
+        let page1 = store(&conn).list_stock_movements("prod-1", 3, 0).unwrap();
+        assert_eq!(page1.len(), 3);
+
+        // With offset 3, should return remaining 2.
+        let page2 = store(&conn).list_stock_movements("prod-1", 10, 3).unwrap();
+        assert_eq!(page2.len(), 2);
+    }
+
+    #[test]
+    fn adjust_stock_writes_source_audit_fields() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        store(&conn)
+            .adjust_stock_with_reason(
+                "DRINK-001",
+                -5,
+                Some("sale"),
+                Some("term-kitchen"),
+                Some("user-alice"),
+            )
+            .unwrap();
+
+        let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(
+            movements[0].source_terminal_id.as_deref(),
+            Some("term-kitchen")
+        );
+        assert_eq!(movements[0].source_user_id.as_deref(), Some("user-alice"));
+        assert_eq!(movements[0].delta, -5);
+        assert_eq!(movements[0].reason.as_deref(), Some("sale"));
+    }
+
+    #[test]
+    fn adjust_stock_without_source_audit_stores_nulls() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // adjust_stock (the backward-compat wrapper) passes None for audit fields.
+        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+
+        let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].source_terminal_id, None);
+        assert_eq!(movements[0].source_user_id, None);
+    }
+
+    #[test]
+    fn rebuild_stock_summary_from_ledger() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // Insert deltas that bypass the normal adjust_stock path
+        // (simulating external sync deltas).
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, created_at) VALUES
+                ('sm-1', 'prod-1', 50, 'migration-seed', '2025-01-01T00:00:00.000Z'),
+                ('sm-2', 'prod-1', -10, 'sale', '2025-01-02T00:00:00.000Z'),
+                ('sm-3', 'prod-2', 100, 'restock', '2025-01-01T00:00:00.000Z'),
+                ('sm-4', 'prod-2', -25, 'sale', '2025-01-02T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let count = store(&conn).rebuild_stock_summary().unwrap();
+        assert_eq!(count, 2, "should rebuild 2 product stock levels");
+
+        // Verify stock_summary was rebuilt.
+        let qty1: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty1, 40, "prod-1: 50 + (-10) = 40");
+
+        let qty2: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty2, 75, "prod-2: 100 + (-25) = 75");
+
+        // Verify inventory was synced.
+        let inv1 = store(&conn).get_stock("prod-1").unwrap();
+        assert_eq!(inv1, 40);
+        let inv2 = store(&conn).get_stock("prod-2").unwrap();
+        assert_eq!(inv2, 75);
+    }
+
+    #[test]
+    fn rebuild_stock_summary_empty_ledger() {
+        let conn = fresh();
+
+        // Rebuild on a fresh DB with no movements.
+        let count = store(&conn).rebuild_stock_summary().unwrap();
+        assert_eq!(count, 0, "no rows to rebuild");
+
+        // stock_summary should be empty.
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM stock_summary", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[test]
+    fn stock_summary_tracks_latest_quantity() {
+        let conn = fresh();
+        seed_everything(&conn);
+
+        // Migration backfill ran against empty inventory, so stock_summary starts empty.
+        // After the first adjust_stock call, the summary row is created.
+        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        let qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        // new_qty = previous_qty (50 from inventory) + 20 = 70
+        assert_eq!(
+            qty, 70,
+            "stock_summary should reflect current total after adjustment"
+        );
+
+        // Second adjustment updates the summary.
+        store(&conn).adjust_stock("DRINK-001", -10).unwrap();
+        let qty2: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty2, 60);
     }
 }

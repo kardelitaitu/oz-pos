@@ -61,7 +61,7 @@ impl Customer {
         assert!(!name.is_empty(), "customer name must not be empty");
 
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name,
             email: None,
             phone: None,

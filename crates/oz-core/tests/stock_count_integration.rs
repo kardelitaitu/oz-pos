@@ -41,7 +41,7 @@ fn seed_user(conn: &Connection, id: &str) {
 }
 
 fn seed_product_with_inventory(conn: &Connection, sku: &str, name: &str, qty: i64) -> String {
-    let pid = uuid::Uuid::new_v4().to_string();
+    let pid = uuid::Uuid::now_v7().to_string();
     conn.execute(
         "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
          VALUES (?1, ?2, ?3, 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
@@ -94,7 +94,7 @@ fn make_line(
 ) -> StockCountLine {
     let diff = counted.unwrap_or(0) - expected;
     StockCountLine {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: uuid::Uuid::now_v7().to_string(),
         count_id: count_id.into(),
         sku: sku.into(),
         product_name: name.into(),
@@ -111,7 +111,7 @@ fn make_line(
 fn create_and_fetch_stock_count() {
     let conn = setup();
     let s = store(&conn);
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = uuid::Uuid::now_v7().to_string();
     let count = make_count(&id, "CNT-INT-001", StockCountStatus::Draft, CountType::Full);
 
     s.create_stock_count(&count).unwrap();
@@ -139,14 +139,14 @@ fn list_stock_counts_newest_first() {
 
     // Use explicit timestamps so ORDER BY created_at DESC is deterministic.
     let mut c1 = make_count(
-        &uuid::Uuid::new_v4().to_string(),
+        &uuid::Uuid::now_v7().to_string(),
         "CNT-001",
         StockCountStatus::Draft,
         CountType::Full,
     );
     c1.created_at = "2025-01-01T00:00:00.000Z".into();
     let mut c2 = make_count(
-        &uuid::Uuid::new_v4().to_string(),
+        &uuid::Uuid::now_v7().to_string(),
         "CNT-002",
         StockCountStatus::Completed,
         CountType::Cyclic,
@@ -178,7 +178,7 @@ fn list_stock_counts_mixed_statuses() {
     .enumerate()
     {
         let c = make_count(
-            &uuid::Uuid::new_v4().to_string(),
+            &uuid::Uuid::now_v7().to_string(),
             &format!("CNT-STAT-{i}"),
             status,
             CountType::Spot,
@@ -196,7 +196,7 @@ fn list_stock_counts_mixed_statuses() {
 fn add_and_get_count_lines() {
     let conn = setup();
     let s = store(&conn);
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-LINES",
@@ -219,7 +219,7 @@ fn add_and_get_count_lines() {
 fn update_count_line_record_count() {
     let conn = setup();
     let s = store(&conn);
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-UPDATE",
@@ -253,7 +253,7 @@ fn update_count_line_record_count() {
 fn remove_count_line() {
     let conn = setup();
     let s = store(&conn);
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-REMOVE",
@@ -280,7 +280,7 @@ fn complete_stock_count_creates_adjustments_and_updates_inventory() {
     seed_product_with_inventory(&conn, "SKU-COMPLETE", "Completable", 20);
     let s = store(&conn);
 
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-COMPLETE",
@@ -315,7 +315,7 @@ fn complete_count_no_differences_creates_no_adjustments() {
     seed_product_with_inventory(&conn, "SKU-NODIFF", "No Diff", 10);
     let s = store(&conn);
 
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-NODIFF",
@@ -337,7 +337,7 @@ fn complete_count_not_in_progress_fails() {
     let conn = setup();
     let s = store(&conn);
 
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-ALREADY",
@@ -364,7 +364,7 @@ fn complete_count_with_multiple_products() {
     seed_product_with_inventory(&conn, "SKU-M2", "Product M2", 30);
     let s = store(&conn);
 
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-MULTI",
@@ -396,7 +396,7 @@ fn list_stock_adjustments_after_completion() {
     seed_product_with_inventory(&conn, "SKU-ADJ", "Adjustable", 100);
     let s = store(&conn);
 
-    let count_id = uuid::Uuid::new_v4().to_string();
+    let count_id = uuid::Uuid::now_v7().to_string();
     let count = make_count(
         &count_id,
         "CNT-ADJ",
@@ -434,7 +434,7 @@ fn next_count_number_generates_unique_sequential() {
     assert!(n1.contains(&chrono::Utc::now().format("%Y%m%d").to_string()));
 
     let count = make_count(
-        &uuid::Uuid::new_v4().to_string(),
+        &uuid::Uuid::now_v7().to_string(),
         &n1,
         StockCountStatus::Draft,
         CountType::Full,

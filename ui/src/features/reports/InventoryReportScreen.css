@@ -14,7 +14,7 @@
 .inventory-report-title {
   margin: 0;
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .inventory-report-controls {
@@ -25,7 +25,7 @@
 
 .inventory-report-label {
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--color-fg-secondary);
 }
 
@@ -68,7 +68,7 @@
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-fg-secondary);
@@ -110,13 +110,13 @@
 }
 
 .inventory-report-name {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--color-fg);
 }
 
 .inventory-report-qty {
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-align: right;
 }
 

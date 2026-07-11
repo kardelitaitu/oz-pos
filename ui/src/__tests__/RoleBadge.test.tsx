@@ -97,14 +97,15 @@ describe('RoleBadge', () => {
     expect(badge).toBeInTheDocument();
   });
 
-  it('has logout button with correct title', () => {
+  it('has logout button with correct aria-label', () => {
     mockUseAuth.mockReturnValue({
       session: { display_name: 'Alice', role_name: 'cashier' },
       logout: vi.fn(),
     });
     renderRoleBadge();
-    // Use title which is a plain string without bidi markers.
-    const btn = screen.getByTitle('Log out');
+    // Tooltip provides aria-describedby; the button itself has aria-label.
+    // Prefix-only regex avoids Fluent bidi markers around { $displayName }.
+    const btn = screen.getByRole('button', { name: /log out/i });
     expect(btn).toBeInTheDocument();
   });
 
@@ -115,7 +116,7 @@ describe('RoleBadge', () => {
       logout,
     });
     renderRoleBadge();
-    await userEvent.click(screen.getByTitle('Log out'));
+    await userEvent.click(screen.getByRole('button', { name: /log out/i }));
     expect(logout).toHaveBeenCalledTimes(1);
   });
 

@@ -276,7 +276,7 @@ mod tests {
 
     fn make_bundle(name: &str) -> ProductBundle {
         ProductBundle {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             bundle_sku: format!("B-{name}"),
             name: name.into(),
             description: String::new(),
@@ -290,7 +290,7 @@ mod tests {
 
     fn make_item(bundle_id: &str, sku: &str, qty: i64) -> BundleItem {
         BundleItem {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             bundle_id: bundle_id.into(),
             sku: sku.into(),
             qty,

@@ -16,7 +16,7 @@
 
 .audit-log-title {
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   color: var(--color-fg-primary);
   margin: 0;
 }
@@ -77,9 +77,9 @@
   background: var(--color-bg-primary);
   color: var(--color-fg-secondary);
   font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--duration-150) var(--ease-out);
 }
 
 .audit-log-chip:hover {
@@ -136,7 +136,7 @@
 .audit-log-table th {
   padding: var(--space-3) var(--space-4);
   text-align: left;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-fg-secondary);
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -177,7 +177,7 @@
 
 .audit-log-action-label {
   display: block;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--color-fg-primary);
 }
 
@@ -196,7 +196,7 @@
 }
 
 .audit-log-target-type {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--color-fg-primary);
 }
 
@@ -218,7 +218,7 @@
   padding: 1px var(--space-2);
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-transform: capitalize;
 }
 
@@ -233,7 +233,7 @@
 }
 
 .audit-log-badge--info {
-  background: var(--color-accent-dim, #e0f2fe);
+  background: var(--color-accent-dim);
   color: var(--color-accent, #0284c7);
 }
 
@@ -289,7 +289,7 @@
   padding: var(--space-2) var(--space-4);
   cursor: pointer;
   font-size: var(--text-sm);
-  color: var(--color-fg-link);
+  color: var(--color-link);
   transition: background 0.15s;
 }
 

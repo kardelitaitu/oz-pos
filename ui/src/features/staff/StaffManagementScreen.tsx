@@ -12,12 +12,13 @@ import {
   listAllWorkspaces,
   setUserWorkspaces,
   getUserWorkspaces,
-  type WorkspaceDto,
+  type WorkspaceTypeDto,
 } from '@/api/workspaces';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { RoleIcon } from '@/components/RoleIcon';
 import './StaffManagementScreen.css';
 
 // ── Form state ──────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ export default function StaffManagementScreen() {
   const { session } = useAuth();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
-  const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceDto[]>([]);
+  const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceTypeDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -218,10 +219,12 @@ export default function StaffManagementScreen() {
   // ── Role colour mapping ────────────────────────────────────────
 
   const roleVariant = (roleName: string): 'warning' | 'info' | 'default' | 'success' => {
-    switch (roleName) {
+    switch (roleName.toLowerCase()) {
       case 'owner': return 'warning';
       case 'manager': return 'info';
+      case 'kitchen': return 'success';
       case 'cashier': return 'default';
+      case 'staff': return 'default';
       default: return 'default';
     }
   };
@@ -295,7 +298,10 @@ export default function StaffManagementScreen() {
                   <td className="staff-mgmt-cell-username">{member.username}</td>
                   <td>
                     <Badge variant={roleVariant(member.role_name)}>
-                      {member.role_name}
+                      <span className="staff-mgmt-role-badge-content">
+                        <RoleIcon role={member.role_name} size={12} className="staff-mgmt-role-icon" />
+                        <span>{member.role_name}</span>
+                      </span>
                     </Badge>
                   </td>
                   <td>

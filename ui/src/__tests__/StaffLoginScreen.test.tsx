@@ -98,12 +98,12 @@ describe('StaffLoginScreen', () => {
     await user.type(input, 'alice');
     await user.click(screen.getByRole('button', { name: /next/i }));
 
-    const pinSection = document.querySelector('.staff-login-pin-section')!;
-    expect(pinSection).toBeTruthy();
+    const pinWrap = document.querySelector('.staff-login-pin-wrap')!;
+    expect(pinWrap).toBeTruthy();
 
     const card = document.querySelector('.staff-login-card')!;
     await user.click(card);
 
-    expect(document.activeElement).toBe(pinSection);
+    expect(document.activeElement).toBe(pinWrap);
   });
 });

@@ -122,6 +122,11 @@ pub struct Sale {
     /// Customer ID linked to this sale for loyalty tracking.
     #[serde(default)]
     pub customer_id: Option<String>,
+
+    /// Optimistic concurrency version (ADR #6).
+    /// Incremented on every status transition or void; compared before writing.
+    #[serde(default = "crate::default_version")]
+    pub version: i64,
 }
 
 impl Sale {
@@ -143,7 +148,7 @@ impl Sale {
     /// Like [`from_cart`] but also attaches the user_id of the cashier
     /// who processed the sale.
     pub fn from_cart_with_user(cart: &Cart, user_id: Option<String>) -> Option<Self> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let total = cart.total()?;
         let currency = cart.currency();
         let line_count = cart.line_count() as i64;
@@ -156,7 +161,7 @@ impl Sale {
             .map(|(i, cl)| {
                 let line_total = cl.total()?;
                 Some(SaleLine {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: uuid::Uuid::now_v7().to_string(),
                     sale_id: id.clone(),
                     sku: cl.sku.as_str().to_owned(),
                     qty: cl.qty,
@@ -187,6 +192,7 @@ impl Sale {
             discount_label: cart.discount_label().map(String::from),
             subtotal: Money::zero(currency),
             tax_total: Money::zero(currency),
+            version: 1,
         })
     }
 

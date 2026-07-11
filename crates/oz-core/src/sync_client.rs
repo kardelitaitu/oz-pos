@@ -384,7 +384,7 @@ fn upsert_products(
     for p in rows {
         let id =
             p.id.clone()
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
         stmt.execute(rusqlite::params![
             id,
             p.sku,
@@ -458,7 +458,7 @@ fn upsert_users(tx: &rusqlite::Transaction<'_>, rows: &[SnapshotUser]) -> Result
     for u in rows {
         let id =
             u.id.clone()
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
         stmt.execute(rusqlite::params![
             id,                 // ?1
             u.username,         // ?2

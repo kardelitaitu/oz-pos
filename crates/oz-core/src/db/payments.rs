@@ -29,7 +29,7 @@ impl Store<'_> {
         let cur_str = std::str::from_utf8(&currency.0).expect("currency bytes are valid UTF-8");
 
         for split in splits {
-            let id = uuid::Uuid::new_v4().to_string();
+            let id = uuid::Uuid::now_v7().to_string();
             tx.execute(
                 "INSERT INTO payments (id, sale_id, method, amount_minor, currency, created_at,
                                        gateway_reference, gateway_status, gateway_response)
@@ -128,7 +128,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, 1000, now);
 
@@ -168,7 +168,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, 500, now);
 
@@ -203,7 +203,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, 0, now);
 
@@ -227,7 +227,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, 1000, now);
 
@@ -256,7 +256,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, 0, now);
 
@@ -281,7 +281,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, i64::MAX, now);
 
@@ -306,7 +306,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, 5000, now);
 
@@ -335,8 +335,8 @@ mod tests {
         let currency: Currency = "USD".parse().unwrap();
         let now = "2025-06-01T12:00:00Z";
 
-        let sale_a = uuid::Uuid::new_v4().to_string();
-        let sale_b = uuid::Uuid::new_v4().to_string();
+        let sale_a = uuid::Uuid::now_v7().to_string();
+        let sale_b = uuid::Uuid::now_v7().to_string();
         insert_sale(&conn, &sale_a, 500, now);
         insert_sale(&conn, &sale_b, 300, now);
 
@@ -383,7 +383,7 @@ mod tests {
         let conn = fresh();
         let store = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = "2025-06-01T12:00:00Z";
         conn.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status,

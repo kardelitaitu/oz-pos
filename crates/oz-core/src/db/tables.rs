@@ -60,7 +60,7 @@ impl Store<'_> {
     pub fn create_table(&self, table: &Table) -> Result<Table, CoreError> {
         let active_int: i64 = if table.active { 1 } else { 0 };
         let id = if table.id.is_empty() {
-            uuid::Uuid::new_v4().to_string()
+            uuid::Uuid::now_v7().to_string()
         } else {
             table.id.clone()
         };

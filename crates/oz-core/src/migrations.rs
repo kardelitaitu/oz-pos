@@ -239,6 +239,42 @@ pub const ALL: &[Migration] = &[
         id: "055_offline_queue_tenant.sql",
         sql: include_str!("../migrations/055_offline_queue_tenant.sql"),
     },
+    Migration {
+        id: "060_workspace_instances.sql",
+        sql: include_str!("../migrations/060_workspace_instances.sql"),
+    },
+    Migration {
+        id: "061_tenant_subscription.sql",
+        sql: include_str!("../migrations/061_tenant_subscription.sql"),
+    },
+    Migration {
+        id: "063_stock_movements.sql",
+        sql: include_str!("../migrations/063_stock_movements.sql"),
+    },
+    Migration {
+        id: "064_kds_store_id.sql",
+        sql: include_str!("../migrations/064_kds_store_id.sql"),
+    },
+    Migration {
+        id: "065_version_optimistic.sql",
+        sql: include_str!("../migrations/065_version_optimistic.sql"),
+    },
+    Migration {
+        id: "066_store_profile_orphan_guard.sql",
+        sql: include_str!("../migrations/066_store_profile_orphan_guard.sql"),
+    },
+    Migration {
+        id: "067_stock_movements_store_id.sql",
+        sql: include_str!("../migrations/067_stock_movements_store_id.sql"),
+    },
+    Migration {
+        id: "068_tenant_subscription_api_key.sql",
+        sql: include_str!("../migrations/068_tenant_subscription_api_key.sql"),
+    },
+    Migration {
+        id: "069_data_scoping_columns.sql",
+        sql: include_str!("../migrations/069_data_scoping_columns.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -249,7 +285,7 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
 
 /// Create a fresh in-memory database with all migrations already applied.
 ///
-/// Concatenates all 49 migration SQLs into a single batch the first time
+/// Concatenates all migration SQLs into a single batch the first time
 /// and caches the generated SQL in a `OnceLock<String>`. Subsequent calls
 /// just run `execute_batch` on the cached string — no per-test migration
 /// overhead.
@@ -432,6 +468,12 @@ mod tests {
             "workspace_screens",
             "role_workspaces",
             "user_workspaces",
+            "workspace_types",
+            "workspace_type_screens",
+            "workspace_instances",
+            "user_workspace_instances",
+            "role_workspace_types",
+            "user_store_access",
         ];
 
         for table in &expected_tables {
@@ -447,5 +489,129 @@ mod tests {
                 "expected table `{table}` to exist after migration"
             );
         }
+    }
+
+    // ── ADR #4 Phase 2: Data Scoping tests ─────────────────────────
+
+    #[test]
+    fn migration_069_adds_scoping_columns() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // store_id columns exist on domain tables.
+        for table in &["products", "sales", "sale_lines", "customers"] {
+            let count: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = 'store_id'"
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 1, "{table} missing store_id column");
+        }
+
+        // warehouse_id columns exist on inventory and stock_counts.
+        for table in &["inventory", "stock_counts"] {
+            let count: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = 'warehouse_id'"
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 1, "{table} missing warehouse_id column");
+        }
+    }
+
+    #[test]
+    fn migration_069_creates_scoping_indexes() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let expected_indexes = [
+            "idx_sales_store_status",
+            "idx_sale_lines_store_sale",
+            "idx_products_store_category",
+            "idx_inventory_warehouse_product",
+            "idx_customers_store",
+        ];
+
+        for index in &expected_indexes {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                    rusqlite::params![index],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 1, "missing index {index}");
+        }
+    }
+
+    #[test]
+    fn migration_069_scoping_columns_nullable() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Insert a product without store_id — should default to NULL.
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type)
+             VALUES ('prod-scope', 'SKU-SCOPE', 'Scope Test', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+
+        let store_id: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'prod-scope'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(store_id.is_none(), "store_id should default to NULL");
+
+        // Insert a sale without store_id — should default to NULL.
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status)
+             VALUES ('sale-scope', 500, 'USD', 1, 'completed')",
+            [],
+        )
+        .unwrap();
+
+        let sale_store_id: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM sales WHERE id = 'sale-scope'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(sale_store_id.is_none(), "store_id should default to NULL");
+    }
+
+    #[test]
+    fn migration_069_scoping_indexes_used_in_query_plan() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Verify the compound index is used for store-scoped status queries.
+        let mut stmt = conn
+            .prepare(
+                "EXPLAIN QUERY PLAN SELECT * FROM sales WHERE store_id = 's1' AND status = 'completed' ORDER BY created_at DESC",
+            )
+            .unwrap();
+        let plans: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(3))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        let plan_text = plans.join(" ");
+        assert!(
+            plan_text.contains("idx_sales_store_status"),
+            "expected query plan to use idx_sales_store_status, got: {plan_text}"
+        );
     }
 }

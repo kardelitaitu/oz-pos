@@ -32,6 +32,8 @@ pub mod features;
 pub mod gift_card;
 pub mod inventory;
 pub mod kds;
+/// License server client — verify, activate, renew subscriptions (ADR #9).
+pub mod license_verification;
 /// Loyalty program — points, tiers, and redemption.
 pub mod loyalty;
 pub mod migrations;
@@ -48,12 +50,14 @@ pub mod purchase_order;
 pub mod recipe;
 pub mod refund;
 pub mod sale;
+pub mod session;
 pub mod settings;
 pub mod shift;
 pub mod sku;
 pub mod stock_count;
 pub mod stock_transfer;
 pub mod store_profile;
+pub mod subscription;
 pub mod supplier;
 pub mod sync;
 pub mod sync_client;
@@ -66,6 +70,30 @@ pub mod terminal_profile;
 pub mod user;
 /// Per-user display preferences (card size, font size, etc.).
 pub mod user_preferences;
+
+/// Generate a new time-ordered UUIDv7 primary key.
+///
+/// UUIDv7 embeds a millisecond-precision timestamp in the high bits,
+/// providing better B-tree index locality in SQLite and preventing
+/// ID collisions when multiple offline registers generate IDs
+/// independently (ADR #6).
+///
+/// Use this helper for all new entity IDs. Avoid `Uuid::new_v4()`
+/// in production code.
+#[must_use]
+pub fn new_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
+/// Default optimistic concurrency version (ADR #6).
+///
+/// Used as the `#[serde(default)]` value for [`Product::version`]
+/// and [`Sale::version`] so that deserialization from pre-migration
+/// payloads succeeds.
+#[doc(hidden)]
+pub fn default_version() -> i64 {
+    1
+}
 
 pub use audit::AuditEntry;
 #[cfg(feature = "cache-redis")]
@@ -112,6 +140,7 @@ pub use sku::{LineId, Sku};
 pub use stock_count::{CountType, StockAdjustment, StockCount, StockCountLine, StockCountStatus};
 pub use stock_transfer::{StockTransfer, StockTransferLine};
 pub use store_profile::StoreProfile;
+pub use subscription::{InstanceStatus, SubscriptionTier, TenantSubscription};
 pub use supplier::Supplier;
 pub use sync_client::{
     PullResult, SyncAttemptResult, SyncConfig, pull_snapshot, sync_pending, sync_pending_async,

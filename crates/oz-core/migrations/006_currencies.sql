@@ -28,3 +28,8 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
 
 CREATE INDEX IF NOT EXISTS idx_exchange_rates_from ON exchange_rates(from_currency);
 CREATE INDEX IF NOT EXISTS idx_exchange_rates_to   ON exchange_rates(to_currency);
+
+-- Seed default currencies (idempotent via OR IGNORE).
+INSERT OR IGNORE INTO currencies (code, numeric_code, name, minor_exponent, symbol) VALUES
+    ('USD', '840', 'US Dollar',    2, '$'),
+    ('IDR', '360', 'Indonesian Rupiah', 0, 'Rp');

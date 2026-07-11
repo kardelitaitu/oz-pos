@@ -12,6 +12,7 @@ impl Store<'_> {
         Ok(KdsOrder {
             id: row.get("id")?,
             sale_id: row.get("sale_id")?,
+            store_id: row.get("store_id")?,
             status: row.get("status")?,
             items_summary: row.get("items_summary")?,
             item_count: row.get("item_count")?,
@@ -27,7 +28,7 @@ impl Store<'_> {
 
     /// Create a KDS order from input, auto-incrementing the display number per day.
     pub fn create_kds_order(&self, input: CreateKdsOrderInput) -> Result<KdsOrder, CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
         let tx = self.conn.unchecked_transaction()?;
@@ -51,12 +52,13 @@ impl Store<'_> {
             .to_string();
 
         tx.execute(
-            "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count,
+            "INSERT INTO kds_orders (id, sale_id, store_id, status, items_summary, item_count,
                                      display_number, received_at, notes)
-             VALUES (?1, ?2, 'pending', ?3, ?4, ?5, ?6, ?7)",
+             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8)",
             params![
                 id,
                 input.sale_id,
+                input.store_id,
                 input.items_summary,
                 input.item_count,
                 display_number,
@@ -75,7 +77,7 @@ impl Store<'_> {
     /// List KDS orders, optionally filtered by status. Ordered by received_at DESC.
     pub fn list_kds_orders(&self, status_filter: Option<&str>) -> Result<Vec<KdsOrder>, CoreError> {
         let mut sql = String::from(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders",
@@ -98,7 +100,7 @@ impl Store<'_> {
     /// Get a single KDS order by its id.
     pub fn get_kds_order(&self, id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders WHERE id = ?1",
@@ -114,7 +116,7 @@ impl Store<'_> {
     /// Get a KDS order by the originating sale id.
     pub fn get_kds_order_by_sale(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders WHERE sale_id = ?1",
@@ -170,7 +172,7 @@ impl Store<'_> {
     /// ordered by received_at ASC (oldest first).
     pub fn get_kds_queue(&self) -> Result<Vec<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, notes
              FROM kds_orders
@@ -190,8 +192,16 @@ impl Store<'_> {
     /// Complete a sale to a KDS order: creates a KDS ticket from a completed sale
     /// for items whose product type is `restaurant` or `both`.
     ///
+    /// When `store_id` is provided (from the caller's `SessionContext`), the
+    /// resulting KDS order is tagged with that store for defense-in-depth
+    /// filtering on KDS tablets (ADR #8).
+    ///
     /// Returns `Ok(None)` when the sale has no restaurant-eligible items.
-    pub fn complete_sale_to_kds(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
+    pub fn complete_sale_to_kds(
+        &self,
+        sale_id: &str,
+        store_id: Option<&str>,
+    ) -> Result<Option<KdsOrder>, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
             id: sale_id.to_owned(),
@@ -236,6 +246,7 @@ impl Store<'_> {
 
         self.create_kds_order(CreateKdsOrderInput {
             sale_id: sale_id.to_owned(),
+            store_id: store_id.map(|s| s.to_owned()),
             items_summary,
             item_count,
             notes,
@@ -307,7 +318,7 @@ mod tests {
         seed_product(&conn, "COFFEE", "Coffee");
 
         // Create a minimal sale.
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -326,12 +337,14 @@ mod tests {
             tax_total: price(0),
             customer_id: None,
             lines: vec![],
+            version: 1,
         };
         s.create_sale(&test_sale).unwrap();
 
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id.clone(),
+                store_id: None,
                 items_summary: "Coffee x2, Bagel".into(),
                 item_count: 3,
                 notes: "No onions".into(),
@@ -364,7 +377,7 @@ mod tests {
         let s = store(&conn);
         seed_product(&conn, "TEA", "Tea");
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -383,12 +396,14 @@ mod tests {
             tax_total: price(0),
             customer_id: None,
             lines: vec![],
+            version: 1,
         };
         s.create_sale(&test_sale).unwrap();
 
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id.clone(),
+                store_id: None,
                 items_summary: "Tea".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -404,7 +419,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -423,12 +438,14 @@ mod tests {
             tax_total: price(0),
             customer_id: None,
             lines: vec![],
+            version: 1,
         };
         s.create_sale(&test_sale).unwrap();
 
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id,
+                store_id: None,
                 items_summary: "Test".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -456,7 +473,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -475,12 +492,14 @@ mod tests {
             tax_total: price(0),
             customer_id: None,
             lines: vec![],
+            version: 1,
         };
         s.create_sale(&test_sale).unwrap();
 
         let order = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id,
+                store_id: None,
                 items_summary: "Test".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -504,8 +523,8 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id1 = uuid::Uuid::new_v4().to_string();
-        let sale_id2 = uuid::Uuid::new_v4().to_string();
+        let sale_id1 = uuid::Uuid::now_v7().to_string();
+        let sale_id2 = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         for sid in [&sale_id1, &sale_id2] {
@@ -526,12 +545,14 @@ mod tests {
                 tax_total: price(0),
                 customer_id: None,
                 lines: vec![],
+                version: 1,
             };
             s.create_sale(&test_sale).unwrap();
         }
 
         s.create_kds_order(CreateKdsOrderInput {
             sale_id: sale_id1,
+            store_id: None,
             items_summary: "Order 1".into(),
             item_count: 1,
             notes: String::new(),
@@ -540,6 +561,7 @@ mod tests {
 
         s.create_kds_order(CreateKdsOrderInput {
             sale_id: sale_id2,
+            store_id: None,
             items_summary: "Order 2".into(),
             item_count: 2,
             notes: String::new(),
@@ -561,9 +583,9 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id1 = uuid::Uuid::new_v4().to_string();
-        let sale_id2 = uuid::Uuid::new_v4().to_string();
-        let sale_id3 = uuid::Uuid::new_v4().to_string();
+        let sale_id1 = uuid::Uuid::now_v7().to_string();
+        let sale_id2 = uuid::Uuid::now_v7().to_string();
+        let sale_id3 = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         for sid in [&sale_id1, &sale_id2, &sale_id3] {
@@ -584,6 +606,7 @@ mod tests {
                 tax_total: price(0),
                 customer_id: None,
                 lines: vec![],
+                version: 1,
             };
             s.create_sale(&test_sale).unwrap();
         }
@@ -591,6 +614,7 @@ mod tests {
         let _o1 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id1,
+                store_id: None,
                 items_summary: "Pending".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -600,6 +624,7 @@ mod tests {
         let o2 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id2,
+                store_id: None,
                 items_summary: "Preparing".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -609,6 +634,7 @@ mod tests {
         let o3 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id3,
+                store_id: None,
                 items_summary: "Served".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -645,7 +671,7 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        let order = s.complete_sale_to_kds(&sale.id).unwrap().unwrap();
+        let order = s.complete_sale_to_kds(&sale.id, None).unwrap().unwrap();
         assert_eq!(order.sale_id, sale.id);
         assert_eq!(order.status, "pending");
         assert!(order.items_summary.contains("Coffee"));
@@ -658,8 +684,8 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id1 = uuid::Uuid::new_v4().to_string();
-        let sale_id2 = uuid::Uuid::new_v4().to_string();
+        let sale_id1 = uuid::Uuid::now_v7().to_string();
+        let sale_id2 = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         for sid in [&sale_id1, &sale_id2] {
@@ -680,6 +706,7 @@ mod tests {
                 tax_total: price(0),
                 customer_id: None,
                 lines: vec![],
+                version: 1,
             };
             s.create_sale(&test_sale).unwrap();
         }
@@ -687,6 +714,7 @@ mod tests {
         let o1 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id1,
+                store_id: None,
                 items_summary: "First".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -696,6 +724,7 @@ mod tests {
         let o2 = s
             .create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id2,
+                store_id: None,
                 items_summary: "Second".into(),
                 item_count: 1,
                 notes: String::new(),
@@ -713,7 +742,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let test_sale = Sale {
             id: sale_id.clone(),
@@ -732,11 +761,12 @@ mod tests {
             tax_total: price(0),
             customer_id: None,
             lines: vec![],
+            version: 1,
         };
         s.create_sale(&test_sale).unwrap();
 
         // Attempt a raw INSERT with an invalid status — should fail the CHECK constraint.
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let result = s.conn.execute(
             "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)
              VALUES (?1, ?2, 'bogus', 'Test', 1, '')",
@@ -764,7 +794,7 @@ mod tests {
         // Insert orders with each valid status. Each needs its own sale_id
         // because kds_orders.sale_id has a UNIQUE constraint.
         for status in &["pending", "preparing", "ready", "served", "cancelled"] {
-            let sale_id = uuid::Uuid::new_v4().to_string();
+            let sale_id = uuid::Uuid::now_v7().to_string();
             let test_sale = Sale {
                 id: sale_id.clone(),
                 status: crate::SaleStatus::Completed,
@@ -782,10 +812,11 @@ mod tests {
                 tax_total: price(0),
                 customer_id: None,
                 lines: vec![],
+                version: 1,
             };
             s.create_sale(&test_sale).unwrap();
 
-            let order_id = uuid::Uuid::new_v4().to_string();
+            let order_id = uuid::Uuid::now_v7().to_string();
             s.conn
                 .execute(
                     "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, notes)

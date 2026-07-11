@@ -76,6 +76,11 @@ async function setFeature(key: string, enabled: boolean): Promise<SetFeatureResu
   return invoke<SetFeatureResult>('set_feature', { args: { key, enabled } });
 }
 
+async function setFeaturesBulk(keys: string[], enabled: boolean): Promise<ListAllFeaturesResult> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<ListAllFeaturesResult>('set_features_bulk', { args: { keys, enabled } });
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function getGroupIcon(group: string): string {
@@ -179,18 +184,17 @@ export default function FeatureToggleScreen() {
 
   const toggleGroup = useCallback(async (group: string, enable: boolean) => {
     const groupFeatures = features.filter((f) => f.group === group);
+    const keys = groupFeatures
+      .filter((f) => f.enabled !== enable)
+      .map((f) => f.key);
+
+    if (keys.length === 0) return;
+
     setTogglingBatch(group);
     try {
-      // Toggle each feature in sequence (individual IPC calls).
-      for (const feat of groupFeatures) {
-        if (feat.enabled !== enable) {
-          // We don't await result.features after every toggle —
-          // just update local state optimistically.
-          await setFeature(feat.key, enable);
-        }
-      }
-      // Reload full state after batch completes.
-      const result = await listAllFeatures();
+      // Toggle all features in a single atomic SQLite transaction via
+      // set_features_bulk — avoids N individual IPC round-trips.
+      const result = await setFeaturesBulk(keys, enable);
       setFeatures(result.features);
       addToast({
         message: l10n.getString(

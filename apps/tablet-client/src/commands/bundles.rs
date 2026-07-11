@@ -49,7 +49,7 @@ pub async fn create_bundle(
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = uuid::Uuid::now_v7().to_string();
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     let bundle = ProductBundle {
@@ -68,7 +68,7 @@ pub async fn create_bundle(
         .items
         .into_iter()
         .map(|i| BundleItem {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             bundle_id: id.clone(),
             sku: i.sku,
             qty: i.qty,

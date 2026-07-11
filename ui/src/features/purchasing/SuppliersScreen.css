@@ -149,11 +149,11 @@
 .suppliers-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 100);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-bg-overlay);
 }
 
 .suppliers-modal {
@@ -259,7 +259,7 @@
   border-radius: var(--radius-md);
   color: var(--color-danger);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .suppliers-modal-actions {

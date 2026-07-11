@@ -34,7 +34,7 @@ mod tests {
 
     fn make_item(created_at: &str, action: &str) -> OfflineQueueItem {
         OfflineQueueItem {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             action: action.to_owned(),
             payload: "{}".to_owned(),
             status: OfflineQueueStatus::Pending,

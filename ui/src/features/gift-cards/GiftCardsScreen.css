@@ -116,13 +116,13 @@
 }
 
 .gift-card-status--active {
-  background: var(--color-success-bg, #dcfce7);
-  color: var(--color-success, #166534);
+  background: var(--color-success-bg);
+  color: var(--color-fg);
 }
 
 .gift-card-status--frozen {
-  background: var(--color-warning-bg, #fef9c3);
-  color: var(--color-warning, #854d0e);
+  background: var(--color-warning-bg);
+  color: var(--color-fg);
 }
 
 .gift-card-status--redeemed {
@@ -132,8 +132,8 @@
 }
 
 .gift-card-status--expired {
-  background: var(--color-danger-bg, #fef2f2);
-  color: var(--color-danger, #991b1b);
+  background: var(--color-danger-bg);
+  color: var(--color-fg);
 }
 
 .gift-card-balance {
@@ -154,7 +154,7 @@
 
 .gift-card-detail {
   padding: 0 var(--space-4) var(--space-4);
-  border-top: 1px solid var(--color-border-dim);
+  border-top: 1px solid var(--color-border);
 }
 
 .gift-card-info-grid {
@@ -238,7 +238,7 @@
 
 .gift-card-txn-table td {
   padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border-dim);
+  border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
 }
 
@@ -257,18 +257,18 @@
 }
 
 .gift-card-txn-type--redeem {
-  background: var(--color-danger-bg, #fef2f2);
-  color: var(--color-danger, #991b1b);
+  background: var(--color-danger-bg);
+  color: var(--color-fg);
 }
 
 .gift-card-txn-type--topup {
-  background: var(--color-success-bg, #dcfce7);
-  color: var(--color-success, #166534);
+  background: var(--color-success-bg);
+  color: var(--color-fg);
 }
 
 .gift-card-txn-type--refund {
-  background: var(--color-warning-bg, #fef9c3);
-  color: var(--color-warning, #854d0e);
+  background: var(--color-warning-bg);
+  color: var(--color-fg);
 }
 
 .gift-card-txn-amount {
@@ -301,11 +301,11 @@
 .gift-cards-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-modal);
 }
 
 .gift-cards-modal {
@@ -314,7 +314,7 @@
   padding: var(--space-6);
   min-width: 400px;
   max-width: 500px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-xl);
 }
 
 .gift-cards-modal-title {

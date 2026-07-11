@@ -70,3 +70,50 @@ export const createStaff = (args: CreateStaffArgs): Promise<StaffMemberDto> =>
 
 export const updateStaff = (args: UpdateStaffArgs): Promise<StaffMemberDto> =>
   invoke<StaffMemberDto>('update_staff', { args });
+
+// ── Session Token (ADR #4 / ADR #7) ───────────────────────────────
+
+/** Arguments for creating a session token after login + workspace selection. */
+export interface CreateSessionArgs {
+  user_id: string;
+  role_id: string;
+  store_id: string;
+  instance_id: string;
+  type_key: string;
+  terminal_id: string;
+}
+
+/** Session context DTO returned alongside the opaque token. */
+export interface SessionContextDto {
+  userId: string;
+  roleId: string;
+  storeId: string;
+  instanceId: string;
+  typeKey: string;
+  terminalId: string;
+}
+
+/** Result of create_session — opaque token + resolved context. */
+export interface CreateSessionResult {
+  session_token: string;
+  context: SessionContextDto;
+}
+
+/**
+ * Create a new session token after authentication and workspace selection.
+ *
+ * The returned token must be passed to every subsequent Tauri command
+ * as the `sessionToken` parameter. The backend resolves the caller's
+ * scope (store, instance, type, user, role, terminal) from this token.
+ */
+export const createSession = (args: CreateSessionArgs): Promise<CreateSessionResult> =>
+  invoke<CreateSessionResult>('create_session', { args });
+
+/**
+ * Destroy an active session token (logout or store switch).
+ *
+ * After this call, any command using the old token will fail
+ * with InvalidSession.
+ */
+export const destroySession = (sessionToken: string): Promise<void> =>
+  invoke<void>('destroy_session', { sessionToken });

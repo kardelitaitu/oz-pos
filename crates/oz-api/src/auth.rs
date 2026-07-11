@@ -72,7 +72,7 @@ pub fn create_token(
     let hours = expiry_hours.unwrap_or(DEFAULT_EXPIRY_HOURS);
     let now = Utc::now();
     let exp_time = now + Duration::hours(hours);
-    let token_id = uuid::Uuid::new_v4().to_string();
+    let token_id = uuid::Uuid::now_v7().to_string();
 
     let claims = ApiTokenClaims {
         sub: subject.to_owned(),

@@ -18,7 +18,7 @@ interface BrandContextValue {
   refreshBrandSettings: () => void;
 }
 
-const BrandContext = createContext<BrandContextValue | null>(null);
+export const BrandContext = createContext<BrandContextValue | null>(null);
 
 const DEFAULT_SETTINGS: BrandSettings = {
   primary_colour: '#10b981',
@@ -73,3 +73,13 @@ export function useBrand(): BrandContextValue {
   }
   return ctx;
 }
+
+/**
+ * Access brand settings safely outside of a BrandProvider (or in unit tests).
+ * Returns `null` if no BrandProvider wraps the calling tree.
+ */
+export function useOptionalBrand(): BrandSettings | null {
+  const ctx = useContext(BrandContext);
+  return ctx?.settings ?? null;
+}
+

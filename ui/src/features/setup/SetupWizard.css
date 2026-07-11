@@ -406,6 +406,24 @@
   color: var(--color-accent);
 }
 
+.setup-currency-select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  appearance: auto;
+}
+
+.setup-currency-select:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
 .setup-step-group {
   display: inline-flex;
   align-items: center;

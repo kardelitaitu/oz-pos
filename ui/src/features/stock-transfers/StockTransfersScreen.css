@@ -60,7 +60,7 @@
 
 .stock-transfers-filter-btn.active {
   background: var(--color-accent);
-  color: var(--color-on-accent);
+  color: var(--color-accent-fg);
   border-color: var(--color-accent);
 }
 
@@ -164,23 +164,23 @@
 }
 
 .stock-transfers-badge--pending {
-  background: var(--color-warning-bg, #fef3c7);
-  color: var(--color-warning, #92400e);
+  background: var(--color-warning-bg);
+  color: var(--color-fg);
 }
 
 .stock-transfers-badge--in_transit {
-  background: var(--color-accent-dim, #dbeafe);
-  color: var(--color-accent, #1e40af);
+  background: var(--color-info-bg);
+  color: var(--color-fg);
 }
 
 .stock-transfers-badge--received {
-  background: var(--color-success-bg, #dcfce7);
-  color: var(--color-success, #166534);
+  background: var(--color-success-bg);
+  color: var(--color-fg);
 }
 
 .stock-transfers-badge--cancelled {
-  background: var(--color-danger-bg, #fef2f2);
-  color: var(--color-danger, #991b1b);
+  background: var(--color-danger-bg);
+  color: var(--color-fg);
 }
 
 /* ── Overlay / Modal ─────────────────────────────────────────── */
@@ -188,18 +188,18 @@
 .stock-transfers-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-bg-overlay);
   padding: var(--space-4);
 }
 
 .stock-transfers-modal {
   background: var(--color-bg);
   border-radius: var(--radius-lg);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-xl);
   max-height: 90vh;
   overflow-y: auto;
   width: 100%;
@@ -303,7 +303,7 @@
 
 .stock-transfers-lines-table td {
   padding: var(--space-2);
-  border-bottom: 1px solid var(--color-border-dim);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* ── Create form ─────────────────────────────────────────────────── */
@@ -358,7 +358,7 @@
 .stock-transfers-lines-section {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border-dim);
+  border-top: 1px solid var(--color-border);
 }
 
 .stock-transfers-lines-header {
@@ -410,6 +410,6 @@
   border-radius: var(--radius-md);
   color: var(--color-danger);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   margin-top: var(--space-3);
 }

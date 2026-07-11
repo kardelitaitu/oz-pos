@@ -160,7 +160,7 @@ impl Store<'_> {
             });
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let mut subtotal: i64 = 0;
@@ -202,7 +202,7 @@ impl Store<'_> {
 
         let mut created_lines: Vec<PurchaseOrderLine> = Vec::with_capacity(lines.len());
         for line in lines {
-            let line_id = uuid::Uuid::new_v4().to_string();
+            let line_id = uuid::Uuid::now_v7().to_string();
             let line_total = line.qty * line.unit_cost_minor;
             self.conn.execute(
                 "INSERT INTO purchase_order_lines (id, po_id, sku, product_name, qty,

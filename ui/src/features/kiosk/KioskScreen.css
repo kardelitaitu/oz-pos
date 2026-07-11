@@ -10,8 +10,8 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: var(--color-accent, #4f46e5);
-  color: var(--color-accent-fg, #fff);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
   cursor: pointer;
 }
 
@@ -68,7 +68,7 @@
 
 .kiosk-cat-chip.active {
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border-color: var(--color-accent);
 }
 
@@ -197,13 +197,13 @@
 }
 
 .kiosk-checkout-btn {
-  padding: 16px;
+  padding: var(--space-4);
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border: none;
   border-radius: var(--radius-md);
   font-size: 20px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   min-height: 56px;
 }
@@ -240,13 +240,13 @@
 }
 
 .kiosk-checkout-pay {
-  padding: 20px;
+  padding: var(--space-5);
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   border: none;
   border-radius: var(--radius-md);
   font-size: 24px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
   min-height: 64px;
   margin-bottom: var(--space-2);

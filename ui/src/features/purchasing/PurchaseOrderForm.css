@@ -1,7 +1,7 @@
 .po-form-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 100);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -141,7 +141,7 @@
 
 .po-form-lines-table td {
   padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border-dim);
+  border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
 }
 

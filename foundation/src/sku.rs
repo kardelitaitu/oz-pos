@@ -63,7 +63,7 @@ pub struct LineId(pub Uuid);
 impl LineId {
     #[must_use]
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        Self(Uuid::now_v7())
     }
 }
 

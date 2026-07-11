@@ -26,24 +26,50 @@ pub struct SaleListItem {
     pub created_at: String,
 }
 
+/// List all sales from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_sales_scoped`
+/// with a `session_token` to list sales from the store-scoped database.
 #[command]
 pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     let sales = store.list_sales()?;
     drop(db);
-    Ok(sales
-        .into_iter()
-        .map(|s| SaleListItem {
-            id: s.id,
-            total: s.total,
-            line_count: s.line_count,
-            status: format!("{:?}", s.status),
-            payment_method: s.payment_method,
-            user_id: s.user_id,
-            created_at: s.created_at,
-        })
-        .collect())
+    Ok(sales.into_iter().map(map_sale_to_item).collect())
+}
+
+/// List all sales for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `list_sales`. The backend resolves the
+/// opaque `session_token` to a `SessionContext`, opens the store-scoped
+/// database, and returns only that store's completed sales.
+#[command]
+pub async fn list_sales_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SaleListItem>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let sales = store.list_sales()?;
+    drop(db);
+    Ok(sales.into_iter().map(map_sale_to_item).collect())
+}
+
+/// Shared mapping from `oz_core::Sale` to `SaleListItem`.
+fn map_sale_to_item(s: oz_core::Sale) -> SaleListItem {
+    SaleListItem {
+        id: s.id,
+        total: s.total,
+        line_count: s.line_count,
+        status: format!("{:?}", s.status),
+        payment_method: s.payment_method,
+        user_id: s.user_id,
+        created_at: s.created_at,
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -61,6 +87,10 @@ pub struct SaleDetail {
     pub lines: Vec<oz_core::SaleLine>,
 }
 
+/// Fetch a single sale by ID from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_sale_scoped`
+/// with a `session_token` to look up the sale in the store-scoped database.
 #[command]
 pub async fn get_sale(
     id: String,
@@ -70,7 +100,33 @@ pub async fn get_sale(
     let store = Store::new(&db);
     let sale = store.get_sale(&id)?;
     drop(db);
-    Ok(sale.map(|s| SaleDetail {
+    Ok(sale.map(map_sale_to_detail))
+}
+
+/// Fetch a single sale by ID from the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `get_sale`. The backend resolves the
+/// session token to open the store-scoped database and looks up the
+/// sale within that store only.
+#[command]
+pub async fn get_sale_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<SaleDetail>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let sale = store.get_sale(&id)?;
+    drop(db);
+    Ok(sale.map(map_sale_to_detail))
+}
+
+/// Shared mapping from `oz_core::Sale` to `SaleDetail`.
+fn map_sale_to_detail(s: oz_core::Sale) -> SaleDetail {
+    SaleDetail {
         id: s.id,
         total: s.total,
         subtotal: s.subtotal,
@@ -82,11 +138,15 @@ pub async fn get_sale(
         user_id: s.user_id,
         created_at: s.created_at,
         lines: s.lines,
-    }))
+    }
 }
 
 // ── Dashboard / Export ───────────────────────────────────────────────
 
+/// Fetch the daily sales summary from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `export_daily_summary_scoped`
+/// with a `session_token` for store-scoped reports.
 #[command]
 pub async fn export_daily_summary(
     state: State<'_, AppState>,
@@ -98,11 +158,50 @@ pub async fn export_daily_summary(
     Ok(rows)
 }
 
+/// Fetch the daily sales summary for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `export_daily_summary`.
+#[command]
+pub async fn export_daily_summary_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<DailySummaryRow>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows = store.export_daily_summary()?;
+    drop(db);
+    Ok(rows)
+}
+
+/// Fetch sales-by-hour breakdown from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `export_sales_by_hour_scoped`.
 #[command]
 pub async fn export_sales_by_hour(
     state: State<'_, AppState>,
 ) -> Result<Vec<SalesByHourRow>, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let rows = store.export_sales_by_hour()?;
+    drop(db);
+    Ok(rows)
+}
+
+/// Fetch sales-by-hour breakdown for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `export_sales_by_hour`.
+#[command]
+pub async fn export_sales_by_hour_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SalesByHourRow>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let rows = store.export_sales_by_hour()?;
     drop(db);
@@ -131,11 +230,34 @@ pub struct PaymentBreakdown {
     pub total: i64,
 }
 
-/// Fetch the full EOD (End-of-Day) report for today.
+/// Fetch the full EOD (End-of-Day) report from the global database.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `export_eod_report_scoped`.
 #[command]
 pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    build_eod_report(&db)
+}
+
+/// Fetch the full EOD report for the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `export_eod_report`. Opens the store-scoped
+/// database and builds the report from that store's data only.
+#[command]
+pub async fn export_eod_report_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<EodReport, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    build_eod_report(&db)
+}
+
+/// Shared business logic for building an EOD report from a connection.
+fn build_eod_report(db: &rusqlite::Connection) -> Result<EodReport, AppError> {
+    let store = Store::new(db);
 
     let daily = store.export_daily_summary()?;
     let hourly = store.export_sales_by_hour()?;
@@ -190,8 +312,6 @@ pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, 
         .map(|r| r.currency.clone())
         .unwrap_or_else(|| "USD".into());
 
-    drop(db);
-
     Ok(EodReport {
         total_sales,
         total_revenue,
@@ -226,7 +346,7 @@ mod tests {
 
     fn make_sale_line(sale_id: &str, sku: &str, qty: i64, unit: i64) -> SaleLine {
         SaleLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sale_id: sale_id.into(),
             sku: sku.into(),
             qty,
@@ -386,5 +506,28 @@ mod tests {
         assert_eq!(json["total_sales"], 50);
         assert_eq!(json["currency"], "USD");
         assert!(!json["payment_breakdown"].as_array().unwrap().is_empty());
+    }
+
+    // ── Session token rejection tests ─────────────────────────────────
+
+    #[test]
+    fn list_sales_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn get_sale_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("bad-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn export_reports_scoped_reject_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }

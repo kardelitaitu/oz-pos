@@ -1117,7 +1117,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             />
             <button
               style={{
-                padding: '4px 12px', background: '#1a3a5c', color: '#fff',
+                padding: '4px 12px', background: 'var(--color-primary-pos)', color: 'var(--color-bg-elevated)',
                 border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
               }}
               onClick={handleSkuSubmit}
@@ -1253,7 +1253,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                 {discountPercent > 0 && discountAmount && (
                   <div className="retail-total-row">
                     <span>{l10n.getString('retail-total-discount', { percent: discountPercent }) || `Discount ${discountPercent}%`}</span>
-                    <span style={{ color: '#c00' }}>&minus;{formatMoney(discountAmount)}</span>
+                    <span style={{ color: 'var(--color-danger)' }}>&minus;{formatMoney(discountAmount)}</span>
                   </div>
                 )}
                 {cartTax > 0 && (
@@ -1313,8 +1313,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                 <button
                   onClick={() => { setShowCreditList(true); loadCreditSales(); }}
                   style={{
-                    width: '100%', padding: '6px', fontSize: 11, background: creditSales.length > 0 ? '#b8860b' : '#555',
-                    color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700,
+                    width: '100%', padding: '6px', fontSize: 11, background: creditSales.length > 0 ? 'var(--color-warning-pos-darker)' : 'var(--color-fg-secondary)',
+                    color: 'var(--color-bg-elevated)', border: 'none', cursor: 'pointer', fontWeight: 700,
                   }}
                 >
                   {l10n.getString('retail-credit-reminders', { count: creditSales.length }) || `Credit Reminders (${creditSales.length})`}
@@ -1499,8 +1499,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                           onClick={() => handleSettleCredit(c.saleId)}
                           disabled={settlingId === c.saleId}
                           style={{
-                            padding: '4px 8px', fontSize: 11, background: '#1a7a2a',
-                            color: '#fff', border: 'none', cursor: 'pointer',
+                            padding: '4px 8px', fontSize: 11, background: 'var(--color-success-pos)',
+                            color: 'var(--color-bg-elevated)', border: 'none', cursor: 'pointer',
                           }}
                         >
                           {settlingId === c.saleId ? '…' : l10n.getString('retail-credit-settle')}

@@ -18,7 +18,7 @@
 .sales-history-title {
   margin: 0;
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .sales-history-count {
@@ -40,6 +40,7 @@
   cursor: pointer;
   font-size: var(--text-sm);
   color: var(--color-link);
+  transition: all var(--duration-150) var(--ease-out);
 }
 
 .sales-history-export-btn:hover {
@@ -293,11 +294,11 @@
 .sales-history-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-modal);
   animation: sales-history-overlay-in var(--duration-200) var(--ease-out);
 }
 
@@ -334,7 +335,7 @@
 .sales-history-modal-header h2 {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .sales-history-modal-close {
@@ -437,12 +438,6 @@
   outline-offset: 1px;
 }
 
-.sales-history-page-indicator {
-  font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
 .sales-history-page-size-group {
   display: inline-flex;
   align-items: center;
@@ -509,8 +504,8 @@
 }
 
 .sales-history-refund-total {
-  font-weight: 700;
-  color: var(--color-danger, #ef4444);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-danger);
   font-family: var(--font-mono);
 }
 
@@ -532,6 +527,24 @@
   background: var(--color-danger-bg);
 }
 
+.sales-history-page-indicator {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+}
+
+.sales-history-void-error {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-dim);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--leading-normal);
+}
+
 .sales-history-cell-actions-inner {
   display: flex;
   gap: var(--space-1);
@@ -546,8 +559,8 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-accent-fg, #fff);
-  background: var(--color-danger, #ef4444);
+  color: var(--color-accent-fg);
+  background: var(--color-danger);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -556,12 +569,7 @@
 }
 
 .sales-history-void-btn:hover {
-  background: var(--color-danger-hover, #dc2626);
-}
-
-.sales-history-void-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  background: var(--color-danger-hover, var(--color-danger));
 }
 
 /* ── Void modal ────────────────────────────────────────── */
@@ -607,15 +615,5 @@
   outline-offset: 0;
   border-color: var(--color-border-focus);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-border-focus) 20%, transparent);
-}
-
-.sales-history-void-error {
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--color-danger);
-  background: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-dim);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-3);
 }
 

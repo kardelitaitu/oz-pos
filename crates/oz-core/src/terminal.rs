@@ -29,7 +29,7 @@ impl Terminal {
     /// Create a new terminal with generated id.
     pub fn new(name: impl Into<String>, device_id: impl Into<String>) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: name.into(),
             device_id: device_id.into(),
             terminal_secret: None,

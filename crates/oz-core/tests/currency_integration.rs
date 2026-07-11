@@ -337,20 +337,28 @@ fn currencies_list_ordered_by_code() {
     seed_common_currencies(&conn);
     let s = store(&conn);
 
+    // Migration 006 seeds USD + IDR. seed_common_currencies adds CAD, EUR,
+    // GBP, JPY, KWD (USD is already there via OR IGNORE). Total: 7.
     let currencies = s.list_currencies().unwrap();
-    // alphabetic: CAD, EUR, GBP, JPY, KWD, USD
-    assert_eq!(currencies.len(), 6);
+    // alphabetic: CAD, EUR, GBP, IDR, JPY, KWD, USD
+    assert_eq!(currencies.len(), 7);
     assert_eq!(currencies[0].0, "CAD");
     assert_eq!(currencies[1].0, "EUR");
     assert_eq!(currencies[2].0, "GBP");
-    assert_eq!(currencies[3].0, "JPY");
-    assert_eq!(currencies[4].0, "KWD");
-    assert_eq!(currencies[5].0, "USD");
+    assert_eq!(currencies[3].0, "IDR");
+    assert_eq!(currencies[4].0, "JPY");
+    assert_eq!(currencies[5].0, "KWD");
+    assert_eq!(currencies[6].0, "USD");
 }
 
 #[test]
 fn currencies_list_empty_db() {
     let conn = setup();
+
+    // Migration 006 seeds USD + IDR. Delete them to test empty state.
+    conn.execute("DELETE FROM exchange_rates", []).unwrap();
+    conn.execute("DELETE FROM currencies", []).unwrap();
+
     let s = store(&conn);
     let currencies = s.list_currencies().unwrap();
     assert!(currencies.is_empty());
@@ -359,6 +367,11 @@ fn currencies_list_empty_db() {
 #[test]
 fn currencies_list_contains_all_fields() {
     let conn = setup();
+
+    // Migration 006 seeds USD + IDR. Clear them and seed clean.
+    conn.execute("DELETE FROM exchange_rates", []).unwrap();
+    conn.execute("DELETE FROM currencies", []).unwrap();
+
     seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
     let s = store(&conn);
 

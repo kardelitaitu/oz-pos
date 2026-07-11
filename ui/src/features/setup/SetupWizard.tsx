@@ -4,6 +4,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
+import { detectDefaultCurrency } from '@/utils/currency';
 import LiveSetupPreview from './components/LiveSetupPreview';
 import './SetupWizard.css';
 
@@ -20,6 +21,7 @@ export interface FeatureDef {
 export interface WizardState {
   preset: Preset | null;
   features: Record<string, boolean>;
+  default_currency: string;
 }
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -312,6 +314,9 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
   const [preset, setPreset] = useState<Preset | null>(null);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [completed, setCompleted] = useState(false);
+  const [defaultCurrency, setDefaultCurrency] = useState(detectDefaultCurrency);
+  // Note: internal state uses camelCase, but WizardState and API use
+  // default_currency (snake_case) to match the Rust backend field name.
 
   // ── Preset selection ────────────────────────────────────────────
   const handleSelectPreset = useCallback((p: Preset) => {
@@ -347,9 +352,9 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
   const handleComplete = useCallback(() => {
     setCompleted(true);
     if (onComplete && preset) {
-      onComplete({ preset, features });
+      onComplete({ preset, features, default_currency: defaultCurrency });
     }
-  }, [onComplete, preset, features]);
+  }, [onComplete, preset, features, defaultCurrency]);
   // ── All-features list for review ─────────────────────────────────
 
   const allFeatures = STEP_FEATURES.flatMap((s) => s.features);
@@ -473,6 +478,8 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
                 preset={preset}
                 features={features}
                 allFeatures={allFeatures}
+                defaultCurrency={defaultCurrency}
+                onDefaultCurrencyChange={setDefaultCurrency}
               />
             )}
 
@@ -652,10 +659,14 @@ function StepReview({
   preset,
   features,
   allFeatures,
+  defaultCurrency,
+  onDefaultCurrencyChange,
 }: {
   preset: Preset | null;
   features: Record<string, boolean>;
   allFeatures: FeatureDef[];
+  defaultCurrency: string;
+  onDefaultCurrencyChange: (v: string) => void;
 }) {
   const { l10n } = useLocalization();
   const enabledFeatures = allFeatures.filter((f) => features[f.key]);
@@ -702,6 +713,22 @@ function StepReview({
               ))
             )}
           </div>
+        </div>
+
+        {/* Default currency */}
+        <div className="setup-review-section">
+          <Localized id="setup-default-currency-label">
+            <h3 className="setup-review-section-title">Default Currency</h3>
+          </Localized>
+          <select
+            className="setup-currency-select"
+            value={defaultCurrency}
+            onChange={(e) => onDefaultCurrencyChange(e.target.value)}
+            aria-label={l10n.getString('setup-default-currency-label')}
+          >
+            <option value="IDR">IDR — Indonesian Rupiah (Rp)</option>
+            <option value="USD">USD — US Dollar ($)</option>
+          </select>
         </div>
 
         {/* Disabled features */}

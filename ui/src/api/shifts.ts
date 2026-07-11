@@ -35,6 +35,13 @@ export const openShift = (userId: string, openingBalanceMinor: number): Promise<
     args: { userId, terminalId: null as string | null, openingBalanceMinor },
   });
 
+/** Open a shift (scoped — ADR #7). */
+export const openShiftScoped = (sessionToken: string, openingBalanceMinor: number, terminalId?: string | null): Promise<ShiftDto> =>
+  invoke<ShiftDto>('open_shift_scoped', {
+    sessionToken,
+    args: { terminalId: terminalId ?? null, openingBalanceMinor },
+  });
+
 /** Arguments for closing a shift. */
 export interface CloseShiftArgs {
   userId: string;
@@ -47,9 +54,20 @@ export interface CloseShiftArgs {
 export const closeShift = (args: CloseShiftArgs): Promise<ShiftDto> =>
   invoke<ShiftDto>('close_shift', { args });
 
+/** Close a shift (scoped — ADR #7). */
+export const closeShiftScoped = (sessionToken: string, id: string, closingBalanceMinor: number, notes?: string | null): Promise<ShiftDto> =>
+  invoke<ShiftDto>('close_shift_scoped', {
+    sessionToken,
+    args: { id, closingBalanceMinor, notes: notes ?? null },
+  });
+
 /** Get the currently open shift for a user, if any. */
 export const getActiveShift = (userId: string): Promise<ShiftDto | null> =>
   invoke<ShiftDto | null>('get_active_shift', { userId });
+
+/** Get the active shift for the session user (scoped — ADR #7). */
+export const getActiveShiftScoped = (sessionToken: string): Promise<ShiftDto | null> =>
+  invoke<ShiftDto | null>('get_active_shift_scoped', { sessionToken });
 
 /** List all shifts (most recent first). */
 export const listShifts = (): Promise<ShiftDto[]> =>

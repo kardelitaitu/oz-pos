@@ -4,7 +4,7 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.0.4] — 2026-07-10
 
 ### Added
 - **StatusBar component**: Full-width VS Code-style status bar at the bottom of the app — connection status dot, version label, gateway status pill, license type, Switch Workspace button, Theme Toggle. Tooltips on all action buttons.
@@ -140,7 +140,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.4
 [0.0.3]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.3
 [0.0.2]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.2
 [0.0.1]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.1

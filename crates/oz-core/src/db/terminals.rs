@@ -130,6 +130,92 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Update a terminal's device binding (store + instance).
+    ///
+    /// Also stores the HMAC signature for tamper detection.
+    /// `store_id` must exist in `store_profiles` (enforced by FK).
+    /// `instance_id` is a logical reference validated at boot.
+    pub fn update_terminal_binding(
+        &self,
+        terminal_id: &str,
+        bound_store_id: &str,
+        bound_instance_id: &str,
+        binding_signature: &str,
+    ) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE terminals SET
+                bound_store_id = ?1,
+                bound_instance_id = ?2,
+                binding_signature = ?3,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?4",
+            params![
+                bound_store_id,
+                bound_instance_id,
+                binding_signature,
+                terminal_id
+            ],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "terminal",
+                id: terminal_id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Read a terminal's device binding columns.
+    ///
+    /// Returns `(bound_store_id, bound_instance_id, binding_signature)`
+    /// or `None` if the terminal has no binding.
+    pub fn get_terminal_binding(
+        &self,
+        terminal_id: &str,
+    ) -> Result<Option<(String, String, String)>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT bound_store_id, bound_instance_id, binding_signature
+             FROM terminals WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![terminal_id], |row| {
+            let store: Option<String> = row.get(0)?;
+            let instance: Option<String> = row.get(1)?;
+            let sig: Option<String> = row.get(2)?;
+            match (store, instance, sig) {
+                (Some(s), Some(i), Some(g)) => Ok(Some((s, i, g))),
+                _ => Ok(None),
+            }
+        });
+        match result {
+            Ok(r) => Ok(r),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(CoreError::NotFound {
+                entity: "terminal",
+                id: terminal_id.to_owned(),
+            }),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Clear a terminal's device binding (remove store+instance binding).
+    pub fn clear_terminal_binding(&self, terminal_id: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE terminals SET
+                bound_store_id = NULL,
+                bound_instance_id = NULL,
+                binding_signature = NULL,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            params![terminal_id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "terminal",
+                id: terminal_id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     fn row_to_terminal(row: &rusqlite::Row) -> rusqlite::Result<Terminal> {
         Ok(Terminal {
             id: row.get("id")?,

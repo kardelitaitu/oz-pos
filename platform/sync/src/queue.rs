@@ -27,6 +27,20 @@ struct StockAdjustmentPayload {
     delta: i64,
 }
 
+/// Payload for the `stock.movement` sync action (ADR #6 cross-store routing).
+/// Carries a full `StockMovement` row for insertion into the local ledger.
+#[derive(Deserialize)]
+struct StockMovementPayload {
+    id: String,
+    item_id: String,
+    delta: i64,
+    reason: Option<String>,
+    source_terminal_id: Option<String>,
+    source_user_id: Option<String>,
+    store_id: String,
+    created_at: String,
+}
+
 /// A resolved item after conflict resolution — may be accepted from either
 /// the local or remote side, or a merged version.
 #[derive(Debug, Clone)]
@@ -186,6 +200,26 @@ impl SyncQueue {
                         Some(product_type),
                     )?;
                 }
+                Ok(())
+            }
+            // ADR #6: Remote stock movement from another store or register.
+            // Insert directly into the ledger; the daemon rebuilds the
+            // stock_summary cache after applying all remote items.
+            "stock.movement" => {
+                let payload: StockMovementPayload =
+                    serde_json::from_str(&item.payload).map_err(|e| {
+                        CoreError::Internal(format!("invalid stock.movement payload: {e}"))
+                    })?;
+                store.insert_stock_movement(
+                    &payload.id,
+                    &payload.item_id,
+                    payload.delta,
+                    payload.reason.as_deref(),
+                    payload.source_terminal_id.as_deref(),
+                    payload.source_user_id.as_deref(),
+                    &payload.store_id,
+                    &payload.created_at,
+                )?;
                 Ok(())
             }
             // Unsupported action — log and skip.
@@ -359,7 +393,7 @@ mod tests {
         let local = queue.enqueue(&store, "test", "{}").unwrap();
 
         let remote = OfflineQueueItem {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             action: "test".into(),
             payload: "{}".into(),
             status: OfflineQueueStatus::Pending,
@@ -391,7 +425,7 @@ mod tests {
         let local = queue.enqueue(&store, "test", "{}").unwrap();
 
         let remote = OfflineQueueItem {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             action: "test".into(),
             payload: r#"{"from":"server"}"#.into(),
             status: OfflineQueueStatus::Pending,
@@ -495,5 +529,102 @@ mod tests {
         assert!(result.is_ok(), "unknown action should not error");
         let all = store.list_all_offline().unwrap();
         assert!(all.is_empty(), "no queue items should be created");
+    }
+
+    // ── stock.movement cross-store delta routing (ADR #6) ────────
+
+    #[test]
+    fn apply_remote_stock_movement_inserts_into_ledger() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+
+        let payload = serde_json::json!({
+            "id": "sm-remote-1",
+            "item_id": "prod-coffee",
+            "delta": 10,
+            "reason": "cross-store-transfer",
+            "source_terminal_id": "term-store-b",
+            "source_user_id": "user-store-b",
+            "store_id": "store-b",
+            "created_at": "2026-01-15T00:00:00Z"
+        })
+        .to_string();
+
+        let remote = OfflineQueueItem::new("stock.movement", &payload);
+        let result = queue.apply_remote(&store, &remote);
+        assert!(result.is_ok(), "stock.movement should succeed");
+
+        // Verify the movement was inserted into the ledger.
+        let movements = store.list_stock_movements("prod-coffee", 10, 0).unwrap();
+        let sm = movements.iter().find(|m| m.id == "sm-remote-1");
+        assert!(sm.is_some(), "remote stock movement should be in ledger");
+        let sm = sm.unwrap();
+        assert_eq!(sm.delta, 10);
+        assert_eq!(sm.store_id, "store-b");
+        assert_eq!(sm.reason.as_deref(), Some("cross-store-transfer"));
+        assert_eq!(sm.source_terminal_id.as_deref(), Some("term-store-b"));
+    }
+
+    #[test]
+    fn apply_remote_stock_movement_negative_delta() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+
+        let payload = serde_json::json!({
+            "id": "sm-remote-2",
+            "item_id": "prod-bagel",
+            "delta": -5,
+            "reason": null,
+            "source_terminal_id": null,
+            "source_user_id": null,
+            "store_id": "store-a",
+            "created_at": "2026-01-15T00:00:00Z"
+        })
+        .to_string();
+
+        let remote = OfflineQueueItem::new("stock.movement", &payload);
+        queue.apply_remote(&store, &remote).unwrap();
+
+        let movements = store.list_stock_movements("prod-bagel", 10, 0).unwrap();
+        let sm = movements.iter().find(|m| m.id == "sm-remote-2").unwrap();
+        assert_eq!(sm.delta, -5);
+        assert_eq!(sm.store_id, "store-a");
+    }
+
+    #[test]
+    fn apply_remote_stock_movement_rebuilds_summary() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+
+        // Insert movements from another store directly into the ledger.
+        let payload = serde_json::json!({
+            "id": "sm-cross-1",
+            "item_id": "prod-coffee",
+            "delta": 30,
+            "reason": "transfer-in",
+            "source_terminal_id": null,
+            "source_user_id": null,
+            "store_id": "store-b",
+            "created_at": "2026-01-15T00:00:00Z"
+        })
+        .to_string();
+        let remote = OfflineQueueItem::new("stock.movement", &payload);
+        queue.apply_remote(&store, &remote).unwrap(); // Rebuild to verify the ledger-based computation.
+        store.rebuild_stock_summary().unwrap();
+
+        // Ledger SUM = just the cross-store delta (30) since the migration
+        // backfill ran against empty inventory (pre-seed).
+        let from_ledger = store.get_stock_from_ledger("prod-coffee").unwrap();
+        assert_eq!(
+            from_ledger, 30,
+            "SUM of deltas for prod-coffee should be 30"
+        );
+
+        // The materialized inventory should now also reflect 30.
+        let inv_qty = store.get_stock("prod-coffee").unwrap();
+        assert_eq!(inv_qty, 30, "inventory should be rebuilt to 30");
     }
 }

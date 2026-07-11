@@ -188,21 +188,34 @@ mod tests {
         let conn: &'static rusqlite::Connection = Box::leak(Box::new(conn));
         let store = Store::new(conn);
 
-        // Seed the primary store (mimics what platform-startup does).
-        let primary = StoreProfile {
-            id: "default".into(),
-            name: "Main Store".into(),
-            address: "123 Main St".into(),
-            tax_id: "TAX-001".into(),
-            currency: "USD".into(),
-            timezone: "America/New_York".into(),
-            is_primary: true,
-            created_at: "2026-06-30T12:00:00Z".into(),
-            updated_at: "2026-06-30T12:00:00Z".into(),
-        };
-        store.create_store_profile(&primary).unwrap();
-        let id = primary.id;
-        (store, id)
+        // Migration 025 seeds a default store_profiles row (id='default',
+        // is_primary=0). Update it to is_primary=1 with full test data.
+        // We use UPDATE rather than INSERT OR REPLACE because the latter
+        // triggers a DELETE (blocked by ON DELETE RESTRICT from
+        // workspace_instances referencing store_profiles).
+        conn.execute(
+            "UPDATE store_profiles SET
+                name = ?1,
+                address = ?2,
+                tax_id = ?3,
+                currency = ?4,
+                timezone = ?5,
+                is_primary = 1,
+                created_at = ?6,
+                updated_at = ?7
+             WHERE id = 'default'",
+            rusqlite::params![
+                "Main Store",
+                "123 Main St",
+                "TAX-001",
+                "USD",
+                "America/New_York",
+                "2026-06-30T12:00:00Z",
+                "2026-06-30T12:00:00Z",
+            ],
+        )
+        .unwrap();
+        (store, "default".into())
     }
 
     #[test]
@@ -239,7 +252,7 @@ mod tests {
     fn create_second_store() {
         let (store, _) = setup();
         let second = StoreProfile {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: "Branch 2".into(),
             address: "456 Oak Ave".into(),
             tax_id: "TAX-002".into(),
@@ -277,7 +290,7 @@ mod tests {
     fn set_primary_store_promotes_and_demotes() {
         let (store, primary_id) = setup();
         let second = StoreProfile {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: "Branch 2".into(),
             address: "".into(),
             tax_id: "".into(),
@@ -318,7 +331,7 @@ mod tests {
     fn delete_second_store() {
         let (store, _) = setup();
         let second = StoreProfile {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             name: "Branch 2".into(),
             address: "".into(),
             tax_id: "".into(),
@@ -346,5 +359,89 @@ mod tests {
         let (store, _) = setup();
         let err = store.delete_store_profile("nonexistent").unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    /// ADR #6: Deleting a store that has workspace instances must be rejected
+    /// by the ON DELETE RESTRICT foreign key constraint.
+    #[test]
+    fn delete_store_with_workspace_instances_rejected() {
+        let (store, _) = setup();
+        let second = StoreProfile {
+            id: "store-branch".into(),
+            name: "Branch".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-06-30T13:00:00Z".into(),
+            updated_at: "2026-06-30T13:00:00Z".into(),
+        };
+        store.create_store_profile(&second).unwrap();
+
+        // Create a workspace instance referencing this store.
+        store.conn.execute(
+            "INSERT INTO workspace_instances (id, type_key, store_id, name) VALUES (?1, 'store-pos', ?2, 'Branch POS')",
+            rusqlite::params!["wi-branch-pos", "store-branch"],
+        ).unwrap();
+
+        // Attempt to delete the store — must fail due to FK RESTRICT.
+        let err = store.delete_store_profile("store-branch").unwrap_err();
+        assert!(
+            matches!(err, CoreError::Db(_)),
+            "expected DB error from FK constraint, got: {err:?}"
+        );
+
+        // Clean up the workspace instance first, then deletion works.
+        store
+            .conn
+            .execute(
+                "DELETE FROM workspace_instances WHERE id = ?1",
+                rusqlite::params!["wi-branch-pos"],
+            )
+            .unwrap();
+        store.delete_store_profile("store-branch").unwrap();
+    }
+
+    /// ADR #6: user_store_access FK also enforces ON DELETE RESTRICT.
+    #[test]
+    fn delete_store_with_user_access_rejected() {
+        let (store, _) = setup();
+        let second = StoreProfile {
+            id: "store-b2".into(),
+            name: "Branch 2".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-06-30T14:00:00Z".into(),
+            updated_at: "2026-06-30T14:00:00Z".into(),
+        };
+        store.create_store_profile(&second).unwrap();
+
+        // Seed a user and assign store access.
+        store.conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-cashier', 'Cashier', '', '[]');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('u-cashier', 'cash', 'hash', 'Cash', 'r-cashier');
+             INSERT INTO user_store_access (user_id, store_id, access_level) VALUES ('u-cashier', 'store-b2', 'operator');"
+        ).unwrap();
+
+        // Attempt to delete the store — must fail due to FK RESTRICT.
+        let err = store.delete_store_profile("store-b2").unwrap_err();
+        assert!(
+            matches!(err, CoreError::Db(_)),
+            "expected DB error from FK constraint, got: {err:?}"
+        );
+
+        // Clean up the user access, then deletion works.
+        store
+            .conn
+            .execute(
+                "DELETE FROM user_store_access WHERE store_id = ?1",
+                rusqlite::params!["store-b2"],
+            )
+            .unwrap();
+        store.delete_store_profile("store-b2").unwrap();
     }
 }

@@ -17,6 +17,25 @@ vi.mock('@/api/stores', () => ({
   setPrimaryStore: (id: string) => mockSetPrimaryStore(id),
 }));
 
+// ADR #4 Phase 2b: StoreSwitcher now calls switchStore from WorkspaceContext.
+const mockSwitchStore = vi.fn();
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    switchStore: mockSwitchStore,
+    resolvedStoreId: 'default',
+    activeWorkspace: null,
+    activeInstance: null,
+    setActiveWorkspace: vi.fn(),
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+  }),
+}));
+
 // ── Fluent setup ────────────────────────────────────────────────────
 
 const bundle = new FluentBundle('en-US');
@@ -55,6 +74,7 @@ describe('StoreSwitcher', () => {
     vi.clearAllMocks();
     mockListStores.mockResolvedValue([]);
     mockSetPrimaryStore.mockResolvedValue(makeStore());
+    mockSwitchStore.mockImplementation(() => {});
   });
 
   // ── Null states ────────────────────────────────────────────────
@@ -224,6 +244,25 @@ describe('StoreSwitcher', () => {
     await userEvent.click(primaryOption);
 
     expect(mockSetPrimaryStore).not.toHaveBeenCalled();
+  });
+
+  it('calls switchStore from WorkspaceContext after switching stores', async () => {
+    mockListStores.mockResolvedValue([
+      makeStore({ name: 'HQ', is_primary: true }),
+      makeStore({ id: 'store-2', name: 'Branch', is_primary: false }),
+    ]);
+    renderComponent();
+
+    await waitFor(() => expect(screen.getByText('HQ')).toBeDefined());
+    await userEvent.click(screen.getByText('HQ').closest('button')!);
+
+    await waitFor(() => expect(screen.getByText('Branch')).toBeDefined());
+    await userEvent.click(screen.getByText('Branch').closest('button')!);
+
+    await waitFor(() => {
+      // ADR #4 Phase 2b: switchStore should be called with the new store ID.
+      expect(mockSwitchStore).toHaveBeenCalledWith('store-2');
+    });
   });
 
   it('closes dropdown after selecting a store', async () => {

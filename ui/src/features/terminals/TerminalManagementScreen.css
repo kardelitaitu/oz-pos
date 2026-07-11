@@ -138,11 +138,11 @@
 .terminal-mgmt-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 100);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-bg-overlay);
 }
 
 .terminal-mgmt-modal {
@@ -404,7 +404,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-accent-fg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   transition: transform var(--duration-200) var(--ease-out);
 }
@@ -447,7 +447,7 @@
   border-radius: var(--radius-md);
   color: var(--color-danger);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .terminal-mgmt-error svg {

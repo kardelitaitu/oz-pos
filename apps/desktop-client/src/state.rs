@@ -18,8 +18,10 @@
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -33,7 +35,9 @@ use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
 
 use oz_core::migrations;
+use oz_core::session::SessionContext;
 use oz_hal::DriverRegistry;
+use platform_core::StoreDatabaseManager;
 use platform_kernel::Kernel;
 use platform_sync::daemon::SyncDaemon;
 
@@ -80,9 +84,23 @@ pub struct AppState {
     /// Shared across all `Store` instances via `Arc`.
     pub cache: Arc<dyn Cache>,
 
+    /// Store-scoped database manager (ADR #4 Phase 2).
+    ///
+    /// Manages per-store SQLite files created when additional stores
+    /// are added. The global database (store_profiles, users, terminals)
+    /// is accessed via `db_manager.global()`.
+    pub db_manager: StoreDatabaseManager,
+
     /// Shutdown sender for the inventory pub/sub background listener.
     /// Dropped on app shutdown to stop the listener thread gracefully.
     pub inventory_pubsub_shutdown: Option<std::sync::mpsc::Sender<()>>,
+
+    /// In-memory session store mapping opaque session tokens to resolved
+    /// [`SessionContext`] values. ADR #4 / ADR #7.
+    ///
+    /// Tokens are randomly-generated UUIDs created during login/session
+    /// resolution. Commands look up their context via [`AppState::resolve_session`].
+    pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
 }
 
 impl AppState {
@@ -147,6 +165,14 @@ impl AppState {
         }
 
         let db = Arc::new(Mutex::new(conn));
+
+        // ── Store-scoped database manager (ADR #4 Phase 2) ────────
+        let db_dir = db_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let db_manager = StoreDatabaseManager::new(db_dir, oz_core::migrations::ALL);
+
         let registry = Arc::new(DriverRegistry::default());
 
         // Load plugins from <app_data_dir>/plugins/.
@@ -179,6 +205,7 @@ impl AppState {
 
         Ok(Self {
             db,
+            db_manager,
             registry,
             app: Some(app.clone()),
             db_path,
@@ -189,6 +216,7 @@ impl AppState {
             sync_daemon: SyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
+            session_store: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 }
@@ -218,6 +246,50 @@ impl AppState {
     /// to benefit from Redis caching (when configured).
     pub fn store<'a>(&self, conn: &'a Connection) -> oz_core::db::Store<'a> {
         oz_core::db::Store::with_cache(conn, self.cache.clone())
+    }
+
+    /// Resolve an opaque session token to its [`SessionContext`].
+    ///
+    /// ADR #4 / ADR #7: Commands call this to look up the caller's
+    /// resolved scope (store, instance, type, user, role, terminal).
+    /// Returns `AppError::InvalidSession` if the token is unknown.
+    pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
+        let store = self
+            .session_store
+            .read()
+            .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
+        store.get(token).cloned().ok_or(AppError::InvalidSession)
+    }
+
+    /// Resolve a session token and open the store-scoped database.
+    ///
+    /// ADR #7: Convenience method combining `resolve_session` +
+    /// `db_manager.open_store` in one call. Most domain commands
+    /// should use this instead of the global `db` field.
+    ///
+    /// Returns the resolved [`SessionContext`] and an [`Arc`]`<Mutex<Connection>>`
+    /// for the store-scoped SQLite database. The caller must call `.lock()` on
+    /// the returned connection before querying.
+    pub fn resolve_scope(
+        &self,
+        token: &str,
+    ) -> Result<(SessionContext, Arc<std::sync::Mutex<Connection>>), AppError> {
+        let session = self.resolve_session(token)?;
+        let conn = self
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        Ok((session, conn))
+    }
+
+    /// Resolve a session token and return only the store-scoped database
+    /// connection. Convenience wrapper for commands that don't need the
+    /// [`SessionContext`] (e.g., `adjust_stock_scoped`).
+    pub fn resolve_store(
+        &self,
+        token: &str,
+    ) -> Result<Arc<std::sync::Mutex<Connection>>, AppError> {
+        self.resolve_scope(token).map(|(_, conn)| conn)
     }
 }
 
@@ -295,8 +367,10 @@ impl AppState {
     /// Construct an `AppState` suitable for unit tests.
     /// Creates a lightweight Tauri app handle via `tauri::test::mock_builder`.
     pub fn for_test() -> Self {
+        let db = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
         Self {
-            db: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+            db,
+            db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
             registry: Arc::new(DriverRegistry::default()),
             app: None,
             db_path: ":memory:".into(),
@@ -307,24 +381,41 @@ impl AppState {
             sync_daemon: SyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
+            session_store: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+}
 
-    /// Construct an `AppState` with a pre-configured connection (migrations
-    /// already run). Used by integration tests that need a seeded database.
-    pub fn for_test_with_conn(conn: Connection) -> Self {
-        Self {
-            db: Arc::new(Mutex::new(conn)),
-            registry: Arc::new(DriverRegistry::default()),
-            app: None,
-            db_path: ":memory:".into(),
-            scanner_cancel: Mutex::new(None),
-            kernel: Mutex::new(Kernel::new()),
-            plugins: Arc::new(Mutex::new(None)),
-            plugin_watcher: None,
-            sync_daemon: SyncDaemon::new(),
-            cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
-            inventory_pubsub_shutdown: None,
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_session_returns_context_for_valid_token() {
+        let state = AppState::for_test();
+        let ctx = SessionContext::new(
+            "u1".into(),
+            "r1".into(),
+            "t1".into(),
+            "s1".into(),
+            "i1".into(),
+            "type1".into(),
+        );
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("tok-abc".into(), ctx.clone());
+
+        let resolved = state.resolve_session("tok-abc").unwrap();
+        assert_eq!(resolved.store_id, "s1");
+        assert_eq!(resolved.user_id, "u1");
+    }
+
+    #[test]
+    fn resolve_session_returns_error_for_unknown_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 }

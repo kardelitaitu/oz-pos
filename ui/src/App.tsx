@@ -42,6 +42,7 @@ import SalesReportScreen from '@/features/reports/SalesReportScreen';
 import InventoryReportScreen from '@/features/reports/InventoryReportScreen';
 import MenuEngineeringScreen from '@/features/reports/MenuEngineeringScreen';
 import DesignSystem from '@/features/design/DesignSystem';
+import TooltipPreview from '@/features/design/TooltipPreview';
 import KdsScreen from '@/features/kds/KdsScreen';
 import KioskScreen from '@/features/kiosk/KioskScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
@@ -146,7 +147,7 @@ registerPage({ route: 'bundles', component: BundleManagementScreen, label: 'Bund
 registerNavItem({ route: 'bundles', label: 'Bundles', requiredRole: 'manager', i18nKey: 'nav-bundles', section: 'products',
   icon: icon('M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z') });
 
-registerPage({ route: 'settings', component: SettingsPage, label: 'General', requiredRole: 'manager' });
+registerPage({ route: 'settings', component: SettingsPage, label: 'General', requiredRole: 'manager', fullscreen: true });
 registerNavItem({ route: 'settings', label: 'General', requiredRole: 'manager', i18nKey: 'nav-general', section: 'settings', icon: icon('M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42') });
 
 registerPage({ route: 'dashboard', component: DashboardScreen, label: 'Dashboard' });
@@ -167,6 +168,9 @@ registerNavItem({ route: 'menu-engineering', label: 'Menu Engineering', feature:
 
 registerPage({ route: 'design', component: DesignSystem, label: 'Design System' });
 registerNavItem({ route: 'design', label: 'Design System', i18nKey: 'nav-design-system', section: 'dev', icon: icon('M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />) });
+
+registerPage({ route: 'tooltips', component: TooltipPreview, label: 'Tooltip Preview' });
+registerNavItem({ route: 'tooltips', label: 'Tooltip Preview', i18nKey: 'nav-tooltip-preview', section: 'dev', icon: icon('M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-5l-5 5v-5z') });
 
 registerPage({ route: 'kiosk', component: KioskScreen, label: 'Kiosk', feature: 'self-service-kiosk', fullscreen: true });
 registerNavItem({ route: 'kiosk', label: 'Kiosk', feature: 'self-service-kiosk', i18nKey: 'nav-kiosk', section: 'operations',

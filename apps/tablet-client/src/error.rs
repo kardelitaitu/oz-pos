@@ -46,6 +46,11 @@ pub enum AppError {
     #[error("permission denied: {0}")]
     PermissionDenied(String),
 
+    /// Session token is invalid, expired, or not found.
+    /// ADR #4 / ADR #7.
+    #[error("invalid or expired session")]
+    InvalidSession,
+
     /// Catch-all for unexpected internal errors. Logged with full context.
     #[error("internal error: {0}")]
     Internal(String),

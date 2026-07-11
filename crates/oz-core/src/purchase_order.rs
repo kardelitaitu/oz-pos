@@ -94,7 +94,7 @@ impl PurchaseOrder {
         assert!(!po_number.is_empty(), "PO number must not be empty");
 
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             po_number,
             supplier_id: supplier_id.into(),
             status: "draft".into(),
@@ -116,7 +116,7 @@ impl PurchaseOrderLine {
     /// Create a new line item belonging to the given purchase order.
     pub fn new(po_id: impl Into<String>) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             po_id: po_id.into(),
             sku: String::new(),
             product_name: String::new(),

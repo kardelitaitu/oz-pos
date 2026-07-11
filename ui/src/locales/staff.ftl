@@ -93,3 +93,10 @@ staff-login-submit = Login
 staff-login-submitting = Logging in…
 staff-login-verifying = Verifying...
 staff-login-back = ← Back
+staff-login-copyright = © 2026 OZ-POS. All rights reserved.
+
+# ── Fast User Switching (ADR #6) ──────────────────────────────────────────
+
+fastpin-switch-user = Switch User
+fastpin-active-user = Active: { $name }
+fastpin-enter-pin = Enter PIN for { $user }

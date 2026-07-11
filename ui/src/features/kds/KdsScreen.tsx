@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspaceScope } from '@/contexts/WorkspaceContext';
 import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
 import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import './KdsScreen.css';
@@ -16,15 +17,32 @@ const STATUS_LABELS: Record<KdsStatus, string> = {
 
 export default function KdsScreen() {
   const { session } = useAuth();
+  const workspaceScope = useWorkspaceScope();
   const userId = session?.user_id ?? '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const fetchOrders = useCallback(() => {
     getKdsQueue(userId)
-      .then(setOrders)
+      .then((allOrders) => {
+        // ADR #8: Filter out orders whose store_id doesn't match the
+        // device-bound store. This is defense-in-depth — the database
+        // is already store-scoped, but LAN-broadcast events could carry
+        // orders from other stores in future multi-store deployments.
+        const activeStoreId = workspaceScope?.storeId;
+        if (activeStoreId) {
+          const filtered = allOrders.filter((order) => {
+            // Keep orders with no store_id (legacy/backward compat)
+            // and orders whose store_id matches the active store.
+            return !order.store_id || order.store_id === activeStoreId;
+          });
+          setOrders(filtered);
+        } else {
+          setOrders(allOrders);
+        }
+      })
       .catch((e) => setError(e.message ?? String(e)));
-  }, [userId]);
+  }, [userId, workspaceScope?.storeId]);
 
   useEffect(() => {
     fetchOrders();

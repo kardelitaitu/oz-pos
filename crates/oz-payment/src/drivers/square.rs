@@ -264,7 +264,7 @@ impl SquarePaymentProcessor {
 impl PaymentProcessor for SquarePaymentProcessor {
     async fn authorize(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
         let body = CreatePaymentRequest {
-            idempotency_key: Uuid::new_v4().to_string(),
+            idempotency_key: Uuid::now_v7().to_string(),
             amount_money: MoneyAmount {
                 amount: Self::to_square_amount(&request.amount),
                 currency: "USD".to_string(),
@@ -318,7 +318,7 @@ impl PaymentProcessor for SquarePaymentProcessor {
     ) -> Result<PaymentResult, PaymentError> {
         let charged_amount = amount.unwrap_or(Money::zero(Currency(*b"USD")));
         let body = CreateRefundRequest {
-            idempotency_key: Uuid::new_v4().to_string(),
+            idempotency_key: Uuid::now_v7().to_string(),
             payment_id: transaction_id.to_string(),
             amount_money: MoneyAmount {
                 amount: Self::to_square_amount(&charged_amount),

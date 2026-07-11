@@ -19,6 +19,7 @@
   --kds-pending: #f59e0b;
   --kds-preparing: #3b82f6;
   --kds-ready: #10b981;
+  --kds-red: #ef4444;
   --kds-note-text: #f59e0b;
   --kds-note-bg: rgba(245, 158, 11, 0.1);
   --kds-badge-text: #f0f0f0;
@@ -128,12 +129,12 @@
 
 .kds-column--preparing .kds-column-count {
   background: var(--kds-preparing);
-  color: #fff;
+  color: var(--kds-badge-text);
 }
 
 .kds-column--ready .kds-column-count {
   background: var(--kds-ready);
-  color: #fff;
+  color: var(--kds-badge-text);
 }
 
 /* ── Ticket list ──────────────────────────────────────────────────── */
@@ -216,7 +217,7 @@
 
 .kds-ticket--red {
   --sla-glow: rgba(239, 68, 68, 0.5);
-  border-color: #ef4444;
+  border-color: var(--kds-red);
   box-shadow: 0 0 12px var(--sla-glow);
 }
 
@@ -259,7 +260,7 @@
 }
 
 .kds-ticket-time--green {
-  color: #10b981;
+  color: var(--kds-ready);
 }
 
 .kds-ticket-time--yellow {
@@ -267,7 +268,7 @@
 }
 
 .kds-ticket-time--red {
-  color: #ef4444;
+  color: var(--kds-red);
   font-weight: 700;
 }
 

@@ -1,0 +1,271 @@
+/* ============================================================
+ * Tooltip Preview — component showcase page
+ *
+ * Layout mirrors DesignSystem.css conventions but with
+ * interactive demonstration zones for each tooltip feature.
+ * ============================================================ */
+
+/* ── Page layout (reuses ds-* tokens from DesignSystem.css) ── */
+
+.tp-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-8);
+}
+
+.tp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-8);
+}
+
+.tp-header h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg);
+}
+
+.tp-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* ── Tooltip-wrapper override for demo cards ──────────────── */
+/* Demo sections use centered flex layouts; the default
+   .tooltip-wrapper { width: 100% } would push tooltips far
+   from their trigger elements. We reset to auto so the
+   wrapper hugs the trigger button. */
+.tp-section .tooltip-wrapper {
+  width: auto;
+}
+
+/* ── Section card ──────────────────────────────────────────── */
+
+.tp-section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  background: var(--color-bg-elevated);
+}
+
+.tp-section-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-1);
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.tp-section-desc {
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+  margin-bottom: var(--space-5);
+  margin-top: var(--space-0_5);
+  line-height: 1.5;
+}
+
+/* ── Demo row — horizontal layout for tooltip triggers ──────── */
+
+.tp-demo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  min-height: 120px;
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-border);
+}
+
+/* ── Columns layout (for multi-line / edge-case sections) ──── */
+
+.tp-demo-columns {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.tp-demo-col {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-border);
+}
+
+.tp-demo-col-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Trigger buttons ──────────────────────────────────────── */
+
+.tp-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-100) var(--ease-out),
+    border-color var(--duration-100) var(--ease-out);
+}
+
+.tp-trigger:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-hover);
+}
+
+.tp-trigger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.tp-trigger--primary {
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  border-color: var(--color-accent);
+}
+
+.tp-trigger--primary:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.tp-trigger--icon {
+  padding: var(--space-2);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.tp-trigger--inline {
+  display: inline;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font-size: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: help;
+}
+
+.tp-trigger--inline:hover {
+  background: none;
+  color: var(--color-accent-hover);
+}
+
+/* ── Position demo — dedicated layout ─────────────────────── */
+
+.tp-position-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-border);
+}
+
+@media (min-width: 600px) {
+  .tp-position-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.tp-position-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tp-position-label {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Code display ─────────────────────────────────────────── */
+
+.tp-code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-top: var(--space-3);
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+/* ── Production usage demo zone ───────────────────────────── */
+
+.tp-sidebar-sim {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 220px;
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.tp-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--color-fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--duration-100) var(--ease-out);
+}
+
+.tp-sidebar-item:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
+.tp-sidebar-item:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.tp-sidebar-item--active {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+}

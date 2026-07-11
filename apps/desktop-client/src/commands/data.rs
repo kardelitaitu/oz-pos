@@ -317,6 +317,7 @@ pub async fn import_data(
                     product.category_id.as_deref(),
                     product.barcode.as_ref().map(|b| b.as_str()),
                     Some(product.product_type.as_str()),
+                    None,
                 )?;
             } else {
                 store.create_product(
@@ -619,7 +620,7 @@ mod tests {
     fn import_preview_result_debug() {
         let result = ImportPreviewResult {
             store_name: "My Store".into(),
-            app_version: "0.0.3".into(),
+            app_version: "0.0.4".into(),
             created_at: "2025-01-01".into(),
             types: vec!["products".into()],
             product_count: 50,

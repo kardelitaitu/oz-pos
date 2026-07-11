@@ -42,9 +42,16 @@
 }
 
 .role-badge-role {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: var(--text-xs);
   font-weight: 500;
   text-transform: capitalize;
+}
+
+.role-badge-role-icon {
+  flex-shrink: 0;
 }
 
 .role-badge-role--owner {
@@ -57,6 +64,14 @@
 
 .role-badge-role--cashier {
   color: var(--color-fg-tertiary);
+}
+
+.role-badge-role--kitchen {
+  color: var(--color-info, #2563eb);
+}
+
+.role-badge-role--staff {
+  color: var(--color-fg-secondary);
 }
 
 .role-badge-logout {

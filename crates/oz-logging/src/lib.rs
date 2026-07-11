@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn cleanup_retention_zero_does_nothing() {
-        let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        let dir = std::env::temp_dir().join(uuid::Uuid::now_v7().to_string());
         std::fs::create_dir_all(&dir).unwrap();
         let file_path = dir.join("oz-pos.log");
         std::fs::write(&file_path, "test data").unwrap();
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn cleanup_retention_removes_old_files() {
-        let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        let dir = std::env::temp_dir().join(uuid::Uuid::now_v7().to_string());
         std::fs::create_dir_all(&dir).unwrap();
 
         // Create an old file (modification time in the past).
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn cleanup_retention_skips_non_matching_prefix() {
-        let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        let dir = std::env::temp_dir().join(uuid::Uuid::now_v7().to_string());
         std::fs::create_dir_all(&dir).unwrap();
 
         let other_file = dir.join("other-app.log");
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn cleanup_retention_empty_dir() {
-        let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        let dir = std::env::temp_dir().join(uuid::Uuid::now_v7().to_string());
         std::fs::create_dir_all(&dir).unwrap();
 
         // Should not panic or fail on empty dir.

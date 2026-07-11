@@ -46,22 +46,78 @@ export interface UpdateProductArgs {
 export const listProducts = (): Promise<ProductDto[]> =>
   invoke<ProductDto[]>('list_products');
 
+/**
+ * Fetch products scoped to the store resolved from a session token.
+ *
+ * ADR #4 / ADR #7 canonical pattern: The backend resolves the opaque
+ * `sessionToken` to a `SessionContext` (containing `store_id`), opens
+ * the store-scoped database, and returns only that store's products.
+ *
+ * Prefer this over the unscoped `listProducts()` in multi-store
+ * deployments.
+ */
+export const listProductsScoped = (sessionToken: string): Promise<ProductDto[]> =>
+  invoke<ProductDto[]>('list_products_scoped', { sessionToken });
+
 export const createProduct = (args: CreateProductArgs): Promise<{ sku: string }> =>
   invoke('create_product', { args });
+
+/** ADR #7: Scoped product creation — `userId` is read from session, not args. */
+export interface CreateProductScopedArgs {
+  sku: string;
+  name: string;
+  priceMinor: number;
+  currency: string;
+  categoryId?: string | undefined;
+  barcode?: string | undefined;
+  initialStock: number;
+  productType?: string;
+  taxRateIds: string[];
+}
+
+export const createProductScoped = (sessionToken: string, args: CreateProductScopedArgs): Promise<{ sku: string }> =>
+  invoke<{ sku: string }>('create_product_scoped', { sessionToken, args });
 
 export const updateProduct = (args: UpdateProductArgs): Promise<{ sku: string }> =>
   invoke('update_product', { args });
 
+/** ADR #7: Scoped product update — `userId` is read from session, not args. */
+export interface UpdateProductScopedArgs {
+  sku: string;
+  name: string;
+  priceMinor: number;
+  currency: string;
+  categoryId?: string | undefined;
+  barcode?: string | undefined;
+  productType?: string;
+  taxRateIds: string[];
+}
+
+export const updateProductScoped = (sessionToken: string, args: UpdateProductScopedArgs): Promise<{ sku: string }> =>
+  invoke<{ sku: string }>('update_product_scoped', { sessionToken, args });
+
 export const deleteProduct = (args: { userId: string; sku: string }): Promise<void> =>
   invoke('delete_product', { args });
+
+/** ADR #7: Scoped product deletion — `userId` is read from session, not args. */
+export const deleteProductScoped = (sessionToken: string, sku: string): Promise<void> =>
+  invoke('delete_product_scoped', { sessionToken, args: { sku } });
 
 // ── Barcode / SKU Lookup ───────────────────────────────────────────
 
 export const lookupByBarcode = (barcode: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_by_barcode', { barcode });
 
+/** ADR #7: Scoped barcode lookup using session token. */
+export const lookupByBarcodeScoped = (sessionToken: string, barcode: string): Promise<ProductDto | null> =>
+  invoke<ProductDto | null>('lookup_by_barcode_scoped', { sessionToken, barcode });
+
 export const lookupProductBySku = (sku: string): Promise<ProductDto | null> =>
   invoke<ProductDto | null>('lookup_product_by_sku', { sku });
+
+/** ADR #7: Scoped SKU lookup using session token. */
+export const lookupProductBySkuScoped = (sessionToken: string, sku: string): Promise<ProductDto | null> =>
+  invoke<ProductDto | null>('lookup_product_by_sku_scoped', { sessionToken, sku });
 
 // ── Inventory Adjustment ──────────────────────────────────────────
 
@@ -73,6 +129,14 @@ export interface AdjustStockArgs {
 
 export const adjustStock = (args: AdjustStockArgs): Promise<number> =>
   invoke<number>('adjust_stock', { args });
+
+/**
+ * Adjust stock scoped to the store resolved from a session token.
+ *
+ * ADR #7: Prefer this over `adjustStock()` in multi-store deployments.
+ */
+export const adjustStockScoped = (sessionToken: string, args: AdjustStockArgs): Promise<number> =>
+  invoke<number>('adjust_stock_scoped', { sessionToken, args });
 
 // ── Product Variants ──────────────────────────────────────────────
 

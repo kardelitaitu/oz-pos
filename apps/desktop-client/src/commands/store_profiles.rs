@@ -99,11 +99,19 @@ pub async fn get_primary_store(
 }
 
 /// Create a new store profile (non-primary by default).
+///
+/// ADR #4 Phase 2: Also creates the per-store SQLite database file
+/// with all migrations applied.
 #[command]
 pub async fn create_store_profile(
     args: CreateStoreProfileArgs,
     state: State<'_, AppState>,
 ) -> Result<StoreProfileDto, AppError> {
+    // Create the store's database file before inserting the profile.
+    // If DB creation fails, we still insert the profile — the DB can
+    // be created lazily by open_store() later.
+    let _ = state.db_manager.create_store_db(&args.id);
+
     let conn = state.db.lock().await;
     let store = oz_core::Store::new(&conn);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

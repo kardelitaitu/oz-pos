@@ -134,8 +134,8 @@ impl Store<'_> {
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                                 discount_percent, discount_label, user_id, created_at, updated_at,
-                                subtotal_minor, tax_total_minor, customer_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                                subtotal_minor, tax_total_minor, customer_id, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1)",
             params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 status_str, sale.payment_method, sale.tendered_minor,
@@ -173,7 +173,7 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id
+                    subtotal_minor, tax_total_minor, customer_id, version
              FROM sales ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -210,6 +210,7 @@ impl Store<'_> {
                     currency,
                 },
                 customer_id: row.get("customer_id")?,
+                version: row.get("version").unwrap_or(1),
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -221,7 +222,7 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id
+                    subtotal_minor, tax_total_minor, customer_id, version
              FROM sales WHERE id = ?1",
         )?;
 
@@ -259,6 +260,7 @@ impl Store<'_> {
                     currency,
                 },
                 customer_id: row.get("customer_id")?,
+                version: row.get("version").unwrap_or(1),
             })
         });
 
@@ -315,10 +317,16 @@ impl Store<'_> {
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let status_str = to.as_stored_str();
-        self.conn.execute(
-            "UPDATE sales SET status = ?1, updated_at = ?2 WHERE id = ?3",
+        let rows = self.conn.execute(
+            "UPDATE sales SET status = ?1, updated_at = ?2, version = version + 1 WHERE id = ?3",
             params![status_str, now, id],
         )?;
+        if rows == 0 {
+            return Err(CoreError::Conflict {
+                entity: "sale",
+                field: "version",
+            });
+        }
 
         self.get_sale(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
@@ -386,7 +394,7 @@ impl Store<'_> {
         bill_type: &str,
         customer_name: Option<&str>,
     ) -> Result<String, CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency, bill_type, customer_name)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -492,7 +500,7 @@ impl Store<'_> {
 impl Store<'_> {
     /// Store a receipt barcode mapping for a sale.
     pub fn save_receipt_barcode(&self, sale_id: &str, barcode: &str) -> Result<(), CoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT INTO receipt_barcodes (id, sale_id, barcode) VALUES (?1, ?2, ?3)",
             params![id, sale_id, barcode],
@@ -541,11 +549,17 @@ impl Store<'_> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let tx = self.conn.unchecked_transaction()?;
 
-        // 1. Update status to Voided.
-        tx.execute(
-            "UPDATE sales SET status = 'voided', updated_at = ?1 WHERE id = ?2",
+        // 1. Update status to Voided with optimistic concurrency (ADR #6).
+        let rows = tx.execute(
+            "UPDATE sales SET status = 'voided', updated_at = ?1, version = version + 1 WHERE id = ?2",
             rusqlite::params![now, sale_id],
         )?;
+        if rows == 0 {
+            return Err(CoreError::Conflict {
+                entity: "sale",
+                field: "version",
+            });
+        }
 
         // 2. Restore stock for each line item.
         for line in &sale.lines {
@@ -1231,8 +1245,9 @@ mod tests {
             subtotal: sale.total,
             tax_total: price(0),
             customer_id: None,
+            version: 1,
             lines: vec![SaleLine {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: uuid::Uuid::now_v7().to_string(),
                 sale_id: sale.id.clone(),
                 sku: "VOID-SKU".into(),
                 qty: 2,
@@ -1340,6 +1355,7 @@ mod tests {
         let sale_with_user = Sale {
             user_id: Some("cashier-1".into()),
             customer_id: None,
+            version: 1,
             ..sale
         };
         s.create_sale(&sale_with_user).unwrap();
@@ -1450,8 +1466,8 @@ mod tests {
     }
 
     fn make_single_line_sale(sku: &str, qty: i64, unit_minor: i64) -> Sale {
-        let line_id = uuid::Uuid::new_v4().to_string();
-        let sale_id = uuid::Uuid::new_v4().to_string();
+        let line_id = uuid::Uuid::now_v7().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         Sale {
             id: sale_id.clone(),
@@ -1469,6 +1485,7 @@ mod tests {
             subtotal: price(unit_minor * qty),
             tax_total: price(0),
             customer_id: None,
+            version: 1,
             lines: vec![SaleLine {
                 id: line_id,
                 sale_id,
@@ -1570,7 +1587,7 @@ mod tests {
         seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
 
         let line1 = SaleLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sale_id: "sale-1".into(),
             sku: "COFFEE".into(),
             qty: 2,
@@ -1582,7 +1599,7 @@ mod tests {
             serial_number: None,
         };
         let line2 = SaleLine {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sale_id: "sale-1".into(),
             sku: "BAGEL".into(),
             qty: 1,
@@ -1610,6 +1627,7 @@ mod tests {
             subtotal: price(1150),
             tax_total: price(0),
             customer_id: None,
+            version: 1,
             lines: vec![line1, line2],
         };
 
@@ -1661,6 +1679,7 @@ mod tests {
             subtotal: price(0),
             tax_total: price(0),
             customer_id: None,
+            version: 1,
             lines: vec![],
         };
         s.compute_sale_tax(&mut sale, &[]).unwrap();
@@ -1689,8 +1708,8 @@ mod tests {
         )
         .unwrap();
 
-        let sale_id = uuid::Uuid::new_v4().to_string();
-        let line_id = uuid::Uuid::new_v4().to_string();
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        let line_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let sale = Sale {
             id: sale_id.clone(),
@@ -1708,6 +1727,7 @@ mod tests {
             subtotal: price(5000),
             tax_total: price(0),
             customer_id: None,
+            version: 1,
             lines: vec![SaleLine {
                 id: line_id,
                 sale_id: sale_id.clone(),

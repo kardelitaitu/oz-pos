@@ -25,6 +25,7 @@ staff-login-submitting = Memasuki sistem…
 # Restaurant Menu
 staff-login-verifying = Memverifikasi…
 staff-login-back = ← Kembali
+staff-login-copyright = © 2026 OZ-POS. Seluruh hak cipta dilindungi.
 
 # ── Product Bundles ──
 staff-title = Staf
@@ -112,5 +113,11 @@ staff-login-digit-aria =
 staff-ws-section-label = Akses Ruang Kerja
 staff-ws-role-defaults = Gunakan default peran
 staff-ws-custom = Kustom
+
+# ── Fast User Switching (ADR #6) ──────────────────────────────────────────
+
+fastpin-switch-user = Ganti Pengguna
+fastpin-active-user = Aktif: { $name }
+fastpin-enter-pin = Masukkan PIN untuk { $user }
 
 # ── Product Management ──

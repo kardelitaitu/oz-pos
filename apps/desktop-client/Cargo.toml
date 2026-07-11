@@ -28,6 +28,7 @@ oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-lua = { workspace = true }
 oz-plugin = { workspace = true }
+oz-security = { workspace = true }
 modules-crm = { workspace = true }
 modules-inventory = { workspace = true }
 modules-settings = { workspace = true }
@@ -38,6 +39,7 @@ modules-reporting = { workspace = true }
 modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
 oz-reporting = { workspace = true }
+platform-core = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
 platform-sync = { workspace = true }
@@ -54,6 +56,9 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 notify = { workspace = true }
 uuid = { workspace = true }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

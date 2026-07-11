@@ -334,6 +334,7 @@ pub async fn complete_sale(
 
         let event = SaleCompleted {
             sale_id: sale_id.clone(),
+            store_id: None,
             line_items,
             total_minor: total.map(|m| m.minor_units).unwrap_or(0),
             currency: String::from_utf8_lossy(&sale.currency.0).into_owned(),

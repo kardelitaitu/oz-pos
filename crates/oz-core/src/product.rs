@@ -97,6 +97,11 @@ pub struct Product {
     /// Product type classification (retail, restaurant, or both).
     #[serde(default)]
     pub product_type: ProductType,
+
+    /// Optimistic concurrency version (ADR #6).
+    /// Incremented on every UPDATE; compared before writing.
+    #[serde(default = "crate::default_version")]
+    pub version: i64,
 }
 
 impl Product {
@@ -114,7 +119,7 @@ impl Product {
         assert!(!name.is_empty(), "product name must not be empty");
 
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: uuid::Uuid::now_v7().to_string(),
             sku: sku.into(),
             name,
             price,
@@ -125,6 +130,7 @@ impl Product {
             price_updated_at: String::new(),
             track_serial: false,
             product_type: ProductType::Retail,
+            version: 1,
         }
     }
 

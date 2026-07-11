@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import RoleBadge from './RoleBadge';
+import Tooltip from './Tooltip';
 import UpdateBanner from './UpdateBanner';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import { useBrand } from '@/contexts/BrandContext';
@@ -70,12 +71,12 @@ export interface AppLayoutProps {
  * `registerNavItem()`. The sidebar renders them dynamically
  * instead of using a hardcoded list.
  */
+/** Routes that render without the top bar (hamburger + store switcher). */
 const ADMIN_ROUTES = new Set(['settings', 'features', 'data-management']);
 
 export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole }: AppLayoutProps) {
   const { l10n } = useLocalization();
   const { settings: brandSettings } = useBrand();
-  const showTopbar = !ADMIN_ROUTES.has(route);
   const navItems = getNavItems(enabledFeatures, userRole);
 
   // ── Sidebar collapse state (persisted to localStorage) ─────
@@ -89,25 +90,28 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
 
   const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
 
-  // ── Section collapse state (per-section, persisted) ─────────
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
+  // ── Section accordion state (single expanded section) ───────
+  const [expandedSection, setExpandedSection] = useState<string | null>(() => {
     try {
-      const raw = localStorage.getItem('app-sidebar-sections');
-      return new Set<string>(raw ? JSON.parse(raw) : []);
-    } catch { return new Set<string>(); }
+      // Migrate from old multi-section format if present
+      const oldRaw = localStorage.getItem('app-sidebar-sections');
+      if (oldRaw) {
+        localStorage.removeItem('app-sidebar-sections');
+      }
+      return localStorage.getItem('app-sidebar-expanded') || null;
+    } catch { return null; }
   });
 
   useEffect(() => {
-    localStorage.setItem('app-sidebar-sections', JSON.stringify([...collapsedSections]));
-  }, [collapsedSections]);
+    if (expandedSection) {
+      localStorage.setItem('app-sidebar-expanded', expandedSection);
+    } else {
+      localStorage.removeItem('app-sidebar-expanded');
+    }
+  }, [expandedSection]);
 
   const toggleSection = useCallback((section: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(section)) next.delete(section);
-      else next.add(section);
-      return next;
-    });
+    setExpandedSection((prev) => (prev === section ? null : section));
   }, []);
 
   // Set document title to the brand store name (fallback to 'OZ-POS').
@@ -124,38 +128,54 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
         {/* ── Sidebar ──────────────────────────────── */}
         <aside className={`app-sidebar${sidebarCollapsed ? ' collapsed' : ''}`} aria-label={l10n.getString('nav-main-aria')}>
           <div className="app-sidebar-header">
-            {brandSettings.logo_path ? (
-              <img
-                className="app-sidebar-logo-img"
-                src={`file://${brandSettings.logo_path}`}
-                alt=""
-              />
-            ) : null}
-            <span className="app-sidebar-logo">
-              {brandSettings.store_name || 'OZ-POS'}
-            </span>
-          </div>
-          <div className="app-sidebar-user">
+            {/* ── Brand ──────────────────────────────── */}
+            <Tooltip content={brandSettings.store_name || 'OZ-POS'}>
+              <div className="app-sidebar-brand">
+                {brandSettings.logo_path ? (
+                  <img
+                    className="app-sidebar-logo-img"
+                    src={`file://${brandSettings.logo_path}`}
+                    alt=""
+                  />
+                ) : (
+                  <div className="app-sidebar-brand-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
+                      <rect x="3" y="3" width="18" height="14" rx="2" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                      <line x1="7" y1="15" x2="9" y2="15" />
+                      <line x1="15" y1="15" x2="17" y2="15" />
+                    </svg>
+                  </div>
+                )}
+                <div className="app-sidebar-brand-text">
+                  <span className="app-sidebar-store-name">
+                    {brandSettings.store_name || 'OZ-POS'}
+                  </span>
+                  <span className="app-sidebar-subtitle">Point of Sale</span>
+                </div>
+              </div>
+            </Tooltip>
+            {/* ── User info ──────────────────────────── */}
             <RoleBadge />
           </div>
 
           <nav className="app-sidebar-nav">
             {groupBySection(navItems).map(({ section, items }) => {
               const sectionI18nKey = SECTION_LABELS[section];
-              const isCollapsed = collapsedSections.has(section);
+              const isExpanded = expandedSection === section;
               return (
                 <div key={section} className="app-sidebar-section">
                   <button
                     type="button"
                     className="app-sidebar-section-header"
                     onClick={() => toggleSection(section)}
-                    aria-expanded={!isCollapsed}
+                    aria-expanded={isExpanded}
                   >
                     <Localized id={sectionI18nKey}>
                       <span className="app-sidebar-section-label">{section}</span>
                     </Localized>
                     <svg
-                      className={`app-sidebar-chevron${isCollapsed ? ' collapsed' : ''}`}
+                      className={`app-sidebar-chevron${isExpanded ? '' : ' collapsed'}`}
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -169,60 +189,90 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </button>
-                  {!isCollapsed && (
+                  {isExpanded && (
                     <div className="app-sidebar-section-items">
-                      {items.map((item) => (
-                        <button
-                          key={item.route}
-                          type="button"
-                          className={
-                            route === item.route
-                              ? 'app-nav-item app-nav-item--active'
-                              : 'app-nav-item'
-                          }
-                          onClick={() => onNavigate(item.route)}
-                          aria-current={route === item.route ? 'page' : undefined}
-                          aria-label={l10n.getString(item.i18nKey ?? item.label) ?? item.label}
-                        >
-                          {item.icon && (
-                            <span className="app-nav-icon">{item.icon}</span>
-                          )}
-                          <Localized id={item.i18nKey ?? item.label}><span>{item.label}</span></Localized>
-                        </button>
-                      ))}
+                      {items.map((item) => {
+                        const label = l10n.getString(item.i18nKey ?? item.label) ?? item.label;
+                        return (
+                          <Tooltip key={item.route} content={label}>
+                            <button
+                              type="button"
+                              className={
+                                route === item.route
+                                  ? 'app-nav-item app-nav-item--active'
+                                  : 'app-nav-item'
+                              }
+                              onClick={() => onNavigate(item.route)}
+                              aria-current={route === item.route ? 'page' : undefined}
+                              aria-label={label}
+                            >
+                              {item.icon && (
+                                <span className="app-nav-icon">{item.icon}</span>
+                              )}
+                              <Localized id={item.i18nKey ?? item.label}><span>{item.label}</span></Localized>
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               );
             })}
           </nav>
+
+          {/* ── Sidebar collapse button ──────────────── */}
+          <Tooltip content={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')} showDelay={800}>
+            <button
+              type="button"
+              className="sidebar-collapse-btn"
+              onClick={toggleSidebar}
+              aria-label={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="16"
+                height="16"
+                aria-hidden="true"
+              >
+                <polyline points={sidebarCollapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
+              </svg>
+            </button>
+          </Tooltip>
         </aside>
 
         {/* ── Content area ─────────────────────────── */}
         <main className="app-content">
-          {showTopbar && (
+          {!ADMIN_ROUTES.has(route) && (
             <div className="app-topbar" role="banner">
               <div className="app-topbar-left">
-                <button
-                  type="button"
-                  className="sidebar-toggle"
-                  onClick={toggleSidebar}
-                  aria-label={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')}
-                  aria-expanded={!sidebarCollapsed}
-                >
-                  {sidebarCollapsed ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-                      <line x1="3" y1="12" x2="21" y2="12" />
-                      <line x1="3" y1="6" x2="21" y2="6" />
-                      <line x1="3" y1="18" x2="21" y2="18" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  )}
-                </button>
+                <Tooltip content={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')} position="bottom" showDelay={800}>
+                  <button
+                    type="button"
+                    className="sidebar-toggle"
+                    onClick={toggleSidebar}
+                    aria-label={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')}
+                    aria-expanded={!sidebarCollapsed}
+                  >
+                    {sidebarCollapsed ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                        <line x1="3" y1="12" x2="21" y2="12" />
+                        <line x1="3" y1="6" x2="21" y2="6" />
+                        <line x1="3" y1="18" x2="21" y2="18" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    )}
+                  </button>
+                </Tooltip>
               </div>
               <div className="app-topbar-right">
                 <StoreSwitcher />

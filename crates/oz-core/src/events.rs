@@ -20,6 +20,11 @@ use foundation::contracts::DomainEvent;
 pub struct SaleCompleted {
     /// Unique sale identifier (UUID v4).
     pub sale_id: String,
+    /// The store where the sale occurred (ADR #8).
+    ///
+    /// `None` in single-store/legacy deployments or test contexts.
+    /// In multi-store mode, always set from the session's `store_id`.
+    pub store_id: Option<String>,
     /// Line items sold in this transaction.
     pub line_items: Vec<SaleCompletedLine>,
     /// Total sale amount in minor units.
@@ -114,6 +119,11 @@ impl DomainEvent for StockAdjusted {
 pub struct CourseFired {
     /// Sale/order ID this course belongs to.
     pub sale_id: String,
+    /// The store where the order was placed (ADR #8).
+    ///
+    /// `None` in single-store/legacy deployments or test contexts.
+    /// In multi-store mode, always set from the session's `store_id`.
+    pub store_id: Option<String>,
     /// Course identifier (e.g. "appetizer", "main", "dessert", "drinks").
     pub course_id: String,
     /// Display number shown on the ticket.
@@ -147,6 +157,7 @@ mod tests {
     fn sale_completed_event_name() {
         let event = SaleCompleted {
             sale_id: "sale-1".into(),
+            store_id: None,
             line_items: vec![SaleCompletedLine {
                 sku: "COFFEE".into(),
                 qty: 2,
@@ -218,6 +229,7 @@ mod tests {
     fn course_fired_event_name() {
         let event = CourseFired {
             sale_id: "sale-1".into(),
+            store_id: None,
             course_id: "main".into(),
             display_number: Some(42),
             items: vec![CourseItem {
@@ -243,6 +255,7 @@ mod tests {
     fn course_fired_serde_roundtrip() {
         let event = CourseFired {
             sale_id: "sale-42".into(),
+            store_id: None,
             course_id: "appetizer".into(),
             display_number: Some(101),
             items: vec![
@@ -270,6 +283,7 @@ mod tests {
     fn course_fired_no_display_number() {
         let event = CourseFired {
             sale_id: "sale-3".into(),
+            store_id: None,
             course_id: "drinks".into(),
             display_number: None,
             items: vec![CourseItem {

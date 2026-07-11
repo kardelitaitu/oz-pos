@@ -53,6 +53,11 @@ pub struct KdsOrder {
     pub id: String,
     /// FK to the originating sale.
     pub sale_id: String,
+    /// The store where the order belongs (ADR #8).
+    ///
+    /// Populated from the sale's store context. Used by KDS tablets
+    /// to filter orders for defense-in-depth in multi-store deployments.
+    pub store_id: Option<String>,
     /// Current kitchen status ("pending", "preparing", "ready", "served", "cancelled").
     pub status: String,
     /// Comma-separated item names for display.
@@ -80,6 +85,8 @@ pub struct KdsOrder {
 pub struct CreateKdsOrderInput {
     /// FK to the originating sale.
     pub sale_id: String,
+    /// The store where this order belongs (ADR #8).
+    pub store_id: Option<String>,
     /// Comma-separated item display names.
     pub items_summary: String,
     /// Total item count.
@@ -149,6 +156,7 @@ mod tests {
         let order = KdsOrder {
             id: "o-1".into(),
             sale_id: "s-1".into(),
+            store_id: Some("store-default".into()),
             status: "pending".into(),
             items_summary: "Coffee x2, Bagel".into(),
             item_count: 3,
@@ -175,6 +183,7 @@ mod tests {
     fn create_kds_order_input_serde_roundtrip() {
         let input = CreateKdsOrderInput {
             sale_id: "s-1".into(),
+            store_id: None,
             items_summary: "Tea".into(),
             item_count: 1,
             notes: String::new(),
@@ -192,6 +201,7 @@ mod tests {
         let order = KdsOrder {
             id: "o-2".into(),
             sale_id: "s-2".into(),
+            store_id: None,
             status: "served".into(),
             items_summary: "Done".into(),
             item_count: 1,

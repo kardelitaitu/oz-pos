@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { Localized, useLocalization } from '@fluent/react';
 import { Modal } from '@/components/Modal';
+import { WorkspaceIcon } from '@/components/WorkspaceIcon';
 import './WorkspaceHome.css';
 
 // ── Per-workspace accent color classes ────────────────────────────
@@ -29,56 +30,11 @@ const WS_ORDER: Record<string, number> = {
 // ── Icons ─────────────────────────────────────────────────────────
 
 function getIcon(key: string) {
-  switch (key) {
-    case 'restaurant-pos':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 3h18v18H3z" />
-          <path d="M12 8v8M8 12h8" />
-        </svg>
-      );
-    case 'store-pos':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-      );
-    case 'inventory':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-          <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-          <line x1="8" y1="12" x2="16" y2="12" />
-          <line x1="8" y1="16" x2="14" y2="16" />
-        </svg>
-      );
-    case 'admin':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-        </svg>
-      );
-    case 'kds':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-          <line x1="8" y1="21" x2="16" y2="21" />
-          <line x1="12" y1="17" x2="12" y2="21" />
-          <path d="M7 9l3 3-3 3" />
-          <path d="M17 9l-3 3 3 3" />
-          <circle cx="12" cy="12" r="1" fill="currentColor" />
-        </svg>
-      );
-    default:
-      console.warn(`WorkspaceHome: unknown workspace key "${key}" — using default icon`);
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-        </svg>
-      );
+  const known = ['restaurant-pos', 'store-pos', 'kds', 'inventory', 'admin'];
+  if (!known.includes(key)) {
+    console.warn(`WorkspaceHome: unknown workspace key "${key}" — using default icon`);
   }
+  return <WorkspaceIcon wsKey={key} />;
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────
@@ -213,7 +169,7 @@ export default function WorkspaceHome() {
   const sortedWorkspaces = useMemo(
     () =>
       [...availableWorkspaces].sort(
-        (a, b) => (WS_ORDER[a.key] ?? 99) - (WS_ORDER[b.key] ?? 99),
+        (a, b) => (WS_ORDER[a.type_key] ?? 99) - (WS_ORDER[b.type_key] ?? 99),
       ),
     [availableWorkspaces],
   );
@@ -701,16 +657,16 @@ export default function WorkspaceHome() {
       ) : (
         <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
           {sortedWorkspaces.map((ws, idx) => {
-            const disabled = !canAccess(ws.key);
-            const colorClass = WS_COLORS[ws.key] ?? '';
-            const isActive = ws.key === lastWorkspace && !disabled;
+            const disabled = !canAccess(ws.type_key);
+            const colorClass = WS_COLORS[ws.type_key] ?? '';
+            const isActive = ws.type_key === lastWorkspace && !disabled;
             return (
               <button
-                key={ws.key}
+                key={ws.type_key}
                 type="button"
                 aria-current={isActive ? 'true' : undefined}
-                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.key ? ' workspace-card--exiting' : ''}`}
-                onClick={(e) => handleCardClick(ws.key, e)}
+                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
+                onClick={(e) => handleCardClick(ws.type_key, e)}
                 disabled={disabled || exitingWorkspace !== null}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
@@ -729,7 +685,7 @@ export default function WorkspaceHome() {
                   </div>
                 )}
                 <div className="workspace-card-icon">
-                  {getIcon(ws.key)}
+                  {getIcon(ws.type_key)}
                 </div>
                 <div className="workspace-card-body">
                   <h2 className="workspace-card-name">{ws.name}</h2>

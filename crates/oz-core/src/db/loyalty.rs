@@ -41,7 +41,7 @@ impl Store<'_> {
         }
 
         // Create new account with Bronze tier.
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         self.conn.execute(
@@ -256,7 +256,7 @@ impl Store<'_> {
             });
         }
 
-        let txn_id = uuid::Uuid::new_v4().to_string();
+        let txn_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let tx = self.conn.unchecked_transaction()?;
@@ -335,7 +335,7 @@ impl Store<'_> {
 
         let discount_minor = points * POINTS_TO_MINOR_RATIO;
 
-        let txn_id = uuid::Uuid::new_v4().to_string();
+        let txn_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         let tx = self.conn.unchecked_transaction()?;

@@ -1,0 +1,146 @@
+/* ── Tooltip ──────────────────────────────────────────────────────── */
+
+.tooltip-wrapper {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+/* ── Tooltip bubble ─────────────────────────────── */
+.tooltip-content {
+  position: absolute;
+  padding: var(--space-1_5) var(--space-2_5);
+  background: var(--tooltip-bg, var(--neutral-800));
+  color: var(--tooltip-fg, #ffffff);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  z-index: var(--z-tooltip);
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity var(--duration-150) var(--ease-out),
+    transform var(--duration-150) var(--ease-out);
+  transform-origin: var(--tooltip-origin, left center);
+}
+
+/* In light mode: --neutral-800 = #262626 (dark gray) → white text ✓ */
+/* In dark  mode: --neutral-800 = #e5e5e5 (light) — wrong for tooltip.
+   Override with a proper dark shade for the tooltip bubble. */
+[data-theme='dark'] .tooltip-content {
+  --tooltip-bg: #2a2a3e;
+  --tooltip-fg: #f0f0f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tooltip-content {
+    --tooltip-bg: #2a2a3e;
+    --tooltip-fg: #f0f0f0;
+  }
+}
+
+.tooltip-content--visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ── Position: right (default for collapsed sidebar) ─ */
+.tooltip-content--right {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+  --tooltip-origin: left center;
+}
+
+.tooltip-content--right.tooltip-content--visible {
+  transform: translateY(-50%) scale(1);
+}
+
+/* ── Position: left ─────────────────────────────── */
+.tooltip-content--left {
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+  --tooltip-origin: right center;
+}
+
+.tooltip-content--left.tooltip-content--visible {
+  transform: translateY(-50%) scale(1);
+}
+
+/* ── Position: top ──────────────────────────────── */
+.tooltip-content--top {
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  --tooltip-origin: bottom center;
+}
+
+.tooltip-content--top.tooltip-content--visible {
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── Position: bottom ───────────────────────────── */
+.tooltip-content--bottom {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  --tooltip-origin: top center;
+}
+
+.tooltip-content--bottom.tooltip-content--visible {
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── Arrow ──────────────────────────────────────── */
+.tooltip-content::before {
+  content: '';
+  position: absolute;
+  border: 5px solid transparent;
+  pointer-events: none;
+}
+
+/* Right-positioned arrow points left into the trigger */
+.tooltip-content--right::before {
+  left: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: var(--tooltip-bg, var(--neutral-800));
+}
+
+/* Left-positioned arrow points right */
+.tooltip-content--left::before {
+  right: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: var(--tooltip-bg, var(--neutral-800));
+}
+
+/* Top-positioned arrow points up */
+.tooltip-content--top::before {
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: var(--tooltip-bg, var(--neutral-800));
+}
+
+/* Bottom-positioned arrow points down */
+.tooltip-content--bottom::before {
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: var(--tooltip-bg, var(--neutral-800));
+}
+
+/* ── Reduced motion ─────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-content {
+    transition: none;
+  }
+}

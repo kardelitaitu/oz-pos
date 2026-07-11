@@ -42,7 +42,7 @@ fn seed_product(conn: &Connection, sku: &str, name: &str) {
     conn.execute(
         "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
          VALUES (?1, ?2, ?3, 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        rusqlite::params![uuid::Uuid::new_v4().to_string(), sku, name],
+        rusqlite::params![uuid::Uuid::now_v7().to_string(), sku, name],
     )
     .unwrap();
 }

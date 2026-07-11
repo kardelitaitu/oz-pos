@@ -19,11 +19,19 @@ pub struct VoidSaleArgs {
     pub reason: String,
 }
 
-/// Void an active (completed) sale.
+/// Args for `void_sale_scoped` — identical to `VoidSaleArgs` but without
+/// `user_id` (read from the session token instead).
+#[derive(Debug, Deserialize)]
+pub struct VoidSaleScopedArgs {
+    pub sale_id: String,
+    pub reason: String,
+}
+
+/// Void an active (completed) sale using the global database.
 ///
-/// Restores inventory for each line item and writes an audit log entry.
-/// Requires `sales:void` permission.
-/// Returns the updated sale with status `Voided`.
+/// **Deprecated for multi-store (ADR #7):** Use `void_sale_scoped`
+/// with a `session_token` instead. The `user_id` is read from the
+/// resolved session, not passed as a frontend parameter.
 #[command]
 pub async fn void_sale(
     args: VoidSaleArgs,
@@ -39,6 +47,36 @@ pub async fn void_sale(
     drop(db);
 
     tracing::info!(sale_id = %args.sale_id, reason = %args.reason, "sale voided");
+    Ok(sale)
+}
+
+/// Void a sale within the store resolved from a session token.
+///
+/// ADR #7: Scoped variant of `void_sale`. The `user_id` for permission
+/// checks and the void operation is read from the resolved `SessionContext`.
+#[command]
+pub async fn void_sale_scoped(
+    session_token: String,
+    args: VoidSaleScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<oz_core::Sale, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::SALES_VOID)?;
+
+    let sale = store.void_sale(&args.sale_id, &session.user_id, &args.reason)?;
+    drop(db);
+
+    tracing::info!(sale_id = %args.sale_id, reason = %args.reason, "sale voided (scoped)");
     Ok(sale)
 }
 
@@ -67,6 +105,21 @@ mod tests {
         let d = format!("{args:?}");
         assert!(d.contains("s2"));
         assert!(d.contains("Test"));
+    }
+
+    #[test]
+    fn void_sale_scoped_args_deserialize() {
+        let json = r##"{"sale_id":"s1","reason":"Wrong item"}"##;
+        let args: VoidSaleScopedArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.sale_id, "s1");
+        assert_eq!(args.reason, "Wrong item");
+    }
+
+    #[test]
+    fn void_sale_scoped_rejects_invalid_token() {
+        let state = AppState::for_test();
+        let result = state.resolve_session("nonexistent-token");
+        assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 
     #[test]

@@ -7,7 +7,7 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert } = vi.hoisted(() => ({
+const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
   mockUseTicketSla: vi.fn((): { level: 'green' | 'yellow' | 'red'; elapsedSeconds: number; display: string } => ({
@@ -16,6 +16,7 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert } 
     display: '2m 0s',
   })),
   mockPlayAlert: vi.fn(),
+  mockUseWorkspaceScope: vi.fn<[], { storeId: string; instanceId: string; typeKey: string } | null>(() => null),
 }));
 
 vi.mock('@/api/kds', () => ({
@@ -41,6 +42,10 @@ vi.mock('@/frontend/shared/useSound', () => ({
   }),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspaceScope: () => mockUseWorkspaceScope(),
+}));
+
 const bundle = new FluentBundle('en-US');
 bundle.addResource(new FluentResource(kdsFtl));
 const l10n = new ReactLocalization([bundle]);
@@ -57,6 +62,7 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
   return {
     id: 'o-1',
     sale_id: 's-1',
+    store_id: null,
     status: 'pending',
     items_summary: 'Burger x1, Fries x1',
     item_count: 2,
@@ -295,5 +301,77 @@ describe('KdsScreen', () => {
       const timeCell = document.querySelector('.kds-ticket-time');
       expect(timeCell?.classList.contains('kds-ticket-time--yellow')).toBe(true);
     });
+  });
+
+  // ── ADR #8: store_id filtering tests ────────────────────────────────
+
+  it('passes through orders with null store_id when scope is set (legacy compat)', async () => {
+    mockUseWorkspaceScope.mockReturnValue({ storeId: 'store-downtown', instanceId: 'i-1', typeKey: 'kds' });
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', store_id: null, items_summary: 'Legacy Order' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Legacy Order')).toBeDefined();
+    });
+  });
+
+  it('passes through orders whose store_id matches the active scope', async () => {
+    mockUseWorkspaceScope.mockReturnValue({ storeId: 'store-downtown', instanceId: 'i-1', typeKey: 'kds' });
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', store_id: 'store-downtown', items_summary: 'Downtown Order' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Order')).toBeDefined();
+    });
+  });
+
+  it('filters out orders whose store_id does not match the active scope', async () => {
+    mockUseWorkspaceScope.mockReturnValue({ storeId: 'store-downtown', instanceId: 'i-1', typeKey: 'kds' });
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', store_id: 'store-mall', items_summary: 'Mall Order' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      // The Mall order should be filtered out — all columns show empty state
+      const empties = screen.getAllByText('No orders yet');
+      expect(empties.length).toBe(3);
+    });
+    expect(screen.queryByText('Mall Order')).toBeNull();
+  });
+
+  it('passes through all orders when workspace scope is null (no filtering)', async () => {
+    mockUseWorkspaceScope.mockReturnValue(null);
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', store_id: 'store-downtown', items_summary: 'DT Order' }),
+      makeOrder({ id: 'o-2', store_id: 'store-mall', items_summary: 'Mall Order' }),
+      makeOrder({ id: 'o-3', store_id: null, items_summary: 'Legacy Order' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('DT Order')).toBeDefined();
+      expect(screen.getByText('Mall Order')).toBeDefined();
+      expect(screen.getByText('Legacy Order')).toBeDefined();
+    });
+  });
+
+  it('filters mixed orders — keeps matching and legacy, drops mismatched', async () => {
+    mockUseWorkspaceScope.mockReturnValue({ storeId: 'store-downtown', instanceId: 'i-1', typeKey: 'kds' });
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', store_id: 'store-downtown', items_summary: 'DT Order' }),
+      makeOrder({ id: 'o-2', store_id: 'store-mall', items_summary: 'Mall Order' }),
+      makeOrder({ id: 'o-3', store_id: null, items_summary: 'Legacy Order' }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('DT Order')).toBeDefined();
+      expect(screen.getByText('Legacy Order')).toBeDefined();
+    });
+    // Mall order should be filtered out
+    expect(screen.queryByText('Mall Order')).toBeNull();
+    // Header count should show 2 orders
+    const countEl = document.querySelector('.kds-order-count');
+    expect(countEl?.textContent).toMatch(/2/);
   });
 });
