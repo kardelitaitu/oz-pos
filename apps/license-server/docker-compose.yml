@@ -1,0 +1,36 @@
+# OZ-POS License Server — Local Development Docker Compose
+#
+# Usage:
+#   1. Generate keys:  .\scripts\generate-license-keys.ps1  (PowerShell)
+#   2. Start server:   docker compose -f apps/license-server/docker-compose.yml up -d
+#   3. Create admin:   docker compose -f apps/license-server/docker-compose.yml exec license-server \
+#                        /pb/pocketbase superuser upsert admin@oz-pos.com password123
+#   4. Open admin UI:  http://localhost:8080/_/
+#   5. Test activate:  curl -X POST http://localhost:8080/api/v1/license/activate \
+#                        -H "Content-Type: application/json" \
+#                        -d '{"key": "OZ-PRO-TEST-ABCD-EFGH-IJKL", "tenant_id": "t1", "machine_id": "m1"}'
+#
+#   Stop:             docker compose -f apps/license-server/docker-compose.yml down
+#   Clean:            docker compose -f apps/license-server/docker-compose.yml down -v
+
+services:
+  license-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      OZ_LICENSE_PRIVATE_KEY: ${OZ_LICENSE_PRIVATE_KEY}
+    volumes:
+      - pb_data:/pb/pb_data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pb_data:
