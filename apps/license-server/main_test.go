@@ -760,6 +760,16 @@ func TestNormalizePEM_EndMarkerWithoutClosingDashes(t *testing.T) {
 	}
 }
 
+func TestNormalizePEM_BeginMarkerWithoutClosingDashes(t *testing.T) {
+	// BEGIN marker present but the type section never closes with "-----"
+	// anywhere in the string (no "-----" appears at all after the type name).
+	result := normalizePEM("-----BEGIN PRIVATE KEY")
+	// headerClose is -1 (no "-----" found in afterType), returns raw.
+	if !strings.Contains(result, "-----BEGIN PRIVATE KEY") {
+		t.Error("PEM with incomplete BEGIN header should be preserved")
+	}
+}
+
 // ── Tests: jsonMarshal ────────────────────────────────────────────
 
 func TestJsonMarshal_Simple(t *testing.T) {
