@@ -76,7 +76,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 
 	subscriptions := core.NewBaseCollection("subscriptions")
 	subscriptions.Fields.Add(
-		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id},
+		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
 		&core.NumberField{Name: "max_stores", Required: true},
 		&core.NumberField{Name: "max_pos_instances", Required: true},
@@ -98,7 +98,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 
 	tenantMachines := core.NewBaseCollection("tenant_machines")
 	tenantMachines.Fields.Add(
-		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id},
+		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
 		&core.DateField{Name: "first_seen_at"},
 		&core.DateField{Name: "last_seen_at"},
 	)
@@ -130,6 +130,26 @@ func runScenario(t *testing.T, scenario *tests.ApiScenario) {
 	scenario.Test(t)
 }
 
+// ── Seed helpers ─────────────────────────────────────────────────
+
+func seedTenant(t *testing.T, app *tests.TestApp, tenantID, apiKey, status string) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		t.Fatalf("tenants collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Id = tenantID
+	rec.Set("business_name", "Test Business")
+	rec.Set("contact_name", "Test Contact")
+	rec.Set("email", "test@example.com")
+	rec.Set("api_key", apiKey)
+	rec.Set("status", status)
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed tenant %q: %v", tenantID, err)
+	}
+}
+
 // ── Tests: Status Handler ────────────────────────────────────────
 
 func TestStatusHandler_TenantNotFound(t *testing.T) {
@@ -138,6 +158,20 @@ func TestStatusHandler_TenantNotFound(t *testing.T) {
 		URL:             "/api/v1/license/status/n0t4f0und000000",
 		ExpectedStatus:  404,
 		ExpectedContent: []string{`"error"`, "tenant not found"},
+	})
+}
+
+func TestStatusHandler_TenantNoSubscription(t *testing.T) {
+	// Seeds a tenant without any subscription — handler should return
+	// fallback response with active:false and tier:"unknown".
+	runScenario(t, &tests.ApiScenario{
+		Method:          "GET",
+		URL:             "/api/v1/license/status/nosubtest000001",
+		ExpectedStatus:  200,
+		ExpectedContent: []string{`"tenant_id":"nosubtest000001"`, `"active":false`, `"tier":"unknown"`},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedTenant(t.(*testing.T), app, "nosubtest000001", "nosubapikey0001", "active")
+		},
 	})
 }
 
@@ -159,8 +193,8 @@ func TestActivateHandler_InvalidKey(t *testing.T) {
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
 			"key": "OZINVALIDKEY001",
-			"tenant_id": "test000000000001",
-			"machine_id": "mach00000000001"
+			"tenant_id": "testactivate001",
+			"machine_id": "machinetest0001"
 		}`),
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`},
@@ -194,7 +228,7 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 		Method: "POST",
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
-			"tenant_id": "tsx000000000001",
+			"tenant_id": "tsxinvalid00001",
 			"api_key": "invalidkey00001"
 		}`),
 		ExpectedStatus:  401,
@@ -209,5 +243,24 @@ func TestRenewHandler_InvalidJSON(t *testing.T) {
 		Body:            strings.NewReader(`not json`),
 		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`},
+	})
+}
+
+func TestRenewHandler_WrongTenantID(t *testing.T) {
+	// Seed a tenant with api_key "wrongapik000001" and id "wrongtenant0002",
+	// then send a request with a different tenant_id.
+	// The handler should authenticate via api_key but reject the mismatched tenant_id.
+	runScenario(t, &tests.ApiScenario{
+		Method: "POST",
+		URL:    "/api/v1/license/renew",
+		Body: strings.NewReader(`{
+			"tenant_id": "wrongtenant0001",
+			"api_key": "wrongapik000001"
+		}`),
+		ExpectedStatus:  401,
+		ExpectedContent: []string{`tenant_id does not match api_key`},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedTenant(t.(*testing.T), app, "wrongtenant0002", "wrongapik000001", "active")
+		},
 	})
 }
