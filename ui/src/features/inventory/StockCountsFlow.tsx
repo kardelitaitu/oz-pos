@@ -7,6 +7,7 @@ import type { StockCountDto } from '@/api/inventoryCounts';
 
 type View = 'list' | 'new' | 'detail' | 'history';
 
+/** Stock counts feature router — orchestrates navigation between list, new, detail, and history views based on hash or local state. */
 export default function StockCountsFlow() {
   const [view, setView] = useState<View>('list');
   const [selectedId, setSelectedId] = useState<string | null>(null);

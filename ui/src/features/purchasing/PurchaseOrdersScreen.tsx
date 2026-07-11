@@ -17,6 +17,7 @@ function formatMinor(minor: number): string {
   return (minor / 100).toFixed(2);
 }
 
+/** Purchase orders list screen — view, filter, approve, receive, and cancel purchase orders with status management. */
 export default function PurchaseOrdersScreen() {
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [loading, setLoading] = useState(true);

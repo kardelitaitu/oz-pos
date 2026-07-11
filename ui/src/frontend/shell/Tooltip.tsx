@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useId, type ReactNode, type ReactElement, cloneElement } from 'react';
 import './Tooltip.css';
 
+/** Props for the Tooltip component. */
 export interface TooltipProps {
   /** Content to show inside the tooltip. */
   content: ReactNode;

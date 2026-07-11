@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
+/** Application zoom level preset. */
 export type ZoomLevel = 'auto' | '100' | '125' | '150' | '200';
 
 interface ZoomContextType {
@@ -9,6 +10,12 @@ interface ZoomContextType {
 
 const ZoomContext = createContext<ZoomContextType | undefined>(undefined);
 
+/**
+ * Provides zoom/scaling state to the application.
+ * Adjusts the root `font-size` based on the selected zoom level.
+ * Intercepts Ctrl+/-/0 for manual zoom control and persists the
+ * choice to localStorage.
+ */
 export function ZoomProvider({ children }: { children: ReactNode }) {
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(() => {
     const saved = localStorage.getItem('app-zoom-level');
@@ -82,6 +89,7 @@ export function ZoomProvider({ children }: { children: ReactNode }) {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
+/** Access the zoom context. Must be used within a `<ZoomProvider>`. */
 export function useAppZoom() {
   const context = useContext(ZoomContext);
   if (context === undefined) {

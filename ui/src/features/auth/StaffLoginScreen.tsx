@@ -86,6 +86,7 @@ function useResizedLogo(src: string | null | undefined, targetSize = 256) {
 
 type Step = 'username' | 'pin';
 
+/** Staff login screen — two-step authentication flow with username entry followed by PIN pad input and shake animation on error. */
 export default function StaffLoginScreen() {
   const { l10n } = useLocalization();
   const { login, loading, error, clearError } = useAuth();

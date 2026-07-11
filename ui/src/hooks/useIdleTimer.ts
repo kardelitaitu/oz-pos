@@ -16,6 +16,12 @@ function getMinutes(): number {
 
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'] as const;
 
+/**
+ * Monitor user activity and fire `onIdle` after a configurable period
+ * of inactivity. Resets the timer on mousedown, keydown, touchstart,
+ * scroll, or wheel events. The idle duration is read from localStorage
+ * (`auto-lock-minutes`, default 5 minutes).
+ */
 export function useIdleTimer(onIdle: () => void) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onIdleRef = useRef(onIdle);
@@ -44,10 +50,12 @@ export function useIdleTimer(onIdle: () => void) {
   }, []);
 }
 
+/** Read the persisted auto-lock idle duration in minutes. */
 export function getAutoLockMinutes(): number {
   return getMinutes();
 }
 
+/** Persist the auto-lock idle duration (clamped 1–120 minutes). */
 export function setAutoLockMinutes(minutes: number) {
   localStorage.setItem(STORAGE_KEY, String(Math.max(1, Math.min(120, minutes))));
 }

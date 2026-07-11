@@ -20,6 +20,7 @@ const STATUS_CLASS: Record<string, string> = {
   expired: 'gift-card-status--expired',
 };
 
+/** Gift card management screen — list, search, filter, freeze/unfreeze, top up, and issue gift cards. */
 export default function GiftCardsScreen() {
   const { l10n } = useLocalization();
   const [cards, setCards] = useState<GiftCardWithTransactions[]>([]);

@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 
+/**
+ * Reactively evaluate a CSS media query string.
+ * Returns `true` when the query matches and re-renders on changes.
+ */
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {

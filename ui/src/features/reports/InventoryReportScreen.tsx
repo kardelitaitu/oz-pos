@@ -7,6 +7,7 @@ import { Button } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
 import './InventoryReportScreen.css';
 
+/** Inventory report screen — view and export low-stock alerts with configurable threshold, CSV download, and print support. */
 export default function InventoryReportScreen() {
   const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);

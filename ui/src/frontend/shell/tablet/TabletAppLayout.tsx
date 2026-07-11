@@ -5,6 +5,7 @@ import './tablet.css';
 
 // ── Props ───────────────────────────────────────────────────────────
 
+/** Props for the tablet-optimised shell layout component. */
 export interface TabletAppLayoutProps {
   /** Current active route. */
   route: string;

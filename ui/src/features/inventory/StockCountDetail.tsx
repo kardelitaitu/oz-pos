@@ -20,6 +20,7 @@ interface Props {
   onBack: () => void;
 }
 
+/** Stock count detail view — display and manage individual count lines with product search and quantity entry. */
 export default function StockCountDetail({ countId, onBack }: Props) {
   const [count, setCount] = useState<StockCountDto | null>(null);
   const [lines, setLines] = useState<StockCountLineDto[]>([]);

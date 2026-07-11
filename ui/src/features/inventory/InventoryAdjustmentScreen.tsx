@@ -24,6 +24,7 @@ const ADJUSTMENT_REASONS = [
 
 // ── Component ───────────────────────────────────────────────────────
 
+/** Inventory adjustment screen — search products, add or remove stock quantities, and record an adjustment reason. */
 export default function InventoryAdjustmentScreen() {
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [loading, setLoading] = useState(true);

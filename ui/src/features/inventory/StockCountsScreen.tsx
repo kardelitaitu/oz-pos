@@ -8,6 +8,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './StockCountsScreen.css';
 
+/** Stock counts list screen — displays all stock counts with status filters and links to create new counts or view details. */
 export default function StockCountsScreen() {
   const [counts, setCounts] = useState<StockCountDto[]>([]);
   const [loading, setLoading] = useState(true);

@@ -18,6 +18,7 @@ interface CartItem {
   qty: number;
 }
 
+/** Self-service kiosk screen — customer-facing product browsing, cart management, and checkout with idle timeout reset. */
 export default function KioskScreen() {
   const { l10n } = useLocalization();
   const [products, setProducts] = useState<ProductDto[]>([]);

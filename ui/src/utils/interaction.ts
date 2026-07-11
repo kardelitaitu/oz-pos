@@ -1,3 +1,4 @@
+/** Named interaction events that can trigger sound and vibration feedback. */
 export type InteractionName =
   | 'add-to-cart'
   | 'qty-change'
@@ -36,6 +37,7 @@ function getAudio(filename: string): HTMLAudioElement | null {
   }
 }
 
+/** Play the configured sound and (optionally) vibrate for the given interaction. */
 export function triggerInteraction(name: InteractionName): void {
   const config = INTERACTIONS[name];
   if (!config) return;

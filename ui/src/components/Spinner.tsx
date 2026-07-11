@@ -1,8 +1,10 @@
 import { type HTMLAttributes } from 'react';
 import { useLocalization } from '@fluent/react';
 
+/** Size preset for the Spinner component. */
 export type SpinnerSize = 'sm' | 'md' | 'lg';
 
+/** Props for the Spinner loading indicator component. */
 export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
   /** Size preset. @default 'md' */
   size?: SpinnerSize;
@@ -10,6 +12,10 @@ export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
   label?: string;
 }
 
+/**
+ * Accessible loading spinner with a configurable size and label.
+ * Uses `role="status"` and an `aria-label` for screen readers.
+ */
 export function Spinner({
   size = 'md',
   label,

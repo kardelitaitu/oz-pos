@@ -4,8 +4,11 @@
 // refuses to mix up `CartId` and `Sku`. Convert at the IPC boundary
 // (`pos.ts` is the only place that talks to Rust).
 
+/** Branded string type for cart identifiers. */
 export type CartId = string & { readonly __brand: 'CartId' };
+/** Branded string type for cart line identifiers. */
 export type LineId = string & { readonly __brand: 'LineId' };
+/** Branded string type for stock-keeping unit codes. */
 export type Sku = string & { readonly __brand: 'Sku' };
 
 import { getDecimalSep } from '@/utils/storage';
@@ -40,7 +43,7 @@ export function courseEmoji(courseId: CourseId): string {
   return COURSES.find((c) => c.id === courseId)?.emoji ?? '🍽️';
 }
 
-/** Single line in a cart. */
+/** A single line in a shopping cart. */
 export interface CartLine {
   readonly id: LineId;
   readonly sku: Sku;
@@ -86,6 +89,7 @@ export type AppError =
   | { kind: 'invalid'; message: string }
   | { kind: 'internal'; message: string };
 
+/** Type guard that checks whether an unknown value is an AppError. */
 export const isAppError = (e: unknown): e is AppError =>
   typeof e === 'object' && e !== null && 'kind' in e;
 

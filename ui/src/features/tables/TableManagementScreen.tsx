@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { listTables, updateTableStatus, releaseTable, type Table } from '@/api/tables';
 import './TableManagementScreen.css';
 
+/** Table management screen — interactive floor-plan view for managing restaurant table status (available, occupied, reserved, cleaning). */
 export default function TableManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();

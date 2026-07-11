@@ -8,6 +8,11 @@ interface ConnectionStatusProps {
   maxIntervalMs?: number;
 }
 
+/**
+ * Ping a service URL at intervals and display its reachability,
+ * latency, and label. Uses exponential backoff on failure and
+ * listens for OS-level `online` / `offline` events.
+ */
 export default function ConnectionStatus({ 
   label, 
   url, 

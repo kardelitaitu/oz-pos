@@ -10,6 +10,7 @@ interface Props {
   onCancel: () => void;
 }
 
+/** New stock count creation form — select count type (full, cyclic, or spot) and add optional notes before creating. */
 export default function StockCountForm({ onCreated, onCancel }: Props) {
   const [countType, setCountType] = useState<'full' | 'cyclic' | 'spot'>('full');
   const [notes, setNotes] = useState('');

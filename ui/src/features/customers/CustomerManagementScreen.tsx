@@ -32,6 +32,7 @@ const EMPTY_FORM: FormData = {
 
 // ── Component ───────────────────────────────────────────────────────
 
+/** Customer management screen — list, search, create, edit, and delete customer records. */
 export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();

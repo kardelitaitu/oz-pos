@@ -278,6 +278,7 @@ function useDate(): string {
 
 // ── Component ─────────────────────────────────────────────────────
 
+/** Settings hub — sidebar-driven navigation across general, appearance, features, data management, staff, terminals, multi-store, audit, offline queue, shifts, tax, currency, and promotions. */
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
 
+/** Describes a payment gateway's connection state. */
 export interface GatewayStatus {
   name: string;
   configured: boolean;
   online: boolean;
 }
 
+/**
+ * Poll the payment gateway status on mount and every 60 s.
+ * Returns the gateway name, configuration state, and online status.
+ */
 export function useGatewayStatus(): GatewayStatus {
   const [status, setStatus] = useState<GatewayStatus>({ name: 'Stripe', configured: false, online: false });
 

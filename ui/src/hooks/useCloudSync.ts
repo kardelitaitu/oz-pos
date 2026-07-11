@@ -23,22 +23,27 @@ import {
 
 // ── Public types ───────────────────────────────────────────────────
 
+/** Input shape for adding a notification toast. */
 export type ToastInput = {
   message: string;
   type: 'success' | 'error' | 'warning' | 'info';
 };
 
+/** Connection status to the cloud sync server. */
 export type SyncStatus = 'online' | 'offline';
 
+/** Minimal Fluent-like localisation interface expected by the sync hook. */
 export interface L10nLike {
   getString: (key: string, vars?: Record<string, string | number>) => string | null;
 }
 
+/** Dependencies injected into the sync hook for side-effect isolation. */
 export interface UseCloudSyncDeps {
   addToast: (t: ToastInput) => void;
   l10n: L10nLike;
 }
 
+/** Full return type of the `useCloudSync` hook. */
 export interface UseCloudSyncReturn {
   // State
   enabled: boolean;
@@ -121,6 +126,16 @@ function t(
 
 // ── Hook ────────────────────────────────────────────────────────────
 
+/**
+ * Shared cloud-sync state and side-effects for the desktop Options screen
+ * and tablet Settings sheet.
+ *
+ * Owns non-secret config in `localStorage`, the auth token in the secure
+ * IPC channel, the auto-sync interval lifecycle, and the real sync
+ * round-trip to the configured cloud server. Returns setters, actions
+ * (`syncNow`, `pullFromServer`, `testConnection`), and a `persist`
+ * function that flushes everything to the backend.
+ */
 export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
   const { addToast, l10n } = deps;
 

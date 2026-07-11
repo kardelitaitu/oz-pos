@@ -36,6 +36,7 @@ const EMPTY_FORM: FormData = {
   notes: '',
 };
 
+/** Supplier management screen — list, search, create, and edit supplier profiles with contact and payment term details. */
 export default function SuppliersScreen() {
   const { l10n } = useLocalization();
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);

@@ -46,6 +46,7 @@ export interface PaymentModalProps {
   tenderPresets?: number[];
 }
 
+/** Payment processing modal — method selection (cash, card, QRIS, open bill, credit), split tender, customer/loyalty, multi-currency, and change calculation. */
 export default function PaymentModal({
   open,
   lineItems,

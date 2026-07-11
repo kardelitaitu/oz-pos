@@ -56,6 +56,7 @@ function dtoToProduct(dto: ProductDto): Product {
   };
 }
 
+/** Product management screen — full CRUD for products, including SKU, pricing, barcode, tax rates, and variant management. */
 export default function ProductManagementScreen() {
   const { session } = useAuth();
   const userId = session?.user_id ?? '';

@@ -101,6 +101,7 @@ function getGroupIcon(group: string): string {
 
 // ── Component ──────────────────────────────────────────────────────
 
+/** Feature flag management screen — groups all 32 feature flags by category with toggle switches and automatic dependency resolution. */
 export default function FeatureToggleScreen() {
   const { l10n } = useLocalization();
   const [features, setFeatures] = useState<FeatureInfo[]>([]);

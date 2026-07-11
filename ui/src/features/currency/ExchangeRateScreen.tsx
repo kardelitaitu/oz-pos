@@ -35,6 +35,7 @@ const EMPTY_FORM: FormData = {
   effectiveDate: todayStr(),
 };
 
+/** Exchange rate management screen — create and delete currency exchange rates for multi-currency support. */
 export default function ExchangeRateScreen() {
   const { l10n } = useLocalization();
   const [rates, setRates] = useState<ExchangeRateDto[]>([]);

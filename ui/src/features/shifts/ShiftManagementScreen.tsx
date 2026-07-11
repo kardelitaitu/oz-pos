@@ -30,6 +30,7 @@ const fmt = (minor: number, currency = 'USD') =>
 
 // ── Component ───────────────────────────────────────────────────────
 
+/** Shift management screen — view active shift status, open and close shifts, record cash payouts, and display reconciliation reports. */
 export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();

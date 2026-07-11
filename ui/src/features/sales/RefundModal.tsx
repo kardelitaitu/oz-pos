@@ -15,6 +15,7 @@ interface RefundModalProps {
   onRefunded: () => void;
 }
 
+/** Refund modal — select line items to refund with quantity, reason, and note. Dispatches the refund to the backend on confirm. */
 export default function RefundModal({ open, sale, onClose, onRefunded }: RefundModalProps) {
   const { l10n } = useLocalization();
   const { session } = useAuth();

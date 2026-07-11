@@ -9,6 +9,7 @@ interface ScaleIndicatorProps {
   onClearWeighTarget: () => void;
 }
 
+/** Live scale weight indicator — polls the connected scale every 2 seconds and supports weigh-and-add for weighed products. */
 export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTarget }: ScaleIndicatorProps) {
   const { l10n } = useLocalization();
   const [reading, setReading] = useState<WeightReading | null>(null);

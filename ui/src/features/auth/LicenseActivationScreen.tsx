@@ -4,11 +4,15 @@ import { activateLicense, getMachineId } from '@/api/license';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import './LicenseActivationScreen.css';
 
+/** Props for the LicenseActivationScreen component. */
 export interface LicenseActivationScreenProps {
+  /** Optional pre-existing error message to display on mount. */
   initialError?: string | null;
+  /** Callback invoked after successful license activation. */
   onActivated: () => void;
 }
 
+/** License activation screen — form for entering a license key and email to activate the POS software. */
 export default function LicenseActivationScreen({ initialError, onActivated }: LicenseActivationScreenProps) {
   const [key, setKey] = useState('');
   const [email, setEmail] = useState('');

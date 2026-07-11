@@ -2,9 +2,12 @@ import type { ReactNode } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** Shadow elevation preset for the Card component. */
 export type CardShadow = 'none' | 'xs' | 'sm' | 'md' | 'lg';
+/** Inner padding preset for the Card component. */
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg';
 
+/** Props for the Card container component. */
 export interface CardProps {
   /** Card body content. */
   children: ReactNode;

@@ -19,6 +19,12 @@ function simpleHash(str: string): number {
   return hash >>> 0;
 }
 
+/**
+ * Full-screen QRIS QR code payment modal.
+ * Displays a deterministic pseudo-QR code based on the reference,
+ * polls for payment confirmation, and calls `onPaymentConfirmed`
+ * when the payment is detected as complete.
+ */
 export default function QrisQrDisplay({
   amount,
   currency,

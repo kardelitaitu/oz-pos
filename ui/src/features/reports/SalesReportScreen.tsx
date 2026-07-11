@@ -66,6 +66,7 @@ function monthAgo(): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Sales report screen — daily/weekly/monthly revenue charts, top products, hourly heatmap, and category breakdown with CSV export. */
 export default function SalesReportScreen() {
   const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);

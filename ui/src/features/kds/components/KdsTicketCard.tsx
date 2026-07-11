@@ -4,8 +4,11 @@ import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
 import type { KdsOrder, KdsStatus } from '@/api/kds';
 
+/** Props for the KdsTicketCard component. */
 export interface KdsTicketCardProps {
+  /** The KDS order data to display. */
   order: KdsOrder;
+  /** Called when the ticket is tapped to advance to the next status. */
   onAdvance: (order: KdsOrder) => void;
 }
 

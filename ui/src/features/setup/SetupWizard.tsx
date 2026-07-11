@@ -10,14 +10,17 @@ import './SetupWizard.css';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** Supported store-type presets for quick-setup. */
 export type Preset = 'simple-retail' | 'restaurant' | 'full-store' | 'cafe' | 'franchise' | 'custom';
 
+/** A single feature toggle shown in the wizard section. */
 export interface FeatureDef {
   key: string;
   label: string;
   description: string;
 }
 
+/** Aggregate state of the entire wizard — chosen preset, per-feature toggles, and the default currency. */
 export interface WizardState {
   preset: Preset | null;
   features: Record<string, boolean>;
@@ -37,6 +40,7 @@ const STEPS = [
   'Review',
 ] as const;
 
+/** Total number of steps in the setup wizard. */
 export const TOTAL_STEPS = STEPS.length;
 
 /** Suffixes used to build the FTL id for each step (e.g. `setup-step-store-type`). */

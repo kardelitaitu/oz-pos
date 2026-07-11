@@ -21,6 +21,7 @@ export interface GiftCardPaymentProps {
   onComplete: () => void;
 }
 
+/** Gift card payment flow — look up gift card number, check balance, and apply gift card amount toward the current sale. */
 export default function GiftCardPayment({
   totalMinor,
   currency,

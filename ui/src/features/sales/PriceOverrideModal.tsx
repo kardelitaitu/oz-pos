@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { staffLogin } from '@/api/staff';
 import { formatMoney, type Money } from '@/types/domain';
 
+/** Props for the PriceOverrideModal — requires staff PIN verification before applying a manual price change. */
 export interface PriceOverrideModalProps {
   open: boolean;
   lineDescription: string;
@@ -10,6 +11,7 @@ export interface PriceOverrideModalProps {
   onClose: () => void;
 }
 
+/** Price override modal — two-step flow: enter new price, then authenticate with staff username + PIN before applying. */
 export default function PriceOverrideModal({
   open,
   lineDescription,

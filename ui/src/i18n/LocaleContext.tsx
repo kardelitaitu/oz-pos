@@ -7,6 +7,7 @@ import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { getBundle, getAvailableLocales, getLocaleLabel } from './index';
 import type { LocaleCode } from './index';
 
+/** Shape of the locale context exposed to consumers. */
 export interface LocaleContextValue {
   locale: LocaleCode;
   setLocale: (code: LocaleCode) => void;
@@ -14,6 +15,7 @@ export interface LocaleContextValue {
   getLocaleLabel: (code: LocaleCode) => string;
 }
 
+/** React context that carries the current locale and setter. */
 export const LocaleContext = createContext<LocaleContextValue>({
   locale: 'id',
   setLocale: () => {},
@@ -27,6 +29,11 @@ interface LocaleProviderProps {
 
 const STORAGE_KEY = 'oz-pos-locale';
 
+/**
+ * Provides locale state and the Fluent localisation provider to the
+ * component tree. Persists the user's choice to localStorage and
+ * initialises from the stored value or defaults to `'id'`.
+ */
 export function LocaleProvider({ children }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState<LocaleCode>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);

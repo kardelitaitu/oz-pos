@@ -30,6 +30,7 @@ const EMPTY_TAX_FORM: TaxFormData = {
   isInclusive: false,
 };
 
+/** Tax configuration screen — CRUD for tax rates, inclusive/exclusive toggle, and per-category tax rate assignment. */
 export default function TaxConfigurationScreen() {
   const { l10n } = useLocalization();
   // ── Tax rates state ─────────────────────────────────────────────

@@ -160,6 +160,7 @@ function colourToId(name: string): string {
 
 // ── Component ────────────────────────────────────────────────────────
 
+/** Category management screen — create, edit, and delete product categories with colour and icon selection. */
 export default function CategoryManagementScreen() {
   const { l10n } = useLocalization();
   const [categories, setCategories] = useState<CategoryDto[]>([]);

@@ -10,6 +10,7 @@ import {
 } from '@/api/inventoryCounts';
 import './StockCountHistory.css';
 
+/** Stock count history screen — lists completed and cancelled counts alongside stock adjustments with drill-down into individual count lines. */
 export default function StockCountHistory() {
   const [counts, setCounts] = useState<StockCountDto[]>([]);
   const [adjustments, setAdjustments] = useState<StockAdjustmentDto[]>([]);

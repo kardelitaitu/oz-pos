@@ -14,6 +14,7 @@ function isOnline(lastSeenAt: string | null): boolean {
   return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
 }
 
+/** Multi-store dashboard — overview of all store profiles with terminal status, primary store designation, and store deletion. */
 export default function MultiStoreDashboardScreen() {
   const { l10n } = useLocalization();
   const [stores, setStores] = useState<StoreProfile[]>([]);

@@ -1,3 +1,4 @@
+/** Normalised role variant used for badge styling, icon selection, and gating. */
 export type RoleVariant = 'owner' | 'manager' | 'cashier' | 'kitchen' | 'staff';
 
 /**

@@ -53,6 +53,7 @@ function formatDate(iso: string): string {
 
 type OutcomeFilter = 'all' | 'success' | 'failure';
 
+/** Audit log screen — view filtered action history with date range, action type, and outcome filters for compliance monitoring. */
 export default function AuditLogScreen() {
   const { l10n } = useLocalization();
   const [entries, setEntries] = useState<AuditEntryDto[]>([]);

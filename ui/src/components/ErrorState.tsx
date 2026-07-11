@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useLocalization } from '@fluent/react';
 import { Button } from './Button';
 
+/** Props for the ErrorState display component. */
 export interface ErrorStateProps {
   /** Optional icon/illustration displayed above the title. */
   icon?: ReactNode;
@@ -17,6 +18,10 @@ export interface ErrorStateProps {
   children?: ReactNode;
 }
 
+/**
+ * Error state screen with an optional icon, title, detailed message,
+ * retry button, and additional children.
+ */
 export function ErrorState({
   icon,
   title,

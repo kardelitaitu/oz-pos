@@ -1,8 +1,11 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
+/** Visual variant for the Badge component. */
 export type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
+/** Size preset for the Badge component. */
 export type BadgeSize = 'sm' | 'md';
 
+/** Props for the Badge component. */
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   /** Visual variant. @default 'default' */
   variant?: BadgeVariant;
@@ -12,6 +15,10 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   children: ReactNode;
 }
 
+/**
+ * Inline badge / pill for status labelling.
+ * Renders a `<span>` with variant and size CSS classes.
+ */
 export function Badge({
   variant = 'default',
   size = 'md',

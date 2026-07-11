@@ -60,6 +60,7 @@ interface RetailPosScreenProps {
   onNavigate?: (route: string) => void;
 }
 
+/** Retail POS sales screen — product lookup on the left, cart panel on the right with resizable width and barcode scanning support. */
 export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { l10n } = useLocalization();
   const { goToWorkspacePicker } = useWorkspaceNav();

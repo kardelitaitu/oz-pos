@@ -131,6 +131,7 @@ function formatDate(iso: string): string {
 
 // ── Component ───────────────────────────────────────────────────────
 
+/** Terminal management screen — register, configure, and manage POS terminals, feature overrides, and device bindings for multi-store deployments. */
 export default function TerminalManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();

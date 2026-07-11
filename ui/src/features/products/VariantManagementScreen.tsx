@@ -35,6 +35,7 @@ const EMPTY_FORM: VariantForm = {
   isActive: true,
 };
 
+/** Variant management screen — manage product variants (size, colour, etc.) with separate SKU, pricing, and barcode. */
 export default function VariantManagementScreen({ productSku, productName, onClose }: Props) {
   const [variants, setVariants] = useState<ProductVariantDto[]>([]);
   const [loading, setLoading] = useState(true);

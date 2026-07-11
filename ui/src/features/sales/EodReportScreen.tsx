@@ -234,6 +234,7 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
   );
 }
 
+/** End-of-day report screen — payment summary, cashier shift reconciliation, totals by method, and printable receipt. */
 export default function EodReportScreen() {
   const { l10n } = useLocalization();
   const [report, setReport] = useState<EodReport | null>(null);

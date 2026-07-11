@@ -23,6 +23,7 @@ interface AppearanceSettingsProps {
   onStoreNameChange?: (n: string) => void;
 }
 
+/** Brand appearance panel — primary colour picker, logo upload, store name, interface zoom, and a live preview of the resulting palette. */
 export function AppearanceSettings({
   embedded = false,
   colour: colourProp,

@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   DECIMAL_SEP: 'oz-pos-decimal-sep',
 } as const;
 
+/** Decimal separator mode for monetary display. */
 export type DecimalSep = 'dot' | 'comma' | 'none';
 
 const VALID_DECIMAL_SEPS: readonly string[] = ['dot', 'comma', 'none'];
