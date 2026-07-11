@@ -420,7 +420,7 @@ mod tests {
         // Test the default URL without env var overrides (avoid unsafe on set_var).
         let url = license_server_url();
         assert_eq!(url, LICENSE_SERVER_URL);
-        assert!(url.contains("license.oz-pos.com"));
+        assert!(url.starts_with("https://"));
     }
 
     #[test]
