@@ -48,7 +48,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       } else if (typeof err === 'string') {
         message = err;
       } else if (err && typeof err === 'object' && 'message' in err) {
-        message = String((err as Record<string, unknown>).message);
+        message = String((err as Record<string, unknown>)['message']);
       }
       
       addToast({ 
