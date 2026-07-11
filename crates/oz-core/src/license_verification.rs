@@ -117,10 +117,13 @@ pub struct SignedSubscriptionPayload {
     /// The subscription status.
     pub status: String,
     /// Maximum number of stores allowed.
+    #[serde(default)]
     pub max_stores: i64,
     /// Maximum POS register instances allowed.
+    #[serde(default)]
     pub max_pos_instances: i64,
     /// List of workspace types allowed.
+    #[serde(default)]
     pub allowed_types: Vec<String>,
     /// When the subscription becomes active.
     pub starts_at: String,
@@ -147,7 +150,9 @@ pub struct SignedSubscriptionPayload {
 /// `Ok(())` if the signature is valid, or `Err(CoreError::InvalidSubscriptionSignature)`.
 pub fn verify_license_signature(payload: &str, signature_base64: &str) -> Result<(), CoreError> {
     // BOOTSTRAP_FREE is a sentinel for single-store deployments without
-    // a license server (seeded by migration 061).
+    // a license server (seeded by migration 061). It is ONLY accepted in
+    // debug/dev builds; release builds require a real RSA signature.
+    #[cfg(debug_assertions)]
     if signature_base64 == "BOOTSTRAP_FREE" {
         return Ok(());
     }
@@ -411,10 +416,48 @@ mod tests {
     }
 
     #[test]
-    fn verify_bootstrap_free_bypasses_rsa() {
-        // The BOOTSTRAP_FREE sentinel should pass without a real key.
+    fn verify_bootstrap_free_bypasses_rsa_in_debug() {
+        // The BOOTSTRAP_FREE sentinel should pass without a real key
+        // in debug/dev/test builds (where #[cfg(debug_assertions)] applies).
+        // This test is always compiled in test mode (which is debug).
         let result = verify_license_signature("anything", "BOOTSTRAP_FREE");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn verify_rejects_garbage_signatures() {
+        // Non-BOOTSTRAP_FREE garbage signatures (random strings, empty)
+        // should always fail verification, regardless of build mode.
+        let payload = r#"{"tenant_id":"test","tier_key":"free"}"#;
+
+        let result = verify_license_signature(payload, "TAMPERED_SIGNATURE");
+        assert!(
+            result.is_err(),
+            "tampered signature should fail: {result:?}"
+        );
+
+        let result = verify_license_signature(payload, "");
+        assert!(result.is_err(), "empty signature should fail: {result:?}");
+    }
+
+    /// NOTE: There is intentionally no test that BOOTSTRAP_FREE is *rejected*
+    /// in release builds, because `cargo test` always runs with
+    /// `debug_assertions` enabled. The `#[cfg(debug_assertions)]` guard is
+    /// validated by inspection and by running `cargo build --release` and
+    /// confirming the symbol is absent.
+
+    #[test]
+    fn embedded_public_key_is_loadable() {
+        // The embedded public key must be parseable at startup.
+        // A corrupt or missing key file would cause this to panic.
+        use rsa::traits::PublicKeyParts;
+
+        let key = RsaPublicKey::from_public_key_pem(LICENSE_PUBLIC_KEY_PEM);
+        assert!(key.is_ok(), "embedded public key should load: {key:?}");
+        let key = key.unwrap();
+        // Verify it's a 2048-bit key (the expected size).
+        let bits = key.size() * 8;
+        assert_eq!(bits, 2048, "embedded key should be 2048-bit RSA");
     }
 
     #[test]

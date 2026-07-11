@@ -105,14 +105,22 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			newExpiresAt = baseTime.AddDate(1, 0, 0)
 		}
 
+		var allowedTypes []string
+		if err := json.Unmarshal([]byte(currentSub.GetString("allowed_types")), &allowedTypes); err != nil {
+			allowedTypes = []string{}
+		}
+
 		sub := SubscriptionPayload{
-			TenantID:   req.TenantID,
-			TierKey:    tierKey,
-			Status:     "active",
-			StartsAt:   time.Now().UTC().Format(time.RFC3339),
-			ExpiresAt:  newExpiresAt.Format(time.RFC3339),
-			GraceUntil: calculateGraceUntil(newExpiresAt).Format(time.RFC3339),
-			IssuedAt:   time.Now().UTC().Format(time.RFC3339),
+			TenantID:        req.TenantID,
+			TierKey:         tierKey,
+			Status:          "active",
+			MaxStores:       currentSub.GetInt("max_stores"),
+			MaxPOSInstances: currentSub.GetInt("max_pos_instances"),
+			AllowedTypes:    allowedTypes,
+			StartsAt:        time.Now().UTC().Format(time.RFC3339),
+			ExpiresAt:       newExpiresAt.Format(time.RFC3339),
+			GraceUntil:      calculateGraceUntil(newExpiresAt).Format(time.RFC3339),
+			IssuedAt:        time.Now().UTC().Format(time.RFC3339),
 		}
 
 		payloadStr, signature, err := signSubscription(sub)

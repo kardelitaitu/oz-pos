@@ -141,14 +141,23 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// ── Build and sign subscription ───────────────────────────
 			tierKey := keyRecord.GetString("tier_key")
 			expiresAt := calculateExpiry(tierKey)
+
+			var allowedTypes []string
+			if err := json.Unmarshal([]byte(keyRecord.GetString("allowed_types")), &allowedTypes); err != nil {
+				allowedTypes = []string{}
+			}
+
 			sub := SubscriptionPayload{
-				TenantID:   tenantID,
-				TierKey:    tierKey,
-				Status:     "active",
-				StartsAt:   time.Now().UTC().Format(time.RFC3339),
-				ExpiresAt:  expiresAt.Format(time.RFC3339),
-				GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
-				IssuedAt:   time.Now().UTC().Format(time.RFC3339),
+				TenantID:        tenantID,
+				TierKey:         tierKey,
+				Status:          "active",
+				MaxStores:       keyRecord.GetInt("max_stores"),
+				MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
+				AllowedTypes:    allowedTypes,
+				StartsAt:        time.Now().UTC().Format(time.RFC3339),
+				ExpiresAt:       expiresAt.Format(time.RFC3339),
+				GraceUntil:      calculateGraceUntil(expiresAt).Format(time.RFC3339),
+				IssuedAt:        time.Now().UTC().Format(time.RFC3339),
 			}
 
 		// ── Save subscription record ──────────────────────────────

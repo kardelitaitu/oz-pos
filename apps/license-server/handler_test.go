@@ -73,6 +73,9 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	subscriptions.Fields.Add(
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.NumberField{Name: "max_stores"},
+		&core.NumberField{Name: "max_pos_instances"},
+		&core.JSONField{Name: "allowed_types"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
 		&core.DateField{Name: "starts_at", Required: true},
 		&core.DateField{Name: "expires_at", Required: true},
@@ -251,6 +254,9 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		subscriptions.Fields.Add(
 			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
 			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+			&core.NumberField{Name: "max_stores"},
+			&core.NumberField{Name: "max_pos_instances"},
+			&core.JSONField{Name: "allowed_types"},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
 			&core.DateField{Name: "starts_at", Required: true},
 			&core.DateField{Name: "expires_at", Required: true},
@@ -675,6 +681,21 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 		t.Error("expected signature in response")
 	}
 
+	// Verify the signed payload includes quota fields carried over from the old subscription.
+	if payloadStr, ok := resp["signed_payload"].(string); ok {
+		var sp SubscriptionPayload
+		if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+			t.Errorf("failed to parse signed_payload: %v", err)
+		} else {
+			if sp.MaxStores != 5 {
+				t.Errorf("expected max_stores=5 in renewal payload, got %d", sp.MaxStores)
+			}
+			if sp.MaxPOSInstances != 3 {
+				t.Errorf("expected max_pos_instances=3 in renewal payload, got %d", sp.MaxPOSInstances)
+			}
+		}
+	}
+
 	// Verify old subscription is now expired.
 	subs, err := app.FindRecordsByFilter(
 		"subscriptions",
@@ -809,6 +830,24 @@ func TestActivateHandler_Success(t *testing.T) {
 	}
 	if _, ok := resp["api_key"]; !ok {
 		t.Error("expected api_key in response")
+	}
+
+	// Verify the signed payload includes quota fields.
+	if payloadStr, ok := resp["signed_payload"].(string); ok {
+		var sp SubscriptionPayload
+		if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+			t.Errorf("failed to parse signed_payload: %v", err)
+		} else {
+			if sp.MaxStores != 5 {
+				t.Errorf("expected max_stores=5 in payload, got %d", sp.MaxStores)
+			}
+			if sp.MaxPOSInstances != 3 {
+				t.Errorf("expected max_pos_instances=3 in payload, got %d", sp.MaxPOSInstances)
+			}
+			if len(sp.AllowedTypes) != 2 || sp.AllowedTypes[0] != "restaurant-pos" || sp.AllowedTypes[1] != "store-pos" {
+				t.Errorf("expected allowed_types=[restaurant-pos, store-pos] in payload, got %v", sp.AllowedTypes)
+			}
+		}
 	}
 
 	// Verify tenant was created.
