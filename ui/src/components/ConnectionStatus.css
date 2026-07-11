@@ -8,13 +8,14 @@
   border-radius: 8px;
   font-size: 0.75rem;
   color: #94a3b8;
-  cursor: help;
-  transition: background 0.2s;
+  opacity: 0.5;
+  transition: all 0.2s;
   user-select: none;
 }
 
 .connection-status:hover {
   background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
 }
 
 .status-indicator {
