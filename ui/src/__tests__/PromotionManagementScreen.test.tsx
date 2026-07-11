@@ -144,9 +144,9 @@ describe('PromotionManagementScreen', () => {
     renderScreen();
 
     await waitFor(() => {
-      const checkbox = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      const checkbox = document.querySelector('input[type="checkbox"]') as HTMLElement as HTMLInputElement | null;
       expect(checkbox).toBeTruthy();
-      expect(checkbox.checked).toBe(true);
+      expect(checkbox!.checked).toBe(true);
     });
   });
 
@@ -226,7 +226,7 @@ describe('PromotionManagementScreen', () => {
 
     // Click Cancel in the delete modal
     const cancelBtns = screen.getAllByText('Cancel');
-    await user.click(cancelBtns[0]);
+    await user.click(cancelBtns[0]!);
 
     await waitFor(() => {
       expect(screen.queryByText(/Are you sure/)).toBeNull();
@@ -290,8 +290,8 @@ describe('PromotionManagementScreen', () => {
     });
 
     // Fill the name field via aria-label
-    const nameInput = document.querySelector('input[aria-label="Name"]') as HTMLInputElement;
-    await user.type(nameInput, 'New Promo');
+    const nameInput = document.querySelector('input[aria-label="Name"]') as HTMLElement as HTMLInputElement | null;
+    await user.type(nameInput!, 'New Promo');
 
     await user.click(screen.getByText('Save'));
 
@@ -311,10 +311,10 @@ describe('PromotionManagementScreen', () => {
     });
 
     const user = userEvent.setup();
-    const checkbox = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    const checkbox = document.querySelector('input[type="checkbox"]') as HTMLElement as HTMLInputElement | null;
+    expect(checkbox!.checked).toBe(true);
 
-    await user.click(checkbox);
+    await user.click(checkbox!);
 
     await waitFor(() => {
       expect(mockUpdatePromotion).toHaveBeenCalled();

@@ -19,12 +19,11 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
-import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '@/api/customers';
+import { listCustomers, createCustomer, updateCustomer } from '@/api/customers';
 
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 const mockCreateCustomer = createCustomer as ReturnType<typeof vi.fn>;
 const mockUpdateCustomer = updateCustomer as ReturnType<typeof vi.fn>;
-const mockDeleteCustomer = deleteCustomer as ReturnType<typeof vi.fn>;
 
 const wrap = (children: React.ReactNode) => withFluent(children, customersFtl, sharedFtl);
 

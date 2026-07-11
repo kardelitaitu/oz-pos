@@ -30,7 +30,7 @@ function TestConsumer({
 
   // Track the latest toast id as a side-effect
   if (toasts.length > 0) {
-    lastIdRef.current = toasts[toasts.length - 1].id;
+    lastIdRef.current = toasts[toasts.length - 1]!.id;
   }
 
   if (onRender) onRender(add, removeToast);
@@ -69,7 +69,7 @@ describe('useToast', () => {
       add('Hello world');
     });
 
-    const container = document.querySelector('.toast-container')!;
+    const container = document.querySelector<HTMLElement>('.toast-container')!;
     expect(within(container).getByText('Hello world')).toBeTruthy();
     expect(screen.getByTestId('toast-info')).toBeTruthy();
     expect(screen.getByTestId('toast-count').textContent).toBe('1');
@@ -83,7 +83,7 @@ describe('useToast', () => {
       add('Success!', 'success');
     });
 
-    const container = document.querySelector('.toast-container')!;
+    const container = document.querySelector<HTMLElement>('.toast-container')!;
     expect(within(container).getByText('Success!')).toBeTruthy();
     expect(screen.getByTestId('toast-success')).toBeTruthy();
   });
@@ -106,8 +106,7 @@ describe('useToast', () => {
 
   it('removes a toast by explicit remove', () => {
     let add: (msg: string, v?: ToastVariant) => string = () => '';
-    let remove: (id: string) => void = () => {};
-    renderWithProvider(<TestConsumer onRender={(a, r) => { add = a; remove = r; }} />);
+    renderWithProvider(<TestConsumer onRender={(a) => { add = a; }} />);
 
     act(() => {
       add('Temp');
@@ -115,14 +114,9 @@ describe('useToast', () => {
 
     expect(screen.getByTestId('toast-count').textContent).toBe('1');
 
-    // Grab the toast element and get its data-testid to extract the variant, then remove
-    const toastEl = document.querySelector('.toast')!;
-    const testId = toastEl.querySelector('[data-testid]')?.getAttribute('data-testid') || '';
-    const variant = testId.replace('toast-', '');
-
-    // Remove by variant — the removeToast function uses the actual id, so we need to
-    // use a different approach. Let's click the dismiss button instead.
-    const dismissBtn = toastEl.querySelector('.toast__dismiss') as HTMLElement;
+    // Grab the toast element and click its dismiss button.
+    const toastEl = document.querySelector<HTMLElement>('.toast')!;
+    const dismissBtn = toastEl.querySelector<HTMLElement>('.toast__dismiss')!;
     act(() => {
       dismissBtn.click();
     });
@@ -186,10 +180,10 @@ describe('useToast', () => {
       add('Accessible');
     });
 
-    const container = document.querySelector('.toast-container');
+    const container = document.querySelector<HTMLElement>('.toast-container')!;
     expect(container).toBeTruthy();
-    expect(container!.getAttribute('role')).toBe('status');
-    expect(container!.getAttribute('aria-live')).toBe('polite');
+    expect(container.getAttribute('role')).toBe('status');
+    expect(container.getAttribute('aria-live')).toBe('polite');
   });
 
   it('has dismiss buttons on each toast', () => {
@@ -200,13 +194,13 @@ describe('useToast', () => {
       add('Dismiss me');
     });
 
-    const dismissBtns = document.querySelectorAll('.toast__dismiss');
+    const dismissBtns = document.querySelectorAll<HTMLElement>('.toast__dismiss');
     expect(dismissBtns.length).toBe(1);
-    expect(dismissBtns[0].textContent).toContain('×');
+    expect(dismissBtns[0]!.textContent).toContain('×');
 
     // Clicking dismiss removes the toast (use act + direct click with fake timers)
     act(() => {
-      (dismissBtns[0] as HTMLElement).click();
+      dismissBtns[0]!.click();
     });
 
     expect(screen.getByTestId('toast-count').textContent).toBe('0');
@@ -219,9 +213,9 @@ describe('useToast', () => {
     act(() => { add('error toast', 'error'); });
     act(() => { add('success toast', 'success'); });
 
-    const toasts = document.querySelectorAll('.toast');
-    expect(toasts[0].classList.contains('toast--error')).toBe(true);
-    expect(toasts[1].classList.contains('toast--success')).toBe(true);
+    const toasts = document.querySelectorAll<HTMLElement>('.toast');
+    expect(toasts[0]!.classList.contains('toast--error')).toBe(true);
+    expect(toasts[1]!.classList.contains('toast--success')).toBe(true);
   });
 
   it('toast messages are rendered in a span', () => {
@@ -232,9 +226,9 @@ describe('useToast', () => {
       add('Span message');
     });
 
-    const msgEl = document.querySelector('.toast__message');
+    const msgEl = document.querySelector<HTMLElement>('.toast__message')!;
     expect(msgEl).toBeTruthy();
-    expect(msgEl!.tagName).toBe('SPAN');
-    expect(msgEl!.textContent).toBe('Span message');
+    expect(msgEl.tagName).toBe('SPAN');
+    expect(msgEl.textContent).toBe('Span message');
   });
 });

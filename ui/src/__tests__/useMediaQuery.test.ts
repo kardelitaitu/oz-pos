@@ -12,10 +12,10 @@ describe('useMediaQuery', () => {
       const mql = {
         matches: query === '(min-width: 768px)',
         media: query,
-        addEventListener: (event: string, listener: unknown) => {
+        addEventListener: (_event: string, listener: unknown) => {
           listeners.set(query, listener as (e: MediaQueryListEvent) => void);
         },
-        removeEventListener: (event: string, listener: unknown) => {
+        removeEventListener: (_event: string, _listener: unknown) => {
           listeners.delete(query);
         },
         addListener: vi.fn(),

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useSwipe } from '@/hooks/useSwipe';
 
@@ -6,8 +6,6 @@ function createTouchEvent(
   type: 'touchstart' | 'touchend',
   clientX: number,
   clientY: number,
-  startX?: number,
-  startY?: number,
 ): React.TouchEvent {
   const touches: React.Touch[] = [{
     clientX,
@@ -18,10 +16,6 @@ function createTouchEvent(
     pageY: clientY,
     screenX: clientX,
     screenY: clientY,
-    force: 1,
-    radiusX: 1,
-    radiusY: 1,
-    rotationAngle: 0,
   }];
 
   const changedTouches: React.Touch[] = [{
@@ -33,10 +27,6 @@ function createTouchEvent(
     pageY: clientY,
     screenX: clientX,
     screenY: clientY,
-    force: 1,
-    radiusX: 1,
-    radiusY: 1,
-    rotationAngle: 0,
   }];
 
   return {

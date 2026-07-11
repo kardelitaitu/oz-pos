@@ -162,7 +162,7 @@ describe('ExchangeRateScreen', () => {
 
     const user = userEvent.setup();
     const addBtns = screen.getAllByText('Add');
-    await user.click(addBtns[0]);
+    await user.click(addBtns[0]!);
 
     await waitFor(() => {
       expect(screen.getByText('Add Exchange Rate')).toBeTruthy();
@@ -179,7 +179,7 @@ describe('ExchangeRateScreen', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(screen.getAllByText('Add')[0]);
+    await user.click(screen.getAllByText('Add')[0]!);
 
     await waitFor(() => {
       expect(screen.getByText('Cancel')).toBeTruthy();
@@ -207,23 +207,23 @@ describe('ExchangeRateScreen', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(screen.getAllByText('Add')[0]);
+    await user.click(screen.getAllByText('Add')[0]!);
 
     await waitFor(() => {
       expect(screen.getByText('Add Exchange Rate')).toBeTruthy();
     });
 
     // Fill the rate field
-    const rateInput = document.querySelector('#er-field-rate') as HTMLInputElement;
-    await user.type(rateInput, '16000');
+    const rateInput = document.querySelector('#er-field-rate') as HTMLElement as HTMLInputElement | null;
+    await user.type(rateInput!, '16000');
 
     // Select From currency
-    const fromSelect = document.querySelector('#er-field-from') as HTMLSelectElement;
-    await user.selectOptions(fromSelect, 'USD');
+    const fromSelect = document.querySelector('#er-field-from') as HTMLElement as HTMLSelectElement | null;
+    await user.selectOptions(fromSelect!, 'USD');
 
     // Select To currency
-    const toSelect = document.querySelector('#er-field-to') as HTMLSelectElement;
-    await user.selectOptions(toSelect, 'IDR');
+    const toSelect = document.querySelector('#er-field-to') as HTMLElement as HTMLSelectElement | null;
+    await user.selectOptions(toSelect!, 'IDR');
 
     await user.click(screen.getByText('Save'));
 
