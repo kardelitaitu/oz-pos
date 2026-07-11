@@ -569,6 +569,77 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	}
 }
 
+// resetRateLimiters clears the package-level rate limiter and key failure
+// tracker so that tests manipulating these globals don't interfere with
+// each other.
+func resetRateLimiters() {
+	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	keyFailTracker.failures = make(map[string]*keyFailures)
+}
+
+func TestActivateHandler_RateLimited(t *testing.T) {
+	resetRateLimiters()
+
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Exhaust rate limiter for a specific IP. PocketBase's RealIP()
+	// parses RemoteAddr via net.SplitHostPort; supply port:IP form.
+	testIP := "10.99.99.99"
+	testAddr := testIP + ":1234"
+	for i := 0; i < ipRateLimiter.maxPerHr; i++ {
+		ipRateLimiter.allow(testIP)
+	}
+
+	body := strings.NewReader(`{"key":"OZ-RATELIM-KEY01","tenant_id":"rlimtenant00001","machine_id":"rlimmachin00001"}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = testAddr
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "rate limit") {
+		t.Errorf("expected rate-limit error message, got: %s", rec.Body.String())
+	}
+}
+
+func TestActivateHandler_KeyBruteForceBlocked(t *testing.T) {
+	resetRateLimiters()
+
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Exhaust the key failure tracker — handler checks this before
+	// looking up the key, so no seedLicenseKey needed.
+	for i := 0; i < keyFailTracker.maxAttempts; i++ {
+		keyFailTracker.recordFailure("OZ-BRUTE-KEY001")
+	}
+
+	body := strings.NewReader(`{"key":"OZ-BRUTE-KEY001","tenant_id":"brutteten00001","machine_id":"bruttemach00001"}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "too many attempts") {
+		t.Errorf("expected brute-force error message, got: %s", rec.Body.String())
+	}
+}
+
 func TestActivateHandler_Success(t *testing.T) {
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
