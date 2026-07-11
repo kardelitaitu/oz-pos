@@ -9,12 +9,12 @@ use oz_core::loyalty::{
 use crate::error::AppError;
 use crate::state::AppState;
 
+/// The result of a successful loyalty points redemption.
 #[derive(Debug, Serialize)]
-/// Redeemresult.
 pub struct RedeemResult {
-    /// Transaction.
+    /// The ledger transaction recording the points deduction.
     pub transaction: LoyaltyTransaction,
-    /// Discount Minor.
+    /// The calculated discount amount in minor currency units.
     pub discount_minor: i64,
 }
 
@@ -68,6 +68,7 @@ mod tests {
     }
 }
 
+/// Retrieves the loyalty account details and tier information for a specific customer.
 #[command]
 pub async fn get_loyalty_account(
     customer_id: String,
@@ -80,6 +81,7 @@ pub async fn get_loyalty_account(
     Ok(result)
 }
 
+/// Lists all registered loyalty accounts along with their tier details.
 #[command]
 pub async fn list_loyalty_accounts(
     state: State<'_, AppState>,
@@ -91,6 +93,7 @@ pub async fn list_loyalty_accounts(
     Ok(result)
 }
 
+/// Awards loyalty points to a customer based on the total value of a completed sale.
 #[command]
 pub async fn earn_loyalty_points(
     customer_id: String,
@@ -105,6 +108,7 @@ pub async fn earn_loyalty_points(
     Ok(result)
 }
 
+/// Redeems loyalty points for a customer against a specific sale and returns the discount value.
 #[command]
 pub async fn redeem_loyalty_points(
     customer_id: String,
@@ -122,6 +126,7 @@ pub async fn redeem_loyalty_points(
     })
 }
 
+/// Lists all defined loyalty tiers and their thresholds.
 #[command]
 pub async fn list_loyalty_tiers(state: State<'_, AppState>) -> Result<Vec<LoyaltyTier>, AppError> {
     let db = state.db.lock().await;
@@ -131,6 +136,7 @@ pub async fn list_loyalty_tiers(state: State<'_, AppState>) -> Result<Vec<Loyalt
     Ok(result)
 }
 
+/// Updates the definition, multipliers, thresholds, or styling of a loyalty tier.
 #[command]
 pub async fn update_loyalty_tier(
     tier: LoyaltyTier,
@@ -150,6 +156,7 @@ pub async fn update_loyalty_tier(
     Ok(result)
 }
 
+/// Converts a given amount of loyalty points into its equivalent monetary value in minor units.
 #[command]
 pub async fn get_points_value(points: i64, state: State<'_, AppState>) -> Result<i64, AppError> {
     let db = state.db.lock().await;
@@ -159,6 +166,7 @@ pub async fn get_points_value(points: i64, state: State<'_, AppState>) -> Result
     Ok(result)
 }
 
+/// Retrieves an existing loyalty account for a customer, or creates a new one if it does not exist.
 #[command]
 pub async fn get_or_create_loyalty_account(
     customer_id: String,
