@@ -185,7 +185,17 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				ExpiresAt:       expiresAt.Format(time.RFC3339),
 				GraceUntil:      calculateGraceUntil(expiresAt).Format(time.RFC3339),
 				IssuedAt:        time.Now().UTC().Format(time.RFC3339),
-			}		// ── Save subscription record ──────────────────────────────
+			}
+
+		// ── Build and sign subscription payload ───────────────────
+		payloadStr, signature, err = signSubscription(sub)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]any{
+				"error": "signing failed",
+			})
+		}
+
+				// ── Save subscription record ──────────────────────────────
 		subColl, err := app.FindCollectionByNameOrId("subscriptions")
 			if err != nil {
 				return e.JSON(http.StatusInternalServerError, map[string]any{
