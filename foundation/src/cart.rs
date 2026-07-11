@@ -548,4 +548,288 @@ mod tests {
             CartError::SkuNotInCart("B".into()),
         );
     }
+
+    // ── CartLine overridden price ──
+
+    #[test]
+    fn cartline_overridden_price_none_by_default() {
+        let line = CartLine::new(
+            Sku::new("TEA"),
+            2,
+            Money {
+                minor_units: 150,
+                currency: usd(),
+            },
+        );
+        assert!(line.overridden_price.is_none());
+    }
+
+    #[test]
+    fn cartline_set_overridden_price() {
+        let mut line = CartLine::new(
+            Sku::new("TEA"),
+            2,
+            Money {
+                minor_units: 150,
+                currency: usd(),
+            },
+        );
+        line.set_overridden_price(Money {
+            minor_units: 100,
+            currency: usd(),
+        });
+        assert_eq!(line.overridden_price.unwrap().minor_units, 100);
+    }
+
+    #[test]
+    fn cartline_total_uses_overridden_price() {
+        let mut line = CartLine::new(
+            Sku::new("TEA"),
+            3,
+            Money {
+                minor_units: 200,
+                currency: usd(),
+            },
+        );
+        // Without override: 3 x 200 = 600
+        assert_eq!(line.total().unwrap().minor_units, 600);
+        // With override: 3 x 150 = 450
+        line.set_overridden_price(Money {
+            minor_units: 150,
+            currency: usd(),
+        });
+        assert_eq!(line.total().unwrap().minor_units, 450);
+    }
+
+    #[test]
+    fn cartline_clone_preserves_fields() {
+        let mut line = CartLine::new(
+            Sku::new("LATTE"),
+            1,
+            Money {
+                minor_units: 450,
+                currency: usd(),
+            },
+        );
+        line.set_overridden_price(Money {
+            minor_units: 400,
+            currency: usd(),
+        });
+        let clone = line.clone();
+        assert_eq!(clone.sku, line.sku);
+        assert_eq!(clone.qty, line.qty);
+        assert_eq!(clone.unit_price, line.unit_price);
+        assert_eq!(clone.overridden_price, line.overridden_price);
+    }
+
+    #[test]
+    fn cartline_serialization_roundtrip() {
+        let line = CartLine::new(
+            Sku::new("MOCHA"),
+            2,
+            Money {
+                minor_units: 500,
+                currency: usd(),
+            },
+        );
+        let json = serde_json::to_string(&line).unwrap();
+        let back: CartLine = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sku, line.sku);
+        assert_eq!(back.qty, line.qty);
+        assert_eq!(back.unit_price, line.unit_price);
+    }
+
+    // ── Cart accessors & serialization ──
+
+    #[test]
+    fn cart_discount_percentage_accessor() {
+        let mut cart = Cart::new(usd());
+        cart.set_discount(Percentage::new(15).unwrap(), None);
+        assert_eq!(cart.discount_percentage().get(), 15);
+    }
+
+    #[test]
+    fn cart_lines_and_lines_mut() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("A"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        assert_eq!(cart.lines().len(), 1);
+        cart.lines_mut()[0].set_overridden_price(Money {
+            minor_units: 50,
+            currency: usd(),
+        });
+        assert_eq!(cart.lines()[0].overridden_price.unwrap().minor_units, 50);
+    }
+
+    #[test]
+    fn cart_serialization_roundtrip() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("A"),
+            2,
+            Money {
+                minor_units: 300,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.set_discount(Percentage::new(10).unwrap(), Some("sale".into()));
+        let json = serde_json::to_string(&cart).unwrap();
+        let back: Cart = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.line_count(), 1);
+        assert_eq!(back.currency(), usd());
+        assert_eq!(back.discount_percent(), 10);
+        assert_eq!(back.discount_label(), Some("sale"));
+    }
+
+    // ── CartId derived traits ──
+
+    #[test]
+    fn cart_id_clone_and_copy() {
+        let a = CartId::new();
+        let b = a; // Copy
+        let c = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn cart_id_hash_consistent_with_eq() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let id = CartId::new();
+        let same = id; // Copy
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        id.hash(&mut h1);
+        same.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    // ── Cart derived traits ──
+
+    #[test]
+    fn cart_clone_preserves_all_data() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("X"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.set_discount(Percentage::new(5).unwrap(), Some("5%".into()));
+        let clone = cart.clone();
+        assert_eq!(clone.line_count(), cart.line_count());
+        assert_eq!(clone.currency(), cart.currency());
+        assert_eq!(clone.discount_percent(), cart.discount_percent());
+        assert_eq!(clone.total(), cart.total());
+    }
+
+    #[test]
+    fn cart_partial_eq_compares_correctly() {
+        let mut a = Cart::new(usd());
+        a.add_line(CartLine::new(
+            Sku::new("X"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        let mut b = Cart::new(usd());
+        b.add_line(CartLine::new(
+            Sku::new("X"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        // Different ids but same data → not equal (id differs)
+        assert_ne!(a, b);
+        // Same cart should equal itself
+        assert_eq!(a, a.clone());
+    }
+
+    #[test]
+    fn cart_debug_contains_key_fields() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("DBG"),
+            1,
+            Money {
+                minor_units: 999,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        let debug = format!("{:?}", cart);
+        assert!(debug.contains("DBG"), "debug should contain sku: {debug}");
+    }
+
+    // ── CartLine equality ──
+
+    #[test]
+    fn cartline_eq_includes_overridden_price() {
+        let mut a = CartLine::new(
+            Sku::new("X"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        );
+        let mut b = a.clone();
+        // Same data → equal
+        assert_eq!(a, b);
+        // Different overridden price → not equal
+        b.set_overridden_price(Money {
+            minor_units: 50,
+            currency: usd(),
+        });
+        assert_ne!(a, b);
+    }
+
+    // ── Serialization edge ──
+
+    #[test]
+    fn cart_serialization_uses_defaults_for_missing_fields() {
+        // JSON without discount_percent and discount_label
+        let json = r#"{"id":"00000000-0000-0000-0000-000000000001","currency":"USD","lines":[]}"#;
+        let cart: Cart = serde_json::from_str(json).unwrap();
+        assert_eq!(cart.discount_percent(), 0);
+        assert!(cart.discount_label().is_none());
+    }
+
+    // ── Empty cart after removal ──
+
+    #[test]
+    fn empty_cart_total_after_remove_all() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("X"),
+            3,
+            Money {
+                minor_units: 500,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        assert_eq!(cart.total().unwrap().minor_units, 1500);
+        cart.remove_sku("X").unwrap();
+        assert_eq!(cart.line_count(), 0);
+        assert_eq!(cart.total().unwrap().minor_units, 0);
+    }
 }
