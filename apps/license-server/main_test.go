@@ -572,6 +572,50 @@ func TestKeyFailureTracker_PartialFailures(t *testing.T) {
 	}
 }
 
+func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
+	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
+	key := "OZ-DECAY"
+
+	// Record 2 failures.
+	kf.recordFailure(key)
+	kf.recordFailure(key)
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after 2 failures")
+	}
+
+	// Manually age the lastAttempt past the decay TTL.
+	kf.mu.Lock()
+	kf.failures[key].lastAttempt = time.Now().Add(-2 * time.Hour)
+	kf.mu.Unlock()
+
+	// After TTL expires, the counter should reset, and the key should NOT be blocked.
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after partial failures decay")
+	}
+
+	// The entry should still exist but with count reset to 0.
+	kf.mu.Lock()
+	f, ok := kf.failures[key]
+	kf.mu.Unlock()
+	if !ok {
+		t.Error("entry should still exist after decay (counter reset, not deleted)")
+	}
+	if f.count != 0 {
+		t.Errorf("counter should be reset to 0 after decay, got %d", f.count)
+	}
+
+	// Fresh failures should count from 0 (not from 2).
+	kf.recordFailure(key)
+	kf.recordFailure(key)
+	if kf.isBlocked(key) {
+		t.Error("should not be blocked after 2 fresh failures post-decay")
+	}
+	kf.recordFailure(key)
+	if !kf.isBlocked(key) {
+		t.Error("should be blocked after 3 fresh failures post-decay")
+	}
+}
+
 func TestKeyFailureTracker_CleanupAfterCooldown(t *testing.T) {
 	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: 100 * time.Millisecond}
 	key := "OZ-CLEANUP"

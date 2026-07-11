@@ -123,7 +123,7 @@ type keyFailures struct {
 }
 
 const keyCleanupInterval = 1 * time.Hour
-const keyPartialTTL = 24 * time.Hour
+const keyPartialFailureTTL = 1 * time.Hour // decay partial failures after 1h idle
 
 // keyFailTracker limits to 3 failed attempts per key, then 15-minute cooldown.
 var keyFailTracker = &keyFailureTracker{
@@ -176,8 +176,8 @@ func (kf *keyFailureTracker) sweep() {
 	defer kf.mu.Unlock()
 	now := time.Now()
 	for k, v := range kf.failures {
-		// Partial failures that haven't been seen in keyPartialTTL are stale.
-		if v.count < kf.maxAttempts && now.Sub(v.lastAttempt) > keyPartialTTL {
+		// Partial failures that haven't been seen in keyPartialFailureTTL are stale.
+		if v.count < kf.maxAttempts && now.Sub(v.lastAttempt) > keyPartialFailureTTL {
 			delete(kf.failures, k)
 			continue
 		}
@@ -196,6 +196,16 @@ func (kf *keyFailureTracker) isBlocked(key string) bool {
 	if !ok {
 		return false
 	}
+
+	// Decay partial failures: if the user made a few wrong attempts
+	// but hasn't tried again in keyPartialFailureTTL, reset the counter
+	// so they get a fresh start (prevents "one typo away from block" forever).
+	if f.count < kf.maxAttempts && time.Since(f.lastAttempt) > keyPartialFailureTTL {
+		f.count = 0
+		f.lastAttempt = time.Now()
+		return false
+	}
+
 	// Clean up entries that have reached maxAttempts AND passed cooldown.
 	if f.count >= kf.maxAttempts && time.Now().After(f.cooldownAt) {
 		delete(kf.failures, key)
