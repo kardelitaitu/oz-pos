@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+	"os"
 	"sync"
 	"time"
 )
@@ -125,11 +127,37 @@ type keyFailures struct {
 const keyCleanupInterval = 1 * time.Hour
 const keyPartialFailureTTL = 1 * time.Hour // decay partial failures after 1h idle
 
-// keyFailTracker limits to 3 failed attempts per key, then 15-minute cooldown.
+// defaultKeyCooldown is the cooldown applied after maxAttempts failures
+// are recorded against a single key. Production default; overridable via
+// the LICENSE_KEY_COOLDOWN env var (e.g. for development to use a much
+// shorter cooldown that doesn't punish legitimate retries).
+const defaultKeyCooldown = 15 * time.Minute
+
+// parseCooldown returns the cooldown duration to apply to keyFailTracker,
+// honoring the LICENSE_KEY_COOLDOWN env var. Falls back to the production
+// default if the env var is unset or unparseable — never weakens security
+// implicitly.
+func parseCooldown() time.Duration {
+	v := os.Getenv("LICENSE_KEY_COOLDOWN")
+	if v == "" {
+		return defaultKeyCooldown
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		log.Printf("keyFailTracker: invalid LICENSE_KEY_COOLDOWN=%q (using default %v): %v",
+			v, defaultKeyCooldown, err)
+		return defaultKeyCooldown
+	}
+	log.Printf("keyFailTracker: cooldown overridden to %v via LICENSE_KEY_COOLDOWN", d)
+	return d
+}
+
+// keyFailTracker limits to 3 failed attempts per key, then a cooldown
+// (default 15 min; LICENSE_KEY_COOLDOWN env var overrides for dev).
 var keyFailTracker = &keyFailureTracker{
 	failures:    make(map[string]*keyFailures),
 	maxAttempts: 3,
-	cooldown:    15 * time.Minute,
+	cooldown:    defaultKeyCooldown,
 }
 
 // startCleanup launches a background goroutine that sweeps expired entries.
@@ -231,6 +259,10 @@ func (kf *keyFailureTracker) recordFailure(key string) {
 }
 
 func init() {
+	// Apply the LICENSE_KEY_COOLDOWN env override (or fall back to
+	// defaultKeyCooldown) before cleanup goroutines start.
+	keyFailTracker.cooldown = parseCooldown()
+
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
 }

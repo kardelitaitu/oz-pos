@@ -1257,3 +1257,50 @@ func TestActivateHandler_EmailCaseInsensitive(t *testing.T) {
 		t.Errorf("expected exactly 1 tenant matching lowercased email, got %d", len(tenants))
 	}
 }
+
+// ── Tests: keyFailTracker cooldown env override ───────────────────
+
+// TestKeyFailureTracker_CooldownEnvOverride verifies that the
+// LICENSE_KEY_COOLDOWN env var shortens the per-key cooldown for
+// development use, while preserving the production default (15
+// minutes) when the env is unset.
+func TestKeyFailureTracker_CooldownEnvOverride(t *testing.T) {
+	// 1) Override path: short cooldown via env var.
+	t.Setenv("LICENSE_KEY_COOLDOWN", "200ms")
+	kf := &keyFailureTracker{
+		failures:    make(map[string]*keyFailures),
+		maxAttempts: 3,
+		cooldown:    parseCooldown(),
+	}
+	if kf.cooldown != 200*time.Millisecond {
+		t.Fatalf("expected cooldown=200ms after env override, got %v", kf.cooldown)
+	}
+
+	kf.recordFailure("OZ-COOL-OVR-001")
+	kf.recordFailure("OZ-COOL-OVR-001")
+	kf.recordFailure("OZ-COOL-OVR-001")
+
+	if !kf.isBlocked("OZ-COOL-OVR-001") {
+		t.Error("expected key to be blocked immediately after 3 failures")
+	}
+
+	// Wait past the short cooldown and confirm the lock releases.
+	time.Sleep(250 * time.Millisecond)
+
+	if kf.isBlocked("OZ-COOL-OVR-001") {
+		t.Error("expected key to be unblocked after 200ms cooldown expired")
+	}
+
+	// 2) Default path: unset env falls back to production default.
+	t.Setenv("LICENSE_KEY_COOLDOWN", "")
+	if got := parseCooldown(); got != defaultKeyCooldown {
+		t.Errorf("expected defaultKeyCooldown=%v with empty env, got %v", defaultKeyCooldown, got)
+	}
+
+	// 3) Malformed env falls back to default (and logs a warning
+	//    that's acceptable to ignore here).
+	t.Setenv("LICENSE_KEY_COOLDOWN", "not-a-duration")
+	if got := parseCooldown(); got != defaultKeyCooldown {
+		t.Errorf("expected defaultKeyCooldown=%v with malformed env, got %v", defaultKeyCooldown, got)
+	}
+}
