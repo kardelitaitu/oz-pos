@@ -30,7 +30,7 @@ describe('ConnectionStatus', () => {
   });
 
   it('updates to online status with latency when fetch succeeds', async () => {
-    (global.fetch as any).mockResolvedValueOnce({ ok: true });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true });
     
     let time = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => {
@@ -52,7 +52,7 @@ describe('ConnectionStatus', () => {
   });
 
   it('updates to offline status when fetch fails', async () => {
-    (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+    (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Network error'));
 
     render(<ConnectionStatus label="Auth Server" url="http://test.com" />);
 

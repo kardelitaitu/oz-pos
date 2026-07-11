@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export type ZoomLevel = 'auto' | '100' | '125' | '150' | '200';
 
@@ -9,7 +9,7 @@ interface ZoomContextType {
 
 const ZoomContext = createContext<ZoomContextType | undefined>(undefined);
 
-export function ZoomProvider({ children }: { children: React.ReactNode }) {
+export function ZoomProvider({ children }: { children: ReactNode }) {
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(() => {
     const saved = localStorage.getItem('app-zoom-level');
     return (saved as ZoomLevel) || 'auto';
@@ -49,6 +49,7 @@ export function ZoomProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAppZoom() {
   const context = useContext(ZoomContext);
   if (context === undefined) {

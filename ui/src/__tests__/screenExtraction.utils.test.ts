@@ -65,8 +65,8 @@ describe('extractClassSelectors', () => {
     expect(result.has('mobile-only')).toBe(true);
   });
 
-  it('ignores url() content to avoid false positives', () => {
-    const css = '.icon { background: url(data:image/svg+xml,<svg><rect id=\"icon-shape\"/></svg>); }';
+  it("ignores url() content to avoid false positives", () => {
+    const css = '.icon { background: url(data:image/svg+xml,<svg><rect id="icon-shape"/></svg>); }';
     const result = extractClassSelectors(css);
     // url() content like "w3" from www.w3.org should be stripped
     // The class "icon" should still be extracted

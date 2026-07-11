@@ -88,7 +88,7 @@ describe('ScaleIndicator', () => {
 
   // ── Stable reading ─────────────────────────────────────────────
 
-  it('shows stable weight and \"Stable\" label', async () => {
+  it('shows stable weight and "Stable" label', async () => {
     mockReadScaleWeight.mockResolvedValue(stableReading);
 
     render(
@@ -111,7 +111,7 @@ describe('ScaleIndicator', () => {
 
   // ── Unstable reading ───────────────────────────────────────────
 
-  it('shows unstable weight and \"…\" label', async () => {
+  it('shows unstable weight and "…" label', async () => {
     mockReadScaleWeight.mockResolvedValue(unstableReading);
 
     render(

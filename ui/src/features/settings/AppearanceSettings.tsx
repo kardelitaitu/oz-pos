@@ -11,7 +11,8 @@ import { useBrand } from '@/contexts/BrandContext';
 import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { useAppZoom, ZoomLevel } from '@/contexts/ZoomContext';
+import { useAppZoom } from '@/contexts/ZoomContext';
+import type { ZoomLevel } from '@/contexts/ZoomContext';
 import './AppearanceSettings.css';
 
 interface AppearanceSettingsProps {

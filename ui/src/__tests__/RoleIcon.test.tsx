@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/aria-role */
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { RoleIcon } from '../components/RoleIcon';

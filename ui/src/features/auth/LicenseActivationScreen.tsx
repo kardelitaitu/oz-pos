@@ -39,10 +39,11 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
       } else {
         addToast({ type: 'error', message: 'Failed to activate license.' });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An error occurred during activation.';
       addToast({ 
         type: 'error', 
-        message: err.message || 'An error occurred during activation.' 
+        message,
       });
     } finally {
       setLoading(false);
@@ -68,7 +69,6 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
               value={key}
               onChange={(e) => setKey(e.target.value.toUpperCase())}
               disabled={loading}
-              autoFocus
             />
           </div>
 
