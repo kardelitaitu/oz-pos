@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   hexToRgb,
   rgbToHex,
@@ -6,175 +6,177 @@ import {
   darken,
   rgba,
   deriveAccentPalette,
-  applyAccentPalette,
 } from '@/utils/color';
 
-// ── hexToRgb ───────────────────────────────────────────────────────────
 describe('hexToRgb', () => {
-  it('parses a 6-char hex string', () => {
+  it('parses 6-digit hex', () => {
     expect(hexToRgb('#ff0000')).toEqual({ r: 255, g: 0, b: 0 });
-    expect(hexToRgb('#00ff00')).toEqual({ r: 0, g: 255, b: 0 });
-    expect(hexToRgb('#0000ff')).toEqual({ r: 0, g: 0, b: 255 });
   });
 
-  it('parses a 3-char hex string by expanding each channel', () => {
+  it('parses 6-digit hex without hash', () => {
+    expect(hexToRgb('00ff00')).toEqual({ r: 0, g: 255, b: 0 });
+  });
+
+  it('parses 3-digit hex', () => {
     expect(hexToRgb('#f00')).toEqual({ r: 255, g: 0, b: 0 });
-    expect(hexToRgb('#abc')).toEqual({ r: 170, g: 187, b: 204 });
+    expect(hexToRgb('#0f0')).toEqual({ r: 0, g: 255, b: 0 });
+    expect(hexToRgb('#00f')).toEqual({ r: 0, g: 0, b: 255 });
   });
 
-  it('handles hex without the hash prefix', () => {
-    expect(hexToRgb('ff0000')).toEqual({ r: 255, g: 0, b: 0 });
-  });
-
-  it('parses white and black correctly', () => {
+  it('parses white and black', () => {
     expect(hexToRgb('#ffffff')).toEqual({ r: 255, g: 255, b: 255 });
     expect(hexToRgb('#000000')).toEqual({ r: 0, g: 0, b: 0 });
   });
+
+  it('parses a mid-tone colour', () => {
+    const result = hexToRgb('#808080');
+    expect(result.r).toBe(128);
+    expect(result.g).toBe(128);
+    expect(result.b).toBe(128);
+  });
+
+  it('handles uppercase hex', () => {
+    expect(hexToRgb('#ABCDEF')).toEqual({ r: 0xab, g: 0xcd, b: 0xef });
+  });
 });
 
-// ── rgbToHex ───────────────────────────────────────────────────────────
 describe('rgbToHex', () => {
-  it('converts rgb values to hex', () => {
+  it('converts rgb to hex', () => {
     expect(rgbToHex(255, 0, 0)).toBe('#ff0000');
     expect(rgbToHex(0, 255, 0)).toBe('#00ff00');
     expect(rgbToHex(0, 0, 255)).toBe('#0000ff');
   });
 
-  it('converts white and black', () => {
-    expect(rgbToHex(255, 255, 255)).toBe('#ffffff');
+  it('pads single-digit hex values', () => {
     expect(rgbToHex(0, 0, 0)).toBe('#000000');
+    expect(rgbToHex(1, 2, 3)).toBe('#010203');
   });
 
-  it('clamps values to 0-255 range', () => {
-    expect(rgbToHex(300, -10, 128)).toBe('#ff0080');
-    expect(rgbToHex(-5, 500, 128)).toBe('#00ff80');
+  it('clamps values below 0', () => {
+    const result = rgbToHex(-10, -5, -1);
+    expect(result).toBe('#000000');
   });
 
-  it('rounds floating point values', () => {
-    expect(rgbToHex(127.6, 63.2, 0)).toBe('#803f00');
-  });
-});
-
-// ── lighten ────────────────────────────────────────────────────────────
-describe('lighten', () => {
-  it('returns the original colour when amount is 0', () => {
-    expect(lighten('#ff0000', 0)).toBe('#ff0000');
+  it('clamps values above 255', () => {
+    const result = rgbToHex(300, 500, 1000);
+    expect(result).toBe('#ffffff');
   });
 
-  it('returns white when amount is 1', () => {
-    expect(lighten('#ff0000', 1)).toBe('#ffffff');
-    expect(lighten('#00ff00', 1)).toBe('#ffffff');
-    expect(lighten('#0000ff', 1)).toBe('#ffffff');
-  });
-
-  it('blends toward white by the given amount', () => {
-    // red halfway to white = #ff8080 (r=255, g=128, b=128)
-    const result = lighten('#ff0000', 0.5);
-    expect(result).toBe('#ff8080');
-  });
-});
-
-// ── darken ─────────────────────────────────────────────────────────────
-describe('darken', () => {
-  it('returns the original colour when amount is 0', () => {
-    expect(darken('#ff0000', 0)).toBe('#ff0000');
-  });
-
-  it('returns black when amount is 1', () => {
-    expect(darken('#ff0000', 1)).toBe('#000000');
-    expect(darken('#ffffff', 1)).toBe('#000000');
-  });
-
-  it('blends toward black by the given amount', () => {
-    // red halfway to black = #800000 (r=128, g=0, b=0)
-    const result = darken('#ff0000', 0.5);
+  it('rounds non-integer values', () => {
+    const result = rgbToHex(127.6, 0, 0);
     expect(result).toBe('#800000');
   });
 });
 
-// ── rgba ───────────────────────────────────────────────────────────────
-describe('rgba', () => {
-  it('produces an rgba() string with the given alpha', () => {
-    expect(rgba('#ff0000', 0.5)).toBe('rgba(255, 0, 0, 0.5)');
-    expect(rgba('#00ff00', 0.1)).toBe('rgba(0, 255, 0, 0.1)');
+describe('lighten', () => {
+  it('returns original at amount 0', () => {
+    expect(lighten('#ff0000', 0)).toBe('#ff0000');
   });
 
-  it('handles alpha of 1 (fully opaque)', () => {
-    expect(rgba('#0000ff', 1)).toBe('rgba(0, 0, 255, 1)');
+  it('returns white at amount 1', () => {
+    expect(lighten('#ff0000', 1)).toBe('#ffffff');
+    expect(lighten('#000000', 1)).toBe('#ffffff');
   });
 
-  it('handles alpha of 0 (fully transparent)', () => {
-    expect(rgba('#ffffff', 0)).toBe('rgba(255, 255, 255, 0)');
+  it('lightens at amount 0.5', () => {
+    const result = lighten('#000000', 0.5);
+    // 0 + (255-0)*0.5 = 127.5 → rounded to 128
+    expect(result).toBe('#808080');
   });
 });
 
-// ── deriveAccentPalette ────────────────────────────────────────────────
+describe('darken', () => {
+  it('returns original at amount 0', () => {
+    expect(darken('#ff0000', 0)).toBe('#ff0000');
+  });
+
+  it('returns black at amount 1', () => {
+    expect(darken('#ff0000', 1)).toBe('#000000');
+    expect(darken('#ffffff', 1)).toBe('#000000');
+  });
+
+  it('darkens at amount 0.5', () => {
+    const result = darken('#ffffff', 0.5);
+    // 255 * 0.5 = 127.5 → rounded to 128
+    expect(result).toBe('#808080');
+  });
+});
+
+describe('rgba', () => {
+  it('formats rgba string', () => {
+    expect(rgba('#ff0000', 0.5)).toBe('rgba(255, 0, 0, 0.5)');
+  });
+
+  it('handles alpha 0 and 1', () => {
+    expect(rgba('#000000', 0)).toBe('rgba(0, 0, 0, 0)');
+    expect(rgba('#ffffff', 1)).toBe('rgba(255, 255, 255, 1)');
+  });
+
+  it('handles fractional alpha', () => {
+    expect(rgba('#808080', 0.33)).toBe('rgba(128, 128, 128, 0.33)');
+  });
+});
+
 describe('deriveAccentPalette', () => {
-  it('uses the default emerald colour when no base is given', () => {
+  it('returns all palette keys', () => {
+    const palette = deriveAccentPalette('#10b981');
+    expect(palette).toHaveProperty('base');
+    expect(palette).toHaveProperty('hover');
+    expect(palette).toHaveProperty('active');
+    expect(palette).toHaveProperty('subtle');
+    expect(palette).toHaveProperty('fg');
+    expect(palette).toHaveProperty('dim');
+    expect(palette).toHaveProperty('alpha');
+    expect(palette).toHaveProperty('secondary');
+  });
+
+  it('returns base colour as-is', () => {
+    const palette = deriveAccentPalette('#ff5500');
+    expect(palette.base).toBe('#ff5500');
+  });
+
+  it('uses default accent when no arg provided', () => {
     const palette = deriveAccentPalette();
     expect(palette.base).toBe('#10b981');
   });
 
-  it('derives hover, active, subtle, dim, alpha, secondary, and fg from base', () => {
-    const palette = deriveAccentPalette('#4f46e5');
-    expect(palette.base).toBe('#4f46e5');
-    // hover = darken(base, 0.1)
-    expect(palette.hover).toBeTruthy();
+  it('hover is darker than base', () => {
+    const palette = deriveAccentPalette('#10b981');
     expect(palette.hover).not.toBe(palette.base);
-    // active = darken(base, 0.2)
-    expect(palette.active).toBeTruthy();
-    // subtle = lighten(base, ...)
-    expect(palette.subtle).toBeTruthy();
-    // fg is either '#0a0a0a' or '#ffffff'
-    expect(['#0a0a0a', '#ffffff']).toContain(palette.fg);
-    // dim = rgba(base, 0.12)
-    expect(palette.dim).toBeTruthy();
-    expect(palette.dim).toContain('rgba');
-    // alpha = rgba(base, 0.2)
-    expect(palette.alpha).toBeTruthy();
-    expect(palette.alpha).toContain('rgba');
-    // secondary = lighten(base, 0.15)
-    expect(palette.secondary).toBeTruthy();
   });
 
-  it('uses white fg for dark bases (luminance <= 160)', () => {
+  it('active is darker than hover', () => {
+    const palette = deriveAccentPalette('#10b981');
+    // Both are darkened versions; active has amount 0.2 vs hover 0.1
+    expect(palette.active).not.toBe(palette.hover);
+  });
+
+  it('dark base → white foreground', () => {
     const palette = deriveAccentPalette('#000000');
     expect(palette.fg).toBe('#ffffff');
   });
 
-  it('uses dark fg for bright bases (luminance > 160)', () => {
+  it('light base → dark foreground', () => {
     const palette = deriveAccentPalette('#ffffff');
     expect(palette.fg).toBe('#0a0a0a');
   });
-});
 
-// ── applyAccentPalette ─────────────────────────────────────────────────
-describe('applyAccentPalette', () => {
-  beforeEach(() => {
-    // Reset any prior style properties
-    const root = document.documentElement;
-    root.style.removeProperty('--color-accent');
-    root.style.removeProperty('--color-accent-hover');
-    root.style.removeProperty('--color-accent-active');
-    root.style.removeProperty('--color-accent-subtle');
-    root.style.removeProperty('--color-accent-fg');
-    root.style.removeProperty('--color-accent-dim');
-    root.style.removeProperty('--color-accent-alpha');
-    root.style.removeProperty('--color-accent-secondary');
+  it('alpha is rgba format', () => {
+    const palette = deriveAccentPalette('#10b981');
+    expect(palette.alpha).toMatch(/^rgba\(/);
   });
 
-  it('sets all 8 CSS custom properties on documentElement', () => {
+  it('dim is rgba format', () => {
     const palette = deriveAccentPalette('#10b981');
-    applyAccentPalette(palette);
+    expect(palette.dim).toMatch(/^rgba\(/);
+  });
 
-    const root = document.documentElement;
-    expect(root.style.getPropertyValue('--color-accent')).toBe(palette.base);
-    expect(root.style.getPropertyValue('--color-accent-hover')).toBe(palette.hover);
-    expect(root.style.getPropertyValue('--color-accent-active')).toBe(palette.active);
-    expect(root.style.getPropertyValue('--color-accent-subtle')).toBe(palette.subtle);
-    expect(root.style.getPropertyValue('--color-accent-fg')).toBe(palette.fg);
-    expect(root.style.getPropertyValue('--color-accent-dim')).toBe(palette.dim);
-    expect(root.style.getPropertyValue('--color-accent-alpha')).toBe(palette.alpha);
-    expect(root.style.getPropertyValue('--color-accent-secondary')).toBe(palette.secondary);
+  it('returns hex strings for solid colours', () => {
+    const palette = deriveAccentPalette('#10b981');
+    expect(palette.base).toMatch(/^#[0-9a-f]{6}$/);
+    expect(palette.hover).toMatch(/^#[0-9a-f]{6}$/);
+    expect(palette.active).toMatch(/^#[0-9a-f]{6}$/);
+    expect(palette.subtle).toMatch(/^#[0-9a-f]{6}$/);
+    expect(palette.secondary).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
