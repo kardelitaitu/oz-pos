@@ -60,33 +60,15 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 
 		// ── Parse current subscription data ───────────────────────
 		tierKey := currentSub.GetString("tier_key")
-		var allowedTypes []string
-		if raw := currentSub.Get("allowed_types"); raw != nil {
-			switch v := raw.(type) {
-			case []any:
-				for _, item := range v {
-					if s, ok := item.(string); ok {
-						allowedTypes = append(allowedTypes, s)
-					}
-				}
-			case string:
-				json.Unmarshal([]byte(v), &allowedTypes)
-			}
-		}
-
-		// ── Build and sign new subscription ───────────────────────
 		expiresAt := calculateExpiry(tierKey)
 		sub := SubscriptionPayload{
-			TenantID:        req.TenantID,
-			TierKey:         tierKey,
-			Status:          "active",
-			MaxStores:       currentSub.GetInt("max_stores"),
-			MaxPOSInstances: currentSub.GetInt("max_pos_instances"),
-			AllowedTypes:    allowedTypes,
-			StartsAt:        time.Now().UTC().Format(time.RFC3339),
-			ExpiresAt:       expiresAt.Format(time.RFC3339),
-			GraceUntil:      calculateGraceUntil(expiresAt).Format(time.RFC3339),
-			IssuedAt:        time.Now().UTC().Format(time.RFC3339),
+			TenantID:   req.TenantID,
+			TierKey:    tierKey,
+			Status:     "active",
+			StartsAt:   time.Now().UTC().Format(time.RFC3339),
+			ExpiresAt:  expiresAt.Format(time.RFC3339),
+			GraceUntil: calculateGraceUntil(expiresAt).Format(time.RFC3339),
+			IssuedAt:   time.Now().UTC().Format(time.RFC3339),
 		}
 
 		payloadStr, signature, err := signSubscription(sub)
@@ -112,9 +94,6 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		newSub := core.NewRecord(subColl)
 		newSub.Set("tenant_id", req.TenantID)
 		newSub.Set("tier_key", tierKey)
-		newSub.Set("max_stores", sub.MaxStores)
-		newSub.Set("max_pos_instances", sub.MaxPOSInstances)
-		newSub.Set("allowed_types", sub.AllowedTypes)
 		newSub.Set("status", "active")
 		newSub.Set("starts_at", sub.StartsAt)
 		newSub.Set("expires_at", sub.ExpiresAt)

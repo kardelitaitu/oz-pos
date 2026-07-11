@@ -134,9 +134,9 @@ func runScenario(t *testing.T, scenario *tests.ApiScenario) {
 
 func TestStatusHandler_TenantNotFound(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
-		Method:         "GET",
-		URL:            "/api/v1/license/status/nonexistent_000",
-		ExpectedStatus: 404,
+		Method:          "GET",
+		URL:             "/api/v1/license/status/n0t4f0und000000",
+		ExpectedStatus:  404,
 		ExpectedContent: []string{`"error"`, "tenant not found"},
 	})
 }
@@ -145,10 +145,10 @@ func TestStatusHandler_TenantNotFound(t *testing.T) {
 
 func TestActivateHandler_MissingFields(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
-		Method:         "POST",
-		URL:            "/api/v1/license/activate",
-		Body:           strings.NewReader(`{}`),
-		ExpectedStatus: 400,
+		Method:          "POST",
+		URL:             "/api/v1/license/activate",
+		Body:            strings.NewReader(`{}`),
+		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`, "required"},
 	})
 }
@@ -158,21 +158,21 @@ func TestActivateHandler_InvalidKey(t *testing.T) {
 		Method: "POST",
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
-			"key": "OZ_INVALID_KEY_",
-			"tenant_id": "tstest___0000001",
-			"machine_id": "mach_00000000001"
+			"key": "OZINVALIDKEY001",
+			"tenant_id": "test000000000001",
+			"machine_id": "mach00000000001"
 		}`),
-		ExpectedStatus: 401,
+		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`},
 	})
 }
 
 func TestActivateHandler_InvalidJSON(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
-		Method:         "POST",
-		URL:            "/api/v1/license/activate",
-		Body:           strings.NewReader(`not json`),
-		ExpectedStatus: 400,
+		Method:          "POST",
+		URL:             "/api/v1/license/activate",
+		Body:            strings.NewReader(`not json`),
+		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`},
 	})
 }
@@ -181,10 +181,10 @@ func TestActivateHandler_InvalidJSON(t *testing.T) {
 
 func TestRenewHandler_MissingFields(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
-		Method:         "POST",
-		URL:            "/api/v1/license/renew",
-		Body:           strings.NewReader(`{}`),
-		ExpectedStatus: 400,
+		Method:          "POST",
+		URL:             "/api/v1/license/renew",
+		Body:            strings.NewReader(`{}`),
+		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`, "required"},
 	})
 }
@@ -194,20 +194,20 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 		Method: "POST",
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
-			"tenant_id": "tsx_____0000001",
-			"api_key": "invalid_key_001"
+			"tenant_id": "tsx000000000001",
+			"api_key": "invalidkey00001"
 		}`),
-		ExpectedStatus: 401,
+		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`},
 	})
 }
 
 func TestRenewHandler_InvalidJSON(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
-		Method:         "POST",
+		Method:          "POST",
 		URL:            "/api/v1/license/renew",
-		Body:           strings.NewReader(`not json`),
-		ExpectedStatus: 400,
+		Body:            strings.NewReader(`not json`),
+		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`},
 	})
 }

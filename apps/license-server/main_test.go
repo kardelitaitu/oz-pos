@@ -115,8 +115,6 @@ func TestSignAndVerify_RoundTrip(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-roundtrip", TierKey: "pro", Status: "active",
-		MaxStores: 2, MaxPOSInstances: 3,
-		AllowedTypes: []string{"restaurant-pos", "store-pos", "admin"},
 		StartsAt: time.Now().UTC().Format(time.RFC3339),
 		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
@@ -134,8 +132,6 @@ func TestSignAndVerify_TamperedPayload(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-tamper", TierKey: "pro", Status: "active",
-		MaxStores: 2, MaxPOSInstances: 3,
-		AllowedTypes: []string{"restaurant-pos"},
 		StartsAt: time.Now().UTC().Format(time.RFC3339),
 		ExpiresAt: time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339),
 		GraceUntil: time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339),
@@ -704,7 +700,6 @@ func TestSignSubscription_EmptyTier(t *testing.T) {
 
 	sub := SubscriptionPayload{
 		TenantID: "tenant-empty-tier", TierKey: "", Status: "active",
-		MaxStores: 1, MaxPOSInstances: 1,
 	}
 	payload, sig, err := signSubscription(sub)
 	if err != nil {

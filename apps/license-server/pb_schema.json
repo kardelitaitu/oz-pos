@@ -21,23 +21,6 @@
           }
         },
         {
-          "name": "max_stores",
-          "type": "number",
-          "required": true,
-          "options": { "min": 1, "max": 9999 }
-        },
-        {
-          "name": "max_pos_instances",
-          "type": "number",
-          "required": true,
-          "options": { "min": 1, "max": 9999 }
-        },
-        {
-          "name": "allowed_types",
-          "type": "json",
-          "required": true
-        },
-        {
           "name": "status",
           "type": "select",
           "required": true,
@@ -178,21 +161,6 @@
             "values": ["free", "pro", "premium", "enterprise"],
             "maxSelect": 1
           }
-        },
-        {
-          "name": "max_stores",
-          "type": "number",
-          "required": true
-        },
-        {
-          "name": "max_pos_instances",
-          "type": "number",
-          "required": true
-        },
-        {
-          "name": "allowed_types",
-          "type": "json",
-          "required": true
         },
         {
           "name": "status",
