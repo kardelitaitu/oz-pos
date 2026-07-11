@@ -895,6 +895,59 @@ func TestActivateHandler_Success(t *testing.T) {
 	}
 }
 
+func TestActivateHandler_ExistingTenantNoApiKeyLeak(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed a pre-existing tenant with a known api_key.
+	seedTenant(t, app, "existtenan00001", "existapikey0001", "active")
+
+	// Seed an unused license key.
+	seedLicenseKey(t, app, "OZ-EXIST-KEY001", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	// Activate with the existing tenant's email.
+	body := strings.NewReader(`{
+		"key": "OZ-EXIST-KEY001",
+		"email": "existtenan00001@example.com",
+		"machine_id": "existmachin0001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// The response must NOT include api_key for an existing tenant.
+	if _, ok := resp["api_key"]; ok {
+		t.Error("api_key must NOT be returned for an existing tenant (prevents credential leakage)")
+	}
+
+	// Core fields must still be present.
+	if _, ok := resp["signed_payload"]; !ok {
+		t.Error("expected signed_payload in response")
+	}
+	if _, ok := resp["signature"]; !ok {
+		t.Error("expected signature in response")
+	}
+	if _, ok := resp["tenant_id"]; !ok {
+		t.Error("expected tenant_id in response")
+	}
+}
+
 // ── Tests: Misconfiguration error paths ──────────────────────────
 //
 // These tests verify that handleActivate returns 500 with a descriptive

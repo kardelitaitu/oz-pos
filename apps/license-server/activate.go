@@ -50,9 +50,11 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Find or Create tenant record by Email ─────────────────
+		var isNewTenant bool
 		tenant, err := app.FindFirstRecordByData("tenants", "email", req.Email)
 		if err != nil {
 			// Not found, create new tenant
+			isNewTenant = true
 			tenantColl, collErr := app.FindCollectionByNameOrId("tenants")
 			if collErr != nil {
 				return e.JSON(http.StatusInternalServerError, map[string]any{
@@ -214,11 +216,18 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Return signed subscription to POS ─────────────────────
-		return e.JSON(http.StatusOK, map[string]any{
+		// Only include the api_key for newly created tenants or when
+		// reusing an already-activated key (caller proved they know a
+		// key already bound to this tenant). Never leak it when the
+		// caller only knows the email address.
+		resp := map[string]any{
 			"signed_payload": payloadStr,
 			"signature":      signature,
 			"tenant_id":      tenantID,
-			"api_key":        tenant.GetString("api_key"),
-		})
+		}
+		if isNewTenant || keyStatus == "activated" {
+			resp["api_key"] = tenant.GetString("api_key")
+		}
+		return e.JSON(http.StatusOK, resp)
 	}
 }

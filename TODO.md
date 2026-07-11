@@ -1,5 +1,20 @@
 # TODO — OZ-POS v0.0.4
 
+## Rust Codebase Documentation Audit (1,400+ missing docs)
+
+### Phase 1: Core Crates
+- `[ ]` Document `foundation` crate (~9 warnings)
+- `[ ]` Document `platform-sync` crate (~10 warnings)
+- `[ ]` Document `oz-api` crate (~24 warnings)
+- `[ ]` Document `oz-plugin` crate (~46 warnings)
+
+### Phase 2: Tablet App
+- `[ ]` Document `oz-pos-tablet` crate (~501 warnings, primarily Tauri commands)
+
+### Phase 3: Desktop App
+- `[ ]` Document `oz-pos-app` crate (~811 warnings, primarily Tauri commands)
+
+---
 ## 1. Centralized Branding & Assets Architecture (`assets/`)
 
 ### Objective
