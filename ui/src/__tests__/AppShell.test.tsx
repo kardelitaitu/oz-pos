@@ -48,6 +48,11 @@ vi.mock('@/features/sales/PosScreen', () => ({
 
 // ── Mock API modules used by AppShell ────────────────────────────
 
+vi.mock('@/api/license', () => ({
+  getLicenseStatus: vi.fn(() => Promise.resolve({ is_active: true, payload: null })),
+  activateLicense: vi.fn(),
+}));
+
 vi.mock('@/api/settings', () => ({
   getSetupStatus: vi.fn(() => Promise.resolve({ completed: true })),
   completeSetup: vi.fn(),
