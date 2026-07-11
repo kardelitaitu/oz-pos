@@ -32,7 +32,9 @@ pub enum LicenseVerificationStatus {
 #[serde(rename_all = "camelCase")]
 pub struct LicenseStatusDto {
     pub is_active: bool,
+    pub status: LicenseVerificationStatus,
     pub payload: Option<String>,
+    pub message: Option<String>,
 }
 
 #[command]
@@ -120,21 +122,27 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
     let payload_str = Settings::get(&conn, "license.payload")?;
     let signature = Settings::get(&conn, "license.signature")?;
 
-    if let (Some(p), Some(s)) = (payload.clone(), signature) {
+    if let (Some(p), Some(s)) = (payload_str.clone(), signature) {
         match verify_license_signature(&p, &s) {
             Ok(_) => Ok(LicenseStatusDto {
                 is_active: true,
-                payload: Some(p.to_string()),
+                status: LicenseVerificationStatus::Valid,
+                payload: Some(p),
+                message: None,
             }),
             Err(_) => Ok(LicenseStatusDto {
                 is_active: false,
+                status: LicenseVerificationStatus::InvalidSignature,
                 payload: None,
+                message: None,
             }), // Invalid signature
         }
     } else {
         Ok(LicenseStatusDto {
             is_active: false,
+            status: LicenseVerificationStatus::Missing,
             payload: None,
+            message: None,
         })
     }
 }
