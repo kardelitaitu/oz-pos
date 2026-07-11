@@ -12,7 +12,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 
@@ -57,10 +56,6 @@ func main() {
 
 	// ── Register custom license API routes ───────────────────────
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		// Health check endpoint for orchestration platforms (Northflank, K8s, etc.)
-		se.Router.GET("/api/health", func(e *core.RequestEvent) error {
-			return e.JSON(http.StatusOK, map[string]string{"status": "healthy"})
-		})
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.GET("/api/v1/license/status/{tenant_id}", handleStatus(app))
@@ -79,9 +74,10 @@ func main() {
 //   - Literal "\\n" escape sequences (double-escaped in JSON/YAML)
 //   - Surrounding whitespace and quotes
 func normalizePEM(raw string) string {
-	// Strip surrounding whitespace and quotes.
+	// Strip surrounding whitespace.
 	raw = strings.TrimSpace(raw)
-	raw = strings.Trim(raw, "\"'")
+	// Strip surrounding quotes, then re-trim in case quotes hid whitespace.
+	raw = strings.TrimSpace(strings.Trim(raw, "\"'"))
 
 	// Replace literal backslash-n sequences with real newlines.
 	raw = strings.ReplaceAll(raw, "\\n", "\n")
