@@ -12,7 +12,7 @@ import {
   listAllWorkspaces,
   setUserWorkspaces,
   getUserWorkspaces,
-  type WorkspaceDto,
+  type WorkspaceTypeDto,
 } from '@/api/workspaces';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
@@ -50,7 +50,7 @@ export default function StaffManagementScreen() {
   const { session } = useAuth();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
-  const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceDto[]>([]);
+  const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceTypeDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

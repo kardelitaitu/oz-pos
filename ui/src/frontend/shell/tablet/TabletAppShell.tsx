@@ -178,7 +178,7 @@ export default function TabletAppShell() {
       route={currentRoute}
       onNavigate={handleNavigate}
       {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
-      workspaceScreens={workspaceScreens.length > 0 ? workspaceScreens : undefined}
+      workspaceScreens={workspaceScreens}
     >
       {pageDenied ? (
         <PermissionDenied
