@@ -309,4 +309,149 @@ mod tests {
         let err: ModuleResult = Err(anyhow::anyhow!("test error"));
         assert!(err.is_err());
     }
+
+    // ── Error propagation ──
+
+    #[test]
+    fn module_error_propagation() {
+        #[derive(Debug)]
+        struct FailingModule;
+        impl Module for FailingModule {
+            fn id(&self) -> ModuleId {
+                "failing"
+            }
+            fn on_load(&mut self) -> ModuleResult {
+                Err(anyhow::anyhow!("config missing"))
+            }
+        }
+        let mut m = FailingModule;
+        let err = m.on_load().unwrap_err();
+        assert_eq!(err.to_string(), "config missing");
+    }
+
+    #[test]
+    fn service_error_propagation() {
+        #[derive(Debug)]
+        struct FailingService;
+        impl Service for FailingService {
+            fn id(&self) -> &'static str {
+                "failing"
+            }
+            fn start(&mut self) -> ModuleResult {
+                Err(anyhow::anyhow!("cannot start"))
+            }
+            fn stop(&mut self) -> ModuleResult {
+                Err(anyhow::anyhow!("cannot stop"))
+            }
+        }
+        let mut s = FailingService;
+        assert_eq!(s.start().unwrap_err().to_string(), "cannot start");
+        assert_eq!(s.stop().unwrap_err().to_string(), "cannot stop");
+    }
+
+    #[test]
+    fn event_handler_error_propagation() {
+        #[derive(Debug)]
+        struct ErrEvent {
+            should_fail: bool,
+        }
+        impl DomainEvent for ErrEvent {
+            fn event_name(&self) -> &'static str {
+                "err.event"
+            }
+        }
+        struct ErrHandler;
+        impl EventHandler<ErrEvent> for ErrHandler {
+            fn handle(&self, event: &ErrEvent) -> ModuleResult {
+                if event.should_fail {
+                    Err(anyhow::anyhow!("handler failed"))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+        let h = ErrHandler;
+        assert!(h.handle(&ErrEvent { should_fail: false }).is_ok());
+        let err = h.handle(&ErrEvent { should_fail: true }).unwrap_err();
+        assert_eq!(err.to_string(), "handler failed");
+    }
+
+    // ── Multiple event types ──
+
+    #[test]
+    fn multiple_domain_event_types() {
+        #[derive(Debug)]
+        struct EventA;
+        impl DomainEvent for EventA {
+            fn event_name(&self) -> &'static str {
+                "event.a"
+            }
+        }
+        #[derive(Debug)]
+        struct EventB;
+        impl DomainEvent for EventB {
+            fn event_name(&self) -> &'static str {
+                "event.b"
+            }
+        }
+        assert_eq!(EventA.event_name(), "event.a");
+        assert_eq!(EventB.event_name(), "event.b");
+        assert_ne!(EventA.event_name(), EventB.event_name());
+    }
+
+    #[test]
+    fn handler_for_multiple_event_types() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        #[derive(Debug)]
+        struct PriceEvent {
+            amount: i32,
+        }
+        impl DomainEvent for PriceEvent {
+            fn event_name(&self) -> &'static str {
+                "price.changed"
+            }
+        }
+        struct MultiHandler(AtomicUsize);
+        impl EventHandler<PriceEvent> for MultiHandler {
+            fn handle(&self, _: &PriceEvent) -> ModuleResult {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+        impl EventHandler<TestEvent> for MultiHandler {
+            fn handle(&self, _: &TestEvent) -> ModuleResult {
+                self.0.fetch_add(10, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+        let h = MultiHandler(AtomicUsize::new(0));
+        h.handle(&PriceEvent { amount: 99 }).unwrap();
+        h.handle(&TestEvent { value: 1 }).unwrap();
+        assert_eq!(h.0.load(Ordering::SeqCst), 11);
+    }
+
+    // ── Error context chaining ──
+
+    #[test]
+    fn module_result_supports_context() {
+        use anyhow::Context;
+        let result: ModuleResult<u32> = Err(anyhow::anyhow!("io error"));
+        let chained = result.context("while loading config");
+        let err = chained.unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("while loading config"));
+        assert!(msg.contains("io error"));
+    }
+
+    #[test]
+    fn module_result_error_downcast() {
+        use std::io;
+        let result: ModuleResult<u32> = Err(anyhow::anyhow!(io::Error::new(
+            io::ErrorKind::NotFound,
+            "file missing"
+        )));
+        let err = result.unwrap_err();
+        let root = err.root_cause();
+        assert!(root.downcast_ref::<io::Error>().is_some());
+    }
 }
