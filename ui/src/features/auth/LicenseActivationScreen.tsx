@@ -100,7 +100,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
               id="phone"
               type="tel"
               className="license-input"
-              placeholder="+1-555-0123"
+              placeholder="+628123456790"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               disabled={loading}
