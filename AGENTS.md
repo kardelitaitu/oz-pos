@@ -3,6 +3,7 @@
 ## Global Rules
 
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
+- Never switch local branches unless explicitly asked by the user.
 
 ## Quick Setup
 
