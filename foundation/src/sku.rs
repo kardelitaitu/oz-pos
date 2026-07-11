@@ -3,8 +3,6 @@
 //! `Sku` is `#[serde(transparent)]` so it serializes as its inner
 //! `String`. `LineId` is a fresh UUID per line item.
 
-#![allow(missing_docs)]
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -61,6 +59,7 @@ impl From<&str> for Sku {
 pub struct LineId(pub Uuid);
 
 impl LineId {
+    /// Create a new line identifier backed by a UUID v7.
     #[must_use]
     pub fn new() -> Self {
         Self(Uuid::now_v7())

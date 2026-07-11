@@ -4,8 +4,6 @@
 //! [`Cart::add_line`], and the total is computed by summing line totals
 //! in checked arithmetic.
 
-#![allow(missing_docs)]
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -19,6 +17,7 @@ use crate::sku::{LineId, Sku};
 pub struct CartId(pub Uuid);
 
 impl CartId {
+    /// Create a new cart identifier backed by a UUID v7.
     #[must_use]
     pub fn new() -> Self {
         Self(Uuid::now_v7())
@@ -40,10 +39,15 @@ impl std::fmt::Display for CartId {
 /// A single line in a cart.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CartLine {
+    /// Unique line identifier.
     pub id: LineId,
+    /// The product SKU.
     pub sku: Sku,
+    /// Quantity ordered (must be > 0).
     pub qty: i64,
+    /// Base unit price (before per-line override).
     pub unit_price: Money,
+    /// Optional per-line price override.
     pub overridden_price: Option<Money>,
 }
 
@@ -82,8 +86,15 @@ impl CartLine {
 #[derive(Debug, Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CartError {
+    /// Line currency does not match the cart currency.
     #[error("currency mismatch: cart is {cart}, line is {line}")]
-    CurrencyMismatch { cart: String, line: String },
+    CurrencyMismatch {
+        /// Cart currency code.
+        cart: String,
+        /// Line currency code.
+        line: String,
+    },
+    /// Attempted to remove a SKU that is not in the cart.
     #[error("sku not in cart: {0}")]
     SkuNotInCart(String),
 }
@@ -113,29 +124,36 @@ impl Cart {
         }
     }
 
+    /// Return the cart's unique identifier.
     #[must_use]
     pub fn id(&self) -> CartId {
         self.id
     }
+    /// Return the currency scoped to this cart.
     #[must_use]
     pub fn currency(&self) -> Currency {
         self.currency
     }
+    /// Return a shared reference to the line items.
     #[must_use]
     pub fn lines(&self) -> &[CartLine] {
         &self.lines
     }
+    /// Return a mutable reference to the line items.
     pub fn lines_mut(&mut self) -> &mut [CartLine] {
         &mut self.lines
     }
+    /// Return the number of line items.
     #[must_use]
     pub fn line_count(&self) -> usize {
         self.lines.len()
     }
+    /// Return the discount percentage as an integer (0–100).
     #[must_use]
     pub fn discount_percent(&self) -> i64 {
         self.discount_percent.get() as i64
     }
+    /// Return an optional label for the current discount.
     #[must_use]
     pub fn discount_label(&self) -> Option<&str> {
         self.discount_label.as_deref()

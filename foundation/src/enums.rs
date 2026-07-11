@@ -83,8 +83,11 @@ impl std::error::Error for InvalidTransition {}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PaymentMethod {
+    /// Cash payment.
     Cash,
+    /// Card payment (credit / debit).
     Card,
+    /// Catch-all for other payment methods (e.g. voucher).
     Other(String),
 }
 
