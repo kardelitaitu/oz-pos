@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { activateLicense } from '@/api/license';
+import ConnectionStatus from '@/components/ConnectionStatus';
 import './LicenseActivationScreen.css';
 
 export interface LicenseActivationScreenProps {
@@ -102,6 +103,17 @@ export default function LicenseActivationScreen({ onActivated }: LicenseActivati
             )}
           </button>
         </form>
+      </div>
+
+      <div className="license-server-status-container">
+        <ConnectionStatus 
+          label="Auth" 
+          url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" 
+        />
+        <ConnectionStatus 
+          label="Sync" 
+          url="" 
+        />
       </div>
     </div>
   );
