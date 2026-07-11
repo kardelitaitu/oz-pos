@@ -6,12 +6,10 @@ use tauri::{State, command};
 
 use chrono::{DateTime, Utc};
 use oz_core::Settings;
-use oz_core::error::CoreError;
 use oz_core::license_verification::{
     ActivateLicenseRequest, SignedSubscriptionPayload, activate_license as core_activate_license,
     verify_license_signature,
 };
-use oz_core::subscription::TenantSubscription;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -27,16 +25,6 @@ pub enum LicenseVerificationStatus {
     GracePeriod,
     InvalidSignature,
     ClockTampered,
-    Missing,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum LicenseVerificationStatus {
-    Valid,
-    Expired,
-    GracePeriod,
-    InvalidSignature,
     Missing,
 }
 
@@ -193,6 +181,8 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::error::CoreError;
+    use oz_core::subscription::TenantSubscription;
 
     #[test]
     fn clock_tampered_serializes_camel_case() {
