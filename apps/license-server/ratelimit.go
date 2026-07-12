@@ -384,13 +384,35 @@ func (kf *keyFailureTracker) sweep() {
 	}
 }
 
-func (kf *keyFailureTracker) isBlocked(key string) bool {
+func (kf *keyFailureTracker) calculateCooldown(attempts int) time.Duration {
+	if kf.cooldown != defaultKeyCooldown {
+		return kf.cooldown
+	}
+	switch attempts {
+	case 1, 2:
+		return 0
+	case 3:
+		return 15 * time.Second
+	case 4:
+		return 30 * time.Second
+	case 5:
+		return 1 * time.Minute
+	case 6:
+		return 2 * time.Minute
+	case 7:
+		return 4 * time.Minute
+	default:
+		return 10 * time.Minute
+	}
+}
+
+func (kf *keyFailureTracker) isBlocked(key string) (bool, time.Duration) {
 	kf.mu.Lock()
 	defer kf.mu.Unlock()
 
 	f, ok := kf.failures[key]
 	if !ok {
-		return false
+		return false, 0
 	}
 
 	// Decay partial failures: if the user made a few wrong attempts
@@ -399,15 +421,24 @@ func (kf *keyFailureTracker) isBlocked(key string) bool {
 	if f.count < kf.maxAttempts && time.Since(f.lastAttempt) > keyPartialFailureTTL {
 		f.count = 0
 		f.lastAttempt = time.Now()
-		return false
+		return false, 0
 	}
 
 	// Clean up entries that have reached maxAttempts AND passed cooldown.
 	if f.count >= kf.maxAttempts && time.Now().After(f.cooldownAt) {
 		delete(kf.failures, key)
-		return false
+		return false, 0
 	}
-	return f.count >= kf.maxAttempts
+	if f.count >= kf.maxAttempts {
+		return true, time.Until(f.cooldownAt)
+	}
+	return false, 0
+}
+
+// isBlockedBool is a test helper that returns only the boolean part of isBlocked.
+func (kf *keyFailureTracker) isBlockedBool(key string) bool {
+	blocked, _ := kf.isBlocked(key)
+	return blocked
 }
 
 func (kf *keyFailureTracker) recordFailure(key string) {
@@ -421,7 +452,7 @@ func (kf *keyFailureTracker) recordFailure(key string) {
 	f.count++
 	f.lastAttempt = time.Now()
 	if f.count >= kf.maxAttempts {
-		f.cooldownAt = time.Now().Add(kf.cooldown)
+		f.cooldownAt = time.Now().Add(kf.calculateCooldown(f.count))
 	}
 
 	// Snapshot for persistence, then release the lock so other keys can

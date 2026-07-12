@@ -41,9 +41,10 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		if keyFailTracker.isBlocked(req.Key) {
+		if blocked, waitDuration := keyFailTracker.isBlocked(req.Key); blocked {
+			waitStr := waitDuration.Round(time.Second).String()
 			return e.JSON(http.StatusTooManyRequests, map[string]any{
-				"error": "too many attempts for this key, try again in 15 minutes",
+				"error": "too many attempts for this key, try again in " + waitStr,
 			})
 		}
 

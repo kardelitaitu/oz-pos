@@ -60,10 +60,12 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Per-key brute-force: 3 failures → 15-min cooldown ────
-		if keyFailTracker.isBlocked(req.Key) {
+		// ── Per-key brute-force: progressive cooldown ────
+		if blocked, waitDuration := keyFailTracker.isBlocked(req.Key); blocked {
+			// Round to seconds for a cleaner message
+			waitStr := waitDuration.Round(time.Second).String()
 			return e.JSON(http.StatusTooManyRequests, map[string]any{
-				"error": "too many attempts for this key, try again in 15 minutes",
+				"error": "too many attempts for this key, try again in " + waitStr,
 			})
 		}
 
@@ -142,8 +144,12 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 		if keyStatus != "activated" || activatedBy != tenantID {
 			keyFailTracker.recordFailure(req.Key)
+			errMsg := "invalid or already used license key"
+			if keyStatus == "activated" {
+				errMsg = "Wrong email or phone number"
+			}
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid or already used license key",
+				"error": errMsg,
 			})
 		}
 	}
@@ -161,10 +167,19 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				"error": "server misconfiguration: tenant_machines collection not found",
 			})
 		}
-		machine := core.NewRecord(machineColl)
-		machine.Set("id", req.MachineID)
-		machine.Set("tenant_id", tenantID)
-		machine.Set("first_seen_at", time.Now().UTC())
+		machine, err := app.FindRecordById("tenant_machines", req.MachineID)
+		if err != nil {
+			machine = core.NewRecord(machineColl)
+			machine.Set("id", req.MachineID)
+			machine.Set("tenant_id", tenantID)
+			machine.Set("first_seen_at", time.Now().UTC())
+		} else {
+			if machine.GetString("tenant_id") != tenantID {
+				return e.JSON(http.StatusConflict, map[string]any{
+					"error": "machine already registered to a different tenant",
+				})
+			}
+		}
 		machine.Set("last_seen_at", time.Now().UTC())
 	if err := app.Save(machine); err != nil {
 		log.Printf("H1 audit: machine registration failed (id=%q tenant_id=%q): %v", req.MachineID, tenantID, err)

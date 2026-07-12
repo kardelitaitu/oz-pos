@@ -50,12 +50,12 @@ func TestKeyFailureTracker_BlocksAfterLimit(t *testing.T) {
 	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
 	key := "OZ-TEST-BRUTE"
 	for i := 0; i < 3; i++ {
-		if kf.isBlocked(key) {
+		if kf.isBlockedBool(key) {
 			t.Errorf("should not be blocked after %d failures", i)
 		}
 		kf.recordFailure(key)
 	}
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 failures")
 	}
 }
@@ -66,11 +66,11 @@ func TestKeyFailureTracker_CooldownExpires(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		kf.recordFailure(key)
 	}
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 failures")
 	}
 	time.Sleep(10 * time.Millisecond)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after cooldown expires")
 	}
 }
@@ -616,11 +616,11 @@ func TestKeyFailureTracker_IsolatedByKey(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		kf.recordFailure(key1)
 	}
-	if !kf.isBlocked(key1) {
+	if !kf.isBlockedBool(key1) {
 		t.Error("key1 should be blocked after 3 failures")
 	}
 	// key2 should not be affected.
-	if kf.isBlocked(key2) {
+	if kf.isBlockedBool(key2) {
 		t.Error("key2 should not be blocked (isolated from key1)")
 	}
 }
@@ -632,12 +632,12 @@ func TestKeyFailureTracker_PartialFailures(t *testing.T) {
 	// 2 failures should not block.
 	kf.recordFailure(key)
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after only 2 failures")
 	}
 	// 3rd failure should block.
 	kf.recordFailure(key)
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3rd failure")
 	}
 }
@@ -649,7 +649,7 @@ func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
 	// Record 2 failures.
 	kf.recordFailure(key)
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after 2 failures")
 	}
 
@@ -659,7 +659,7 @@ func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
 	kf.mu.Unlock()
 
 	// After TTL expires, the counter should reset, and the key should NOT be blocked.
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after partial failures decay")
 	}
 
@@ -677,11 +677,11 @@ func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
 	// Fresh failures should count from 0 (not from 2).
 	kf.recordFailure(key)
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after 2 fresh failures post-decay")
 	}
 	kf.recordFailure(key)
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 fresh failures post-decay")
 	}
 }
@@ -693,19 +693,19 @@ func TestKeyFailureTracker_CleanupAfterCooldown(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		kf.recordFailure(key)
 	}
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 failures")
 	}
 
 	time.Sleep(150 * time.Millisecond)
 
 	// After cooldown, the entry should be cleaned up on next check.
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after cooldown expires")
 	}
 	// New failures should start fresh.
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after single fresh failure")
 	}
 }

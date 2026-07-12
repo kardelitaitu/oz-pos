@@ -540,18 +540,18 @@ func TestActivateHandler_InvalidJSON(t *testing.T) {
 	})
 }
 
-func TestActivateHandler_AlreadyUsedKey(t *testing.T) {
-	// Seed a license key with status "activated" — handler should return 401.
+func TestActivateHandler_AlreadyUsedKey_WrongEmail(t *testing.T) {
+	// Seed a license key with status "activated". With a non-matching email, handler should return 401.
 	runScenario(t, &tests.ApiScenario{
 		Method: "POST",
 		URL:    "/api/v1/license/activate",
 		Body: strings.NewReader(`{
 			"key": "OZ-USED-KEY-00001",
-			"email": "usedkeytest0001@example.com",
+			"email": "wrongemail@example.com",
 			"machine_id": "usedmachin00001"
 		}`),
 		ExpectedStatus:  401,
-		ExpectedContent: []string{`"error"`, "already used"},
+		ExpectedContent: []string{`"error"`, "Wrong email or phone number"},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 			seedLicenseKey(t.(*testing.T), app,
 				"OZ-USED-KEY-00001", "pro", "activated",
@@ -1708,14 +1708,14 @@ func TestKeyFailureTracker_CooldownEnvOverride(t *testing.T) {
 	kf.recordFailure("OZ-COOL-OVR-001")
 	kf.recordFailure("OZ-COOL-OVR-001")
 
-	if !kf.isBlocked("OZ-COOL-OVR-001") {
+	if blocked, _ := kf.isBlocked("OZ-COOL-OVR-001"); !blocked {
 		t.Error("expected key to be blocked immediately after 3 failures")
 	}
 
 	// Wait past the short cooldown and confirm the lock releases.
 	time.Sleep(250 * time.Millisecond)
 
-	if kf.isBlocked("OZ-COOL-OVR-001") {
+	if blocked, _ := kf.isBlocked("OZ-COOL-OVR-001"); blocked {
 		t.Error("expected key to be unblocked after 200ms cooldown expired")
 	}
 
@@ -2227,7 +2227,11 @@ func TestActivationLocks_BoundedMemory(t *testing.T) {
 	// would be reflect.Map and the test would fail loudly here, not
 	// silently in a memory-stat heuristic.
 	expectedType := reflect.TypeOf([activationLockShards]sync.Mutex{})
-	rt := reflect.TypeOf(*kal)
+	// reflect.TypeOf(kal).Elem() gives the struct type without copying
+	// the underlying value (which contains sync.Mutex). This avoids the
+	// go vet "copies lock value" warning that reflect.TypeOf(*kal)
+	// would trigger.
+	rt := reflect.TypeOf(kal).Elem()
 	if rt.NumField() != 1 {
 		t.Fatalf("activationLocks has %d fields; expected exactly 1 (the [256]sync.Mutex shards array). Extra fields likely indicate per-key state regression.",
 			rt.NumField())
