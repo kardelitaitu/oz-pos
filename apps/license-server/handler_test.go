@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -2667,6 +2670,69 @@ func TestRenewHandler_AuthPaths(t *testing.T) {
 				t.Errorf("expected %d, got %d. Body: %s", tc.expectCode, rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestRenewHandler_LogsDeprecationOnBodyFallback verifies the backward-
+// compat deprecation nudge actually fires on the body-fallback path AND
+// does NOT fire on the Bearer path. Without this test, a future refactor
+// could silently drop the log.Printf line and operators would never
+// know which clients still need to migrate to the Bearer header — the
+// entire reason for the body-fixture backward-compat.
+//
+// log.SetOutput is package-global, so we restore os.Stderr via
+// t.Cleanup. Do NOT add t.Parallel() to this test (would race with the
+// captured buffer; the other tests in this package run sequentially
+// anyway, which is fine).
+func TestRenewHandler_LogsDeprecationOnBodyFallback(t *testing.T) {
+	resetRateLimiters()
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "renwdeprenwtest" // 15 chars (PocketBase implicit id field)
+	const apiKey = "renwdeptestkey001"
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscription(t, app, tenantID, "pro", "active")
+
+	mux, _ := se.Router.BuildMux()
+
+	// ── Case 1: body-only fallback MUST log DEPRECATION ──────────
+	buf.Reset()
+	seedLicenseKey(t, app, "OZ-DEPRNW-BODY01", "pro", "unused", "2099-12-31 23:59:59.000Z")
+	body := fmt.Sprintf(`{"tenant_id":"%s","api_key":"%s","key":"OZ-DEPRNW-BODY01"}`,
+		tenantID, apiKey)
+	req := httptest.NewRequest("POST", "/api/v1/license/renew", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("body-fallback setup failed: %d, %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(buf.String(), "DEPRECATION: /renew") {
+		t.Errorf("expected DEPRECATION log on body-fallback success, got buffer: %q", buf.String())
+	}
+
+	// ── Case 2: Bearer header MUST NOT log DEPRECATION ──────────
+	buf.Reset()
+	seedLicenseKey(t, app, "OZ-DEPRNW-BEARER1", "pro", "unused", "2099-12-31 23:59:59.000Z")
+	body2 := fmt.Sprintf(`{"tenant_id":"%s","key":"OZ-DEPRNW-BEARER1"}`, tenantID)
+	req2 := httptest.NewRequest("POST", "/api/v1/license/renew", strings.NewReader(body2))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Authorization", "Bearer "+apiKey)
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("bearer setup failed: %d, %s", rec2.Code, rec2.Body.String())
+	}
+	if strings.Contains(buf.String(), "DEPRECATION: /renew") {
+		t.Errorf("expected NO DEPRECATION log when Bearer header is used, got buffer: %q", buf.String())
 	}
 }
 
