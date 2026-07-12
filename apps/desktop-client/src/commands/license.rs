@@ -67,6 +67,8 @@ pub async fn activate_license(
         Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty())
     };
 
+    let phone_clone = phone.clone();
+
     let req = ActivateLicenseRequest {
         key,
         email,
@@ -88,6 +90,7 @@ pub async fn activate_license(
             ("license.signature".to_string(), resp.signature),
             ("license.tenant_id".to_string(), resp.tenant_id),
             ("license.api_key".to_string(), resp.api_key),
+            ("license.phone".to_string(), phone_clone),
         ],
     )?;
 

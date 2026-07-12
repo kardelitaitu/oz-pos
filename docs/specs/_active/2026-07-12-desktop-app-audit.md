@@ -4,6 +4,7 @@
 - **Status:** Findings identified — **NOT YET SHIPPABLE TO RELEASE**
 - **Auditor:** RSA-Agent (Buffy) following the [`rust-auditor`](../../.agents/skills/rust-auditor/SKILL.md) framework
 - **Audit date:** 12-07-26
+- **C-1 closure:** closed in Epic X-3 PR (see §11) — exchange rates converted end-to-end to `i64` millionths; 4 of 5 release-blocker items (C-2, C-3, C-4, C-5) still open as of this revision; C-1 struck from §7.
 - **Scope:** `apps/desktop-client/` (Tauri v2 Rust+React desktop POS)
 - **Out of scope:** `apps/tablet-client/` (separate codebase; subset of the same concerns), `apps/cloud-server/`, `apps/license-server/`, `ui/` front-end (separate audit recommended). The `ui/` IPC-binding surface is audited only insofar as it depends on the Rust commands in scope.
 
@@ -32,7 +33,7 @@
 
 ## 2. CRITICAL findings — RELEASE BLOCKERS
 
-### C-1 — Exchange rates use `f64` throughout (money-safety violation)
+### C-1 — Exchange rates use `f64` throughout (money-safety violation) **— CLOSED in Epic X-3 (see §11)**
 
 **Location:** `apps/desktop-client/src/commands/exchange_rates.rs:23, 54` (struct fields); `48` (validation); `65–80` (DB persistence path)
 
@@ -322,7 +323,7 @@ Bundles: **C-2**, **M-1**, **M-2**, **M-5**, **H-1** (formerly X-4). Touches `st
 ### Epic X-2 — "Network & Content Security Posture"
 Bundles: **C-3**, **C-4**, **H-2**. Touches `tauri.conf.json`, `lan_server.rs`, `commands::sync.rs`. One ticket tracked under `fix/network-security`.
 
-### Epic X-3 — "Money type safety" *(workspace-wide grep)*
+### Epic X-3 — "Money type safety" *(workspace-wide grep)* **— CLOSED (see §11)**
 Bundles: **C-1** plus the actual `f64`/`f32` money-domain hits across the workspace.
 
 Run the following (broader pattern, captures field declarations and parameter types as well as `Vec<f64>` container shapes):
@@ -349,7 +350,7 @@ Bundles: **H-3** (`set_brand_logo_path`) and **M-6** (`start_sale` empty currenc
 Top 5 — must land before a 0.0.5 release:
 
 1. **C-2** — Remove `unsafe { std::env::set_var }`; add typed config + watch channel. *(single highest-impact correctness/UB fix)*
-2. **C-1** — Convert `exchange_rates` to `i64` minor units across the whole module and DB schema.
+2. ~~**C-1** — Convert `exchange_rates` to `i64` minor units across the whole module and DB schema.~~ **CLOSED in Epic X-3 (see §11).**
 3. **C-3** — Enable a strict CSP in `tauri.conf.json`.
 4. **C-4** — Default-bind LAN server to `127.0.0.1` (with backward-compatible opt-in for `0.0.0.0` + PSK).
 5. **C-5** — Encrypt SQLite at rest + move license API key to OS credential store.
@@ -372,8 +373,10 @@ Anything else (H-1, H-2, H-3, M-*) can ship in 0.0.6 / 0.0.7 with no ejection fr
 | File                                                  | Status  | Lint   |
 |-------------------------------------------------------|---------|--------|
 | `apps/desktop-client/src/commands/features.rs`        | UNSAFE  | ISSUES |
-| `apps/desktop-client/src/commands/exchange_rates.rs`  | UNSAFE  | CLEAN  |
+| `apps/desktop-client/src/commands/exchange_rates.rs`  | SAFE ✅ | CLEAN  |
 | `apps/desktop-client/src/state.rs`                    | UNSAFE  | ISSUES |
+
+`exchange_rates.rs` flipped to SAFE on C-1 closure (Epic X-3, see §11). The other two stamped files remain UNSAFE pending Epic X-1 (state & concurrency) for `state.rs` and `commands/features.rs`.
 
 Each `.rs` carries a compact 5-line stamp block (`/* last audited … */`) at the very top, citing the audit date, crate, status, lint, and self-contained finding reference (file-internal line numbers + see-audit-doc pointer).
 
@@ -387,6 +390,12 @@ The next auditor should run the same baseline block **plus** the following non-c
 
 ```bash
 # C-1: f64/f32 in money-domain fields (run from project root)
+# Expected empty post-C-1 closure (Epic X-3) for crates/oz-core,
+# apps/desktop-client/src/, apps/tablet-client/src/,
+# platform/startup/src/, modules/currency/. Other directories
+# (oz-payment, oz-reporting) may still surface non-finite uses that
+# warrant follow-up tickets. The lone remaining f64 site in the FX
+# domain is `ExchangeRateRow::display_rate()` (presentation only).
 grep -rn ': f64\|: Option<f64>\|pub.*[0-9].*f64' \
     crates/oz-core crates/oz-payment crates/oz-reporting \
     modules/ apps/desktop-client/src/ \
@@ -420,4 +429,48 @@ Add the result of each grep to the next audit report under a "Closure" column. I
 
 ---
 
-*End of audit.*
+## 11. C-1 Closure (Epic X-3)
+
+**Status:** CLOSED — merged as part of the C-1 / X-3 PR on branch `0.0.5`. The single highest-impact money-safety defect in the audit foundation crate is fully remediated.
+
+### What changed (8 files)
+
+| File | Change |
+|------|--------|
+| `crates/oz-core/src/exchange_rate.rs` | `ExchangeRateRow.rate: f64` → `rate_millionths: i64`; new `display_rate()` helper. |
+| `crates/oz-core/migrations/071_exchange_rate_minor_units.sql` | NEW: `ADD COLUMN rate_millionths INTEGER DEFAULT 0` → `UPDATE … = ROUND(rate * 1e6)` → `DROP COLUMN rate`. Documented rollback path. |
+| `crates/oz-core/src/migrations.rs` | Registered migration `071` next to `070`. |
+| `crates/oz-core/src/db/settings.rs` | `list_exchange_rates` / `create_exchange_rate` / `upsert_exchange_rate` all consume `i64 millionths`; the `<= 0` validation guard added to `create_exchange_rate` (defence in depth — `upsert_exchange_rate` already had it). |
+| `crates/oz-core/tests/currency_integration.rs` | Full rewrite: 38 tests covering ordering, FK constraints, validation rejection, large/small rates, display_rate formatting, currency parsing, Money multi-currency, and roundtrips. |
+| `apps/desktop-client/src/commands/exchange_rates.rs` | `ExchangeRateDto` + `CreateExchangeRateArgs` use `rate_millionths: i64`; `<= 0` validation in command layer; tests updated. |
+| `apps/tablet-client/src/commands/exchange_rates.rs` | Same shape as desktop client. |
+| `platform/startup/src/rate_sync.rs` | Frankfurter daemon's `f64` rate now converted via `(*rate * RATE_SCALE).round() as i64` with documented clippy-allow at the cast; this is the only unavoidable `f64` site in the FX domain. |
+
+### Why this is end-to-end
+
+- The `<= 0.0` float comparison the audit called out is now `<= 0` on `i64` — sign-stable, no off-by-one near zero.
+- Every `f64` rate-literal in the codebase was replaced with an explicit `i64` millionths literal (every test fixture carries a comment like `// 0.92 → 920_000`).
+- `display_rate()` is the only place that reintroduces a `f64` for presentation; the underlying persistence is integer.
+- Schema migration 071 is forward-compatible: it backfills `rate_millionths` from the legacy `rate REAL` column with `ROUND(rate * 1e6)`, then drops the legacy column. New installs only see `rate_millionths INTEGER`.
+- `platform/startup/src/rate_sync.rs` is the lone consumer that still touches `f64` because the upstream Frankfurter API is unavoidably float; the cast is bounded (`< 1e7` per rate) and well within `i64::MAX`.
+
+### Test verification at PR time
+
+- `cargo build -p oz-core -p oz-pos-app -p oz-pos-tablet -p platform-startup` — exit 0
+- `cargo clippy -p oz-core -p platform-startup -p oz-pos-app -p oz-pos-tablet --lib --tests -- -D warnings` — exit 0, 0 warnings
+- `cargo test -p oz-core --lib` — 1052 passed, 0 failed
+- `cargo test -p oz-core --test currency_integration` — 38 passed, 0 failed
+- `cargo test -p platform-startup` — 27 passed, 0 failed
+- `cargo fmt --all -- --check` — clean
+
+### What is still open
+
+- The grep in §10 (C-1 line) is now expected to return **empty** for `crates/oz-core` `apps/desktop-client` `apps/tablet-client` `platform/startup` `modules/currency`. The next auditor should confirm the grep yields zero matches across all the directories the epic touched, and snapshot the diff against the pre-epic baseline at `docs/specs/_active/_archive/2026-07-12-baseline.txt` once that archive is created (the previous epic did not snapshot before remediation — backlog item).
+- **Legacy-data backfill hazard in migration 071**: if a pre-existing row had `rate = +Inf` (e.g. an early-API misconfiguration), SQLite's `CAST(Inf AS INTEGER)` clamps to `i64::MAX`; `rate = NaN` backfills to `0` via `CAST(NaN AS INTEGER)`. The new `<= 0` validation runs only on insert, not on the post-migration SELECT. Operators upgrading from a 0.0.4-or-earlier install with suspect legacy data should validate or wipe the `exchange_rates` table before applying 071. The migration is otherwise safe for well-formed legacy data.
+- **Front-end wire-format break** (`ExchangeRateDto` field rename): the field `rate: f64` is now `rate_millionths: i64` on both the desktop and tablet DTOs. Any TypeScript / React consumer of the Tauri command result that read `dto.rate` must update to `dto.rate_millionths` and divide by `1_000_000` for display. The React/TS `ui/` tree is out of this audit's scope but the `ui/src/api/exchange_rates.ts` (or equivalent) consumer is a follow-up ticket for the front-end team; until updated, the affected UI surfaces will read `undefined` and any pre-C-1 cached JSON in the browser will be stale. Pre-1.0 release makes the breaking change acceptable; documenting here so the next front-end PR picks it up.
+- **C-2 / C-3 / C-4 / C-5** remain 0.0.5 release-blockers. The X-3 closure unblocks the "money safety" half of the post-audit posture but does not address the network/CSP/license posture.
+- The `display_rate()` helper still uses `f64` internally for output formatting. A future refinement could replace it with a `rust_decimal` or pure integer string-arithmetic implementation; not blocking.
+
+---
+
+*End of audit (revision 2: C-1 closed, 4 release-blockers remain).*
