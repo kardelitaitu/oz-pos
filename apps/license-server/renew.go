@@ -60,6 +60,17 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Per-key activation lock (C2/C3 audit fix) ──────────────
+		// Serialise requests for the same license key to prevent a
+		// TOCTOU race: without this lock, two concurrent renewals for
+		// the same key can both read keyRecord.GetString("status") ==
+		// "unused" before either saves "activated", silently granting
+		// the customer an extra renewed subscription for one key
+		// purchase. Mirrors the same lock pattern used in activate.go
+		// so activation and renewal share the per-key mutex.
+		unlock := activationLocks.lock(req.Key)
+		defer unlock()
+
 		// ── Validate the NEW license key ──────────────────────────
 		keyRecord, err := app.FindFirstRecordByData("license_keys", "key", req.Key)
 		if err != nil || keyRecord.GetString("status") != "unused" {

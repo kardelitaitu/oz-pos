@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -948,6 +949,110 @@ func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
 	})
 }
 
+// TestRenewHandler_ConcurrentSameKey_OnlyOneWins verifies the C2/C3 audit
+// fix: when N parallel requests try to renew with the SAME license key
+// for the SAME tenant, exactly one wins (200 + signed_payload) and the
+// others get 401 "invalid or already used license key". The
+// activationLocks wrapper around the key-status check in renew.go
+// serialises concurrent attempts so the loser goroutines see
+// key.status="activated" (saved by the winner) and short-circuit.
+//
+// Without this lock, two goroutines can both read key.status="unused"
+// before either saves "activated", silently granting an extra renewed
+// subscription for one key purchase — the worst data-integrity bug in
+// the audit. N=5 chosen so all 5 goroutines pass ipRateLimiter.maxPerHr
+// (5 tokens/hr per IP) and reach the activationLocks contention.
+func TestRenewHandler_ConcurrentSameKey_OnlyOneWins(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "racerenew000001"
+	const apiKey = "racerenewkey00001"
+	const newKey = "OZ-RACE-RENEW-01"
+
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscription(t, app, tenantID, "pro", "active")
+	seedLicenseKey(t, app, newKey, "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+
+	const N = 5
+	var wg sync.WaitGroup
+	var codesMu sync.Mutex
+	codes := make([]int, N)
+	bodies := make([]string, N)
+
+	// Start-gate: fan out with zero stagger so the 5 goroutines hit
+	// the activationLocks window within the same scheduler tick. Without
+	// this, per-goroutine spawn-stagger (10s of µs) can let goroutine 1
+	// finish its renewal and unlock before goroutine 2 enters, which still
+	// proves the lock works but lets the test pass even if the lock were
+	// only PARTIALLY effective.
+	start := make(chan struct{})
+
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			body := strings.NewReader(
+				`{"tenant_id":"racerenew000001","api_key":"racerenewkey00001","key":"OZ-RACE-RENEW-01"}`)
+			req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			codesMu.Lock()
+			codes[idx] = rec.Code
+			bodies[idx] = rec.Body.String()
+			codesMu.Unlock()
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	successes, failLose := 0, 0
+	var firstWinBody, firstLoseBody string
+	for i, c := range codes {
+		switch c {
+		case http.StatusOK:
+			successes++
+			if firstWinBody == "" {
+				firstWinBody = bodies[i]
+			}
+		case http.StatusUnauthorized:
+			failLose++
+			if firstLoseBody == "" {
+				firstLoseBody = bodies[i]
+			}
+		}
+	}
+	if successes != 1 {
+		t.Errorf("expected exactly 1 winning renewal (race winner), got %d — all codes: %v",
+			successes, codes)
+	}
+	if successes+failLose != N {
+		t.Errorf("internal: result count %d != N=%d (all codes: %v)",
+			successes+failLose, N, codes)
+	}
+	// Pin the expected error message: the 4 losers should all report
+	// "invalid or already used license key" because the winner saved
+	// key.status="activated" before their key-record lookup. A regression
+	// returning 401 with a different body (e.g. "rate limit") would mean
+	// the rate limit caught them — which means the test setup leaked
+	// tokens and the lock was bypassed by ordering, not by fixing the
+	// race. Catch it explicitly.
+	if firstLoseBody != "" && !strings.Contains(firstLoseBody, "invalid or already used") {
+		t.Errorf("expected loser body to contain 'invalid or already used license key', got: %s", firstLoseBody)
+	}
+	if firstWinBody != "" && !strings.Contains(firstWinBody, "signed_payload") {
+		t.Errorf("expected winner body to contain 'signed_payload', got: %s", firstWinBody)
+	}
+}
+
 func TestActivateHandler_RateLimited(t *testing.T) {
 	resetRateLimiters()
 
@@ -1601,5 +1706,45 @@ func TestKeyFailureTracker_CooldownEnvOverride(t *testing.T) {
 	t.Setenv("LICENSE_KEY_COOLDOWN", "not-a-duration")
 	if got := parseCooldown(); got != defaultKeyCooldown {
 		t.Errorf("expected defaultKeyCooldown=%v with malformed env, got %v", defaultKeyCooldown, got)
+	}
+}
+
+func TestActivateHandler_MachineAlreadyExists(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "reinstallten001", "reinstallkey0001", "active")
+	seedLicenseKey(t, app, "OZ-REINSTALL-01", "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{
+		"key": "OZ-REINSTALL-01",
+		"email": "reinstallten001@example.com",
+		"machine_id": "reinstallmac001",
+		"api_key": "reinstallkey0001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, _ := se.Router.BuildMux()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first activation failed: %v", rec.Body.String())
+	}
+
+	body2 := strings.NewReader(`{
+		"key": "OZ-REINSTALL-01",
+		"email": "reinstallten001@example.com",
+		"machine_id": "reinstallmac001",
+		"api_key": "reinstallkey0001"
+	}`)
+	req2 := httptest.NewRequest("POST", "/api/v1/license/activate", body2)
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("second activation failed (machine already exists): %v", rec2.Body.String())
 	}
 }
