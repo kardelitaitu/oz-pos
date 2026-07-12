@@ -1,11 +1,5 @@
 #![warn(missing_docs)]
-// Suppress the lib-test duplicate of clippy::collapsible_if when running
-// `cargo clippy --all-targets` (the same source line gets linted once in
-// the lib target and again under --cfg test, producing 2 warning rows for
-// 1 logical lint). The lib target still fires the warning, so newly
-// introduced collapsible_if patterns remain visible on the lib pass.
-// `allow` is preferred over `expect` because the user explicitly chose the
-// "live with 2 rows" alternative if the suppression ever becomes incorrect.
+// suppress the lib-test duplicate of clippy::collapsible_if on `cargo clippy --all-targets` (lib target still surfaces it). Remove me when the lint is fixed.
 #![cfg_attr(test, allow(clippy::collapsible_if))]
 
 //! OZ-POS tablet shell (Tauri v2 mobile).
