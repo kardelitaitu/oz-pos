@@ -164,7 +164,8 @@ pub async fn create_workspace_instance_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
-    store.enforce_instance_quota(&sub.tier, &req.type_key, &req.store_id)?;
+    let effective = sub.effective_tier();
+    store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance(
         &req.id,
         &req.type_key,
@@ -212,12 +213,13 @@ pub async fn recover_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let restored = store.auto_recover_instances(&session.store_id, &sub.tier)?;
+    let effective = sub.effective_tier();
+    let restored = store.auto_recover_instances(&session.store_id, &effective)?;
     drop(db);
     tracing::info!(
         store_id = %session.store_id,
         restored = %restored,
-        tier = %sub.tier.name(),
+        tier = %effective.name(),
         "workspace instances recovered after tier upgrade"
     );
     Ok(restored as u32)
@@ -252,12 +254,13 @@ pub async fn suspend_surplus_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let suspended = store.suspend_surplus_instances(&session.store_id, &sub.tier)?;
+    let effective = sub.effective_tier();
+    let suspended = store.suspend_surplus_instances(&session.store_id, &effective)?;
     drop(db);
     tracing::info!(
         store_id = %session.store_id,
         suspended = %suspended,
-        tier = %sub.tier.name(),
+        tier = %effective.name(),
         "surplus workspace instances suspended after tier downgrade"
     );
     Ok(suspended as u32)
@@ -400,7 +403,8 @@ pub async fn create_workspace_instance(
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &caller_user_id, permissions::STAFF_UPDATE)?;
-    store.enforce_instance_quota(&sub.tier, &req.type_key, &req.store_id)?;
+    let effective = sub.effective_tier();
+    store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance(
         &req.id,
         &req.type_key,

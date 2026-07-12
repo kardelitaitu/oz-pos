@@ -73,20 +73,17 @@ pub async fn activate_license(
     let stored_api_key: Option<String> = {
         let conn = state.db.lock().await;
         let raw = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
-        match raw {
-            Some(ref v) => Some(
-                // Try decryption first (new format: base64 ciphertext).
-                // If that fails, assume the value is legacy plaintext and
-                // return it as-is. It will be encrypted on the next write.
-                decrypt_api_key(v, &machine_id).unwrap_or_else(|e| {
-                    tracing::warn!(
-                        "license.api_key decryption failed, treating as legacy plaintext: {e}"
-                    );
-                    v.clone()
-                }),
-            ),
-            None => None,
-        }
+        raw.as_ref().map(|v| {
+            // Try decryption first (new format: base64 ciphertext).
+            // If that fails, assume the value is legacy plaintext and
+            // return it as-is. It will be encrypted on the next write.
+            decrypt_api_key(v, &machine_id).unwrap_or_else(|e| {
+                tracing::warn!(
+                    "license.api_key decryption failed, treating as legacy plaintext: {e}"
+                );
+                v.clone()
+            })
+        })
     };
 
     let phone_clone = phone.clone();
