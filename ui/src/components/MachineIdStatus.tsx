@@ -48,27 +48,8 @@ export default function MachineIdStatus() {
       aria-label={`Hardware ID: ${displayId}. Click to copy.`}
       style={{ cursor: machineId ? 'pointer' : 'default' }}
     >
-      {/* CPU / fingerprint icon */}
-      <svg
-        className="machine-id-icon"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="7" y="7" width="10" height="10" rx="1" />
-        <path d="M10 7V4M14 7V4M10 20v-3M14 20v-3M7 10H4M7 14H4M20 10h-3M20 14h-3" />
-      </svg>
-
-      <span className="connection-label">HW ID</span>
       <span className="connection-latency machine-id-value">{displayId}</span>
 
-      {/* Copy icon — appears on hover when ID is available */}
       {machineId && (
         <svg
           className="machine-id-copy-icon"

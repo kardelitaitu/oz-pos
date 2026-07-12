@@ -6,17 +6,6 @@
   letter-spacing: 0.01em;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
-
-.machine-id-icon {
-  color: var(--color-fg-secondary);
-  flex-shrink: 0;
-  transition: color 0.15s;
-}
-
-.machine-id-chip--ready:hover .machine-id-icon {
-  color: var(--primary-500);
-}
-
 .machine-id-value {
   letter-spacing: 0.06em;
   font-size: 0.7rem;
