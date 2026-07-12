@@ -121,9 +121,6 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// spurious tenant record that would never be cleaned up.
 			if keyStatus != "unused" && keyStatus != "" {
 				errMsg := "invalid or already used license key"
-				if keyStatus == "activated" {
-					errMsg = "Wrong email or phone number"
-				}
 				keyFailTracker.recordFailure(req.Key)
 				return e.JSON(http.StatusUnauthorized, map[string]any{
 					"error": errMsg,
@@ -254,11 +251,13 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// ── Key activated by a different tenant ───────────────
 			// The key is already activated, but the activated_by tenant
 			// does not match this email's tenant — the caller supplied an
-			// email that doesn't belong to the key's owner.
+			// email that doesn't belong to the key's owner. Use the same
+			// generic message as unused/revoked keys to avoid leaking
+			// whether a key exists and is activated (information disclosure).
 			if keyStatus == "activated" && activatedBy != tenant.Id {
 				keyFailTracker.recordFailure(req.Key)
 				return e.JSON(http.StatusUnauthorized, map[string]any{
-					"error": "Wrong email or phone number",
+					"error": "invalid or already used license key",
 				})
 			}
 

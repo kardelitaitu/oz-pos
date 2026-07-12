@@ -563,7 +563,7 @@ func TestActivateHandler_AlreadyUsedKey_WrongEmail(t *testing.T) {
 			"machine_id": "usedmachin00001"
 		}`),
 		ExpectedStatus:  401,
-		ExpectedContent: []string{`"error"`, "Wrong email or phone number"},
+		ExpectedContent: []string{`"error"`, "invalid or already used license key"},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 			seedLicenseKey(t.(*testing.T), app,
 				"OZ-USED-KEY-00001", "pro", "activated",
@@ -3040,7 +3040,7 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 	})
 
 	// ── Step 3: re-activate with wrong email ────────────────────
-	// Should be rejected with 401 "Wrong email or phone number".
+	// Should be rejected with 401 "invalid or already used license key".
 	t.Run("step3_wrong_email_rejected", func(t *testing.T) {
 		body := strings.NewReader(fmt.Sprintf(`{
 			"key": "%s",
@@ -3055,8 +3055,8 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401 (wrong email), got %d: %s", rec.Code, rec.Body.String())
 		}
-		if !strings.Contains(rec.Body.String(), "Wrong email or phone number") {
-			t.Errorf("expected 'Wrong email or phone number', got: %s", rec.Body.String())
+		if !strings.Contains(rec.Body.String(), "invalid or already used license key") {
+			t.Errorf("expected 'invalid or already used license key', got: %s", rec.Body.String())
 		}
 
 		// Must NOT have created a spurious tenant for the wrong email.
@@ -3172,8 +3172,8 @@ func TestActivateHandler_DifferentTenantReturnsWrongEmailError(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 (wrong email for key), got %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "Wrong email or phone number") {
-		t.Errorf("expected 'Wrong email or phone number', got: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "invalid or already used license key") {
+		t.Errorf("expected 'invalid or already used license key', got: %s", rec.Body.String())
 	}
 }
 
