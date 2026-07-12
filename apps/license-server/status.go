@@ -35,7 +35,7 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 				"error": "missing or malformed Authorization header (expected: Bearer <api_key>)",
 			})
 		}
-		apiKey := strings.TrimPrefix(auth, bearerPrefix)
+		apiKey := strings.TrimSpace(strings.TrimPrefix(auth, bearerPrefix))
 		if apiKey == "" {
 			log.Printf("/status: empty api_key after Bearer prefix")
 			return e.JSON(http.StatusUnauthorized, map[string]any{
