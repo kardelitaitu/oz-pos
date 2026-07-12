@@ -11,9 +11,25 @@ export interface LicenseStatusDto {
   message: string | null;
 }
 
+/** Server-authoritative license status (from the license server). */
+export interface ServerLicenseStatus {
+  tenantId: string;
+  status: string;
+  tier: string;
+  active: boolean;
+  expiresAt: string | null;
+  graceUntil: string | null;
+  maxStores: number;
+}
+
 /** Get the current license activation and verification status. */
 export async function getLicenseStatus(): Promise<LicenseStatusDto> {
   return invoke('get_license_status');
+}
+
+/** Check license status against the PocketBase server for authoritative current state. */
+export async function checkLicenseStatus(): Promise<ServerLicenseStatus> {
+  return invoke('check_license_status');
 }
 
 /** Get the unique machine identifier for device-bound license activation. */

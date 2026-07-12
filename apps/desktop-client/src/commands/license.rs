@@ -9,7 +9,7 @@ use oz_core::Settings;
 use oz_core::crypto::{decrypt_api_key, encrypt_api_key};
 use oz_core::license_verification::{
     ActivateLicenseRequest, SignedSubscriptionPayload, activate_license as core_activate_license,
-    verify_license_signature,
+    check_license_status as core_check_license_status, verify_license_signature,
 };
 
 use crate::error::AppError;
@@ -208,6 +208,75 @@ fn generate_machine_id() -> String {
     hex_str[..MACHINE_ID_LEN].to_string()
 }
 
+/// Data transfer object for server-authoritative license status.
+/// Mirrors `oz_core::LicenseStatusResponse` but lives in this crate
+/// so Tauri can serialize it over IPC.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerLicenseStatusDto {
+    /// The tenant ID.
+    pub tenant_id: String,
+    /// The subscription status.
+    pub status: String,
+    /// The tier key (free, pro, premium, enterprise).
+    pub tier: String,
+    /// Whether the subscription is active.
+    pub active: bool,
+    /// When the subscription expires (RFC 3339).
+    pub expires_at: Option<String>,
+    /// When the grace period ends (RFC 3339).
+    pub grace_until: Option<String>,
+    /// Maximum stores allowed.
+    pub max_stores: i64,
+}
+
+/// Checks the license status against the PocketBase license server.
+///
+/// Unlike [`get_license_status`] which reads locally-stored data, this
+/// command calls the server's `/api/v1/license/status` endpoint to get
+/// the authoritative current status (e.g. whether the license has been
+/// revoked or downgraded since last activation).
+///
+/// The stored API key is decrypted and sent as a Bearer token for
+/// authentication. Returns the server's response directly.
+#[command]
+pub async fn check_license_status(
+    state: State<'_, AppState>,
+) -> Result<ServerLicenseStatusDto, AppError> {
+    let (api_key_encrypted, machine_id) = {
+        let conn = state.db.lock().await;
+        let api_key_enc = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
+        let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
+        (api_key_enc, mid)
+    };
+
+    let api_key = match api_key_encrypted {
+        Some(ref v) => decrypt_api_key(v, &machine_id).unwrap_or_else(|e| {
+            tracing::warn!("license.api_key decryption failed, treating as legacy plaintext: {e}");
+            v.clone()
+        }),
+        None => {
+            return Err(AppError::Invalid(
+                "No license activated. Activate first.".into(),
+            ));
+        }
+    };
+
+    let resp = core_check_license_status(&api_key)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(ServerLicenseStatusDto {
+        tenant_id: resp.tenant_id,
+        status: resp.status,
+        tier: resp.tier,
+        active: resp.active,
+        expires_at: resp.expires_at,
+        grace_until: resp.grace_until,
+        max_stores: resp.max_stores,
+    })
+}
+
 /// Analyzes the local license state and returns a comprehensive status response.
 #[command]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseStatusDto, AppError> {
@@ -396,5 +465,42 @@ mod tests {
             "should be SystemClockTampered, got: {err:?}"
         );
         assert!(err.to_string().contains("system clock tampered"));
+    }
+
+    // ── ServerLicenseStatusDto tests ────────────────────────────
+
+    #[test]
+    fn server_license_status_dto_camel_case() {
+        let dto = ServerLicenseStatusDto {
+            tenant_id: "test-tenant".into(),
+            status: "active".into(),
+            tier: "pro".into(),
+            active: true,
+            expires_at: Some("2027-01-01T00:00:00Z".into()),
+            grace_until: Some("2027-01-15T00:00:00Z".into()),
+            max_stores: 2,
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("\"tenantId\""));
+        assert!(json.contains("\"expiresAt\""));
+        assert!(json.contains("\"graceUntil\""));
+        assert!(json.contains("\"maxStores\""));
+        assert!(json.contains("\"active\":true"));
+    }
+
+    #[test]
+    fn server_license_status_dto_null_optionals() {
+        let dto = ServerLicenseStatusDto {
+            tenant_id: "t1".into(),
+            status: "canceled".into(),
+            tier: "free".into(),
+            active: false,
+            expires_at: None,
+            grace_until: None,
+            max_stores: 1,
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("\"expiresAt\":null"));
+        assert!(json.contains("\"graceUntil\":null"));
     }
 }
