@@ -82,10 +82,12 @@ impl Serialize for AppError {
         #[serde(tag = "kind", rename_all = "camelCase")]
         enum AppErrorDto<'a> {
             Core {
+                #[serde(rename = "subKind")]
                 sub_kind: &'a CoreErrorKind,
                 message: &'a str,
             },
             Hardware {
+                #[serde(rename = "subKind")]
                 sub_kind: &'a HalErrorKind,
                 message: &'a str,
             },
