@@ -481,6 +481,23 @@ func (kf *keyFailureTracker) recordFailure(key string) {
 	}
 }
 
+// clearKey removes a key from the failure tracker (in-memory + SQLite).
+// Used when a legitimate re-activation succeeds, so accumulated failure
+// counts from auth mismatches don't block the same key forever.
+func (kf *keyFailureTracker) clearKey(key string) {
+	kf.mu.Lock()
+	delete(kf.failures, key)
+	kf.mu.Unlock()
+
+	if kf.db != nil {
+		if _, err := kf.db.DB().NewQuery(
+			`DELETE FROM rate_limit_key_failures WHERE key = {:key}`,
+		).Bind(map[string]any{"key": key}).Execute(); err != nil {
+			log.Printf("keyFailTracker: failed to delete persisted failure for key=%q: %v", key, err)
+		}
+	}
+}
+
 // ── Persistence (H2 audit) ────────────────────────────────────────
 
 // attachPersistence wires the tracker to a PocketBase app's SQLite
