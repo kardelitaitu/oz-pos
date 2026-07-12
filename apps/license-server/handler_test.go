@@ -27,6 +27,15 @@ import (
 func newTestAppFactory(t *testing.T) *tests.TestApp {
 	t.Helper()
 
+	// Detach stale SQLite handles from prior tests so that
+	// attachPersistence in registerTestRoutes always binds to
+	// THIS test's fresh app rather than holding a dangling
+	// pointer to a previous test's (potentially cleaned-up) DB.
+	// Without this, runScenario-based tests (which don't call
+	// resetRateLimiters() themselves) can panic at rl.db.DB()
+	// inside persistBucket when the handler fires allow().
+	resetRateLimiters()
+
 	app, err := tests.NewTestApp()
 	if err != nil {
 		t.Fatalf("failed to create test app: %v", err)
