@@ -6,6 +6,7 @@ import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import MachineIdStatus from '@/components/MachineIdStatus';
 import { Localized, useLocalization } from '@fluent/react';
+import ThemeToggle from '@/frontend/shell/ThemeToggle';
 import './LicenseActivationScreen.css';
 
 /** Props for the LicenseActivationScreen component. */
@@ -131,6 +132,9 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       onContextMenu={handleGlobalContextMenu}
       onClick={() => setContextMenu(null)}
     >
+      <div style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 1000 }}>
+        <ThemeToggle />
+      </div>
       <div className="license-activation-layout">
         <div className="license-activation-hero">
           <img src="/256x256.png" alt="OZ-POS Logo" className="license-activation-logo" />
