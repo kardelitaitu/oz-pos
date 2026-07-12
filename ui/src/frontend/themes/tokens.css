@@ -249,10 +249,10 @@
 
   /* Semantic colour tokens (light) */
   --color-bg:              var(--neutral-200);
-  --color-bg-elevated:     #ffffff;
+  --color-bg-elevated:     var(--neutral-100);
   --color-bg-surface:      var(--neutral-300);
   --color-bg-overlay:      rgba(0, 0, 0, 0.4);
-  --color-bg-input:        #ffffff;
+  --color-bg-input:        var(--neutral-50);
 
   --color-fg:              var(--neutral-900);
   --color-fg-primary:      var(--neutral-950);
@@ -291,7 +291,7 @@
   --color-link-hover:      var(--primary-700);
   --color-link-visited:    #7c3aed;
 
-  --color-bg-primary:      #ffffff;
+  --color-bg-primary:      var(--neutral-50);
   --color-bg-secondary:    var(--neutral-100);
   --color-bg-hover:        var(--neutral-300);
 
