@@ -49,7 +49,9 @@ vi.mock('@fluent/react', () => ({
         'auth-activate-subtitle': 'Enter your information below',
         'auth-email-label': 'Email Address',
         'auth-phone-label': 'Phone Number',
-        'auth-license-label': 'License Key'
+        'auth-license-label': 'License Key',
+        'auth-validation-phone-required': 'Phone number is required.',
+        'auth-validation-invalid-phone': 'Invalid phone number format.'
       };
       return (map as any)[id] || id;
     }
@@ -65,6 +67,9 @@ vi.mock('@/components/ConnectionStatus', () => ({
 }));
 vi.mock('@/components/MachineIdStatus', () => ({
   default: () => <div data-testid="conn-status-machine-id">Machine Status</div>
+}));
+vi.mock('@/frontend/shell/ThemeToggle', () => ({
+  default: () => <div data-testid="theme-toggle">ThemeToggle</div>,
 }));
 
 describe('LicenseActivationScreen - Exhaustive Suite', () => {
@@ -170,9 +175,10 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       expect(screen.getByRole('button', { name: /Activate License/i })).toBeDisabled();
     });
 
-    it('14. Activate License button is enabled only when both email and key have text', () => {
+    it('14. Activate License button is enabled only when email, phone, and key have text', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       expect(screen.getByRole('button', { name: /Activate License/i })).toBeEnabled();
     });
@@ -213,6 +219,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -229,6 +236,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -242,6 +250,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       const submitBtn = screen.getByRole('button', { name: /Activate License/i });
       await userEvent.click(submitBtn);
@@ -256,6 +265,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -269,6 +279,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       const { container } = render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -283,6 +294,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
@@ -295,6 +307,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     it('24. Submitting with whitespace-only Key shows validation error', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@example.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: '   ' } });
       
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
@@ -305,34 +318,37 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     it('25. Submitting trims whitespace from the Email payload', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: '  test@test.com  ' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '  08123456789  ' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', ''));
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'));
     });
 
     it('26. Submitting trims whitespace from the License Key payload', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: '  KEY123  ' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', ''));
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'));
     });
 
     it('27. Submitting trims whitespace from the Phone payload', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '  1234  ' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '  08123456789  ' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '1234'));
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'));
     });
 
     it('28. Happy path: Successful activation calls getMachineId, activateLicense, fires success toast', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -348,6 +364,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       vi.mocked(activateLicense).mockResolvedValue(false);
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -368,6 +385,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       
       const submitBtn = screen.getByRole('button', { name: /Activate License/i });
@@ -384,6 +402,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       vi.mocked(activateLicense).mockRejectedValue(new Error('Network Failure 500'));
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -394,6 +413,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       vi.mocked(activateLicense).mockRejectedValue('String Error');
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -404,6 +424,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       vi.mocked(activateLicense).mockRejectedValue({ message: 'Object Error' });
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
@@ -414,6 +435,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       vi.mocked(activateLicense).mockRejectedValue({ unknown: true });
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
+      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
       await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
       
