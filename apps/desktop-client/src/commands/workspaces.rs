@@ -656,6 +656,36 @@ pub struct BootResolution {
     pub instance_id: Option<String>,
 }
 
+/// Verify a device-binding HMAC signature using constant-time comparison.
+///
+/// Uses `mac.verify_slice()` which internally uses `subtle::ConstantTimeEq`
+/// to prevent timing side-channel attacks. The previous implementation
+/// used `hex::encode(mac.finalize().into_bytes()) == signature`, which
+/// short-circuits on the first differing byte — leaking the position
+/// of the mismatch to an attacker.
+fn verify_binding_hmac(
+    secret: &str,
+    terminal_id: &str,
+    store_id: &str,
+    instance_id: &str,
+    hex_signature: &str,
+) -> bool {
+    let expected_bytes = match hex::decode(hex_signature) {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+    let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    mac.update(terminal_id.as_bytes());
+    mac.update(b":");
+    mac.update(store_id.as_bytes());
+    mac.update(b":");
+    mac.update(instance_id.as_bytes());
+    mac.verify_slice(&expected_bytes).is_ok()
+}
+
 /// Resolve the active store and instance from device binding.
 ///
 /// This is called once at boot time (before authentication). It does not use
@@ -718,16 +748,13 @@ pub async fn resolve_boot_store(
                 .map_err(|e| AppError::Internal(format!("keyring read failed: {e}")))?;
 
             match secret {
-                Some(secret) => {
-                    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-                        .map_err(|e| AppError::Internal(format!("HMAC init failed: {e}")))?;
-                    mac.update(terminal_id.as_bytes());
-                    mac.update(b":");
-                    mac.update(bound_store_id.as_bytes());
-                    mac.update(b":");
-                    mac.update(bound_instance_id.as_bytes());
-                    hex::encode(mac.finalize().into_bytes()) == signature
-                }
+                Some(secret) => verify_binding_hmac(
+                    &secret,
+                    &terminal_id,
+                    &bound_store_id,
+                    &bound_instance_id,
+                    &signature,
+                ),
                 None => false,
             }
         };
