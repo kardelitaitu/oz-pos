@@ -1949,6 +1949,251 @@ func TestRateLimiter_PermittedAfterSQLiteClosed(t *testing.T) {
 	keyFailTracker.recordFailure("OZ-CLOSED-DB001")
 }
 
+// TestRateLimiter_PersistBucket_MonotonicUnderConcurrentWrites proves
+// the MIN/MAX UPSERT guards introduced in the H2 audit fix hold under
+// concurrent writers. The attack scenario the guards defend against:
+//
+//   - N concurrent requests all try to UPSERT the same (ip) row.
+//   - allow() releases the in-memory mutex BEFORE write-through, so
+//     UPSERTs can land in any order from SQLite's perspective.
+//   - Without MIN/MAX, the LAST UPSERT wins; persisted tokens could
+//     end up anywhere in the set of snap values, letting an attacker
+//     bypass the rate limit after a server restart.
+//
+// The inner burst races N=20 persistBucket calls into the same row with
+// distinct snapTokens ∈ {0..19} and monotonically increasing last_fill
+// timestamps plus a pre-seeded tokens=5 (the production maxPerHr). The
+// final persisted row MUST reflect MIN(tokens) over all writers (=0) and
+// MAX(last_fill) (= the latest snap's timestamp) regardless of UPSERT
+// ordering. Deterministic with MIN/MAX; flaky / wrong without.
+//
+// Outer loop (iters=50) amplifies catch-rate when MIN/MAX guards are
+// absent: a single-run stale-snapshot winner arriving last has only a
+// 1-in-N+1 chance of coincidentally being snapTokens=0. Repeating the
+// burst under independent ticker interleavings 50× raises the probability
+// of catching the regression to ~91% (1 - (20/21)^50). With MIN/MAX
+// every iteration is deterministic so this loop adds no flakiness.
+func TestRateLimiter_PersistBucket_MonotonicUnderConcurrentWrites(t *testing.T) {
+	resetRateLimiters()
+	app, _ := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const (
+		fixedIP         = "192.0.2.99"
+		N               = 20
+		iters           = 50
+		preSeedTokens   = 5
+		preSeedLastFill = "2025-12-31T23:59:00Z"
+	)
+
+	for iter := 0; iter < iters; iter++ {
+		// Per-iter reset — drop the previous iteration's row so the
+		// pre-seed INSERT below always wins the (ip) primary key on
+		// iter 1+, and the test doesn't grow stale carry-over state.
+		if _, err := app.DB().NewQuery(
+			`DELETE FROM rate_limit_ip_buckets WHERE ip = {:ip}`,
+		).Bind(map[string]any{"ip": fixedIP}).Execute(); err != nil {
+			t.Fatalf("iter %d: pre-iter delete failed: %v", iter, err)
+		}
+
+		// Pre-seed a row at tokens=5 (maxPerHr) with an older
+		// last_fill. This stands in for an "earlier happy state" that
+		// a concurrent burst must NOT regress to when a throttled
+		// state arrives later.
+		if _, err := app.DB().NewQuery(
+			`INSERT INTO rate_limit_ip_buckets (ip, tokens, last_fill)
+			 VALUES ({:ip}, {:tokens}, {:last_fill})`,
+		).Bind(map[string]any{
+			"ip":        fixedIP,
+			"tokens":    preSeedTokens,
+			"last_fill": preSeedLastFill,
+		}).Execute(); err != nil {
+			t.Fatalf("iter %d: pre-seed insert failed: %v", iter, err)
+		}
+
+		// Concurrent burst. start-gate + sync.WaitGroup ensures
+		// deterministic fan-out (avoids spawn-stagger variance that
+		// could let writer N-1 finish before writer 0 enters the
+		// UPSERT window).
+		var (
+			start = make(chan struct{})
+			wg    sync.WaitGroup
+		)
+		for i := 0; i < N; i++ {
+			wg.Add(1)
+			// Pass iter explicitly to the goroutine. Without this
+			// the test relies on Go 1.22+ per-iteration loop-variable
+			// scoping; on Go 1.21- every t.Errorf would report the
+			// final iter value (50), making error attribution useless
+			// on a flake.
+			go func(snapTokens int, iterID int) {
+				defer wg.Done()
+				<-start // synchronize fan-out
+				snapFill := time.Date(2026, 1, 1, 0, 0, snapTokens, 0, time.UTC)
+				if err := ipRateLimiter.persistBucket(fixedIP, snapTokens, snapFill); err != nil {
+					t.Errorf("iter %d: persistBucket(snapTokens=%d) failed: %v", iterID, snapTokens, err)
+				}
+			}(i, iter)
+		}
+		close(start)
+		wg.Wait()
+
+		// Read back the row and assert MIN/MAX held. The MIN is
+		// computed across the snap set {0..19} plus the pre-seed {5}:
+		// the absolute minimum is 0. Without MIN/MAX the value would
+		// be the LAST UPSERT's snapTokens ∈ {0..19}, and the LAST
+		// fill depends on which goroutine arrived last.
+		rows, err := app.DB().NewQuery(
+			`SELECT tokens, last_fill FROM rate_limit_ip_buckets WHERE ip = {:ip}`,
+		).Bind(map[string]any{"ip": fixedIP}).Rows()
+		if err != nil {
+			t.Fatalf("iter %d: query failed: %v", iter, err)
+		}
+		if !rows.Next() {
+			rows.Close()
+			t.Fatalf("iter %d: persisted row missing after concurrent write burst", iter)
+		}
+		var dbTokens int
+		var dbLastFill string
+		if err := rows.Scan(&dbTokens, &dbLastFill); err != nil {
+			rows.Close()
+			t.Fatalf("iter %d: scan failed: %v", iter, err)
+		}
+		rows.Close()
+
+		// MIN over snap tokens {0..19} ∪ pre-seed = 0 (snapTokens=0
+		// is the strict minimum). Without MIN/MAX the race could
+		// land us at any value in {0..19, pre-seed=5}.
+		const expectedMinTokens = 0
+		if dbTokens != expectedMinTokens {
+			t.Errorf("iter %d: MIN(tokens) over concurrent UPSERTs should be %d, got %d (without MIN/MAX the LAST write wins, producing a non-deterministic value)",
+				iter, expectedMinTokens, dbTokens)
+		}
+
+		// MAX over last_fill values: pre-seed is the oldest, snap
+		// fills are 2026-01-01T00:00:00Z .. 2026-01-01T00:00:19Z.
+		// snap N-1=19 wins.
+		expectedMaxFill := time.Date(2026, 1, 1, 0, 0, N-1, 0, time.UTC).Format(time.RFC3339)
+		if dbLastFill != expectedMaxFill {
+			t.Errorf("iter %d: MAX(last_fill) over concurrent UPSERTs should be %s, got %s",
+				iter, expectedMaxFill, dbLastFill)
+		}
+	}
+}
+
+// TestKeyFailureTracker_PersistFailure_MonotonicUnderConcurrentWrites
+// proves the MAX UPSERT guards on rate_limit_key_failures hold under
+// concurrent writers. Mirrors the rateLimiter race test: N goroutines
+// race into the same (key) row with monotonically increasing snap counts
+// and cooldown timestamps; the final persisted values MUST be MAX(count)
+// and MAX(cooldown_until) regardless of UPSERT ordering.
+//
+// The attack scenario this defends against: an attacker brute-forces a
+// key, the server enforces cooldown, server restarts. Without MAX
+// guards, the LAST UPSERT could land at a stale lower count or shorter
+// cooldown window, allowing continued attacks after a server restart.
+//
+// Outer loop (iters=50) amplifies catch-rate: under MAX guards every
+// iteration is deterministic (= max snapCount). Without MAX the LAST
+// UPSERT could land on any of {0..9}, only 1/N chance per iter of
+// coincidentally winning. 50 iters → ~99.5% catch rate.
+func TestKeyFailureTracker_PersistFailure_MonotonicUnderConcurrentWrites(t *testing.T) {
+	resetRateLimiters()
+	app, _ := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const (
+		fixedKey = "OZ-MINMAX-RACE-1"
+		N        = 10 // includes snapCounts 0..9; counts >=3 (= max) carry cooldowns
+		iters    = 50
+	)
+	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	for iter := 0; iter < iters; iter++ {
+		// Per-iter reset — drop the previous iteration's row so the
+		// burst starts from a clean slate, not from the last iter's
+		// wins. (No pre-seed here because persistFailure itself
+		// handles cold starts by INSERT on first conflict.)
+		if _, err := app.DB().NewQuery(
+			`DELETE FROM rate_limit_key_failures WHERE key = {:key}`,
+		).Bind(map[string]any{"key": fixedKey}).Execute(); err != nil {
+			t.Fatalf("iter %d: pre-iter delete failed: %v", iter, err)
+		}
+
+		// Concurrent burst with snap counts {0, 1, ..., 9}. Counts
+		// 0..2 don't trigger cooldown (max=3); counts 3+ do.
+		// Cooldown timestamps monotonically increase so MAX is
+		// testable.
+		var (
+			start = make(chan struct{})
+			wg    sync.WaitGroup
+		)
+		for i := 0; i < N; i++ {
+			wg.Add(1)
+			go func(snapCount int, iterID int) {
+				defer wg.Done()
+				<-start // synchronize fan-out
+				snapLastAttempt := baseTime.Add(time.Duration(snapCount) * time.Second)
+				var snapCooldown time.Time
+				if snapCount >= 3 {
+					// Distinct cooldown timestamps for each writer
+					// so MAX picks exactly the latest (= writer N-1).
+					snapCooldown = baseTime.Add(time.Duration(snapCount) * time.Minute)
+				}
+				if err := keyFailTracker.persistFailure(fixedKey, snapCount, snapLastAttempt, snapCooldown); err != nil {
+					t.Errorf("iter %d: persistFailure(snapCount=%d) failed: %v", iterID, snapCount, err)
+				}
+			}(i, iter)
+		}
+		close(start)
+		wg.Wait()
+
+		// Read back the row and assert MAX held.
+		rows, err := app.DB().NewQuery(
+			`SELECT count, last_attempt, cooldown_until FROM rate_limit_key_failures WHERE key = {:key}`,
+		).Bind(map[string]any{"key": fixedKey}).Rows()
+		if err != nil {
+			t.Fatalf("iter %d: query failed: %v", iter, err)
+		}
+		if !rows.Next() {
+			rows.Close()
+			t.Fatalf("iter %d: persisted row missing after concurrent write burst", iter)
+		}
+		var dbCount int
+		var dbLastAttempt, dbCooldown string
+		if err := rows.Scan(&dbCount, &dbLastAttempt, &dbCooldown); err != nil {
+			rows.Close()
+			t.Fatalf("iter %d: scan failed: %v", iter, err)
+		}
+		rows.Close()
+
+		// MAX over snap counts {0..9} = 9 (writer N-1). Without MAX
+		// last-write-wins could land us at any snap count ∈ {0..9}.
+		const expectedMaxCount = N - 1
+		if dbCount != expectedMaxCount {
+			t.Errorf("iter %d: MAX(count) over concurrent UPSERTs should be %d, got %d (without MAX the LAST write wins, producing a non-deterministic value)",
+				iter, expectedMaxCount, dbCount)
+		}
+
+		// MAX over last_attempt: base + snapCount*1s. Writer N-1=9
+		// had base+9s. MAX = base+9s.
+		expectedMaxLastAttempt := baseTime.Add(time.Duration(N-1) * time.Second).Format(time.RFC3339)
+		if dbLastAttempt != expectedMaxLastAttempt {
+			t.Errorf("iter %d: MAX(last_attempt) over concurrent UPSERTs should be %s, got %s",
+				iter, expectedMaxLastAttempt, dbLastAttempt)
+		}
+
+		// MAX over cooldown_until: only writers with snapCount >= 3
+		// carry a non-empty cooldown. The largest snap (9) wins:
+		// base + 9*1min = base + 9 minutes.
+		expectedMaxCooldown := baseTime.Add(time.Duration(N-1) * time.Minute).Format(time.RFC3339)
+		if dbCooldown != expectedMaxCooldown {
+			t.Errorf("iter %d: MAX(cooldown_until) over concurrent UPSERTs should be %s, got %s",
+				iter, expectedMaxCooldown, dbCooldown)
+		}
+	}
+}
+
 func TestActivateHandler_MachineAlreadyExists(t *testing.T) {
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
