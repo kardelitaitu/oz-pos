@@ -60,6 +60,19 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       return;
     }
 
+    // Phone is required for tenant identity matching during re-activation.
+    // Accept international format (+country) or plain digits (min 7).
+    const phoneTrimmed = phone.trim();
+    if (!phoneTrimmed) {
+      setErrorMsg(l10n.getString('auth-validation-phone-required'));
+      return;
+    }
+    const phoneDigits = phoneTrimmed.replace(/[^+\d]/g, '');
+    if (phoneDigits.length < 7) {
+      setErrorMsg(l10n.getString('auth-validation-invalid-phone'));
+      return;
+    }
+
     setLoading(true);
     try {
       const machineId = await getMachineId();
@@ -253,7 +266,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
             <button 
               type="submit" 
               className="license-submit-btn" 
-              disabled={loading || !key || !email}
+              disabled={loading || !key || !email || !phone.trim()}
             >
               {loading ? (
                 <>

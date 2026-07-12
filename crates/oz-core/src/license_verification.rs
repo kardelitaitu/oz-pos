@@ -38,6 +38,23 @@ pub fn license_server_url() -> String {
     std::env::var("OZ_LICENSE_SERVER_URL").unwrap_or_else(|_| LICENSE_SERVER_URL.to_string())
 }
 
+/// Extract a human-readable error message from a JSON error body
+/// returned by the license server.
+///
+/// The server returns errors as `{"error": "message"}`. This helper
+/// extracts the `error` field so the user sees the clean message
+/// (e.g. "Wrong email or phone number") instead of the raw JSON blob.
+///
+/// Falls back to the raw body string if parsing fails.
+fn extract_server_error(body: &str) -> String {
+    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(msg) = obj.get("error").and_then(|v| v.as_str()) {
+            return msg.to_string();
+        }
+    }
+    body.to_string()
+}
+
 // ── Request/Response types ──────────────────────────────────────────
 
 /// Request body for `POST /api/v1/license/activate`.
@@ -234,8 +251,9 @@ pub async fn activate_license(
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
+        let msg = extract_server_error(&body);
         return Err(CoreError::Internal(format!(
-            "activation failed ({status}): {body}"
+            "activation failed ({status}): {msg}"
         )));
     }
 
@@ -268,8 +286,9 @@ pub async fn renew_license(req: &RenewLicenseRequest) -> Result<RenewLicenseResp
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
+        let msg = extract_server_error(&body);
         return Err(CoreError::Internal(format!(
-            "renewal failed ({status}): {body}"
+            "renewal failed ({status}): {msg}"
         )));
     }
 
@@ -310,8 +329,9 @@ pub async fn check_license_status(api_key: &str) -> Result<LicenseStatusResponse
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
+        let msg = extract_server_error(&body);
         return Err(CoreError::Internal(format!(
-            "status check failed ({status}): {body}"
+            "status check failed ({status}): {msg}"
         )));
     }
 
@@ -525,4 +545,41 @@ mod tests {
 
     // We need to import TenantSubscription for the test above.
     use crate::subscription::TenantSubscription;
+
+    // ── extract_server_error tests ────────────────────────────────
+
+    #[test]
+    fn extract_error_from_json_body() {
+        let body = r#"{"error":"Wrong email or phone number"}"#;
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "Wrong email or phone number");
+    }
+
+    #[test]
+    fn extract_error_escaped_json() {
+        let body = r#"{"error":"invalid or already used license key"}"#;
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "invalid or already used license key");
+    }
+
+    #[test]
+    fn extract_error_falls_back_to_raw_body() {
+        // Non-JSON body should be returned as-is.
+        let body = "Internal Server Error";
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "Internal Server Error");
+    }
+
+    #[test]
+    fn extract_error_empty_json() {
+        let body = "{}";
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "{}");
+    }
+
+    #[test]
+    fn extract_error_empty_string() {
+        let msg = super::extract_server_error("");
+        assert_eq!(msg, "");
+    }
 }
