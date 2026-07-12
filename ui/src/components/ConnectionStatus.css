@@ -4,18 +4,18 @@
   gap: 0.5rem;
   padding: 0.25rem 0.5rem;
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   font-size: 0.75rem;
-  color: var(--color-fg-secondary);
-  opacity: 0.75;
+  color: var(--color-fg);
+  opacity: 1;
   transition: all 0.2s;
   user-select: none;
 }
 
 .connection-status:hover {
   background: var(--color-bg-hover, var(--color-bg-surface));
-  opacity: 1;
+  border-color: var(--color-border-hover);
 }
 
 .status-indicator {
@@ -53,7 +53,7 @@
 
 .connection-latency {
   font-family: var(--font-mono);
-  color: var(--color-fg-tertiary);
+  color: var(--color-fg-secondary);
   margin-left: 0.25rem;
 }
 
