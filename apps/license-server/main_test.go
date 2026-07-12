@@ -557,8 +557,8 @@ func TestActivationLocks_SerialisesSameKey(t *testing.T) {
 		done <- true
 	}()
 
-	// Give goroutine time to attempt lock acquisition.
-	time.Sleep(50 * time.Millisecond)
+	// 100ms mirrors TestActivationLocks_ConcurrentSameKeyBlocks grace in handler_test.go — absorbs CI scheduler latency spikes.
+	time.Sleep(100 * time.Millisecond)
 	select {
 	case <-done:
 		t.Error("second lock should block until first is released")
@@ -576,7 +576,7 @@ func TestActivationLocks_SerialisesSameKey(t *testing.T) {
 	}
 }
 
-// TestActivationLocks_DifferentKeysAreIndependent verifies that locking
+// TestActivationLocks_NoGlobalMutexRegression verifies that locking
 // two DIFFERENT keys does not deadlock AND completes promptly (no
 // global-mutex regression). Under the sharded-mutex design distinct
 // keys can occasionally hash to the same shard (~0.4% per pair across
@@ -585,7 +585,7 @@ func TestActivationLocks_SerialisesSameKey(t *testing.T) {
 // clock stays under a generous bound (5s) — a regression to a single
 // global mutex would serialise all 200 lock/unlock pairs and blow past
 // this budget on any reasonably-loaded CI runner.
-func TestActivationLocks_DifferentKeysAreIndependent(t *testing.T) {
+func TestActivationLocks_NoGlobalMutexRegression(t *testing.T) {
 	kal := &keyActivationLocks{}
 	const pairCount = 100
 	const maxWallClock = 5 * time.Second
