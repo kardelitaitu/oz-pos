@@ -248,9 +248,9 @@
   --primary-950: #022c22;
 
   /* Semantic colour tokens (light) */
-  --color-bg:              var(--neutral-100);
+  --color-bg:              var(--neutral-200);
   --color-bg-elevated:     #ffffff;
-  --color-bg-surface:      var(--neutral-200);
+  --color-bg-surface:      var(--neutral-300);
   --color-bg-overlay:      rgba(0, 0, 0, 0.4);
   --color-bg-input:        #ffffff;
 
@@ -267,11 +267,11 @@
   --color-accent-subtle:   var(--primary-100);
   --color-accent-fg:       #ffffff;
 
-  --color-border:          var(--neutral-200);
-  --color-border-hover:    var(--neutral-300);
-  --color-border-strong:   var(--neutral-400);
+  --color-border:          var(--neutral-300);
+  --color-border-hover:    var(--neutral-400);
+  --color-border-strong:   var(--neutral-500);
   --color-border-focus:    var(--primary-500);
-  --color-border-subtle:   var(--neutral-100);
+  --color-border-subtle:   var(--neutral-200);
 
   --color-success:         #22c55e;
   --color-success-bg:      var(--primary-50);
@@ -292,8 +292,8 @@
   --color-link-visited:    #7c3aed;
 
   --color-bg-primary:      #ffffff;
-  --color-bg-secondary:    var(--neutral-50);
-  --color-bg-hover:        var(--neutral-100);
+  --color-bg-secondary:    var(--neutral-100);
+  --color-bg-hover:        var(--neutral-300);
 
   --color-accent-dim:      rgba(16, 185, 129, 0.12);
   --color-accent-alpha:    rgba(16, 185, 129, 0.2);
