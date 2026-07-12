@@ -3122,3 +3122,100 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		}
 	})
 }
+
+// ── Tests: Regression coverage (activation flow audit) ─────────────
+
+// TestActivateHandler_SuccessClearsKeyFailures verifies that a successful
+// first activation clears any accumulated brute-force failure tracking for
+// the key. Without this, a legitimate user who fat-fingers the key 3+
+// times before getting it right would be permanently blocked from
+// re-activating (e.g., after reinstalling on a new machine) until the
+// cooldown expires.
+func TestActivateHandler_DifferentTenantReturnsWrongEmailError(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed tenant A (the one that exists under the request's email).
+	seedTenant(t, app, "tenanta00000001", "tenantakey000001", "active")
+
+	// Seed tenant B (the one that actually activated the key).
+	seedTenant(t, app, "tenantb00000001", "tenantbkey000001", "active")
+
+	// Seed a key activated by tenant B.
+	seedActivatedLicenseKey(t, app, "OZ-DIFF-TENANT01", "pro", "activated",
+		"2099-12-31 23:59:59.000Z", "tenantb00000001")
+
+	// Send activation with tenant A's email + tenant A's api_key,
+	// but the key belongs to tenant B.
+	body := strings.NewReader(`{
+		"key": "OZ-DIFF-TENANT01",
+		"email": "tenanta00000001@example.com",
+		"machine_id": "difftenmac00001",
+		"api_key": "tenantakey000001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, _ := se.Router.BuildMux()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 (wrong email for key), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Wrong email or phone number") {
+		t.Errorf("expected 'Wrong email or phone number', got: %s", rec.Body.String())
+	}
+}
+
+// TestActivateHandler_SuccessClearsKeyFailures verifies that a successful
+// first activation clears any accumulated brute-force failure tracking for
+// the key. Without this, a legitimate user who fat-fingers the key a few
+// times before getting it right could be blocked from subsequent
+// re-activations.
+//
+// Approach: pre-fail 2 times (below maxAttempts=3, so the handler's
+// isBlocked check won't block the activation). After successful activation,
+// record 2 more failures — if clearKey was NOT called, the accumulated
+// count would be 4 (>= maxAttempts=3 → blocked). If clearKey WAS called,
+// the count resets to just 2 (not blocked).
+func TestActivateHandler_SuccessClearsKeyFailures(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const testKey = "OZ-CLR-FAIL-KEY1"
+	seedLicenseKey(t, app, testKey, "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	// Record 2 failed attempts (below maxAttempts=3, so isBlocked
+	// returns false and the handler can proceed with activation).
+	keyFailTracker.recordFailure(testKey)
+	keyFailTracker.recordFailure(testKey)
+
+	// Verify the key is NOT blocked (2 < maxAttempts=3).
+	if blocked, _ := keyFailTracker.isBlocked(testKey); blocked {
+		t.Fatal("precondition: key should NOT be blocked after only 2 failures")
+	}
+
+	// Perform a successful first activation — the handler calls clearKey.
+	body := strings.NewReader(`{"key":"` + testKey + `","email":"clrfailtest001@example.com","machine_id":"clrfailmac00001"}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, _ := se.Router.BuildMux()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (successful activation), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// After successful activation, clearKey should have removed all
+	// prior failures. Record 2 more failures — if clearKey was NOT
+	// called, the count would now be 4 (blocked). If it WAS called,
+	// the count is just 2 (not blocked).
+	keyFailTracker.recordFailure(testKey)
+	keyFailTracker.recordFailure(testKey)
+	if blocked, _ := keyFailTracker.isBlocked(testKey); blocked {
+		t.Error("expected key to NOT be blocked (clearKey should have reset the counter); got blocked")
+	}
+}

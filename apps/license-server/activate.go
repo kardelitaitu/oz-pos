@@ -217,6 +217,17 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				return e.JSON(http.StatusOK, resp)
 			}
 
+			// ── Key activated by a different tenant ───────────────
+			// The key is already activated, but the activated_by tenant
+			// does not match this email's tenant — the caller supplied an
+			// email that doesn't belong to the key's owner.
+			if keyStatus == "activated" && activatedBy != tenant.Id {
+				keyFailTracker.recordFailure(req.Key)
+				return e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "Wrong email or phone number",
+				})
+			}
+
 			// ── New activation for existing tenant: api_key required ──
 			// The caller must prove they are the registered tenant admin
 			// by presenting the api_key that was issued on first activation.
@@ -334,6 +345,13 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		if err := app.Save(keyRecord); err != nil {
 			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
 		}
+
+		// ── Clear failure tracking for this key ─────────────────
+		// The activation succeeded — any prior failed attempts against
+		// this key should be cleared so a legitimate re-activation
+		// (e.g. after reinstalling on a new machine) isn't blocked
+		// by the brute-force cooldown from earlier typos.
+		keyFailTracker.clearKey(req.Key)
 
 		// ── Return signed subscription to POS ─────────────────────
 		resp := map[string]any{
