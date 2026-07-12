@@ -80,6 +80,18 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			log.Printf("DEPRECATION: /renew authenticated via legacy body api_key for tenant_id=%q; migrate client to Authorization: Bearer <api_key> to keep the credential out of CDN / webserver access logs that capture request bodies", tenant.Id)
 		}
 
+		// ── Per-tenant lock (Fix #3: renewal TOCTOU) ─────────────
+		// Two concurrent renewals with DIFFERENT keys for the SAME
+		// tenant must serialize. Without this, both read the same
+		// currentSub, compute the same newExpiresAt, and save — the
+		// second write wins, wasting one key purchase.
+		//
+		// Lock ordering: tenant → key (consistent, no deadlock).
+		// Acquired AFTER authentication so unauthenticated requests
+		// don't waste lock slots.
+		unlockTenant := tenantLocks.lock(req.TenantID)
+		defer unlockTenant()
+
 		// ── Per-key activation lock (C2/C3 audit fix) ──────────────
 		// Serialise requests for the same license key to prevent a
 		// TOCTOU race: without this lock, two concurrent renewals for

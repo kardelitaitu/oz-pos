@@ -97,8 +97,10 @@ fn base64_encode(data: &[u8]) -> String {
 fn base64_decode(encoded: &str) -> Result<Vec<u8>, CoreError> {
     use base64::Engine;
     // Accept both standard and URL-safe, with or without padding.
-    base64::engine::general_purpose::URL_SAFE
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(encoded)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(encoded))
+        .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(encoded))
         .or_else(|_| base64::engine::general_purpose::STANDARD.decode(encoded))
         .map_err(|e| CoreError::Internal(format!("failed to decode base64 ciphertext: {e}")))
 }

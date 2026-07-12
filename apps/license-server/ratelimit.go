@@ -659,6 +659,56 @@ func init() {
 	keyFailTracker.startCleanup()
 }
 
+// ── Tenant-level activation lock (Fix #3: renewal TOCTOU) ─────────
+
+// tenantLockShards is the number of fixed-size mutex shards used for
+// per-tenant mutual exclusion during renewals. Fewer distinct tenants
+// than license keys, so 64 shards keep collision rate low (~1.6%).
+const tenantLockShards = 64
+
+// tenantActivationLocks provides per-tenant mutual exclusion so that
+// two concurrent renewals with DIFFERENT keys for the SAME tenant
+// serialize correctly. Without this lock, both renewals read the same
+// currentSub, compute the same newExpiresAt, and save - the second
+// write wins, wasting one key purchase.
+//
+// Lock ordering: tenantLock → keyLock (consistent, no deadlock).
+// Tenant lock is acquired AFTER authentication succeeds so
+// unauthenticated requests don't waste lock slots.
+type tenantActivationLocks struct {
+	shards [tenantLockShards]sync.Mutex
+}
+
+var tenantLocks = &tenantActivationLocks{}
+
+// bucketForTenant hashes the tenant ID to a stable shard index.
+func bucketForTenant(tenantID string) int {
+	return int(fnv1aHash(tenantID) % tenantLockShards)
+}
+
+// fnv1aHash computes a 64-bit FNV-1a hash of the input string.
+// Shared by bucketFor and bucketForTenant so the constants and
+// algorithm cannot drift between key-lock and tenant-lock sharding.
+func fnv1aHash(s string) uint64 {
+	const (
+		fnvOffset uint64 = 14695981039346656037
+		fnvPrime  uint64 = 1099511628211
+	)
+	var hash uint64 = fnvOffset
+	for i := 0; i < len(s); i++ {
+		hash ^= uint64(s[i])
+		hash *= fnvPrime
+	}
+	return hash
+}
+
+// lock acquires the per-tenant mutex shard. Returns a deferred-unlock closure.
+func (tal *tenantActivationLocks) lock(tenantID string) func() {
+	idx := bucketForTenant(tenantID)
+	tal.shards[idx].Lock()
+	return func() { tal.shards[idx].Unlock() }
+}
+
 // activationLockShards is the number of fixed-size mutex shards used
 // for per-key mutual exclusion. 256 buckets yield a ~0.4% random-
 // collision rate per distinct key — acceptable for a license-server
@@ -691,20 +741,10 @@ var activationLocks = &keyActivationLocks{}
 // bucketFor hashes the given key with FNV-1a to a stable shard index in
 // [0, activationLockShards). Exposed as a method for testability (see
 // TestActivationLocks_DistributesKeysAcrossShards) so the test exercises
-// the production hash directly rather than re-implementing it inline —
+// the production hash directly rather than re-implementing it inline -
 // any divergence between test and production math would be caught.
 func bucketFor(key string) int {
-	// FNV-1a 64-bit constants.
-	const (
-		fnvOffset uint64 = 14695981039346656037
-		fnvPrime  uint64 = 1099511628211
-	)
-	var hash uint64 = fnvOffset
-	for i := 0; i < len(key); i++ {
-		hash ^= uint64(key[i])
-		hash *= fnvPrime
-	}
-	return int(hash % activationLockShards)
+	return int(fnv1aHash(key) % activationLockShards)
 }
 
 // lock hashes the given key with FNV-1a to a stable shard index and
