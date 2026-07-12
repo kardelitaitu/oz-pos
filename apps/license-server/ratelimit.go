@@ -611,29 +611,62 @@ func init() {
 	keyFailTracker.startCleanup()
 }
 
-// keyActivationLocks provides per-key mutual exclusion to prevent
-// concurrent activation of the same license key. Two goroutines
-// racing to activate the same key will be serialised.
+// activationLockShards is the number of fixed-size mutex shards used
+// for per-key mutual exclusion. 256 buckets yield a ~0.4% random-
+// collision rate per distinct key — acceptable for a license-server
+// workload where lock-held time is bounded by request duration
+// (≤100 ms) and unrelated-key serialization adds latency, not
+// correctness issues. Fixed shard memory is ≈2 KB regardless of how
+// many distinct keys the server has ever processed, closing the
+// Memory-Leak Audit DoS vector.
+const activationLockShards = 256
+
+// keyActivationLocks provides per-key mutual exclusion via a fixed-size
+// pool of sharded mutexes (Memory-Leak Audit fix). Replaced the previous
+// unbounded per-key map, which allocated a new *sync.Mutex for every
+// distinct key passed to /activate or /renew and never evicted — letting
+// an attacker spamming random key strings OOM the server.
+//
+// Trade-off: distinct keys can hash to the same shard and serialize
+// under load. Acceptable here because (a) the lock-held window is short
+// (one HTTP request), (b) the license-server activation throughput per
+// IP is bounded by ipRateLimiter (=5/hr), and (c) false contention adds
+// latency, never security-relevant behaviour. Correctness is preserved:
+// same-key calls always hash to the same shard and serialize as before
+// (the C2/C3 invariant).
 type keyActivationLocks struct {
-	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	shards [activationLockShards]sync.Mutex
 }
 
-var activationLocks = &keyActivationLocks{
-	locks: make(map[string]*sync.Mutex),
-}
+var activationLocks = &keyActivationLocks{}
 
-// lock acquires a mutex for the given key, creating one if needed.
-// Returns a function that must be called to release the lock.
-func (kal *keyActivationLocks) lock(key string) func() {
-	kal.mu.Lock()
-	mu, ok := kal.locks[key]
-	if !ok {
-		mu = &sync.Mutex{}
-		kal.locks[key] = mu
+// bucketFor hashes the given key with FNV-1a to a stable shard index in
+// [0, activationLockShards). Exposed as a method for testability (see
+// TestActivationLocks_DistributesKeysAcrossShards) so the test exercises
+// the production hash directly rather than re-implementing it inline —
+// any divergence between test and production math would be caught.
+func bucketFor(key string) int {
+	// FNV-1a 64-bit constants.
+	const (
+		fnvOffset uint64 = 14695981039346656037
+		fnvPrime  uint64 = 1099511628211
+	)
+	var hash uint64 = fnvOffset
+	for i := 0; i < len(key); i++ {
+		hash ^= uint64(key[i])
+		hash *= fnvPrime
 	}
-	kal.mu.Unlock()
+	return int(hash % activationLockShards)
+}
 
-	mu.Lock()
-	return func() { mu.Unlock() }
+// lock hashes the given key with FNV-1a to a stable shard index and
+// locks that shard. Returns a closure that unlocks the same shard on
+// invoke. FNV-1a is sufficient for in-process mutex sharding — we only
+// need a uniform distribution across the buckets; we do NOT need
+// cryptographic strength (an attacker knowing their own shard gains
+// nothing — they're still serialised against themselves).
+func (kal *keyActivationLocks) lock(key string) func() {
+	idx := bucketFor(key)
+	kal.shards[idx].Lock()
+	return func() { kal.shards[idx].Unlock() }
 }

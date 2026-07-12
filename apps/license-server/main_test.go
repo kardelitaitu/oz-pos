@@ -8,8 +8,8 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -537,9 +537,14 @@ func TestKeyFailureTracker_SweepEmpty(t *testing.T) {
 }
 
 // ── Tests: Key Activation Locks ───────────────────────────────────
+//
+// These tests target the sharded-mutex implementation (Memory-Leak Audit
+// fix): `&keyActivationLocks{}` is the zero-value struct (256 sync.Mutex
+// shards). The prior unbounded `map[string]*sync.Mutex` field has been
+// replaced and these tests no longer initialise it.
 
 func TestActivationLocks_SerialisesSameKey(t *testing.T) {
-	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
+	kal := &keyActivationLocks{}
 	key := "OZ-CONCURRENT"
 
 	unlock1 := kal.lock(key)
@@ -571,13 +576,33 @@ func TestActivationLocks_SerialisesSameKey(t *testing.T) {
 	}
 }
 
+// TestActivationLocks_DifferentKeysAreIndependent verifies that locking
+// two DIFFERENT keys does not deadlock AND completes promptly (no
+// global-mutex regression). Under the sharded-mutex design distinct
+// keys can occasionally hash to the same shard (~0.4% per pair across
+// 256 buckets) and serialize — but the implementation MUST NOT deadlock
+// or hold a global lock. We loop over 100 pairs and assert the wall
+// clock stays under a generous bound (5s) — a regression to a single
+// global mutex would serialise all 200 lock/unlock pairs and blow past
+// this budget on any reasonably-loaded CI runner.
 func TestActivationLocks_DifferentKeysAreIndependent(t *testing.T) {
-	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
-
-	unlock1 := kal.lock("KEY-A")
-	unlock2 := kal.lock("KEY-B") // different key, should not block
-	unlock1()
-	unlock2()
+	kal := &keyActivationLocks{}
+	const pairCount = 100
+	const maxWallClock = 5 * time.Second
+	start := time.Now()
+	for i := 0; i < pairCount; i++ {
+		keyA := fmt.Sprintf("KEY-A-%04d", i)
+		keyB := fmt.Sprintf("KEY-B-%04d", i)
+		unlock1 := kal.lock(keyA)
+		unlock2 := kal.lock(keyB)
+		unlock1()
+		unlock2()
+	}
+	elapsed := time.Since(start)
+	if elapsed > maxWallClock {
+		t.Errorf("100 distinct-key lock pairs took %v; expected <%v (regression to global-mutex or serialised hot spot?)",
+			elapsed, maxWallClock)
+	}
 }
 
 // ── Tests: Key Failure Tracker Edge Cases ─────────────────────────

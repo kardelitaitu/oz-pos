@@ -2,12 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -2191,6 +2195,195 @@ func TestKeyFailureTracker_PersistFailure_MonotonicUnderConcurrentWrites(t *test
 			t.Errorf("iter %d: MAX(cooldown_until) over concurrent UPSERTs should be %s, got %s",
 				iter, expectedMaxCooldown, dbCooldown)
 		}
+	}
+}
+
+// ── Tests: ActivationLocks (Memory-Leak Audit) ─────────────────
+
+// TestActivationLocks_BoundedMemory verifies that the activationLocks
+// pool is bounded to a fixed-size shard array regardless of how many
+// distinct keys are acquired (Memory-Leak Audit fix). The previous
+// unbounded per-key map allocated a *sync.Mutex for every unique key
+// passed to /activate or /renew and never evicted; an attacker spamming
+// random distinct key strings could OOM the server. With 256 fixed
+// shards, the struct is compile-time constant at ≈2 KB regardless of
+// how many keys have ever been processed — even after 1 million distinct
+// keys.
+//
+// The test asserts three properties:
+//  1. STRUCTURAL: no field is a map. Catches any future regression that
+//     re-introduces unbounded per-key state (a pointer-based or map-
+//     based design would surface as reflect.Map and fail loudly here
+//     rather than only failing the softer memory-stat check below).
+//  2. Compile-time struct size is bounded (rejects non-shard field
+//     additions that would re-introduce per-key memory).
+//  3. Heap usage stays bounded across a 100,000-distinct-key workload
+//     (catches binary-level allocations introduced elsewhere).
+func TestActivationLocks_BoundedMemory(t *testing.T) {
+	kal := &keyActivationLocks{}
+
+	// (1) STRUCTURAL reflection check: no field may be a map. With
+	// a regression to the prior map-based design this field's type
+	// would be reflect.Map and the test would fail loudly here, not
+	// silently in a memory-stat heuristic.
+	expectedType := reflect.TypeOf([activationLockShards]sync.Mutex{})
+	rt := reflect.TypeOf(*kal)
+	if rt.NumField() != 1 {
+		t.Fatalf("activationLocks has %d fields; expected exactly 1 (the [256]sync.Mutex shards array). Extra fields likely indicate per-key state regression.",
+			rt.NumField())
+	}
+	if rt.Field(0).Type != expectedType {
+		t.Fatalf("activationLocks field 0 has type %v; expected exactly %v (regression to map/slice/other unbounded design)",
+			rt.Field(0).Type, expectedType)
+	}
+
+	// (2) Compile-time size check: the struct must remain the
+	// fixed-size [256]sync.Mutex array. sync.Mutex is ≈8 bytes on
+	// x86_64/arm64. The previous unbounded-map design would have
+	// been 0 bytes for the struct itself (just a nil map pointer)
+	// but allocated unboundedly on the heap via the map.
+	const maxAllowedBytes = activationLockShards * 16 // 4 KB upper bound (vs ~2 KB expected)
+	gotSize := unsafe.Sizeof(*kal)
+	if gotSize > maxAllowedBytes {
+		t.Errorf("activationLocks struct grew to %d bytes; expected %d bytes (256 * sizeof(sync.Mutex))",
+			gotSize, maxAllowedBytes)
+	}
+
+	// (3) Heap-boundedness check across 100,000 distinct keys. Without
+	// the unbounded-map fix, the prior design would have grown
+	// ≈ N * 24 bytes ≈ 2.4 MB just for mutex pointers and map
+	// entries. Cap at 2 MB to catch any regression without flaking
+	// on fmt.Sprintf scratch + runtime internals.
+	var memBefore, memAfter runtime.MemStats
+	runtime.ReadMemStats(&memBefore)
+
+	const N = 100_000
+	for i := 0; i < N; i++ {
+		key := fmt.Sprintf("OZ-DOS-KEY-%08d", i)
+		unlock := kal.lock(key)
+		unlock() // immediate release — only per-key allocation matters
+	}
+	runtime.ReadMemStats(&memAfter)
+
+	heapGrowthMB := float64(int64(memAfter.HeapAlloc)-int64(memBefore.HeapAlloc)) / 1024 / 1024
+	if heapGrowthMB > 2 {
+		t.Errorf("activationLocks heap grew by %.2f MB after %d distinct keys; expected <2 MB (prior unbounded-map design would have grown >2 MB from N mutex entries alone)",
+			heapGrowthMB, N)
+	}
+}
+
+// TestActivationLocks_DistributesKeysAcrossShards verifies that the
+// FNV-1a hash distributes distinct keys roughly uniformly across the
+// 256-shard pool. Catches regressions where the bucket index
+// calculation collapses to a single value (e.g., someone replaces
+// `idx := hash % 256` with `idx := 0`), which would defeat the
+// entire memory-leak fix by making all keys serialise on one mutex.
+//
+// Distribution invariants:
+//   - All 256 buckets receive at least one key (no collapsed bucket).
+//   - Max bucket count is within reasonable bounds (no hot spot).
+//   - Mean is ≈ N/256 (sanity).
+func TestActivationLocks_DistributesKeysAcrossShards(t *testing.T) {
+	const N = 10_000
+
+	counts := make([]int, activationLockShards)
+	for i := 0; i < N; i++ {
+		key := fmt.Sprintf("OZ-DIST-KEY-%08d", i)
+		counts[bucketFor(key)]++
+	}
+
+	emptyBuckets := 0
+	maxCount := 0
+	for _, c := range counts {
+		if c == 0 {
+			emptyBuckets++
+		}
+		if c > maxCount {
+			maxCount = c
+		}
+	}
+	if emptyBuckets > 0 {
+		t.Errorf("hash distribution has %d empty buckets out of %d (FNV-1a is broken or hash space collapsed)",
+			emptyBuckets, activationLockShards)
+	}
+	// For 10,000 keys across 256 buckets, expected mean is ~39. A
+	// max > 3x the mean suggests a hot spot (e.g. `idx := 0` or
+	// `idx := hash & 0` would yield max=N=10000, far above the
+	// bound). 3x is a loose bound to absorb legitimate FNV-1a
+	// variance on this input set.
+	meanCount := N / activationLockShards
+	if maxCount > 3*meanCount {
+		t.Errorf("hash distribution hot spot: max bucket has %d keys, mean is %d (expected max < 3x mean)",
+			maxCount, meanCount)
+	}
+}
+
+// TestActivationLocks_ConcurrentSameKeyBlocks verifies that two
+// goroutines calling lock() with the SAME key always hash to the SAME
+// shard, so the second call blocks until the first unlocks. This is the
+// correctness invariant the per-key activation lock was added to defend
+// (C2/C3 audit): without it, two concurrent renewals for the same key
+// could both pass the keyRecord.GetString("status") == "unused" check
+// before either saves "activated", silently granting an extra renewed
+// subscription for one key purchase.
+//
+// The sharded implementation MUST preserve this invariant — different
+// keys may collide on the same shard (false contention, acceptable),
+// but the SAME key must always map to the SAME shard (correctness,
+// required).
+func TestActivationLocks_ConcurrentSameKeyBlocks(t *testing.T) {
+	kal := &keyActivationLocks{}
+	const fixedKey = "OZ-ACTLOCK-SAME-001"
+
+	// Goroutine A: acquire, signal that lock is held, then wait for
+	// permission to release. This guarantees the lock is held before
+	// goroutine B starts trying to acquire.
+	var aLockAcquired sync.WaitGroup
+	var aCanRelease sync.WaitGroup
+	aLockAcquired.Add(1)
+	aCanRelease.Add(1)
+	go func() {
+		unlock := kal.lock(fixedKey)
+		aLockAcquired.Done() // signal "lock held"
+		aCanRelease.Wait()
+		unlock()
+	}()
+	aLockAcquired.Wait()
+
+	// Goroutine B: tries to acquire the same key. MUST block while A
+	// holds the lock; this is the C2/C3 invariant.
+	bAcquired := make(chan struct{})
+	go func() {
+		unlock := kal.lock(fixedKey)
+		close(bAcquired)
+		unlock()
+	}()
+
+	select {
+	case <-bAcquired:
+		t.Error("B acquired lock while A held it — same-key serialisation is broken")
+	default:
+		// B is correctly blocked. Allow a generous sleep to confirm
+		// the lock holder is definitely blocked, not racing. 100ms
+		// is wide enough to absorb Go scheduler latency spikes on
+		// heavily-loaded CI runners (which can hit 10–20ms inside
+		// containers) while keeping the test fast.
+		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-bAcquired:
+			t.Error("B acquired lock while A still held it after 100ms grace")
+		default:
+			// Still blocked. ✓
+		}
+	}
+
+	// Release A; B should now acquire within a reasonable window.
+	aCanRelease.Done()
+	select {
+	case <-bAcquired:
+		// ✓ B acquired after A released.
+	case <-time.After(500 * time.Millisecond):
+		t.Error("B did not acquire lock after A released within 500ms — same-key acquisition is broken")
 	}
 }
 
