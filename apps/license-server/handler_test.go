@@ -2387,6 +2387,102 @@ func TestActivationLocks_ConcurrentSameKeyBlocks(t *testing.T) {
 	}
 }
 
+// TestActivationLocks_BoundedUnderHighChurn is the production-load stress
+// test for the sharded mutex pool (Memory-Leak Audit). Whereas
+// TestActivationLocks_BoundedMemory uses a single goroutine acquiring
+// 100k keys sequentially, this test fans 50 goroutines across 10k unique
+// keys each (500k total unique lock+unlock operations) under a start-gate.
+// Catches any future regression that re-introduces per-key state
+// (e.g., a sync.Map for per-key telemetry, a per-key counter) that would
+// be invisibly small in unit tests but observable under realistic
+// concurrent load. Heap growth must stay <4 MB.
+//
+// The 4 MB threshold allows ~8 bytes per operation across 500k ops,
+// plus runtime internals (slice growth, channel buffers, stack
+// pre-allocation). With the prior unbounded-map design the per-key
+// *sync.Mutex alone (24 bytes) + map entry overhead would have grown
+// >10 MB across 500k unique keys.
+//
+// IMPORTANT: the per-worker key strings are pre-allocated into
+// []string slices BEFORE the heap measurement starts. This isolates
+// the ~10MB of fmt.Sprintf scratch from the measured delta — without
+// it, the test's threshold would be dominated by the formatter
+// itself rather than the sharded-mutex pool's actual growth.
+func TestActivationLocks_BoundedUnderHighChurn(t *testing.T) {
+	const (
+		goroutines    = 50
+		keysPerWorker = 10_000
+		maxHeapGrowth = 4 * 1024 * 1024 // 4 MB
+	)
+	kal := &keyActivationLocks{}
+
+	// Pre-allocate each worker's key set BEFORE the MemStats snapshot.
+	// Building 500k keys via fmt.Sprintf allocates ~10MB of strings;
+	// the GC may keep some of that alive past the MemStats call below.
+	// Building them up-front ensures the measured delta reflects only
+	// the sharded-mutex pool's actual growth, not the test scaffolding.
+	workerKeys := make([][]string, goroutines)
+	for g := 0; g < goroutines; g++ {
+		workerKeys[g] = make([]string, keysPerWorker)
+		for i := 0; i < keysPerWorker; i++ {
+			workerKeys[g][i] = fmt.Sprintf("OZ-CHURN-G%04d-K%08d", g, i)
+		}
+	}
+
+	// Force a GC before the baseline so memBefore is a post-GC
+	// steady-state snapshot rather than a measurement mid-flight.
+	// Without this, a pre-emptive GC during the churn could lower
+	// the post-snapshot HeapInuse (closer heap reclaimed) and make
+	// the measured delta artificially negative or near-zero, letting
+	// the test pass for a false reason ("GC timing reduced the
+	// heap under us") rather than "no per-key state was allocated".
+	var memBefore, memAfter runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&memBefore)
+
+	// Start-gate: all goroutines block on <-start, then fan out
+	// simultaneously. Avoids spawn-stagger variance that could let
+	// worker 0 finish before worker 1 enters the lock window.
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(gID int) {
+			defer wg.Done()
+			<-start
+			for i := 0; i < keysPerWorker; i++ {
+				unlock := kal.lock(workerKeys[gID][i])
+				unlock()
+			}
+		}(g)
+	}
+	close(start)
+	wg.Wait()
+
+	// Force a GC after wg.Wait() so the lock() closure objects are
+	// collected before the post-snapshot. A per-key-state regression
+	// (the failure mode this test catches) would still register in the
+	// delta because the regression's state remains referenced; transient
+	// closure heap would be freed.
+	//
+	// HeapInuse (not HeapAlloc) is the metric of choice because it
+	// includes in-use span overhead, which makes per-key-state
+	// regressions register slightly earlier in the delta. With the
+	// symmetric GC above, HeapAlloc would also be stable — but
+	// HeapInuse is preferred for the slightly earlier detection.
+	// The two GCs together bracket the churn: only growth that
+	// survives BOTH GCs is attributed to the activationLocks pool.
+	runtime.GC()
+	runtime.ReadMemStats(&memAfter)
+
+	heapGrowth := int64(memAfter.HeapInuse) - int64(memBefore.HeapInuse)
+	if heapGrowth > maxHeapGrowth {
+		t.Errorf("activationLocks heap grew by %d bytes (%.2f MB) after %d unique lock+unlock ops across %d goroutines; expected <%d bytes (4 MB). Possible per-key state regression.",
+			heapGrowth, float64(heapGrowth)/1024/1024,
+			goroutines*keysPerWorker, goroutines, maxHeapGrowth)
+	}
+}
+
 func TestActivateHandler_MachineAlreadyExists(t *testing.T) {
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
