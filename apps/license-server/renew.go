@@ -100,6 +100,16 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Check key expiry ────────────────────────────────────
+		// An unused key with a past expiry date is not valid for
+		// renewal — the customer never used it before it expired.
+		// This mirrors the same check in activate.go.
+		if keyRecord.GetDateTime("expires_at").Time().Before(time.Now()) {
+			return e.JSON(http.StatusGone, map[string]any{
+				"error": "license key has expired",
+			})
+		}
+
 		// ── Find the latest active subscription ───────────────────
 		subs, err := app.FindRecordsByFilter(
 			"subscriptions",
@@ -117,7 +127,7 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		// ── Parse current subscription data & extend expiry ───────
 		tierKey := keyRecord.GetString("tier_key")
 		currentExpiresAt := currentSub.GetDateTime("expires_at").Time()
-		
+
 		// If the current subscription has already expired, start from time.Now()
 		// If it's still active, append the new duration to the current expiry
 		baseTime := currentExpiresAt
@@ -138,25 +148,25 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			newExpiresAt = baseTime.AddDate(1, 0, 0)
 		}
 
-	var allowedTypes []string
-	if err := json.Unmarshal([]byte(keyRecord.GetString("allowed_types")), &allowedTypes); err != nil {
-		allowedTypes = []string{}
-	}
+		var allowedTypes []string
+		if err := json.Unmarshal([]byte(keyRecord.GetString("allowed_types")), &allowedTypes); err != nil {
+			allowedTypes = []string{}
+		}
 
-	sub := SubscriptionPayload{
-		TenantID:        req.TenantID,
-		TierKey:         tierKey,
-		Status:          "active",
-		// M5-audit fix: quota fields come from the NEW license key
-		// (keyRecord), not from the OLD subscription (currentSub).
-		// Previously, churning to a different tier (Pro→Enterprise
-		// or Enterprise→Pro) left the customer with their old tier's
-		// limits, which silently capped upgrades and over-provisioned
-		// downgrades. Quotas are now sourced from the same key the
-		// customer just paid for.
-		MaxStores:       keyRecord.GetInt("max_stores"),
-		MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
-		AllowedTypes:    allowedTypes,
+		sub := SubscriptionPayload{
+			TenantID: req.TenantID,
+			TierKey:  tierKey,
+			Status:   "active",
+			// M5-audit fix: quota fields come from the NEW license key
+			// (keyRecord), not from the OLD subscription (currentSub).
+			// Previously, churning to a different tier (Pro→Enterprise
+			// or Enterprise→Pro) left the customer with their old tier's
+			// limits, which silently capped upgrades and over-provisioned
+			// downgrades. Quotas are now sourced from the same key the
+			// customer just paid for.
+			MaxStores:       keyRecord.GetInt("max_stores"),
+			MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
+			AllowedTypes:    allowedTypes,
 			StartsAt:        time.Now().UTC().Format(time.RFC3339),
 			ExpiresAt:       newExpiresAt.Format(time.RFC3339),
 			GraceUntil:      calculateGraceUntil(newExpiresAt).Format(time.RFC3339),
@@ -210,6 +220,13 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		if err := app.Save(keyRecord); err != nil {
 			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
 		}
+
+		// ── Clear failure tracking for this key ─────────────────
+		// The renewal succeeded — any prior failed attempts against
+		// this key should be cleared so a subsequent re-activation
+		// isn't blocked by the brute-force cooldown from earlier
+		// typos (same fix as activate.go).
+		keyFailTracker.clearKey(req.Key)
 
 		return e.JSON(http.StatusOK, map[string]any{
 			"signed_payload": payloadStr,

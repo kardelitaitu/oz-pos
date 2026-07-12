@@ -159,8 +159,9 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			}
 
 			// Resolve the activated_by tenant ID (defensive for legacy
-			// JSON-array format).
-			if keyStatus == "activated" || keyStatus != "unused" {
+			// JSON-array format). Only non-"unused" keys have an
+			// activated_by relation set.
+			if keyStatus != "unused" {
 				activatedBy = keyRecord.GetString("activated_by")
 				if strings.HasPrefix(activatedBy, "[") {
 					if sl := keyRecord.GetStringSlice("activated_by"); len(sl) > 0 {

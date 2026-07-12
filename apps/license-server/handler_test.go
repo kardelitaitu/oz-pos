@@ -999,7 +999,7 @@ func TestRenewHandler_ConcurrentSameKey_OnlyOneWins(t *testing.T) {
 	const newKey = "OZ-RACE-RENEW-01"
 
 	seedTenant(t, app, tenantID, apiKey, "active")
-	seedSubscription(t, app, tenantID, "pro", "active")
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0))
 	seedLicenseKey(t, app, newKey, "pro", "unused", "2099-12-31 23:59:59.000Z")
 
 	mux, err := se.Router.BuildMux()
@@ -2610,7 +2610,7 @@ func TestRenewHandler_AuthPaths(t *testing.T) {
 	const tenantID = "authtenantrnw00" // 15 chars (PocketBase implicit id field)
 	const apiKey = "authtestkey123456"
 	seedTenant(t, app, tenantID, apiKey, "active")
-	seedSubscription(t, app, tenantID, "pro", "active")
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0))
 
 	cases := []struct {
 		name       string
@@ -2695,7 +2695,7 @@ func TestRenewHandler_LogsDeprecationOnBodyFallback(t *testing.T) {
 	const tenantID = "renwdeprenwtest" // 15 chars (PocketBase implicit id field)
 	const apiKey = "renwdeptestkey001"
 	seedTenant(t, app, tenantID, apiKey, "active")
-	seedSubscription(t, app, tenantID, "pro", "active")
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0))
 
 	mux, _ := se.Router.BuildMux()
 
@@ -2748,7 +2748,7 @@ func TestActivateHandler_AuthPaths(t *testing.T) {
 	const apiKey = "actauthtestkey123"
 	const email = "actauthtenant01@example.com"
 	seedTenant(t, app, tenantID, apiKey, "active")
-	seedSubscription(t, app, tenantID, "pro", "active") // decorative — kept to mirror TestRenewHandler_WithSubscription 3-step setup
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0)) // decorative — kept to mirror TestRenewHandler_WithSubscription 3-step setup
 
 	cases := []struct {
 		name       string
@@ -3217,5 +3217,155 @@ func TestActivateHandler_SuccessClearsKeyFailures(t *testing.T) {
 	keyFailTracker.recordFailure(testKey)
 	if blocked, _ := keyFailTracker.isBlocked(testKey); blocked {
 		t.Error("expected key to NOT be blocked (clearKey should have reset the counter); got blocked")
+	}
+}
+
+// ── Tests: Renew handler audit fixes ───────────────────────────────
+
+// TestRenewHandler_SuccessClearsKeyFailures verifies that a successful
+// renewal clears accumulated brute-force failure tracking for the key.
+// Mirrors TestActivateHandler_SuccessClearsKeyFailures for renew.
+func TestRenewHandler_SuccessClearsKeyFailures(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const (
+		tenantID = "rnwclearfn00001"
+		apiKey   = "rnwclearfn000001"
+		newKey   = "OZ-RNW-CLR-KEY1"
+	)
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0))
+	seedLicenseKey(t, app, newKey, "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	// Record 2 failed attempts (below maxAttempts=3).
+	keyFailTracker.recordFailure(newKey)
+	keyFailTracker.recordFailure(newKey)
+
+	if blocked, _ := keyFailTracker.isBlocked(newKey); blocked {
+		t.Fatal("precondition: key should NOT be blocked after only 2 failures")
+	}
+
+	// Successful renewal.
+	body := strings.NewReader(fmt.Sprintf(`{"tenant_id":"%s","api_key":"%s","key":"%s"}`, tenantID, apiKey, newKey))
+	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, _ := se.Router.BuildMux()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (successful renewal), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// After success, clearKey should have reset the counter.
+	// Record 2 more failures — count should be 2 (not 4 → blocked).
+	keyFailTracker.recordFailure(newKey)
+	keyFailTracker.recordFailure(newKey)
+	if blocked, _ := keyFailTracker.isBlocked(newKey); blocked {
+		t.Error("expected key to NOT be blocked (clearKey should have reset the counter); got blocked")
+	}
+}
+
+// TestRenewHandler_ExpiredKeyRejected verifies that an unused key with
+// an expiry date in the past cannot be used for renewal.
+func TestRenewHandler_ExpiredKeyRejected(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const (
+		tenantID = "rnwexpiry000001"
+		apiKey   = "rnwexpiry000001"
+		expKey   = "OZ-RNW-EXPIRED01"
+	)
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0))
+
+	// Seed a key that is unused but expired.
+	seedLicenseKey(t, app, expKey, "pro", "unused", "2020-01-01 00:00:00.000Z")
+
+	body := strings.NewReader(fmt.Sprintf(`{"tenant_id":"%s","api_key":"%s","key":"%s"}`, tenantID, apiKey, expKey))
+	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, _ := se.Router.BuildMux()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGone {
+		t.Fatalf("expected 410 (key expired), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "expired") {
+		t.Errorf("expected 'expired' in response, got: %s", rec.Body.String())
+	}
+}
+
+// ── Tests: Status handler audit fixes ──────────────────────────────
+
+// TestStatusHandler_ExcludesInactiveSubscription verifies that /status
+// filters by active subscriptions only. Without the status filter, an
+// expired subscription from a prior churn could shadow an active one.
+func TestStatusHandler_ExcludesInactiveSubscription(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const (
+		tenantID = "statexpin000000"
+		apiKey   = "statexpinkey001"
+	)
+	seedTenant(t, app, tenantID, apiKey, "active")
+
+	// Seed an expired subscription (MORE RECENT starts_at — should sort first without status filter).
+	seedSubscriptionStatus(t, app, tenantID, "pro", "expired", time.Now())
+
+	// Seed an active subscription (OLDER starts_at — only returned with status filter).
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0))
+
+	req := httptest.NewRequest("POST", "/api/v1/license/status", nil)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+	mux, _ := se.Router.BuildMux()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// Must return active=true because the active subscription should
+	// be found, not the expired one.
+	if body["active"] != true {
+		t.Errorf("expected active=true (found active subscription), got %v; status filter may not be working", body["active"])
+	}
+}
+
+// seedSubscriptionStatus is seedSubscription with an explicit starts_at
+// timestamp (for tests that need to control subscription ordering).
+func seedSubscriptionStatus(t *testing.T, app *tests.TestApp, tenantID, tierKey, status string, startsAt time.Time) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("subscriptions")
+	if err != nil {
+		t.Fatalf("subscriptions collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("tenant_id", []string{tenantID})
+	rec.Set("tier_key", tierKey)
+	rec.Set("max_stores", 5)
+	rec.Set("max_pos_instances", 3)
+	rec.Set("allowed_types", `["restaurant-pos", "store-pos"]`)
+	rec.Set("status", status)
+	rec.Set("starts_at", startsAt.Format(time.RFC3339))
+	rec.Set("expires_at", startsAt.AddDate(1, 0, 0).Format(time.RFC3339))
+	rec.Set("grace_until", startsAt.AddDate(1, 0, 14).Format(time.RFC3339))
+	rec.Set("signed_payload", "{}")
+	rec.Set("signature", "dummy-sig")
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed subscription for %q: %v", tenantID, err)
 	}
 }

@@ -49,10 +49,16 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 		}
 		tenantID := tenant.Id
 
-		// ── Find latest subscription ──────────────────────────────
+		// ── Find latest ACTIVE subscription ─────────────────────
+		// Only return active subscriptions — expired/revoked/grace_period
+		// subscriptions are not the current license state. Without the
+		// status filter, a more-recently-created "expired" subscription
+		// would shadow an older "active" one (when both share the same
+		// starts_at, or the expired one has a later starts_at from a
+		// churn that was subsequently reversed).
 		subs, err := app.FindRecordsByFilter(
 			"subscriptions",
-			"tenant_id = {:tenant_id}",
+			"tenant_id = {:tenant_id} && status = 'active'",
 			"-starts_at", 1, 0,
 			map[string]any{"tenant_id": tenantID},
 		)
