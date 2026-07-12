@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -29,12 +30,14 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 		// ── Authenticate via Authorization: Bearer header ────────
 		auth := e.Request.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, bearerPrefix) {
+			log.Printf("/status: missing or malformed Authorization header")
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "missing or malformed Authorization header (expected: Bearer <api_key>)",
 			})
 		}
 		apiKey := strings.TrimPrefix(auth, bearerPrefix)
 		if apiKey == "" {
+			log.Printf("/status: empty api_key after Bearer prefix")
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "missing or malformed Authorization header (expected: Bearer <api_key>)",
 			})
@@ -43,6 +46,12 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 		// ── Look up tenant by api_key (uniquely indexed) ─────────
 		tenant, err := app.FindFirstRecordByData("tenants", "api_key", apiKey)
 		if err != nil || tenant.GetString("status") != "active" {
+			if err != nil {
+				log.Printf("/status: unknown api_key (tenant lookup failed): %v", err)
+			} else {
+				log.Printf("/status: tenant %q status is %q, not active",
+					tenant.Id, tenant.GetString("status"))
+			}
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid api_key or tenant is not active",
 			})
@@ -63,6 +72,11 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 			map[string]any{"tenant_id": tenantID},
 		)
 		if err != nil || len(subs) == 0 {
+			if err != nil {
+				log.Printf("/status: subscription query failed for tenant=%q: %v", tenantID, err)
+			} else {
+				log.Printf("/status: tenant=%q has no active subscription", tenantID)
+			}
 			return e.JSON(http.StatusOK, map[string]any{
 				"tenant_id": tenantID,
 				"status":    tenant.GetString("status"),
@@ -72,11 +86,15 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		sub := subs[0]
+		tierKey := sub.GetString("tier_key")
+		subStatus := sub.GetString("status")
+		log.Printf("/status: tenant=%q tier=%s status=%s active=%v",
+			tenantID, tierKey, subStatus, subStatus == "active")
 		return e.JSON(http.StatusOK, map[string]any{
 			"tenant_id":   tenantID,
 			"status":      tenant.GetString("status"),
-			"tier":        sub.GetString("tier_key"),
-			"active":      sub.GetString("status") == "active",
+			"tier":        tierKey,
+			"active":      subStatus == "active",
 			"expires_at":  sub.GetString("expires_at"),
 			"grace_until": sub.GetString("grace_until"),
 			"max_stores":  sub.GetInt("max_stores"),
