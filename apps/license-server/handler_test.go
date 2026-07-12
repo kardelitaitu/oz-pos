@@ -2750,6 +2750,7 @@ func TestActivateHandler_AuthPaths(t *testing.T) {
 	const apiKey = "actauthtestkey123"
 	const email = "actauthtenant01@example.com"
 	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscription(t, app, tenantID, "pro", "active") // decorative — kept to mirror TestRenewHandler_WithSubscription 3-step setup
 
 	cases := []struct {
 		name       string
@@ -2790,13 +2791,6 @@ func TestActivateHandler_AuthPaths(t *testing.T) {
 			// activation.
 			newKey := fmt.Sprintf("OZ-ACTPATH-%02d", i)
 			seedLicenseKey(t, app, newKey, "pro", "unused", "2099-12-31 23:59:59.000Z")
-			// Pre-seed a subscription so the handler can complete
-			// the create-new-subscription path on first activation
-			// for this tenant (without this, the test would still
-			// pass on auth but the handler might trip on
-			// subscription-creation assumptions; the seed makes the
-			// path deterministic).
-			seedSubscription(t, app, tenantID, "pro", "active")
 
 			body := fmt.Sprintf(`{"key":"%s","email":"%s","machine_id":"actpathmac%05d","api_key":"%s"}`,
 				newKey, email, i, tc.bodyAPIKey)
