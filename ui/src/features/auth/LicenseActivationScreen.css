@@ -152,8 +152,8 @@
 .license-submit-btn {
   width: 100%;
   padding: 1rem;
-  background: var(--color-accent);
-  color: var(--color-accent-fg);
+  background: var(--primary-500);
+  color: #ffffff;
   border: none;
   border-radius: 12px;
   font-size: 1.125rem;
@@ -168,9 +168,9 @@
 }
 
 .license-submit-btn:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  background: var(--primary-600);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px var(--color-accent-alpha);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .license-submit-btn:active:not(:disabled) {
