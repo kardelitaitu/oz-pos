@@ -47,7 +47,7 @@ function tierLabel(tier: string): string {
 
 /** License settings section — displays tier, expiry, grace period, and quotas. */
 export default function LicenseSettings() {
-  useLocalization(); // loads Fluent bundle for <Localized> children
+  const { l10n } = useLocalization();
   const { addToast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -92,7 +92,7 @@ export default function LicenseSettings() {
   if (loading) {
     return (
       <Card shadow="sm" header={<Localized id="settings-section-license"><h2 className="settings-section-title">License</h2></Localized>}>
-        <div className="settings-form">
+        <div className="settings-form" role="status" aria-live="polite" aria-label={l10n.getString('settings-loading')}>
           <Localized id="settings-loading"><p>Loading&hellip;</p></Localized>
         </div>
       </Card>
@@ -105,7 +105,7 @@ export default function LicenseSettings() {
         <div className="settings-form">
           <div className="settings-error" role="alert">
             <p>{loadError}</p>
-            <Button variant="secondary" onClick={() => { setLoadError(null); load(); }}>
+            <Button variant="secondary" onClick={() => { setLoadError(null); load(); }} aria-label={l10n.getString('settings-retry')}>
               <Localized id="settings-retry"><span>Retry</span></Localized>
             </Button>
           </div>
@@ -118,7 +118,7 @@ export default function LicenseSettings() {
     return (
       <Card shadow="sm" header={<Localized id="settings-section-license"><h2 className="settings-section-title">License</h2></Localized>}>
         <div className="settings-form">
-          <p className="settings-hint">
+          <p className="settings-hint" role="status">
             <Localized id="settings-license-not-activated">
               <span>No license activated. Activate a license to see details here.</span>
             </Localized>
@@ -131,7 +131,7 @@ export default function LicenseSettings() {
   // ── Main render ─────────────────────────────────────────────
   return (
     <Card shadow="sm" header={<Localized id="settings-section-license"><h2 className="settings-section-title">License</h2></Localized>}>
-      <div className="settings-form settings-license-section">
+      <div className="settings-form settings-license-section" role="region" aria-label={l10n.getString('settings-section-license')}>
 
         {/* ── Subscription details from local payload ── */}
         <div className="settings-license-row">
@@ -203,6 +203,7 @@ export default function LicenseSettings() {
             variant="secondary"
             loading={checkingServer}
             onClick={handleCheckServer}
+            aria-label={l10n.getString('settings-license-check-server')}
           >
             <Localized id="settings-license-check-server">
               <span>Check Server Status</span>
@@ -211,7 +212,7 @@ export default function LicenseSettings() {
         </div>
 
         {serverStatus && (
-          <div className="settings-license-server-section">
+          <div className="settings-license-server-section" role="region" aria-label={l10n.getString('settings-license-server-results')}>
             <div className="settings-license-row">
               <span className="settings-license-label">
                 <Localized id="settings-license-server-tier"><span>Server Tier</span></Localized>

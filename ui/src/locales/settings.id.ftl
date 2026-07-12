@@ -591,6 +591,7 @@ settings-license-check-server = Periksa Status Server
 settings-license-server-tier = Tingkat Server
 settings-license-server-active = Server Aktif
 settings-license-server-expires = Server Kedaluwarsa
+settings-license-server-results = Hasil Pemeriksaan Lisensi
 settings-license-type-value = Proprietary
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
 

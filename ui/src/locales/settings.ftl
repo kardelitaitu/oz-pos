@@ -263,6 +263,7 @@ settings-license-check-server = Check Server Status
 settings-license-server-tier = Server Tier
 settings-license-server-active = Server Active
 settings-license-server-expires = Server Expires
+settings-license-server-results = License Check Results
 settings-license-type-value = Proprietary
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
 
