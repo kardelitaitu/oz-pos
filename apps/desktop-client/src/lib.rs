@@ -1,6 +1,4 @@
 #![warn(missing_docs)]
-// suppress the lib-test duplicate of clippy::collapsible_if on `cargo clippy --all-targets` (lib target still surfaces it). Remove me when the lint is fixed.
-#![cfg_attr(test, allow(clippy::collapsible_if))]
 
 //! Tauri v2 application entry point.
 //!
