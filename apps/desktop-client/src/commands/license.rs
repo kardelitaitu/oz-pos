@@ -317,11 +317,18 @@ mod tests {
     }
 
     #[test]
-    fn generate_machine_id_is_unique() {
-        let mut ids = std::collections::HashSet::new();
-        for _ in 0..100 {
-            let id = generate_machine_id();
-            assert!(ids.insert(id.clone()), "duplicate machine ID: {id}");
+    fn generate_machine_id_is_deterministic() {
+        // The machine ID is derived from the system UUID (or a random
+        // fallback), hashed via SHA-256.  On the same machine it must
+        // always return the same value — the first 15 hex chars of the
+        // hash are stable.
+        let id1 = generate_machine_id();
+        for _ in 0..10 {
+            assert_eq!(
+                generate_machine_id(),
+                id1,
+                "machine ID changed between calls"
+            );
         }
     }
 

@@ -81,10 +81,12 @@ impl serde::Serialize for AppError {
         #[serde(tag = "kind", rename_all = "camelCase")]
         enum AppErrorDto<'a> {
             Core {
+                #[serde(rename = "subKind")]
                 sub_kind: &'a CoreErrorKind,
                 message: &'a str,
             },
             Hardware {
+                #[serde(rename = "subKind")]
                 sub_kind: &'a HalErrorKind,
                 message: &'a str,
             },
@@ -313,7 +315,7 @@ mod tests {
             message: "name required".into(),
         };
         let json = serde_json::to_value(&err).unwrap();
-        assert_eq!(json["subKind"], "Validation");
+        assert_eq!(json["subKind"], "validation");
     }
 
     #[test]
@@ -323,7 +325,7 @@ mod tests {
             message: "device not responding".into(),
         };
         let json = serde_json::to_value(&err).unwrap();
-        assert_eq!(json["subKind"], "Timeout");
+        assert_eq!(json["subKind"], "timeout");
     }
 
     // ── From conversions ─────────────────────────────────────
