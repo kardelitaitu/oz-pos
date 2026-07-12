@@ -45,10 +45,10 @@ pub async fn get_local_ip() -> Result<String, AppError> {
         Ok(s) => s,
         Err(_) => return Ok("127.0.0.1".into()),
     };
-    if let Ok(()) = socket.connect("8.8.8.8:80") {
-        if let Ok(local_addr) = socket.local_addr() {
-            return Ok(local_addr.ip().to_string());
-        }
+    if let Ok(()) = socket.connect("8.8.8.8:80")
+        && let Ok(local_addr) = socket.local_addr()
+    {
+        return Ok(local_addr.ip().to_string());
     }
     Ok("127.0.0.1".into())
 }

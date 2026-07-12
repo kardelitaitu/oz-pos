@@ -213,6 +213,49 @@ registerNavItem({ route: 'stock-transfers', label: 'Stock Transfers', feature: '
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 
+import { useTheme } from '@/frontend/shell/ThemeProvider';
+import { useState, useEffect } from 'react';
+
+function ThemeDebug() {
+  const { theme } = useTheme();
+  const [dataTheme, setDataTheme] = useState(() => document.documentElement.getAttribute('data-theme'));
+  const [localStorageValue, setLocalStorageValue] = useState(() => localStorage.getItem('oz-pos-theme-v4'));
+  
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setDataTheme(document.documentElement.getAttribute('data-theme'));
+      setLocalStorageValue(localStorage.getItem('oz-pos-theme-v4'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 10,
+      left: 10,
+      zIndex: 99999,
+      background: 'rgba(0, 0, 0, 0.85)',
+      color: '#00ff00',
+      padding: '10px 15px',
+      borderRadius: '8px',
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      border: '1px solid #00ff00',
+      pointerEvents: 'none',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px'
+    }}>
+      <div>Theme state: {theme}</div>
+      <div>DOM data-theme: {dataTheme || 'null'}</div>
+      <div>LocalStorage: {localStorageValue || 'null'}</div>
+      <div>OS Dark: {window.matchMedia('(prefers-color-scheme: dark)').matches ? 'yes' : 'no'}</div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -220,6 +263,7 @@ export default function App() {
         <BrandProvider>
           <ZoomProvider>
             <ThemeProvider>
+              <ThemeDebug />
               <AuthProvider>
                 <ToastProvider>
                   <WorkspaceProvider>

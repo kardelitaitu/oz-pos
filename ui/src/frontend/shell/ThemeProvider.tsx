@@ -30,7 +30,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = 'oz-pos-theme-v3';
+const STORAGE_KEY = 'oz-pos-theme-v4';
 
 // ── Provider ───────────────────────────────────────────────────────
 
