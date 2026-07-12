@@ -1,0 +1,703 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import LicenseSettings from '../LicenseSettings';
+import { getLicenseStatus, checkLicenseStatus } from '@/api/license';
+
+const mockAddToast = vi.fn();
+
+vi.mock('@/frontend/shared/Toast', () => ({
+  useToast: () => ({ addToast: mockAddToast }),
+}));
+
+vi.mock('@/api/license', () => ({
+  getLicenseStatus: vi.fn(),
+  checkLicenseStatus: vi.fn(),
+}));
+
+vi.mock('@fluent/react', () => ({
+  Localized: ({ children }: any) => <>{children}</>,
+  useLocalization: () => ({
+    l10n: {
+      getString: (id: string) => {
+        const map: Record<string, string> = {
+          'settings-loading': 'Loading…',
+          'settings-retry': 'Retry',
+          'settings-section-license': 'License',
+          'settings-license-tier': 'Tier',
+          'settings-license-status-label': 'Status',
+          'settings-license-expires': 'Expires',
+          'settings-license-grace': 'Grace Period Until',
+          'settings-license-max-stores': 'Max Stores',
+          'settings-license-max-pos': 'Max POS Instances',
+          'settings-license-tenant-id': 'Tenant ID',
+          'settings-license-allowed-types': 'Allowed Workspace Types',
+          'settings-license-allowed-types-all': 'All',
+          'settings-license-not-activated':
+            'No license activated. Activate a license to see details here.',
+          'settings-license-check-server': 'Check Server Status',
+          'settings-license-server-tier': 'Server Tier',
+          'settings-license-server-active': 'Server Active',
+          'settings-license-server-expires': 'Server Expires',
+          'settings-license-server-results': 'License Check Results',
+        };
+        return map[id] || id;
+      },
+    },
+  }),
+}));
+
+vi.mock('@/components/Card', () => ({
+  Card: ({ children, header }: any) => (
+    <div data-testid="card">
+      {header}
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/Button', () => ({
+  Button: ({ children, variant, loading, onClick, ...rest }: any) => (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      data-variant={variant}
+      data-loading={loading ? 'true' : 'false'}
+      aria-label={rest['aria-label']}
+      aria-busy={loading ? 'true' : undefined}
+    >
+      {loading ? 'Loading…' : children}
+    </button>
+  ),
+}));
+
+/** Build a valid license payload for tests. */
+function makePayload(overrides: Partial<any> = {}) {
+  return {
+    tenant_id: 'abc123-tenant',
+    tier_key: 'pro',
+    status: 'active',
+    max_stores: 5,
+    max_pos_instances: 10,
+    allowed_types: ['retail', 'restaurant'],
+    starts_at: '2025-01-01T00:00:00Z',
+    expires_at: '2026-01-01T00:00:00Z',
+    grace_until: '2026-02-01T00:00:00Z',
+    issued_at: '2025-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+const VALID_LICENSE_STATUS = {
+  is_active: true,
+  status: 'valid' as const,
+  payload: JSON.stringify(makePayload()),
+  message: null,
+};
+
+const SERVER_STATUS = {
+  tenantId: 'abc123-tenant',
+  status: 'active',
+  tier: 'pro',
+  active: true,
+  expiresAt: '2026-01-01T00:00:00Z',
+  graceUntil: '2026-02-01T00:00:00Z',
+  maxStores: 5,
+};
+
+describe('LicenseSettings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // ── 1. Loading state ──────────────────────────────────────
+  describe('Loading state', () => {
+    it('shows loading indicator while getLicenseStatus is pending', () => {
+      let resolve: any;
+      vi.mocked(getLicenseStatus).mockReturnValue(
+        new Promise((r) => { resolve = r; }),
+      );
+      render(<LicenseSettings />);
+      expect(screen.getByText('Loading…')).toBeInTheDocument();
+      resolve(VALID_LICENSE_STATUS);
+    });
+
+    it('loading container has role="status" for screen readers', async () => {
+      let resolve: any;
+      vi.mocked(getLicenseStatus).mockReturnValue(
+        new Promise((r) => { resolve = r; }),
+      );
+      const { container } = render(<LicenseSettings />);
+      const statusEl = container.querySelector('[role="status"]');
+      expect(statusEl).toBeInTheDocument();
+      expect(statusEl).toHaveAttribute('aria-live', 'polite');
+      resolve(VALID_LICENSE_STATUS);
+    });
+  });
+
+  // ── 2. Error state ────────────────────────────────────────
+  describe('Error state', () => {
+    it('shows error message when getLicenseStatus rejects', async () => {
+      vi.mocked(getLicenseStatus).mockRejectedValue(
+        new Error('Network offline'),
+      );
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('Network offline')).toBeInTheDocument();
+      });
+    });
+
+    it('shows generic error when rejection is not an Error instance', async () => {
+      vi.mocked(getLicenseStatus).mockRejectedValue('some string error');
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByText('Failed to load license info'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('error container has role="alert"', async () => {
+      vi.mocked(getLicenseStatus).mockRejectedValue(new Error('fail'));
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(container.querySelector('[role="alert"]')).toBeInTheDocument();
+      });
+    });
+
+    it('Retry button has aria-label', async () => {
+      vi.mocked(getLicenseStatus).mockRejectedValue(new Error('fail'));
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        const btn = screen.getByRole('button', { name: /retry/i });
+        expect(btn).toHaveAttribute('aria-label', 'Retry');
+      });
+    });
+
+    it('clicking Retry re-invokes getLicenseStatus', async () => {
+      vi.mocked(getLicenseStatus)
+        .mockRejectedValueOnce(new Error('fail'))
+        .mockResolvedValueOnce(VALID_LICENSE_STATUS);
+
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('fail')).toBeInTheDocument();
+      });
+      expect(getLicenseStatus).toHaveBeenCalledTimes(1);
+
+      await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+      expect(getLicenseStatus).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(screen.getByText('Pro')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ── 3. Not-activated state ────────────────────────────────
+  describe('Not-activated state', () => {
+    it('shows message when payload is null', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        is_active: false,
+        status: 'missing',
+        payload: null,
+        message: null,
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'No license activated. Activate a license to see details here.',
+          ),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('not-activated message has role="status"', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        is_active: false,
+        status: 'missing',
+        payload: null,
+        message: null,
+      });
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        const el = container.querySelector('p[role="status"]');
+        expect(el).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ── 4. Normal render with valid payload ───────────────────
+  describe('Normal render', () => {
+    beforeEach(() => {
+      vi.mocked(getLicenseStatus).mockResolvedValue(VALID_LICENSE_STATUS);
+    });
+
+    it('displays tier with correct label', async () => {
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('Pro')).toBeInTheDocument();
+      });
+    });
+
+    it('applies correct CSS class for tier badge', async () => {
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          container.querySelector('.settings-license-value--tier-pro'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('displays status field', async () => {
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('active')).toBeInTheDocument();
+      });
+    });
+
+    it('active status has --active CSS class', async () => {
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          container.querySelector('.settings-license-value--active'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('non-active status has --warning CSS class', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(makePayload({ status: 'gracePeriod' })),
+      });
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          container.querySelector('.settings-license-value--warning'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('displays formatted expiry date', async () => {
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        // formatDate converts RFC 3339 to locale date; year appears in both
+        // the local expiry row and the server check results, so getAllByText
+        const yearMatches = screen.getAllByText(/2026/);
+        expect(yearMatches.length).toBeGreaterThanOrEqual(1);
+      });
+    });
+
+    it('displays formatted grace period date', async () => {
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText(/February/)).toBeInTheDocument();
+      });
+    });
+
+    it('displays max stores count', async () => {
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('5')).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Unlimited" when max_stores is 0', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(makePayload({ max_stores: 0 })),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getAllByText('Unlimited').length).toBeGreaterThanOrEqual(1);
+      });
+    });
+
+    it('displays max POS instances count', async () => {
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('10')).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Unlimited" when max_pos_instances is 0', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(makePayload({ max_pos_instances: 0 })),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getAllByText('Unlimited').length).toBeGreaterThanOrEqual(1);
+      });
+    });
+
+    it('displays tenant ID in monospace', async () => {
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          container.querySelector('.settings-license-value--mono'),
+        ).toBeInTheDocument();
+        expect(screen.getByText('abc123-tenant')).toBeInTheDocument();
+      });
+    });
+
+    it('license section container has role="region" with aria-label', async () => {
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        const region = container.querySelector(
+          '.settings-license-section[role="region"]',
+        );
+        expect(region).toHaveAttribute('aria-label', 'License');
+      });
+    });
+  });
+
+  // ── 5. Allowed types display ──────────────────────────────
+  describe('Allowed workspace types', () => {
+    it('displays comma-joined workspace type labels', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(
+          makePayload({ allowed_types: ['retail', 'restaurant', 'cafe'] }),
+        ),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByText('Retail, Restaurant, Café'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('shows localized "All" when allowed_types is empty', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(makePayload({ allowed_types: [] })),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('All')).toBeInTheDocument();
+      });
+    });
+
+    it('gracefully handles null allowed_types (null-safe guard)', async () => {
+      // Simulate an older payload that omits allowed_types
+      const payloadWithoutTypes = {
+        tenant_id: 'abc123-tenant',
+        tier_key: 'pro',
+        status: 'active',
+        max_stores: 5,
+        max_pos_instances: 10,
+        starts_at: '2025-01-01T00:00:00Z',
+        expires_at: '2026-01-01T00:00:00Z',
+        grace_until: '2026-02-01T00:00:00Z',
+        issued_at: '2025-01-01T00:00:00Z',
+      };
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(payloadWithoutTypes),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        // Should not crash, and should show "All" since undefined ?? [] = []
+        expect(screen.getByText('All')).toBeInTheDocument();
+      });
+    });
+
+    it('falls back to raw slug for unmapped workspace types', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(
+          makePayload({ allowed_types: ['unknown-type'] }),
+        ),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('unknown-type')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ── 6. JSON payload edge cases ────────────────────────────
+  describe('JSON payload edge cases', () => {
+    it('handles malformed JSON payload gracefully', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        is_active: true,
+        status: 'valid',
+        payload: '{ not valid json }',
+        message: null,
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        // Should fall through to error state since JSON.parse throws
+        expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+      });
+    });
+
+    it('handles empty string payload gracefully', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        is_active: true,
+        status: 'valid',
+        payload: '',
+        message: null,
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        // Empty string is falsy, so payload is treated as null → not-activated
+        expect(
+          screen.getByText(
+            'No license activated. Activate a license to see details here.',
+          ),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('handles payload with unexpected shape (missing all fields)', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        is_active: true,
+        status: 'valid',
+        payload: '{}',
+        message: null,
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        // When fields are undefined, String(undefined) renders the literal
+        // string "undefined" for both max_stores and max_pos_instances.
+        // The component doesn't crash.
+        const undefs = screen.getAllByText('undefined');
+        expect(undefs.length).toBeGreaterThanOrEqual(2);
+      });
+    });
+
+    it('handles numeric 0 expiry gracefully', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(makePayload({ max_stores: 0, max_pos_instances: 0 })),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        const unlimited = screen.getAllByText('Unlimited');
+        expect(unlimited.length).toBe(2); // both stores and instances
+      });
+    });
+  });
+
+  // ── 7. Server status check ────────────────────────────────
+  describe('Server status check', () => {
+    beforeEach(() => {
+      vi.mocked(getLicenseStatus).mockResolvedValue(VALID_LICENSE_STATUS);
+    });
+
+    it('Check Server Status button is present and has aria-label', async () => {
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        const btn = screen.getByRole('button', {
+          name: /check server status/i,
+        });
+        expect(btn).toHaveAttribute('aria-label', 'Check Server Status');
+      });
+    });
+
+    it('clicking Check Server Status calls checkLicenseStatus', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+      expect(checkLicenseStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows server results after successful check', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+
+      await waitFor(() => {
+        // "Pro" appears in both the local tier badge and the server tier row
+        const tierMatches = screen.getAllByText('Pro');
+        expect(tierMatches.length).toBeGreaterThanOrEqual(2);
+        expect(screen.getByText('Yes')).toBeInTheDocument();
+      });
+    });
+
+    it('shows "No" when server active is false', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue({
+        ...SERVER_STATUS,
+        active: false,
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('No')).toBeInTheDocument();
+      });
+    });
+
+    it('server results region has role="region" with aria-label', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+
+      await waitFor(() => {
+        const region = container.querySelector(
+          '.settings-license-server-section[role="region"]',
+        );
+        expect(region).toHaveAttribute('aria-label', 'License Check Results');
+      });
+    });
+
+    it('does not show expiresAt row when server returns null', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue({
+        ...SERVER_STATUS,
+        expiresAt: null,
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Yes')).toBeInTheDocument();
+      });
+      // "Server Expires" label should NOT be in the document
+      expect(screen.queryByText('Server Expires')).not.toBeInTheDocument();
+    });
+
+    it('shows info toast on successful check', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith({
+          type: 'info',
+          message: 'Server license status retrieved.',
+        });
+      });
+    });
+
+    it('shows error toast on failed check', async () => {
+      vi.mocked(checkLicenseStatus).mockRejectedValue(
+        new Error('Server unreachable'),
+      );
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith({
+          type: 'error',
+          message: 'Server unreachable',
+        });
+      });
+    });
+
+    it('shows generic error toast for non-Error rejection', async () => {
+      vi.mocked(checkLicenseStatus).mockRejectedValue('timeout');
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /check server status/i }),
+        ).toBeInTheDocument();
+      });
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /check server status/i }),
+      );
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith({
+          type: 'error',
+          message: 'Server check failed',
+        });
+      });
+    });
+  });
+
+  // ── 8. Tier variants ──────────────────────────────────────
+  describe('Tier badge variants', () => {
+    it.each([
+      ['free', 'Free', 'settings-license-value--tier-free'],
+      ['pro', 'Pro', 'settings-license-value--tier-pro'],
+      ['premium', 'Premium', 'settings-license-value--tier-premium'],
+      ['enterprise', 'Enterprise', 'settings-license-value--tier-enterprise'],
+    ])(
+      'displays %s tier with label "%s" and CSS class %s',
+      async (tierKey, expectedLabel, expectedClass) => {
+        vi.mocked(getLicenseStatus).mockResolvedValue({
+          ...VALID_LICENSE_STATUS,
+          payload: JSON.stringify(makePayload({ tier_key: tierKey })),
+        });
+        const { container } = render(<LicenseSettings />);
+        await waitFor(() => {
+          expect(screen.getByText(expectedLabel)).toBeInTheDocument();
+          expect(
+            container.querySelector(`.${expectedClass}`),
+          ).toBeInTheDocument();
+        });
+      },
+    );
+
+    it('shows raw tier slug for unknown tiers', async () => {
+      vi.mocked(getLicenseStatus).mockResolvedValue({
+        ...VALID_LICENSE_STATUS,
+        payload: JSON.stringify(makePayload({ tier_key: 'custom_tier' })),
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('custom_tier')).toBeInTheDocument();
+      });
+    });
+  });
+});
