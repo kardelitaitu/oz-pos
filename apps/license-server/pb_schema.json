@@ -502,6 +502,21 @@
         "min": ""
       },
       {
+        "help": "Hardware-bound fingerprint derived from motherboard UUID or Windows MachineGuid (SHA-256, 15 hex chars). Stable across app reinstalls and DB wipes.",
+        "hidden": false,
+        "id": "text4821093761",
+        "name": "machine_id",
+        "presentable": true,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 15,
+        "min": 0,
+        "pattern": "^[a-f0-9]{15}$",
+        "primaryKey": false
+      },
+      {
         "hidden": false,
         "id": "autodate7039629861",
         "name": "created",
@@ -522,6 +537,8 @@
         "type": "autodate"
       }
     ],
-    "indexes": []
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_tenant_machines_machine_id ON tenant_machines (machine_id) WHERE machine_id IS NOT NULL AND machine_id != ''"
+    ]
   }
 ]
