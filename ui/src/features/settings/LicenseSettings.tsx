@@ -45,6 +45,19 @@ function tierLabel(tier: string): string {
   return map[tier] || tier;
 }
 
+/** Human-readable labels for workspace type slugs. */
+function workspaceTypeLabel(type: string): string {
+  const map: Record<string, string> = {
+    retail: 'Retail',
+    restaurant: 'Restaurant',
+    cafe: 'Café',
+    kiosk: 'Kiosk',
+    franchise: 'Franchise',
+    warehouse: 'Warehouse',
+  };
+  return map[type] || type;
+}
+
 /** License settings section — displays tier, expiry, grace period, and quotas. */
 export default function LicenseSettings() {
   const { l10n } = useLocalization();
@@ -194,6 +207,17 @@ export default function LicenseSettings() {
           </span>
           <span className="settings-license-value settings-license-value--mono">
             {payload.tenant_id}
+          </span>
+        </div>
+
+        <div className="settings-license-row">
+          <span className="settings-license-label">
+            <Localized id="settings-license-allowed-types"><span>Allowed Workspace Types</span></Localized>
+          </span>
+          <span className="settings-license-value">
+            {(payload.allowed_types ?? []).length === 0
+              ? (<Localized id="settings-license-allowed-types-all"><span>All</span></Localized>)
+              : payload.allowed_types.map(workspaceTypeLabel).join(', ')}
           </span>
         </div>
 
