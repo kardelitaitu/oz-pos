@@ -15,7 +15,7 @@ import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 // ── Types ──────────────────────────────────────────────────────────
 
 /** Application colour-scheme theme. */
-export type Theme = 'light' | 'dark';
+export type Theme = 'default' | 'light' | 'dark';
 
 interface ThemeContextValue {
   /** Current resolved theme. */
@@ -30,7 +30,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = 'oz-pos-theme';
+const STORAGE_KEY = 'oz-pos-theme-v2';
 
 // ── Provider ───────────────────────────────────────────────────────
 
@@ -52,13 +52,10 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => {
     // 1. Check localStorage
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark') return stored;
+    if (stored === 'default' || stored === 'light' || stored === 'dark') return stored as Theme;
 
-    // 2. Fall back to OS preference
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'light';
+    // 2. Fall back to default theme
+    return 'default';
   });
 
   // Sync `data-theme` attribute and localStorage whenever theme changes.
@@ -69,7 +66,11 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
     // Add transitioning class to animate the theme change.
     html.classList.add('is-theme-transitioning');
-    html.setAttribute('data-theme', theme);
+    if (theme === 'default') {
+      html.removeAttribute('data-theme');
+    } else {
+      html.setAttribute('data-theme', theme);
+    }
     localStorage.setItem(STORAGE_KEY, theme);
 
     // Remove the class after transitions complete so subsequent
@@ -108,7 +109,11 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [brandSettings.primary_colour]);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
+    setThemeState((prev) => {
+      if (prev === 'default') return 'light';
+      if (prev === 'light') return 'dark';
+      return 'default';
+    });
   }, []);
 
   const setTheme = useCallback((t: Theme) => {

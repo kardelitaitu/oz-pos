@@ -36,7 +36,7 @@ body {
   font-weight: var(--font-weight-normal, 400);
   line-height: var(--leading-normal, 1.5);
   color: var(--color-fg, #1a1a1a);
-  background-color: var(--color-bg, #ffffff);
+  background: var(--color-bg, #ffffff);
   min-height: 100dvh;
   overflow-x: hidden;
 }

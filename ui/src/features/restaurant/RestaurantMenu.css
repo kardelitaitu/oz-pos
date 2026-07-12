@@ -337,7 +337,6 @@
     box-shadow var(--duration-200) var(--ease-out);
 
 }
-}
 
 .restaurant-card--added {
   z-index: 2;

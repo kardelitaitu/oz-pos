@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 // ── Hooks only used for type-level assertions are tested implicitly
 //    via renderHook + wrapper. No need to import Theme explicitly.
 
-const STORAGE_KEY = 'oz-pos-theme';
+const STORAGE_KEY = 'oz-pos-theme-v2';
 
 /** Shared wrapper that provides both brand and theme context. */
 function Wrapper({ children }: { children: ReactNode }) {
@@ -70,15 +70,15 @@ describe('ThemeProvider', () => {
 
   // ── Initial theme detection ────────────────────────────────────
 
-  it('defaults to light theme when localStorage is empty and OS is light', () => {
+  it('defaults to default theme when localStorage is empty and OS is light', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    expect(result.current.theme).toBe('light');
+    expect(result.current.theme).toBe('default');
   });
 
-  it('defaults to dark theme when prefers-color-scheme is dark', () => {
+  it('defaults to default theme even when prefers-color-scheme is dark', () => {
     setMatchMedia(true);
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    expect(result.current.theme).toBe('dark');
+    expect(result.current.theme).toBe('default');
   });
 
   it('reads stored theme from localStorage', () => {
@@ -96,19 +96,27 @@ describe('ThemeProvider', () => {
 
   // ── toggleTheme ────────────────────────────────────────────────
 
+  it('toggleTheme switches from default to light', () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    expect(result.current.theme).toBe('default');
+    act(() => result.current.toggleTheme());
+    expect(result.current.theme).toBe('light');
+  });
+
   it('toggleTheme switches from light to dark', () => {
+    localStorage.setItem(STORAGE_KEY, 'light');
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
     expect(result.current.theme).toBe('light');
     act(() => result.current.toggleTheme());
     expect(result.current.theme).toBe('dark');
   });
 
-  it('toggleTheme switches from dark to light', () => {
+  it('toggleTheme switches from dark to default', () => {
     localStorage.setItem(STORAGE_KEY, 'dark');
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
     expect(result.current.theme).toBe('dark');
     act(() => result.current.toggleTheme());
-    expect(result.current.theme).toBe('light');
+    expect(result.current.theme).toBe('default');
   });
 
   // ── setTheme ───────────────────────────────────────────────────
@@ -128,21 +136,21 @@ describe('ThemeProvider', () => {
 
   // ── DOM side-effects ───────────────────────────────────────────
 
-  it('updates data-theme attribute on html element', () => {
+  it('removes data-theme attribute on html element for default theme', () => {
     const html = document.documentElement;
     render(
       <BrandProvider>
         <ThemeProvider><div /></ThemeProvider>
       </BrandProvider>,
     );
-    expect(html.getAttribute('data-theme')).toBe('light');
+    expect(html.hasAttribute('data-theme')).toBe(false);
   });
 
   it('updates data-theme when theme changes', () => {
     const html = document.documentElement;
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    act(() => result.current.toggleTheme());
-    expect(html.getAttribute('data-theme')).toBe('dark');
+    act(() => result.current.toggleTheme()); // default -> light
+    expect(html.getAttribute('data-theme')).toBe('light');
   });
 
   it('persists theme to localStorage', () => {
