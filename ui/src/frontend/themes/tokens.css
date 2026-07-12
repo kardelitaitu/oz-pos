@@ -10,12 +10,12 @@
  *   e.g. --color-bg-elevated, --space-4, --font-size-lg
  *
  * THEMES
- *   Default (:root) is Indigo Glassmorphism (Dark)
- *   [data-theme="light"] is Emerald Solid (Light)
- *   [data-theme="dark"] is Emerald Solid (Dark)
+ *   Default (:root) is Steel Blue Glassmorphism (Dark)
+ *   [data-theme="light"] is Steel Blue Elevated (Light)
+ *   [data-theme="dark"] is Steel Blue Solid (Dark)
  *   ============================================================ */
 
-/* ── Default Theme (Indigo Glassmorphism) ──────────────────── */
+/* ── Default Theme (Steel Blue Glassmorphism) ──────────────────── */
 :root {
   /* ── Font ─────────────────────────────────────── */
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
@@ -87,60 +87,65 @@
   --info-500:    #3b82f6;
 
   /* ── Semantic colour tokens (Steel Blue Glassmorphism) ────────────── */
-  --color-bg:              radial-gradient(circle at 50% -20%, #0e1e30 0%, #090e14 100%);
-  --color-bg-elevated:     rgba(255, 255, 255, 0.03);
-  --color-bg-surface:      rgba(255, 255, 255, 0.02);
-  --color-bg-overlay:      rgba(0, 0, 0, 0.7);
-  --color-bg-input:        rgba(0, 0, 0, 0.2);
+  /* Stronger radial bloom — visible glow from top implies depth */
+  --color-bg:              radial-gradient(ellipse at 50% -10%, #132540 0%, #07111d 60%, #040a12 100%);
+  /* Blue-tinted glass surfaces — hue resonance with the background */
+  --color-bg-elevated:     rgba(43, 92, 143, 0.08);
+  --color-bg-surface:      rgba(43, 92, 143, 0.05);
+  --color-bg-overlay:      rgba(4, 10, 18, 0.80);
+  --color-bg-input:        rgba(0, 0, 0, 0.25);
 
-  --color-fg:              #ffffff;
+  --color-fg:              #f0f6ff;
   --color-fg-primary:      #ffffff;
-  --color-fg-secondary:    #cbd5e1;
-  --color-fg-tertiary:     #94a3b8;
-  --color-fg-disabled:     #475569;
-  --color-fg-inverse:      #0d0d14;
+  --color-fg-secondary:    #a8c4e0;
+  --color-fg-tertiary:     #6b92b4;
+  --color-fg-disabled:     #3d5a72;
+  --color-fg-inverse:      #07111d;
 
-  --color-accent:          var(--primary-600);
-  --color-accent-hover:    var(--primary-700);
-  --color-accent-active:   var(--primary-800);
-  --color-accent-subtle:   var(--primary-900);
+  /* Luminous accent — lighter steel blue pops on dark backgrounds */
+  --color-accent:          #5a9fd4;
+  --color-accent-hover:    #73b2e0;
+  --color-accent-active:   #3d88c4;
+  --color-accent-subtle:   rgba(43, 92, 143, 0.18);
   --color-accent-fg:       #ffffff;
 
-  --color-border:          rgba(255, 255, 255, 0.08);
-  --color-border-hover:    rgba(255, 255, 255, 0.15);
-  --color-border-strong:   rgba(255, 255, 255, 0.2);
-  --color-border-focus:    var(--primary-500);
-  --color-border-subtle:   rgba(255, 255, 255, 0.03);
+  /* Blue-tinted borders for hue resonance */
+  --color-border:          rgba(90, 159, 212, 0.12);
+  --color-border-hover:    rgba(90, 159, 212, 0.25);
+  --color-border-strong:   rgba(90, 159, 212, 0.35);
+  --color-border-focus:    #5a9fd4;
+  --color-border-subtle:   rgba(43, 92, 143, 0.06);
 
   --color-success:         #4ade80;
-  --color-success-bg:      rgba(74, 222, 128, 0.1);
+  --color-success-bg:      rgba(74, 222, 128, 0.08);
   --color-success-dim:     #86efac;
   --color-warning:         #fbbf24;
-  --color-warning-bg:      rgba(251, 191, 36, 0.1);
+  --color-warning-bg:      rgba(251, 191, 36, 0.08);
   --color-danger:          #f87171;
   --color-danger-hover:    #fca5a5;
   --color-danger-700:      #dc2626;
-  --color-danger-bg:       rgba(239, 68, 68, 0.1);
+  --color-danger-bg:       rgba(239, 68, 68, 0.08);
   --color-danger-dim:      #fecaca;
   --color-danger-fg:       #ef4444;
   --color-info:            #60a5fa;
-  --color-info-bg:         rgba(96, 165, 250, 0.1);
+  --color-info-bg:         rgba(96, 165, 250, 0.08);
 
-  --color-link:            var(--primary-400);
-  --color-link-hover:      var(--primary-300);
+  --color-link:            #73b2e0;
+  --color-link-hover:      #93c5fd;
   --color-link-visited:    #a78bfa;
 
   --color-bg-primary:      var(--neutral-50);
   --color-bg-secondary:    var(--neutral-100);
-  --color-bg-hover:        rgba(255, 255, 255, 0.1);
+  --color-bg-hover:        rgba(90, 159, 212, 0.1);
 
-  --color-accent-dim:      rgba(99, 102, 241, 0.12);
-  --color-accent-alpha:    rgba(99, 102, 241, 0.2);
-  --color-accent-secondary: var(--primary-500);
-  
+  --color-accent-dim:      rgba(90, 159, 212, 0.12);
+  --color-accent-alpha:    rgba(90, 159, 212, 0.2);
+  --color-accent-secondary: #5a9fd4;
+
   /* Glassmorphism Controls */
   --blur-amount: 20px;
-  --shadow-glow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  /* Blue-tinted glow shadow for hue-resonant depth */
+  --shadow-glow: 0 8px 32px rgba(4, 10, 18, 0.7), inset 0 1px 0 rgba(90, 159, 212, 0.15);
 
   /* ── Spacing scale (rem) ───────────────────────── */
   --space-0:   0;
@@ -175,14 +180,14 @@
   --radius-3xl:  1.5rem;
   --radius-full: 9999px;
 
-  /* ── Shadows (Default Glassmorphic mode) ──────────────────────── */
-  --shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
-  --shadow-xl:   0 20px 25px -5px rgba(0, 0, 0, 0.45), 0 8px 10px -6px rgba(0, 0, 0, 0.35);
-  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  /* ── Shadows (Steel Blue Glassmorphic) — blue-tinted for depth ──── */
+  --shadow-xs:   0 1px 2px rgba(4, 10, 18, 0.5);
+  --shadow-sm:   0 1px 3px rgba(4, 10, 18, 0.5), 0 1px 2px rgba(4, 10, 18, 0.4);
+  --shadow-md:   0 4px 12px -1px rgba(4, 10, 18, 0.55), 0 2px 4px -2px rgba(43, 92, 143, 0.15);
+  --shadow-lg:   0 10px 24px -3px rgba(4, 10, 18, 0.6), 0 4px 8px -4px rgba(43, 92, 143, 0.2);
+  --shadow-xl:   0 20px 40px -5px rgba(4, 10, 18, 0.65), 0 8px 16px -6px rgba(43, 92, 143, 0.25);
+  --shadow-2xl:  0 25px 60px -12px rgba(4, 10, 18, 0.7), 0 0 0 1px rgba(90, 159, 212, 0.08);
+  --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.5);
 
   /* ── Timing / transitions ──────────────────────── */
   --duration-75:   75ms;
@@ -216,25 +221,25 @@
   --z-tooltip:   600;
 }
 
-/* ── Light mode (Emerald Solid) ──────────────────────────────────── */
+/* ── Light mode (Steel Blue Elevated) ────────────────────────────── */
 [data-theme='light'] {
   --blur-amount: 0px;
   --shadow-glow: none;
 
-  /* Neutral */
-  --neutral-50:  #fafafa;
-  --neutral-100: #f5f5f5;
-  --neutral-200: #e5e5e5;
-  --neutral-300: #d4d4d4;
-  --neutral-400: #a3a3a3;
-  --neutral-500: #737373;
-  --neutral-600: #525252;
-  --neutral-700: #404040;
-  --neutral-800: #262626;
-  --neutral-900: #171717;
-  --neutral-950: #0a0a0a;
+  /* Neutral — warm-cool white with subtle blue tint */
+  --neutral-50:  #f8fafc;
+  --neutral-100: #f1f5f9;
+  --neutral-200: #e2e8f0;
+  --neutral-300: #cbd5e1;
+  --neutral-400: #94a3b8;
+  --neutral-500: #64748b;
+  --neutral-600: #475569;
+  --neutral-700: #334155;
+  --neutral-800: #1e293b;
+  --neutral-900: #0f172a;
+  --neutral-950: #020617;
 
-  /* Brand / Primary — Steel Blue (matches logo text) */
+  /* Brand / Primary — Steel Blue */
   --primary-50:  #f0f5fa;
   --primary-100: #dbeafe;
   --primary-200: #b9d6f2;
@@ -248,14 +253,15 @@
   --primary-950: #08111b;
 
   /* Semantic colour tokens (light) */
-  --color-bg:              var(--neutral-200);
-  --color-bg-elevated:     var(--neutral-100);
-  --color-bg-surface:      var(--neutral-300);
-  --color-bg-overlay:      rgba(0, 0, 0, 0.4);
-  --color-bg-input:        var(--neutral-50);
+  /* Blue-tinted gradient gives a soft light-source feel from above */
+  --color-bg:              linear-gradient(160deg, #eef4fb 0%, #e2ecf7 50%, #d8e8f5 100%);
+  --color-bg-elevated:     #ffffff;
+  --color-bg-surface:      rgba(255, 255, 255, 0.7);
+  --color-bg-overlay:      rgba(15, 23, 42, 0.45);
+  --color-bg-input:        #ffffff;
 
-  --color-fg:              var(--neutral-900);
-  --color-fg-primary:      var(--neutral-950);
+  --color-fg:              var(--neutral-800);
+  --color-fg-primary:      var(--neutral-900);
   --color-fg-secondary:    var(--neutral-600);
   --color-fg-tertiary:     var(--neutral-400);
   --color-fg-disabled:     var(--neutral-300);
@@ -267,129 +273,137 @@
   --color-accent-subtle:   var(--primary-100);
   --color-accent-fg:       #ffffff;
 
-  --color-border:          var(--neutral-300);
-  --color-border-hover:    var(--neutral-400);
-  --color-border-strong:   var(--neutral-500);
+  --color-border:          rgba(43, 92, 143, 0.12);
+  --color-border-hover:    rgba(43, 92, 143, 0.22);
+  --color-border-strong:   rgba(43, 92, 143, 0.32);
   --color-border-focus:    var(--primary-500);
-  --color-border-subtle:   var(--neutral-200);
+  --color-border-subtle:   rgba(43, 92, 143, 0.06);
 
-  --color-success:         #22c55e;
-  --color-success-bg:      var(--primary-50);
+  --color-success:         #16a34a;
+  --color-success-bg:      #f0fdf4;
   --color-success-dim:     #86efac;
-  --color-warning:         #f59e0b;
+  --color-warning:         #d97706;
   --color-warning-bg:      #fffbeb;
-  --color-danger:          #ef4444;
-  --color-danger-hover:    #dc2626;
-  --color-danger-700:      #b91c1c;
+  --color-danger:          #dc2626;
+  --color-danger-hover:    #b91c1c;
+  --color-danger-700:      #991b1b;
   --color-danger-bg:       #fef2f2;
   --color-danger-dim:      #fecaca;
   --color-danger-fg:       #ffffff;
-  --color-info:            #3b82f6;
+  --color-info:            #2563eb;
   --color-info-bg:         #eff6ff;
 
   --color-link:            var(--primary-600);
   --color-link-hover:      var(--primary-700);
-  --color-link-visited:    #7c3aed;
+  --color-link-visited:    #6d28d9;
 
-  --color-bg-primary:      var(--neutral-50);
+  --color-bg-primary:      #ffffff;
   --color-bg-secondary:    var(--neutral-100);
-  --color-bg-hover:        var(--neutral-300);
+  --color-bg-hover:        rgba(43, 92, 143, 0.06);
 
-  --color-accent-dim:      rgba(16, 185, 129, 0.12);
-  --color-accent-alpha:    rgba(16, 185, 129, 0.2);
+  --color-accent-dim:      rgba(43, 92, 143, 0.1);
+  --color-accent-alpha:    rgba(43, 92, 143, 0.18);
   --color-accent-secondary: var(--primary-400);
 
-  /* Shadows (light mode) */
-  --shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
-  --shadow-xl:   0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
-  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.15);
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  /* Shadows — blue-tinted for cohesion with steel blue palette */
+  --shadow-xs:   0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-sm:   0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(43, 92, 143, 0.05);
+  --shadow-md:   0 4px 12px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(43, 92, 143, 0.08);
+  --shadow-lg:   0 10px 24px -3px rgba(15, 23, 42, 0.12), 0 4px 8px -4px rgba(43, 92, 143, 0.1);
+  --shadow-xl:   0 20px 40px -5px rgba(15, 23, 42, 0.14), 0 8px 16px -6px rgba(43, 92, 143, 0.12);
+  --shadow-2xl:  0 25px 60px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(43, 92, 143, 0.06);
+  --shadow-inner: inset 0 2px 4px rgba(15, 23, 42, 0.06);
 }
 
-/* ── Dark mode (Emerald Solid) ──────────────── */
-
-/* Exact data-theme for Dark Solid */
+/* ── Dark mode (Steel Blue Solid) ──────────────── */
 [data-theme='dark'] {
   --blur-amount: 0px;
   --shadow-glow: none;
 
-  /* Neutral (shifted for dark backgrounds) */
-  --neutral-50:  #0a0a0a;
-  --neutral-100: #171717;
-  --neutral-200: #262626;
-  --neutral-300: #404040;
-  --neutral-400: #525252;
-  --neutral-500: #737373;
-  --neutral-600: #a3a3a3;
-  --neutral-700: #d4d4d4;
-  --neutral-800: #e5e5e5;
-  --neutral-900: #f5f5f5;
-  --neutral-950: #fafafa;
+  /* Neutral — steel blue tinted darks for cohesive depth */
+  --neutral-50:  #080e16;
+  --neutral-100: #0e1826;
+  --neutral-200: #152133;
+  --neutral-300: #1f3045;
+  --neutral-400: #2e4560;
+  --neutral-500: #4a6a8a;
+  --neutral-600: #7a9ec0;
+  --neutral-700: #a8c4de;
+  --neutral-800: #cddff0;
+  --neutral-900: #e8f1f9;
+  --neutral-950: #f5f9fd;
 
-  /* Brand / Primary — Emerald */
-  --primary-50:  #ecfdf5;
-  --primary-100: #d1fae5;
-  --primary-200: #a7f3d0;
-  --primary-300: #6ee7b7;
-  --primary-400: #34d399;
-  --primary-500: #10b981;
-  --primary-600: #059669;
-  --primary-700: #047857;
-  --primary-800: #065f46;
-  --primary-900: #064e3b;
-  --primary-950: #022c22;
+  /* Brand / Primary — Steel Blue */
+  --primary-50:  #f0f5fa;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #5a9fd4;
+  --primary-500: #2b5c8f;
+  --primary-600: #224b75;
+  --primary-700: #1a3a5c;
+  --primary-800: #122945;
+  --primary-900: #0b1a2e;
+  --primary-950: #060d17;
 
-  /* Semantic tokens (dark) */
+  /* Semantic tokens (dark solid) */
   --color-bg:              var(--neutral-50);
   --color-bg-elevated:     var(--neutral-100);
   --color-bg-surface:      var(--neutral-200);
-  --color-bg-overlay:      rgba(0, 0, 0, 0.7);
+  --color-bg-overlay:      rgba(8, 14, 22, 0.80);
   --color-bg-input:        var(--neutral-100);
 
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);
-  --color-fg-secondary:    var(--neutral-600);
-  --color-fg-tertiary:     var(--neutral-500);
+  --color-fg-secondary:    var(--neutral-700);
+  --color-fg-tertiary:     var(--neutral-600);
   --color-fg-disabled:     var(--neutral-400);
   --color-fg-inverse:      var(--neutral-950);
 
-  --color-accent:          var(--primary-400);
-  --color-accent-hover:    var(--primary-300);
-  --color-accent-active:   var(--primary-200);
-  --color-accent-subtle:   var(--primary-950);
-  --color-accent-fg:       var(--neutral-950);
+  /* Luminous accent for dark surfaces */
+  --color-accent:          #5a9fd4;
+  --color-accent-hover:    #73b2e0;
+  --color-accent-active:   #3d88c4;
+  --color-accent-subtle:   rgba(43, 92, 143, 0.2);
+  --color-accent-fg:       #ffffff;
 
-  --color-border:          var(--neutral-300);
-  --color-border-hover:    var(--neutral-400);
-  --color-border-strong:   var(--neutral-500);
-  --color-border-focus:    var(--primary-400);
+  --color-border:          rgba(90, 159, 212, 0.12);
+  --color-border-hover:    rgba(90, 159, 212, 0.22);
+  --color-border-strong:   rgba(90, 159, 212, 0.32);
+  --color-border-focus:    #5a9fd4;
+  --color-border-subtle:   rgba(43, 92, 143, 0.08);
 
   --color-success:         #4ade80;
-  --color-success-bg:      var(--primary-950);
+  --color-success-bg:      rgba(74, 222, 128, 0.08);
   --color-warning:         #fbbf24;
-  --color-warning-bg:      #451a03;
+  --color-warning-bg:      rgba(251, 191, 36, 0.08);
   --color-danger:          #f87171;
   --color-danger-hover:    #fca5a5;
-  --color-danger-bg:       #450a0a;
-  --color-danger-fg:       var(--neutral-950);
+  --color-danger-bg:       rgba(239, 68, 68, 0.08);
+  --color-danger-fg:       #ffffff;
   --color-info:            #60a5fa;
-  --color-info-bg:         #172554;
+  --color-info-bg:         rgba(96, 165, 250, 0.08);
 
-  --color-link:            var(--primary-400);
-  --color-link-hover:      var(--primary-300);
+  --color-link:            #73b2e0;
+  --color-link-hover:      #93c5fd;
   --color-link-visited:    #a78bfa;
 
-  /* Shadows (darker + diffuse in dark mode) */
-  --shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
-  --shadow-xl:   0 20px 25px -5px rgba(0, 0, 0, 0.45), 0 8px 10px -6px rgba(0, 0, 0, 0.35);
-  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  --color-bg-primary:      var(--neutral-100);
+  --color-bg-secondary:    var(--neutral-200);
+  --color-bg-hover:        rgba(90, 159, 212, 0.08);
+
+  --color-accent-dim:      rgba(90, 159, 212, 0.12);
+  --color-accent-alpha:    rgba(90, 159, 212, 0.2);
+  --color-accent-secondary: #5a9fd4;
+
+  /* Shadows — blue-tinted for steel blue dark surfaces */
+  --shadow-xs:   0 1px 2px rgba(8, 14, 22, 0.5);
+  --shadow-sm:   0 1px 3px rgba(8, 14, 22, 0.55), 0 1px 2px rgba(8, 14, 22, 0.4);
+  --shadow-md:   0 4px 12px -1px rgba(8, 14, 22, 0.6), 0 2px 4px -2px rgba(43, 92, 143, 0.15);
+  --shadow-lg:   0 10px 24px -3px rgba(8, 14, 22, 0.65), 0 4px 8px -4px rgba(43, 92, 143, 0.2);
+  --shadow-xl:   0 20px 40px -5px rgba(8, 14, 22, 0.7), 0 8px 16px -6px rgba(43, 92, 143, 0.25);
+  --shadow-2xl:  0 25px 60px -12px rgba(8, 14, 22, 0.75), 0 0 0 1px rgba(90, 159, 212, 0.06);
+  --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.5);
 }
 
 /* ── Smooth theme transitions ──────────────────── */
