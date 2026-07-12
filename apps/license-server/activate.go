@@ -188,6 +188,38 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				log.Printf("Re-activation: key=%q already activated by tenant=%q (email=%q), returning existing subscription",
 					req.Key, tenant.Id, req.Email)
 
+				// ── Machine count enforcement on re-activation ─────────
+				// Without this check, a Free-tier key holder could install
+				// on unlimited machines by repeatedly re-activating with the
+				// correct email+key pair.
+				rTier := keyRecord.GetString("tier_key")
+				rMax := maxMachinesForTier(rTier)
+				if rMax > 0 {
+					existingMachines, _ := app.FindRecordsByFilter(
+						"tenant_machines",
+						"tenant_id = {:tenant_id}",
+						"", 0, 0,
+						map[string]any{"tenant_id": tenant.Id},
+					)
+					if len(existingMachines) >= rMax {
+						isExistingMachine := false
+						for _, m := range existingMachines {
+							if m.Id == req.MachineID {
+								isExistingMachine = true
+								break
+							}
+						}
+						if !isExistingMachine {
+							return e.JSON(http.StatusConflict, map[string]any{
+								"error": fmt.Sprintf(
+									"machine limit reached (%d machines allowed on %s tier). Upgrade to add more.",
+									rMax, rTier,
+								),
+							})
+						}
+					}
+				}
+
 				// ── Register / update machine ──────────────────────────
 				machineColl, macErr := app.FindCollectionByNameOrId("tenant_machines")
 				if macErr == nil {
