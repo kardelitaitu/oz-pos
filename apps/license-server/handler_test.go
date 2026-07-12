@@ -1431,9 +1431,7 @@ func TestActivateHandler_MissingMachinesCollection(t *testing.T) {
 
 	body := strings.NewReader(`{
 		"key": "OZ-MISCFG-KEY02",
-		"tenant_id": "miscfgtenan0002",
 		"machine_id": "miscfgmachin002",
-		"contact_name": "Test",
 		"email": "test@example.com"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
@@ -1445,11 +1443,11 @@ func TestActivateHandler_MissingMachinesCollection(t *testing.T) {
 	}
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (machine registration is non-fatal), got %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "tenant_machines collection not found") {
-		t.Errorf("expected 'tenant_machines collection not found', got: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "signed_payload") {
+		t.Errorf("expected successful activation with signed_payload, got: %s", rec.Body.String())
 	}
 }
 
@@ -2809,4 +2807,311 @@ func TestActivateHandler_AuthPaths(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ── Tests: Activation End-to-End Lifecycle ───────────────────────
+//
+// TestActivateHandler_Lifecycle exercises the full activation flow in a
+// single sequential test that simulates a real customer journey:
+//
+//  1. First activation of an unused key → creates tenant + subscription +
+//     returns api_key.
+//  2. Re-activation of the same key+email (with api_key) → returns cached
+//     subscription (key-reuse branch).
+//  3. Re-activation with wrong email → rejected 401 "Wrong email or phone
+//     number".
+//  4. Activation of a new key on the existing tenant WITHOUT api_key →
+//     rejected 401 "api_key required" (H1 gate).
+//  5. Activation of a new key with WRONG api_key → rejected 401 (H1 gate).
+//
+// While the five scenarios each have individual unit tests (above), this
+// lifecycle test chains them sequentially against a SINGLE TestApp instance
+// — verifying that state persisted by step N is correctly observed by step
+// N+1. Example regressions caught only here: the tenant email
+// normalization accidentally creating a second tenant for step-3's wrong
+// email; the key-reuse branch in step-2 clobbering the subscription
+// created in step-1; the H1 gate in step-4 leaking whether the api_key
+// parameter was missing vs. mismatched.
+func TestActivateHandler_Lifecycle(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// ── Shared test constants ─────────────────────────────────
+	const (
+		email      = "lifecycletest001@example.com"
+		machineID  = "lifecyclemac001"
+		key1       = "OZ-LIFECYCLE-KEY1" // used for steps 1, 2, 3
+		key2       = "OZ-LIFECYCLE-KEY2" // used for steps 4, 5
+		wrongEmail = "lifecycletest002@example.com"
+		wrongKey   = "wrong-api-key-xxxxxxxxxx"
+	)
+
+	// Seed both license keys as unused.
+	seedLicenseKey(t, app, key1, "pro", "unused", "2099-12-31 23:59:59.000Z")
+	seedLicenseKey(t, app, key2, "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+	var apiKey string // populated from step 1
+	var tenantID string
+
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+
+	// ── Step 1: first activation (create tenant + subscription) ──
+	t.Run("step1_first_activation", func(t *testing.T) {
+		body := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s"
+		}`, key1, email, machineID))
+		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		// Assert: response contains signed_payload, signature, tenant_id, api_key.
+		if _, ok := resp["signed_payload"]; !ok {
+			t.Error("expected signed_payload")
+		}
+		if _, ok := resp["signature"]; !ok {
+			t.Error("expected signature")
+		}
+		if _, ok := resp["tenant_id"]; !ok {
+			t.Error("expected tenant_id")
+		}
+		if v, ok := resp["api_key"]; ok {
+			apiKey = v.(string)
+			if !strings.HasPrefix(apiKey, "oz_") {
+				t.Errorf("api_key should start with 'oz_', got: %s", apiKey)
+			}
+		} else {
+			t.Fatal("expected api_key for new tenant")
+		}
+		tenantID = resp["tenant_id"].(string)
+
+		// Verify DB state: tenant created.
+		tenant, err := app.FindFirstRecordByData("tenants", "email", email)
+		if err != nil {
+			t.Fatalf("tenant should be created: %v", err)
+		}
+		if tenant.GetString("status") != "active" {
+			t.Errorf("tenant status should be active")
+		}
+		if tenant.GetString("api_key") != apiKey {
+			t.Errorf("tenant api_key mismatch: DB has %q, response gave %q",
+				tenant.GetString("api_key"), apiKey)
+		}
+
+		// Verify DB state: key marked activated.
+		kr, err := app.FindFirstRecordByData("license_keys", "key", key1)
+		if err != nil {
+			t.Fatalf("key should exist: %v", err)
+		}
+		if kr.GetString("status") != "activated" {
+			t.Errorf("key status should be activated, got %s", kr.GetString("status"))
+		}
+
+		// Verify DB state: subscription created.
+		subs, err := app.FindRecordsByFilter("subscriptions",
+			"tenant_id = {:tenant_id}", "", 1, 0,
+			map[string]any{"tenant_id": tenantID})
+		if err != nil || len(subs) == 0 {
+			t.Fatal("subscription should have been created")
+		}
+		if subs[0].GetString("status") != "active" {
+			t.Errorf("subscription status should be active")
+		}
+
+		// Verify DB state: machine registered.
+		mach, err := app.FindRecordsByFilter("tenant_machines",
+			"tenant_id = {:tenant_id}", "", 1, 0,
+			map[string]any{"tenant_id": tenantID})
+		if err != nil || len(mach) == 0 {
+			t.Fatal("machine should have been registered")
+		}
+	})
+
+	// ── Step 2: re-activate same key+email (WITH api_key) ───────
+	// Should hit the key-reuse branch and return cached subscription.
+	t.Run("step2_reactivate_same_key_returns_cached_subscription", func(t *testing.T) {
+		body := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s",
+			"api_key": "%s"
+		}`, key1, email, "lifecyclemac002", apiKey))
+		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 (key reuse by same tenant), got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		// Must return signed_payload and signature.
+		if _, ok := resp["signed_payload"]; !ok {
+			t.Error("expected signed_payload on reuse")
+		}
+		if _, ok := resp["signature"]; !ok {
+			t.Error("expected signature on reuse")
+		}
+		// On key reuse, api_key is re-emitted (caller proved they know
+		// the key bound to this tenant).
+		if v, ok := resp["api_key"]; !ok || v.(string) != apiKey {
+			t.Error("expected api_key to be re-emitted on key reuse")
+		}
+		if v, ok := resp["tenant_id"]; !ok || v.(string) != tenantID {
+			t.Errorf("expected tenant_id=%q on reuse, got %v", tenantID, resp["tenant_id"])
+		}
+
+		// Must NOT have created a second subscription.
+		subs, err := app.FindRecordsByFilter("subscriptions",
+			"tenant_id = {:tenant_id}", "", 5, 0,
+			map[string]any{"tenant_id": tenantID})
+		if err != nil {
+			t.Fatalf("failed to query subscriptions: %v", err)
+		}
+		if len(subs) != 1 {
+			t.Errorf("expected exactly 1 subscription after reuse, got %d", len(subs))
+		}
+
+		// Key status must still be "activated" (not re-activated as a new key).
+		kr, _ := app.FindFirstRecordByData("license_keys", "key", key1)
+		if kr != nil && kr.GetString("status") != "activated" {
+			t.Errorf("key status should remain activated after reuse, got %s", kr.GetString("status"))
+		}
+
+		// Re-activation also works WITHOUT the api_key (documented behavior:
+		// the email + key pair is sufficient proof of ownership). Send a
+		// second request without api_key to verify this path.
+		body2 := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s"
+		}`, key1, email, "lifecycmac002b"))
+		req2 := httptest.NewRequest("POST", "/api/v1/license/activate", body2)
+		req2.Header.Set("Content-Type", "application/json")
+		rec2 := httptest.NewRecorder()
+		mux.ServeHTTP(rec2, req2)
+
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("expected 200 (key reuse WITHOUT api_key), got %d: %s", rec2.Code, rec2.Body.String())
+		}
+		var resp2 map[string]any
+		if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+			t.Fatalf("failed to parse response (no-api_key reuse): %v", err)
+		}
+		if _, ok := resp2["signed_payload"]; !ok {
+			t.Error("expected signed_payload on reuse without api_key")
+		}
+	})
+
+	// ── Step 3: re-activate with wrong email ────────────────────
+	// Should be rejected with 401 "Wrong email or phone number".
+	t.Run("step3_wrong_email_rejected", func(t *testing.T) {
+		body := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s"
+		}`, key1, wrongEmail, "lifecyclemac003"))
+		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 (wrong email), got %d: %s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "Wrong email or phone number") {
+			t.Errorf("expected 'Wrong email or phone number', got: %s", rec.Body.String())
+		}
+
+		// Must NOT have created a spurious tenant for the wrong email.
+		wrongTenant, _ := app.FindFirstRecordByData("tenants", "email", wrongEmail)
+		if wrongTenant != nil {
+			t.Error("a tenant was created for the wrong email — this should not happen")
+		}
+	})
+
+	// ── Step 4: new key on existing tenant WITHOUT api_key ─────
+	// Should be rejected with 401 "api_key required" (H1 gate).
+	t.Run("step4_new_key_no_api_key_rejected", func(t *testing.T) {
+		body := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s"
+		}`, key2, email, "lifecyclemac004"))
+		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 (no api_key for existing tenant), got %d: %s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "api_key required") {
+			t.Errorf("expected 'api_key required', got: %s", rec.Body.String())
+		}
+
+		// Key must still be "unused" (the H1 gate blocked it before
+		// the handler reached the key-save path).
+		kr, _ := app.FindFirstRecordByData("license_keys", "key", key2)
+		if kr != nil && kr.GetString("status") != "unused" {
+			t.Errorf("key2 should still be unused after blocked attempt, got %s", kr.GetString("status"))
+		}
+	})
+
+	// ── Step 5: new key with WRONG api_key ────────────────────
+	// Should be rejected with 401.
+	t.Run("step5_new_key_wrong_api_key_rejected", func(t *testing.T) {
+		resetRateLimiters()
+		body := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s",
+			"api_key": "%s"
+		}`, key2, email, "lifecyclemac005", wrongKey))
+		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 (wrong api_key), got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		// Verify the response contains the expected error message.
+		if !strings.Contains(rec.Body.String(), "api_key required") {
+			t.Errorf("expected 'api_key required (or mismatched)' error, got: %s", rec.Body.String())
+		}
+
+		// Response must NOT leak the real api_key.
+		if strings.Contains(rec.Body.String(), apiKey) {
+			t.Error("response leaked the real api_key on wrong-key rejection")
+		}
+
+		// Key must still be "unused" (the H1 gate blocked it before
+		// the handler reached the key-save path).
+		kr, _ := app.FindFirstRecordByData("license_keys", "key", key2)
+		if kr != nil && kr.GetString("status") != "unused" {
+			t.Errorf("key2 should still be unused after blocked attempt, got %s", kr.GetString("status"))
+		}
+	})
 }
