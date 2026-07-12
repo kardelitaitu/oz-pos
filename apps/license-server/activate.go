@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -263,6 +264,45 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			return e.JSON(http.StatusGone, map[string]any{
 				"error": "license key has expired",
 			})
+		}
+
+		// ── Machine count enforcement (H1 audit gap fix) ─────
+		// Before registering, check that the tenant hasn't exceeded
+		// their tier-based machine limit. Machine record IDs are
+		// the SHA-256 fingerprint (same as req.MachineID).
+		// Limits mirror the subscription tier quotas:
+		//   Free:       1 machine
+		//   Pro:        3 machines
+		//   Premium:    10 machines
+		//   Enterprise: unlimited
+		tierForLimit := keyRecord.GetString("tier_key")
+		maxMachines := maxMachinesForTier(tierForLimit)
+		if maxMachines > 0 {
+			machines, _ := app.FindRecordsByFilter(
+				"tenant_machines",
+				"tenant_id = {:tenant_id}",
+				"", 0, 0,
+				map[string]any{"tenant_id": tenantID},
+			)
+			if len(machines) >= maxMachines {
+				// Check if the machine being registered is already
+				// one of this tenant's machines (re-activation case).
+				isExisting := false
+				for _, m := range machines {
+					if m.Id == req.MachineID {
+						isExisting = true
+						break
+					}
+				}
+				if !isExisting {
+					return e.JSON(http.StatusConflict, map[string]any{
+						"error": fmt.Sprintf(
+							"machine limit reached (%d machines allowed on %s tier). Upgrade to add more.",
+							maxMachines, tierForLimit,
+						),
+					})
+				}
+			}
 		}
 
 		// ── Register machine (non-fatal: subscription is already valid) ──

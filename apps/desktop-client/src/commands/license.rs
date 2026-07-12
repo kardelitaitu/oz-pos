@@ -225,13 +225,24 @@ pub async fn renew_license(state: State<'_, AppState>, new_key: String) -> Resul
     .map_err(|e| AppError::Internal(format!("failed to persist renewed subscription: {e}")))?;
 
     // Settings (license status checks)
-    Settings::set_batch(
-        &conn,
-        &[
-            ("license.payload".to_string(), resp.signed_payload),
-            ("license.signature".to_string(), resp.signature),
-        ],
-    )?;
+    // Parse the tenant_id from the renewed payload so Settings stays
+    // in sync — if the server issued the renewal for a different
+    // tenant (edge case like merged accounts), the stored tenant_id
+    // is now correct for subsequent renew/status calls.
+    let renewed_tenant_id: Option<String> =
+        serde_json::from_str::<serde_json::Value>(&resp.signed_payload)
+            .ok()
+            .and_then(|v| v.get("tenant_id")?.as_str().map(String::from));
+
+    let mut settings_entries = vec![
+        ("license.payload".to_string(), resp.signed_payload),
+        ("license.signature".to_string(), resp.signature),
+    ];
+    if let Some(tid) = renewed_tenant_id {
+        settings_entries.push(("license.tenant_id".to_string(), tid));
+    }
+
+    Settings::set_batch(&conn, &settings_entries)?;
 
     Ok(true)
 }
