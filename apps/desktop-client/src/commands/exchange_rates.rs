@@ -1,3 +1,9 @@
+/*
+last audited 12-07-26 by RSA-Agent
+crate: oz-pos-app | status: UNSAFE | lint: CLEAN
+findings: lines 23, 54 use f64 for rate; line 65 uses <= 0.0 float compare | next: convert to i64 minor units across DTO/args/validation/DB column | perf: not a hot path
+*/
+
 //! Exchange rate commands.
 
 use serde::{Deserialize, Serialize};

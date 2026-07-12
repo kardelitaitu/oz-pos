@@ -1,3 +1,9 @@
+/*
+last audited 12-07-26 by RSA-Agent
+crate: oz-pos-app | status: UNSAFE | lint: ISSUES
+findings: 4+ sync primitives; line 149 unsafe env::set_var; Drop try_lock leaks | next: consolidate lock types; typed setter; shutdown channels; SQLCipher | perf: Arc-clones on checkout hot path
+*/
+
 //! `AppState` — the long-lived state managed by Tauri and reached via
 //! `State<'_, AppState>` in every command.
 //!
