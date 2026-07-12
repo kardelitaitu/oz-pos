@@ -252,6 +252,7 @@ function ThemeDebug() {
       <div>DOM data-theme: {dataTheme || 'null'}</div>
       <div>LocalStorage: {localStorageValue || 'null'}</div>
       <div>OS Dark: {window.matchMedia('(prefers-color-scheme: dark)').matches ? 'yes' : 'no'}</div>
+      <div>URL: {window.location.href}</div>
     </div>
   );
 }
