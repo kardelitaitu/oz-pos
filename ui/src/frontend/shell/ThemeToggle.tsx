@@ -24,7 +24,7 @@ export default function ThemeToggle() {
     : tooltipContent;
 
   return (
-    <Tooltip content={tooltipContent} position="top">
+    <Tooltip content={tooltipContent} position="bottom">
       <button
         type="button"
         onClick={toggleTheme}
