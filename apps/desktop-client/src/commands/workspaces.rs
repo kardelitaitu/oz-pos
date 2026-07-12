@@ -373,15 +373,34 @@ pub async fn get_workspace_instance(
 /// Create a new workspace instance (admin).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `create_workspace_instance_scoped`.
+///
+/// ADR #5 retro-fit (H1 audit gap fix): Now enforces subscription tier
+/// quota before creating. Previously this deprecated command bypassed the
+/// quota system entirely, allowing an attacker to create unlimited
+/// instances regardless of tier by calling it directly.
 #[command]
 pub async fn create_workspace_instance(
     state: State<'_, AppState>,
     req: CreateInstanceRequest,
     caller_user_id: String,
 ) -> Result<WorkspaceDto, AppError> {
+    // ── Subscription enforcement (H1 audit gap fix) ────────
+    // Load subscription from the global DB, validate clock,
+    // verify signature, and enforce quota — same as the scoped
+    // variant. This prevents bypassing tier limits by calling
+    // the deprecated command directly.
+    let sub = {
+        let global_db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&global_db)?;
+        TenantSubscription::load(&global_db, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
+    };
+    sub.verify_signature()?;
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &caller_user_id, permissions::STAFF_UPDATE)?;
+    store.enforce_instance_quota(&sub.tier, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance(
         &req.id,
         &req.type_key,

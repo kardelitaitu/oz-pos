@@ -12,6 +12,7 @@ use oz_core::license_verification::{
     activate_license as core_activate_license, check_license_status as core_check_license_status,
     renew_license as core_renew_license, store_subscription, verify_license_signature,
 };
+use oz_core::subscription::TenantSubscription;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -376,6 +377,21 @@ pub async fn check_license_status(
 #[command]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseStatusDto, AppError> {
     let conn = state.db.lock().await;
+
+    // ── Clock rollback check (H1 audit gap fix) ─────────────
+    // validate_clock_rollback compares the max ledger timestamp
+    // against Utc::now(). If the OS clock was rolled back, return
+    // ClockTampered so the UI can display a warning before the user
+    // makes sales that would have future timestamps.
+    if let Err(e) = TenantSubscription::validate_clock_rollback(&conn) {
+        return Ok(LicenseStatusDto {
+            is_active: false,
+            status: LicenseVerificationStatus::ClockTampered,
+            payload: None,
+            message: Some(e.to_string()),
+        });
+    }
+
     let payload_str = Settings::get(&conn, "license.payload")?;
     let signature = Settings::get(&conn, "license.signature")?;
 
