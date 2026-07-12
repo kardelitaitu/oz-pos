@@ -110,16 +110,69 @@ pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppErr
     Ok(id)
 }
 
-/// Generate a cryptographically random 15-char lowercase alphanumeric
-/// machine ID matching PocketBase's ID constraints.
+/// Query the physical motherboard UUID or Windows MachineGuid as a stable hardware identifier.
+fn get_system_uuid() -> Option<String> {
+    use std::process::Command;
+
+    // 1. Try motherboard UUID via wmic
+    if let Ok(output) = Command::new("wmic")
+        .args(["csproduct", "get", "uuid"])
+        .output()
+        && output.status.success()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let lines: Vec<&str> = stdout
+            .lines()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if lines.len() >= 2 {
+            let uuid = lines[1];
+            if !uuid.is_empty()
+                && uuid != "00000000-0000-0000-0000-000000000000"
+                && uuid != "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"
+            {
+                return Some(uuid.to_string());
+            }
+        }
+    }
+
+    // 2. Try Windows MachineGuid from Registry
+    if let Ok(output) = Command::new("reg")
+        .args([
+            "query",
+            "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
+            "/v",
+            "MachineGuid",
+        ])
+        .output()
+        && output.status.success()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if line.contains("MachineGuid") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    return Some(parts[2].to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Generate a stable 15-char lowercase alphanumeric machine ID based on
+/// system/hardware UUID, falling back to a random UUID if queries fail.
 ///
-/// Uses UUID v4 (OS entropy) hashed with SHA-256 to produce a unique
+/// Uses the hardware ID hashed with SHA-256 to produce a unique
 /// per-installation fingerprint. The ID is persisted in the local
 /// Settings table and reused across activations.
 fn generate_machine_id() -> String {
-    let uuid = uuid::Uuid::new_v4();
+    let raw_id = get_system_uuid().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
     let mut hasher = Sha256::new();
-    hasher.update(uuid.as_bytes());
+    hasher.update(raw_id.as_bytes());
     let hash = hasher.finalize();
     let hex_str = hex::encode(&hash[..16]);
     hex_str[..MACHINE_ID_LEN].to_string()
