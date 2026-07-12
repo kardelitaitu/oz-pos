@@ -248,9 +248,9 @@
   --primary-950: #022c22;
 
   /* Semantic colour tokens (light) */
-  --color-bg:              var(--neutral-50);
+  --color-bg:              var(--neutral-100);
   --color-bg-elevated:     #ffffff;
-  --color-bg-surface:      var(--neutral-100);
+  --color-bg-surface:      var(--neutral-200);
   --color-bg-overlay:      rgba(0, 0, 0, 0.4);
   --color-bg-input:        #ffffff;
 
