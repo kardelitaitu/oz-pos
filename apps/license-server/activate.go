@@ -16,6 +16,9 @@ type ActivateRequest struct {
 	TenantID  string `json:"tenant_id"`
 	MachineID string `json:"machine_id"`
 	Email     string `json:"email"` // required
+	// Phone is the contact phone number for the licensee.
+	// Stored as-is on the tenant record; falls back to "-" if empty.
+	Phone string `json:"phone"`
 	// APIKey is the tenant API key for authenticating re-activations.
 	// On first activation the server issues a new api_key in the response,
 	// which the POS persists and re-sends on subsequent calls.
@@ -135,7 +138,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			}
 			tenant = core.NewRecord(tenantColl)
 			tenant.Set("email", req.Email)
-			tenant.Set("phone", "-")
+			// Persist the phone number from the activation request.
+			// Falls back to "-" when empty so the required field
+			// constraint on the tenants collection is satisfied.
+			tenant.Set("phone", strDefault(req.Phone, "-"))
 			tenant.Set("api_key", generateAPIKey())
 			tenant.Set("status", "active")
 			if saveErr := app.Save(tenant); saveErr != nil {

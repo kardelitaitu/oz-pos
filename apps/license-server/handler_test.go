@@ -2845,6 +2845,7 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		key2       = "OZ-LIFECYCLE-KEY2" // used for steps 4, 5
 		wrongEmail = "lifecycletest002@example.com"
 		wrongKey   = "wrong-api-key-xxxxxxxxxx"
+		phoneNum   = "+15551234567"
 	)
 
 	// Seed both license keys as unused.
@@ -2864,8 +2865,9 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		body := strings.NewReader(fmt.Sprintf(`{
 			"key": "%s",
 			"email": "%s",
-			"machine_id": "%s"
-		}`, key1, email, machineID))
+			"machine_id": "%s",
+			"phone": "%s"
+		}`, key1, email, machineID, phoneNum))
 		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -2911,6 +2913,11 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		if tenant.GetString("api_key") != apiKey {
 			t.Errorf("tenant api_key mismatch: DB has %q, response gave %q",
 				tenant.GetString("api_key"), apiKey)
+		}
+
+		// Verify the persisted phone matches the request (not the old "-" placeholder).
+		if tenant.GetString("phone") != "+15551234567" {
+			t.Errorf("expected phone=+15551234567 in DB, got %q", tenant.GetString("phone"))
 		}
 
 		// Verify DB state: key marked activated.
