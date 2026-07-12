@@ -8,9 +8,9 @@ use chrono::{DateTime, Utc};
 use oz_core::Settings;
 use oz_core::crypto::{decrypt_api_key, encrypt_api_key};
 use oz_core::license_verification::{
-    ActivateLicenseRequest, SignedSubscriptionPayload, activate_license as core_activate_license,
-    check_license_status as core_check_license_status, store_subscription,
-    verify_license_signature,
+    ActivateLicenseRequest, RenewLicenseRequest, SignedSubscriptionPayload,
+    activate_license as core_activate_license, check_license_status as core_check_license_status,
+    renew_license as core_renew_license, store_subscription, verify_license_signature,
 };
 
 use crate::error::AppError;
@@ -163,6 +163,76 @@ pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppErr
     let id = generate_machine_id();
     Settings::set_batch(&conn, &[("machine_id".to_string(), id.clone())])?;
     Ok(id)
+}
+
+/// Renews an existing license subscription with a new license key.
+///
+/// Calls the server's `/api/v1/license/renew` endpoint with the
+/// stored tenant_id, api_key, and the new key. On success, updates
+/// both the Settings table and the tenant_subscription table with
+/// the fresh signed_payload from the server.
+#[command]
+pub async fn renew_license(state: State<'_, AppState>, new_key: String) -> Result<bool, AppError> {
+    if new_key.trim().is_empty() {
+        return Err(AppError::Invalid("new license key is required".into()));
+    }
+
+    // Read tenant_id and api_key from Settings.
+    let (tenant_id, api_key_encrypted, machine_id) = {
+        let conn = state.db.lock().await;
+        let tid = Settings::get(&conn, "license.tenant_id")?
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| AppError::Invalid("No license activated. Activate first.".into()))?;
+        let api_key_enc = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
+        let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
+        (tid, api_key_enc, mid)
+    };
+
+    let api_key = match api_key_encrypted {
+        Some(ref v) => decrypt_api_key(v, &machine_id).unwrap_or_else(|e| {
+            tracing::warn!("license.api_key decryption failed, treating as legacy plaintext: {e}");
+            v.clone()
+        }),
+        None => {
+            return Err(AppError::Invalid(
+                "No license activated. Activate first.".into(),
+            ));
+        }
+    };
+
+    let req = RenewLicenseRequest {
+        tenant_id,
+        api_key: api_key.clone(),
+        key: new_key,
+    };
+
+    let resp = core_renew_license(&req)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Persist the renewed subscription to both stores.
+    let conn = state.db.lock().await;
+
+    // tenant_subscription (quota enforcement)
+    store_subscription(
+        &conn,
+        "default",
+        &resp.signed_payload,
+        &resp.signature,
+        &api_key,
+    )
+    .map_err(|e| AppError::Internal(format!("failed to persist renewed subscription: {e}")))?;
+
+    // Settings (license status checks)
+    Settings::set_batch(
+        &conn,
+        &[
+            ("license.payload".to_string(), resp.signed_payload),
+            ("license.signature".to_string(), resp.signature),
+        ],
+    )?;
+
+    Ok(true)
 }
 
 /// Query the physical motherboard UUID or Windows MachineGuid as a stable hardware identifier.
@@ -569,5 +639,31 @@ mod tests {
         assert_eq!(updated.signature, "SIG_PRO");
         assert_eq!(updated.api_key, "oz_apikey_pro");
         assert_eq!(updated.signed_payload, payload);
+    }
+
+    // ── RenewLicenseRequest serialization ────────────────────────
+
+    #[test]
+    fn renew_license_request_serializes_snake_case() {
+        let req = RenewLicenseRequest {
+            tenant_id: "test-tenant".into(),
+            api_key: "oz_test_key".into(),
+            key: "OZ-PRO-NEW-KEY".into(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"tenant_id\""));
+        assert!(json.contains("\"api_key\""));
+        assert!(json.contains("\"key\""));
+        assert!(json.contains("test-tenant"));
+        assert!(json.contains("OZ-PRO-NEW-KEY"));
+    }
+
+    #[test]
+    fn renew_license_request_deserializes() {
+        let json = r#"{"tenant_id":"t1","api_key":"k1","key":"OZ-KEY"}"#;
+        let req: RenewLicenseRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.tenant_id, "t1");
+        assert_eq!(req.api_key, "k1");
+        assert_eq!(req.key, "OZ-KEY");
     }
 }

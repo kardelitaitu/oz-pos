@@ -51,3 +51,8 @@ export async function activateLicense(
     phone,
   });
 }
+
+/** Renew an existing license with a new license key. Returns true if renewal succeeded. */
+export async function renewLicense(newKey: string): Promise<boolean> {
+  return invoke('renew_license', { newKey });
+}
