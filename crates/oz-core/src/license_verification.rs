@@ -47,10 +47,10 @@ pub fn license_server_url() -> String {
 ///
 /// Falls back to the raw body string if parsing fails.
 fn extract_server_error(body: &str) -> String {
-    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(body) {
-        if let Some(msg) = obj.get("error").and_then(|v| v.as_str()) {
-            return msg.to_string();
-        }
+    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(body)
+        && let Some(msg) = obj.get("error").and_then(|v| v.as_str())
+    {
+        return msg.to_string();
     }
     body.to_string()
 }
