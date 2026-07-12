@@ -43,6 +43,13 @@ export default function MachineIdStatus() {
     <div
       className={`connection-status machine-id-chip${machineId ? ' machine-id-chip--ready' : ''}${loading ? ' machine-id-chip--loading' : ''}`}
       onClick={handleCopy}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCopy();
+        }
+      }}
+      tabIndex={machineId ? 0 : -1}
       title={machineId ? `Hardware ID: ${machineId} — Click to copy` : 'Hardware ID unavailable'}
       role="button"
       aria-label={`Hardware ID: ${displayId}. Click to copy.`}

@@ -16,7 +16,7 @@ vi.mock('@/api/license', () => ({
 }));
 
 vi.mock('@fluent/react', () => ({
-  Localized: ({ children }: any) => <>{children}</>,
+  Localized: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useLocalization: () => ({
     l10n: {
       getString: (id: string) => {
@@ -48,7 +48,7 @@ vi.mock('@fluent/react', () => ({
 }));
 
 vi.mock('@/components/Card', () => ({
-  Card: ({ children, header }: any) => (
+  Card: ({ children, header }: { children: React.ReactNode; header?: React.ReactNode }) => (
     <div data-testid="card">
       {header}
       {children}
@@ -57,13 +57,13 @@ vi.mock('@/components/Card', () => ({
 }));
 
 vi.mock('@/components/Button', () => ({
-  Button: ({ children, variant, loading, onClick, ...rest }: any) => (
+  Button: ({ children, variant, loading, onClick, ...rest }: { children: React.ReactNode; variant?: string; loading?: boolean; onClick?: React.MouseEventHandler<HTMLButtonElement>; [key: string]: unknown }) => (
     <button
       onClick={onClick}
       disabled={loading}
       data-variant={variant}
       data-loading={loading ? 'true' : 'false'}
-      aria-label={rest['aria-label']}
+      aria-label={typeof rest['aria-label'] === 'string' ? rest['aria-label'] : undefined}
       aria-busy={loading ? 'true' : undefined}
     >
       {loading ? 'Loading…' : children}
@@ -72,7 +72,7 @@ vi.mock('@/components/Button', () => ({
 }));
 
 /** Build a valid license payload for tests. */
-function makePayload(overrides: Partial<any> = {}) {
+function makePayload(overrides: Record<string, unknown> = {}) {
   return {
     tenant_id: 'abc123-tenant',
     tier_key: 'pro',
@@ -113,7 +113,7 @@ describe('LicenseSettings', () => {
   // ── 1. Loading state ──────────────────────────────────────
   describe('Loading state', () => {
     it('shows loading indicator while getLicenseStatus is pending', () => {
-      let resolve: any;
+      let resolve: (value: typeof VALID_LICENSE_STATUS) => void = () => {};
       vi.mocked(getLicenseStatus).mockReturnValue(
         new Promise((r) => { resolve = r; }),
       );
@@ -123,7 +123,7 @@ describe('LicenseSettings', () => {
     });
 
     it('loading container has role="status" for screen readers', async () => {
-      let resolve: any;
+      let resolve: (value: typeof VALID_LICENSE_STATUS) => void = () => {};
       vi.mocked(getLicenseStatus).mockReturnValue(
         new Promise((r) => { resolve = r; }),
       );

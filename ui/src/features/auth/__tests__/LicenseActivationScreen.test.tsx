@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, createEvent } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import LicenseActivationScreen from '../LicenseActivationScreen';
 import { activateLicense, getMachineId } from '@/api/license';
-import { getVersion, getLocalIp } from '@/api/system';
+import { getVersion, getLocalIp, type VersionInfo } from '@/api/system';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
 const mockAddToast = vi.fn();
@@ -25,20 +25,20 @@ vi.mock('@/api/system', () => ({
 
 
 vi.mock('@fluent/react', () => ({
-  Localized: ({ children }: any) => <>{children}</>,
+  Localized: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useLocalization: () => ({ l10n: {
-    getString: (id: string, args?: any) => {
+    getString: (id: string, args?: Record<string, unknown>) => {
       const map = {
         'auth-validation-required': 'License key and Email are required.',
         'auth-validation-invalid-email': 'Invalid email format.',
         'auth-activation-success': 'License activated successfully!',
         'auth-activation-failed': 'Failed to activate license.',
         'auth-activation-error': 'An error occurred during activation.',
-        'auth-clipboard-error': 'Clipboard error: ' + (args && args.message ? args.message : ''),
+        'auth-clipboard-error': 'Clipboard error: ' + (args && args['message'] ? args['message'] : ''),
         'auth-error-title': 'Error',
-        'auth-version': 'Version ' + (args ? args.version : ''),
-        'auth-ip-address': 'IP Address : ' + (args ? args.ip : ''),
-        'auth-copyright': 'OZ-POS © ' + (args ? args.year : '') + ' All rights reserved.',
+        'auth-version': 'Version ' + (args ? args['version'] : ''),
+        'auth-ip-address': 'IP Address : ' + (args ? args['ip'] : ''),
+        'auth-copyright': 'OZ-POS © ' + (args ? args['year'] : '') + ' All rights reserved.',
         'auth-email-placeholder': 'store@example.com',
         'auth-phone-placeholder': '08123456789',
         'auth-license-placeholder': 'OZ-PRO-XXXX-XXXX-XXXX',
@@ -53,7 +53,7 @@ vi.mock('@fluent/react', () => ({
         'auth-validation-phone-required': 'Phone number is required.',
         'auth-validation-invalid-phone': 'Invalid phone number format.'
       };
-      return (map as any)[id] || id;
+      return (map as Record<string, string>)[id] || id;
     }
   } })
 }));
@@ -63,7 +63,7 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
 }));
 
 vi.mock('@/components/ConnectionStatus', () => ({
-  default: ({ label, url }: any) => <div data-testid={`conn-status-${label}`}>{label}: {url}</div>
+  default: ({ label, url }: { label: string; url: string }) => <div data-testid={`conn-status-${label}`}>{label}: {url}</div>
 }));
 vi.mock('@/components/MachineIdStatus', () => ({
   default: () => <div data-testid="conn-status-machine-id">Machine Status</div>
@@ -106,17 +106,17 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('5. Component unmounting during getVersion fetch prevents state updates', () => {
-      let resolveVersion: any;
-      const promise = new Promise<any>(resolve => { resolveVersion = resolve; });
+      let resolveVersion: (value: VersionInfo) => void = () => {};
+      const promise = new Promise<VersionInfo>(resolve => { resolveVersion = resolve; });
       vi.mocked(getVersion).mockReturnValue(promise);
       
       const { unmount } = render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       unmount();
-      expect(() => resolveVersion({ version: '9.9.9' })).not.toThrow();
+      expect(() => resolveVersion({ name: 'oz-pos', version: '9.9.9', rustVersion: '1.75', target: 'x86' })).not.toThrow();
     });
 
     it('6. Component unmounting during getLocalIp fetch prevents state updates', () => {
-      let resolveIp: any;
+      let resolveIp: (value: string) => void = () => {};
       const promise = new Promise<string>(resolve => { resolveIp = resolve; });
       vi.mocked(getLocalIp).mockReturnValue(promise);
       
@@ -213,7 +213,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
 
   describe('3. Loading State Behavior', () => {
     it('18. Inputs become disabled when loading is true', async () => {
-      let resolveActivate: any;
+      let resolveActivate: (value: boolean) => void = () => {};
       const promise = new Promise<boolean>(resolve => { resolveActivate = resolve; });
       vi.mocked(activateLicense).mockReturnValue(promise);
       
@@ -231,7 +231,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('19. Clear buttons disappear while loading is true', async () => {
-      let resolveActivate: any;
+      let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
@@ -245,7 +245,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('20. The Submit button becomes disabled while loading is true', async () => {
-      let resolveActivate: any;
+      let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
@@ -260,7 +260,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('21. The Submit button text changes to "Activating..." when loading', async () => {
-      let resolveActivate: any;
+      let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
@@ -274,7 +274,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('22. A loading spinner SVG is rendered inside the Submit button while loading', async () => {
-      let resolveActivate: any;
+      let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       const { container } = render(<LicenseActivationScreen onActivated={mockOnActivated} />);
@@ -380,7 +380,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('31. Multiple rapid submission attempts are blocked', async () => {
-      let resolveActivate: any;
+      let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
@@ -554,7 +554,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('45. Component unmounting while readText() is awaiting does not cause errors', async () => {
-      let resolveReadText: any;
+      let resolveReadText: (value: string) => void = () => {};
       vi.mocked(readText).mockReturnValue(new Promise<string>(resolve => { resolveReadText = resolve; }));
       
       const { unmount } = render(<LicenseActivationScreen onActivated={mockOnActivated} />);

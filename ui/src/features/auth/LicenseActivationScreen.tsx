@@ -129,10 +129,11 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
         if (contextMenu.field === 'phone') setPhone(text);
         if (contextMenu.field === 'licenseKey') setKey(text.toUpperCase());
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to read clipboard', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
       addToast({ 
-        message: `${l10n.getString('auth-error-title')}: ${l10n.getString('auth-clipboard-error', { message: err.message || err })}`, 
+        message: `${l10n.getString('auth-error-title')}: ${l10n.getString('auth-clipboard-error', { message: errMsg })}`, 
         type: 'error' 
       });
     }
@@ -140,6 +141,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   };
 
   return (
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
     <div 
       className="license-activation-container" 
       onContextMenu={handleGlobalContextMenu}
@@ -316,6 +318,14 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
             e.stopPropagation();
             handlePaste();
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handlePaste();
+            }
+          }}
+          role="button"
+          tabIndex={0}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
