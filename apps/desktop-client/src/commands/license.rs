@@ -6,6 +6,7 @@ use tauri::{State, command};
 
 use chrono::{DateTime, Utc};
 use oz_core::Settings;
+use oz_core::crypto::{decrypt_api_key, encrypt_api_key};
 use oz_core::license_verification::{
     ActivateLicenseRequest, SignedSubscriptionPayload, activate_license as core_activate_license,
     verify_license_signature,
@@ -58,16 +59,36 @@ pub async fn activate_license(
     machine_id: String,
     phone: String,
 ) -> Result<bool, AppError> {
-    // H1 audit fix: read the previously-stored api_key so the server can
-    // authenticate the caller as the legitimate tenant admin on re-
-    // activations. On first activation this returns None and a new
-    // api_key is issued in the response.
+    // H1 audit fix: read the previously-stored (now encrypted) api_key
+    // so the server can authenticate the caller as the legitimate tenant
+    // admin on re-activations. On first activation this returns None and a
+    // new api_key is issued in the response which we encrypt before storing.
+    //
+    // The `machine_id` parameter is the persisted machine fingerprint
+    // (the front-end calls get_machine_id before activate_license).
+    // We use it as the encryption key material — this binds the
+    // ciphertext to this specific installation's hardware.
     let stored_api_key: Option<String> = {
         let conn = state.db.lock().await;
-        Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty())
+        let raw = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
+        match raw {
+            Some(ref v) => Some(
+                // Try decryption first (new format: base64 ciphertext).
+                // If that fails, assume the value is legacy plaintext and
+                // return it as-is. It will be encrypted on the next write.
+                decrypt_api_key(v, &machine_id).unwrap_or_else(|e| {
+                    tracing::warn!(
+                        "license.api_key decryption failed, treating as legacy plaintext: {e}"
+                    );
+                    v.clone()
+                }),
+            ),
+            None => None,
+        }
     };
 
     let phone_clone = phone.clone();
+    let machine_id_for_encryption = machine_id.clone();
 
     let req = ActivateLicenseRequest {
         key,
@@ -81,6 +102,12 @@ pub async fn activate_license(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
+    // Encrypt the api_key before storing in Settings.
+    // The key is derived from the persisted machine_id, binding the
+    // ciphertext to this specific installation.
+    let encrypted_api_key = encrypt_api_key(&resp.api_key, &machine_id_for_encryption)
+        .map_err(|e| AppError::Internal(format!("failed to encrypt api_key: {e}")))?;
+
     // Store in settings table
     let conn = state.db.lock().await;
     Settings::set_batch(
@@ -89,7 +116,7 @@ pub async fn activate_license(
             ("license.payload".to_string(), resp.signed_payload),
             ("license.signature".to_string(), resp.signature),
             ("license.tenant_id".to_string(), resp.tenant_id),
-            ("license.api_key".to_string(), resp.api_key),
+            ("license.api_key".to_string(), encrypted_api_key),
             ("license.phone".to_string(), phone_clone),
         ],
     )?;
