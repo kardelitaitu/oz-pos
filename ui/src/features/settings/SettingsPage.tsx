@@ -51,6 +51,7 @@ import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
+import LicenseSettings from './LicenseSettings';
 import './SettingsPage.css';
 
 // ── Sidebar nav item type ─────────────────────────────────────────
@@ -122,6 +123,15 @@ const NAV_ITEMS: SettingsNavItem[] = [
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M13 2 3 14h9l-1 8 10-12h-9z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'license',
+    label: 'License',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
     ),
   },
@@ -242,7 +252,7 @@ interface SettingsCategory {
 const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
   { label: 'Operations', keys: ['receipt', 'sync'] },
-  { label: 'System', keys: ['about', 'features', 'data'] },
+  { label: 'System', keys: ['about', 'license', 'features', 'data'] },
   { label: 'Management', keys: ['staff', 'terminals', 'stores', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
 ];
 
@@ -915,6 +925,9 @@ export default function SettingsPage() {
             </div>
           </Card>
         );
+
+      case 'license':
+        return <LicenseSettings />;
 
       case 'features':
         return <FeatureToggleScreen />;

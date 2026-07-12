@@ -577,6 +577,23 @@ settings-copyright-notice = Pemberitahuan Hak Cipta
 settings-commercial-contact = Kontak Komersial
 settings-app-version = OZ-POS Enterprise v{ $version }
 
+# ── License Info Section ──
+settings-section-license = Lisensi
+settings-license-tier = Tingkat
+settings-license-status-label = Status
+settings-license-expires = Kedaluwarsa
+settings-license-grace = Masa Tenggang Hingga
+settings-license-max-stores = Maks Toko
+settings-license-max-pos = Maks Instansi POS
+settings-license-tenant-id = ID Tenant
+settings-license-not-activated = Tidak ada lisensi yang diaktifkan. Aktifkan lisensi untuk melihat detail di sini.
+settings-license-check-server = Periksa Status Server
+settings-license-server-tier = Tingkat Server
+settings-license-server-active = Server Aktif
+settings-license-server-expires = Server Kedaluwarsa
+settings-license-type-value = Proprietary
+settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
+
 # ── Toast messages ──
 settings-toast-failed-tax-rates = Gagal memuat tarif pajak
 settings-toast-failed-store-settings = Gagal memuat pengaturan toko
