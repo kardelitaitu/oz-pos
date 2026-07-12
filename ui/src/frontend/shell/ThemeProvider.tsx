@@ -64,8 +64,6 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   useEffect(() => {
     const html = document.documentElement;
 
-    console.log("[ThemeDebug] useEffect running. Current theme state:", theme);
-
     // Add transitioning class to animate the theme change.
     html.classList.add('is-theme-transitioning');
     if (theme === 'default') {
@@ -74,8 +72,6 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       html.setAttribute('data-theme', theme);
     }
     
-    console.log("[ThemeDebug] Writing to localStorage:", STORAGE_KEY, "->", theme);
-    console.trace("[ThemeDebug] Stack trace for theme change:");
     localStorage.setItem(STORAGE_KEY, theme);
 
     // Remove the class after transitions complete so subsequent
