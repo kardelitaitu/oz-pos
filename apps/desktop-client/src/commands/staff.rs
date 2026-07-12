@@ -223,6 +223,15 @@ pub async fn bootstrap_owner(
     args: BootstrapOwnerArgs,
     state: State<'_, AppState>,
 ) -> Result<BootstrapOwnerResult, AppError> {
+    let db = state.db.lock().await;
+    run_bootstrap_owner(&db, &args)
+}
+
+/// Business logic for `bootstrap_owner` (extracted for testing).
+fn run_bootstrap_owner(
+    conn: &rusqlite::Connection,
+    args: &BootstrapOwnerArgs,
+) -> Result<BootstrapOwnerResult, AppError> {
     let username = args.username.trim().to_lowercase();
     let display_name = args.display_name.trim();
 
@@ -234,8 +243,7 @@ pub async fn bootstrap_owner(
     let pin_hash =
         hash_pin(&args.pin).map_err(|e| AppError::Internal(format!("hashing PIN: {e}")))?;
 
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
+    let store = Store::new(conn);
 
     // Guard: refuse to bootstrap if users already exist.
     let existing = store.list_users()?;
@@ -257,7 +265,6 @@ pub async fn bootstrap_owner(
     let role = store
         .get_role(oz_core::builtin_roles::OWNER)?
         .ok_or_else(|| AppError::Internal("owner role not found after seeding".into()))?;
-    drop(db);
 
     tracing::info!(username = %username, "owner account bootstrapped");
 
@@ -432,5 +439,140 @@ mod tests {
         };
         let d = format!("{result:?}");
         assert!(d.contains("Alice"));
+    }
+
+    // ── BootstrapOwner logic tests ─────────────────────────────────────
+
+    use oz_core::migrations;
+    use rusqlite::Connection;
+
+    fn fresh_conn() -> Connection {
+        migrations::fresh_db()
+    }
+
+    #[test]
+    fn bootstrap_owner_creates_user_with_owner_role() {
+        let conn = fresh_conn();
+        let args = BootstrapOwnerArgs {
+            username: "owner".into(),
+            pin: "1234".into(),
+            display_name: "Store Owner".into(),
+        };
+
+        let result = run_bootstrap_owner(&conn, &args).unwrap();
+
+        assert_eq!(result.session.display_name, "Store Owner");
+        assert_eq!(result.session.role_name, "Owner");
+        assert_eq!(result.session.role_id, "role-owner");
+        assert!(!result.session.user_id.is_empty());
+
+        // Verify directly via Store.
+        let store = Store::new(&conn);
+        let users = store.list_users().unwrap();
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].username, "owner");
+        assert_eq!(users[0].display_name, "Store Owner");
+        assert_eq!(users[0].role_id, "role-owner");
+        assert!(users[0].is_active);
+    }
+
+    #[test]
+    fn bootstrap_owner_rejects_when_users_exist() {
+        let conn = fresh_conn();
+        // Seed a user directly to simulate existing staff.
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        store
+            .create_user("existing", "hash", "Existing", "role-cashier")
+            .unwrap();
+
+        let args = BootstrapOwnerArgs {
+            username: "owner".into(),
+            pin: "1234".into(),
+            display_name: "Owner".into(),
+        };
+
+        let err = run_bootstrap_owner(&conn, &args).unwrap_err();
+        assert!(matches!(err, AppError::Invalid(msg) if msg.contains("already exist")));
+    }
+
+    #[test]
+    fn bootstrap_owner_rejects_empty_username() {
+        let conn = fresh_conn();
+        let args = BootstrapOwnerArgs {
+            username: "  ".into(),
+            pin: "1234".into(),
+            display_name: "Owner".into(),
+        };
+
+        let err = run_bootstrap_owner(&conn, &args).unwrap_err();
+        assert!(matches!(err, AppError::Invalid(msg) if msg.contains("username")));
+    }
+
+    #[test]
+    fn bootstrap_owner_rejects_empty_display_name() {
+        let conn = fresh_conn();
+        let args = BootstrapOwnerArgs {
+            username: "owner".into(),
+            pin: "1234".into(),
+            display_name: "  ".into(),
+        };
+
+        let err = run_bootstrap_owner(&conn, &args).unwrap_err();
+        assert!(matches!(err, AppError::Invalid(msg) if msg.contains("display_name")));
+    }
+
+    #[test]
+    fn bootstrap_owner_rejects_short_pin() {
+        let conn = fresh_conn();
+        let args = BootstrapOwnerArgs {
+            username: "owner".into(),
+            pin: "12".into(),
+            display_name: "Owner".into(),
+        };
+
+        let err = run_bootstrap_owner(&conn, &args).unwrap_err();
+        assert!(matches!(err, AppError::Invalid(msg) if msg.contains("pin")));
+    }
+
+    #[test]
+    fn bootstrap_owner_lowercases_username() {
+        let conn = fresh_conn();
+        let args = BootstrapOwnerArgs {
+            username: "StoreOwner".into(),
+            pin: "1234".into(),
+            display_name: "Store Owner".into(),
+        };
+
+        let result = run_bootstrap_owner(&conn, &args).unwrap();
+        assert_eq!(result.session.display_name, "Store Owner");
+
+        // Username should be lowercased.
+        let store = Store::new(&conn);
+        let user = store.get_user_by_username("storeowner").unwrap().unwrap();
+        assert_eq!(user.display_name, "Store Owner");
+    }
+
+    #[test]
+    fn bootstrap_owner_session_matches_user() {
+        let conn = fresh_conn();
+        let args = BootstrapOwnerArgs {
+            username: "admin".into(),
+            pin: "9999".into(),
+            display_name: "Admin".into(),
+        };
+
+        let result = run_bootstrap_owner(&conn, &args).unwrap();
+
+        // The returned session user_id should match the created user.
+        let store = Store::new(&conn);
+        let user = store.get_user(&result.session.user_id).unwrap().unwrap();
+        assert_eq!(user.username, "admin");
+        assert_eq!(user.display_name, "Admin");
+
+        // The role name should be resolved from the DB.
+        let role = store.get_role("role-owner").unwrap().unwrap();
+        assert_eq!(result.session.role_id, role.id);
+        assert_eq!(result.session.role_name, role.name);
     }
 }

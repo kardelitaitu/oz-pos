@@ -107,18 +107,25 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			newExpiresAt = baseTime.AddDate(1, 0, 0)
 		}
 
-		var allowedTypes []string
-		if err := json.Unmarshal([]byte(currentSub.GetString("allowed_types")), &allowedTypes); err != nil {
-			allowedTypes = []string{}
-		}
+	var allowedTypes []string
+	if err := json.Unmarshal([]byte(keyRecord.GetString("allowed_types")), &allowedTypes); err != nil {
+		allowedTypes = []string{}
+	}
 
-		sub := SubscriptionPayload{
-			TenantID:        req.TenantID,
-			TierKey:         tierKey,
-			Status:          "active",
-			MaxStores:       currentSub.GetInt("max_stores"),
-			MaxPOSInstances: currentSub.GetInt("max_pos_instances"),
-			AllowedTypes:    allowedTypes,
+	sub := SubscriptionPayload{
+		TenantID:        req.TenantID,
+		TierKey:         tierKey,
+		Status:          "active",
+		// M5-audit fix: quota fields come from the NEW license key
+		// (keyRecord), not from the OLD subscription (currentSub).
+		// Previously, churning to a different tier (Pro→Enterprise
+		// or Enterprise→Pro) left the customer with their old tier's
+		// limits, which silently capped upgrades and over-provisioned
+		// downgrades. Quotas are now sourced from the same key the
+		// customer just paid for.
+		MaxStores:       keyRecord.GetInt("max_stores"),
+		MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
+		AllowedTypes:    allowedTypes,
 			StartsAt:        time.Now().UTC().Format(time.RFC3339),
 			ExpiresAt:       newExpiresAt.Format(time.RFC3339),
 			GraceUntil:      calculateGraceUntil(newExpiresAt).Format(time.RFC3339),
@@ -148,9 +155,11 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		newSub := core.NewRecord(subColl)
 		newSub.Set("tenant_id", req.TenantID)
 		newSub.Set("tier_key", tierKey)
-		newSub.Set("max_stores", currentSub.GetInt("max_stores"))
-		newSub.Set("max_pos_instances", currentSub.GetInt("max_pos_instances"))
-		newSub.Set("allowed_types", currentSub.GetString("allowed_types"))
+		// M5-audit fix: persist NEW-key quota fields on the subscription
+		// record so the DB row matches the signed payload above.
+		newSub.Set("max_stores", keyRecord.GetInt("max_stores"))
+		newSub.Set("max_pos_instances", keyRecord.GetInt("max_pos_instances"))
+		newSub.Set("allowed_types", keyRecord.GetString("allowed_types"))
 		newSub.Set("status", "active")
 		newSub.Set("starts_at", sub.StartsAt)
 		newSub.Set("expires_at", sub.ExpiresAt)

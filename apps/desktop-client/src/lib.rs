@@ -128,6 +128,7 @@ pub fn run() {
             commands::staff::list_roles,
             commands::staff::create_staff,
             commands::staff::update_staff,
+            commands::staff::bootstrap_owner,
             commands::categories::list_categories,
             commands::categories::create_category,
             commands::categories::update_category,

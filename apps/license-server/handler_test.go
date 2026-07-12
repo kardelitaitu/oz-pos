@@ -347,6 +347,33 @@ func seedSubscription(t *testing.T, app *tests.TestApp, tenantID, tierKey, statu
 	}
 }
 
+// seedSubscriptionWithLimits is seedSubscription with caller-supplied
+// per-tier quota fields. Used by M5-audit tests to seed an active
+// Enterprise subscription at non-default limits, before renewing with
+// a Pro key to verify the Enterprise→Pro downgrade path.
+func seedSubscriptionWithLimits(t *testing.T, app *tests.TestApp, tenantID, tierKey, status string, maxStores, maxPOSInstances int, allowedTypes string) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("subscriptions")
+	if err != nil {
+		t.Fatalf("subscriptions collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("tenant_id", []string{tenantID})
+	rec.Set("tier_key", tierKey)
+	rec.Set("max_stores", maxStores)
+	rec.Set("max_pos_instances", maxPOSInstances)
+	rec.Set("allowed_types", allowedTypes)
+	rec.Set("status", status)
+	rec.Set("starts_at", time.Now().UTC().Format(time.RFC3339))
+	rec.Set("expires_at", time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339))
+	rec.Set("grace_until", time.Now().UTC().AddDate(1, 0, 14).Format(time.RFC3339))
+	rec.Set("signed_payload", "{}")
+	rec.Set("signature", "dummy-sig")
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed subscription for %q: %v", tenantID, err)
+	}
+}
+
 func seedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expiresAt string) {
 	t.Helper()
 	col, err := app.FindCollectionByNameOrId("license_keys")
@@ -359,6 +386,30 @@ func seedLicenseKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expi
 	rec.Set("max_stores", 5)
 	rec.Set("max_pos_instances", 3)
 	rec.Set("allowed_types", `["restaurant-pos", "store-pos"]`)
+	rec.Set("status", status)
+	rec.Set("expires_at", expiresAt)
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed license key %q: %v", key, err)
+	}
+}
+
+// seedLicenseKeyWithLimits is seedLicenseKey with caller-supplied
+// per-tier quota fields (max_stores, max_pos_instances, allowed_types).
+// Used by M5-audit tests to express distinct limits per key so the
+// handler's fix (source quotas from NEW key, not OLD sub) can be
+// unambiguously observed.
+func seedLicenseKeyWithLimits(t *testing.T, app *tests.TestApp, key, tierKey, status, expiresAt string, maxStores, maxPOSInstances int, allowedTypes string) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("license_keys")
+	if err != nil {
+		t.Fatalf("license_keys collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("key", key)
+	rec.Set("tier_key", tierKey)
+	rec.Set("max_stores", maxStores)
+	rec.Set("max_pos_instances", maxPOSInstances)
+	rec.Set("allowed_types", allowedTypes)
 	rec.Set("status", status)
 	rec.Set("expires_at", expiresAt)
 	if err := app.Save(rec); err != nil {
@@ -783,6 +834,118 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	if !foundExpired {
 		t.Error("expected one expired subscription after renewal")
 	}
+}
+
+// TestRenewHandler_TierChange_UsesNewKeyLimits verifies the M5-audit fix:
+// when a customer churns to a different tier via renewal, the renewed
+// subscription's quota fields (max_stores, max_pos_instances, allowed_types)
+// MUST come from the NEW license key, not the OLD subscription. Previously
+// an upgrade (Pro→Enterprise) silently capped the customer at Pro limits,
+// and a downgrade (Enterprise→Pro) silently over-provisioned them at
+// Enterprise limits until the next renewal carried the correct values.
+func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
+	t.Run("ProToEnterprise_Upgrade", func(t *testing.T) {
+		resetRateLimiters()
+		app, se := setupDirectApp(t)
+		defer app.Cleanup()
+
+		// Tenant starts on Pro (max_stores=5, max_pos=3, 2 types).
+		seedTenant(t, app, "rnwupgradetn001", "rnwupgradetn001-key", "active")
+		seedSubscription(t, app, "rnwupgradetn001", "pro", "active")
+
+		// New Enterprise key with HIGHER limits.
+		seedLicenseKeyWithLimits(t, app,
+			"OZ-RNW-UPG-ENT01",
+			"enterprise", "unused", "2099-12-31 23:59:59.000Z",
+			20, 10, `["restaurant-pos","store-pos","kds"]`)
+
+		body := strings.NewReader(`{"tenant_id":"rnwupgradetn001","api_key":"rnwupgradetn001-key","key":"OZ-RNW-UPG-ENT01"}`)
+		req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux, err := se.Router.BuildMux()
+		if err != nil {
+			t.Fatalf("BuildMux failed: %v", err)
+		}
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		var sp SubscriptionPayload
+		payloadStr, _ := resp["signed_payload"].(string)
+		if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+			t.Fatalf("failed to parse signed_payload: %v", err)
+		}
+
+		// M5 audit assertion: quotas must come from the NEW Enterprise
+		// key, NOT from the OLD Pro subscription (which had 5/3/2).
+		if sp.MaxStores != 20 {
+			t.Errorf("Pro→Enterprise upgrade: expected max_stores=20 (from NEW key), got %d", sp.MaxStores)
+		}
+		if sp.MaxPOSInstances != 10 {
+			t.Errorf("Pro→Enterprise upgrade: expected max_pos_instances=10 (from NEW key), got %d", sp.MaxPOSInstances)
+		}
+		if len(sp.AllowedTypes) != 3 {
+			t.Errorf("Pro→Enterprise upgrade: expected 3 allowed_types (from NEW key), got %v", sp.AllowedTypes)
+		}
+	})
+
+	t.Run("EnterpriseToPro_Downgrade", func(t *testing.T) {
+		resetRateLimiters()
+		app, se := setupDirectApp(t)
+		defer app.Cleanup()
+
+		// Tenant starts on Enterprise (max_stores=20, max_pos=10, 3 types).
+		seedTenant(t, app, "rnwdowngrade001", "rnwdowngrade001-key", "active")
+		seedSubscriptionWithLimits(t, app, "rnwdowngrade001", "enterprise", "active",
+			20, 10, `["restaurant-pos","store-pos","kds"]`)
+
+		// New Pro key with LOWER limits.
+		seedLicenseKeyWithLimits(t, app,
+			"OZ-RNW-DWN-PRO01",
+			"pro", "unused", "2099-12-31 23:59:59.000Z",
+			5, 3, `["restaurant-pos","store-pos"]`)
+
+		body := strings.NewReader(`{"tenant_id":"rnwdowngrade001","api_key":"rnwdowngrade001-key","key":"OZ-RNW-DWN-PRO01"}`)
+		req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux, err := se.Router.BuildMux()
+		if err != nil {
+			t.Fatalf("BuildMux failed: %v", err)
+		}
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		var sp SubscriptionPayload
+		payloadStr, _ := resp["signed_payload"].(string)
+		if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+			t.Fatalf("failed to parse signed_payload: %v", err)
+		}
+
+		// M5 audit assertion: quotas must come from the NEW Pro key,
+		// NOT from the OLD Enterprise subscription (which had 20/10/3).
+		if sp.MaxStores != 5 {
+			t.Errorf("Enterprise→Pro downgrade: expected max_stores=5 (from NEW key), got %d", sp.MaxStores)
+		}
+		if sp.MaxPOSInstances != 3 {
+			t.Errorf("Enterprise→Pro downgrade: expected max_pos_instances=3 (from NEW key), got %d", sp.MaxPOSInstances)
+		}
+		if len(sp.AllowedTypes) != 2 {
+			t.Errorf("Enterprise→Pro downgrade: expected 2 allowed_types (from NEW key), got %v", sp.AllowedTypes)
+		}
+	})
 }
 
 func TestActivateHandler_RateLimited(t *testing.T) {
