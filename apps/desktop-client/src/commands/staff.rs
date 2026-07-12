@@ -186,6 +186,91 @@ pub async fn update_staff(
     Ok(to_staff_dto(&user, &roles))
 }
 
+// ── Bootstrap first owner (no authentication required) ────────────────
+
+#[derive(Debug, Deserialize)]
+/// Bootstrapownerargs.
+pub struct BootstrapOwnerArgs {
+    /// Username for the first owner account.
+    pub username: String,
+    /// Plain-text PIN (minimum 4 characters).
+    pub pin: String,
+    /// Display name for the first owner.
+    pub display_name: String,
+}
+
+/// Result of a successful owner bootstrap — returns a login session
+/// so the front-end can auto-login immediately.
+#[derive(Debug, Serialize)]
+pub struct BootstrapOwnerResult {
+    /// LoginSession dto.
+    pub session: oz_core::auth::LoginSession,
+}
+
+/// Create the first owner user in a fresh installation.
+///
+/// This is the only command that does NOT require an existing session,
+/// because there are no users yet. It seeds the default roles first,
+/// then creates a user with the `role-owner` role.
+///
+/// # Errors
+///
+/// Returns `Conflict` if any users already exist, preventing accidental
+/// re-bootstrapping after staff accounts have been created.
+/// Returns `Invalid` if validation fails (empty username, short PIN, etc.).
+#[command]
+pub async fn bootstrap_owner(
+    args: BootstrapOwnerArgs,
+    state: State<'_, AppState>,
+) -> Result<BootstrapOwnerResult, AppError> {
+    let username = args.username.trim().to_lowercase();
+    let display_name = args.display_name.trim();
+
+    validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("display_name", display_name)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_min_length("pin", &args.pin, 4).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let pin_hash =
+        hash_pin(&args.pin).map_err(|e| AppError::Internal(format!("hashing PIN: {e}")))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+
+    // Guard: refuse to bootstrap if users already exist.
+    let existing = store.list_users()?;
+    if !existing.is_empty() {
+        return Err(AppError::Invalid(
+            "cannot bootstrap: staff accounts already exist".into(),
+        ));
+    }
+
+    // Seed roles first so role-owner exists.
+    store.seed_default_roles()?;
+
+    let user = store.create_user(
+        &username,
+        &pin_hash,
+        display_name,
+        oz_core::builtin_roles::OWNER,
+    )?;
+    let role = store
+        .get_role(oz_core::builtin_roles::OWNER)?
+        .ok_or_else(|| AppError::Internal("owner role not found after seeding".into()))?;
+    drop(db);
+
+    tracing::info!(username = %username, "owner account bootstrapped");
+
+    Ok(BootstrapOwnerResult {
+        session: oz_core::auth::LoginSession {
+            user_id: user.id,
+            display_name: user.display_name,
+            role_name: role.name,
+            role_id: role.id,
+        },
+    })
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -295,5 +380,57 @@ mod tests {
         };
         let d = format!("{args:?}");
         assert!(d.contains("z"));
+    }
+
+    // ── BootstrapOwnerArgs ──────────────────────────────────────────────
+
+    #[test]
+    fn bootstrap_owner_args_deserialize() {
+        let json = r##"{"username":"owner1","pin":"1234","display_name":"Store Owner"}"##;
+        let args: BootstrapOwnerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.username, "owner1");
+        assert_eq!(args.pin, "1234");
+        assert_eq!(args.display_name, "Store Owner");
+    }
+
+    #[test]
+    fn bootstrap_owner_args_debug() {
+        let args = BootstrapOwnerArgs {
+            username: "adm".into(),
+            pin: "0000".into(),
+            display_name: "Admin".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("adm"));
+        assert!(d.contains("Admin"));
+    }
+
+    #[test]
+    fn bootstrap_owner_result_serialize() {
+        let result = BootstrapOwnerResult {
+            session: oz_core::auth::LoginSession {
+                user_id: "u1".into(),
+                display_name: "Owner".into(),
+                role_name: "Owner".into(),
+                role_id: "role-owner".into(),
+            },
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["session"]["user_id"], "u1");
+        assert_eq!(json["session"]["role_name"], "Owner");
+    }
+
+    #[test]
+    fn bootstrap_owner_result_debug() {
+        let result = BootstrapOwnerResult {
+            session: oz_core::auth::LoginSession {
+                user_id: "u2".into(),
+                display_name: "Alice".into(),
+                role_name: "Owner".into(),
+                role_id: "role-owner".into(),
+            },
+        };
+        let d = format!("{result:?}");
+        assert!(d.contains("Alice"));
     }
 }

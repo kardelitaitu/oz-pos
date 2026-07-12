@@ -952,7 +952,14 @@ func TestActivateHandler_Success(t *testing.T) {
 	}
 }
 
-func TestActivateHandler_ExistingTenantNoApiKeyLeak(t *testing.T) {
+// TestActivateHandler_ExistingTenantRequiresAPIKey verifies the H1-audit gate:
+// an activation request that targets an EXISTING tenant but supplies no
+// api_key must be rejected with 401. Without this gate, anyone who knew
+// a tenant's email + a valid license key could exfiltrate the tenant's
+// signed_payload (which is sufficient to forge a working offline license
+// until expires_at, since the Rust client verifies the RSA signature
+// locally and trusts the payload).
+func TestActivateHandler_ExistingTenantRequiresAPIKey(t *testing.T) {
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
@@ -964,7 +971,8 @@ func TestActivateHandler_ExistingTenantNoApiKeyLeak(t *testing.T) {
 	seedLicenseKey(t, app, "OZ-EXIST-KEY001", "pro", "unused",
 		"2099-12-31 23:59:59.000Z")
 
-	// Activate with the existing tenant's email.
+	// Activate with the existing tenant's email but NO api_key.
+	// Must be rejected (H1 audit fix).
 	body := strings.NewReader(`{
 		"key": "OZ-EXIST-KEY001",
 		"email": "existtenan00001@example.com",
@@ -979,8 +987,85 @@ func TestActivateHandler_ExistingTenantNoApiKeyLeak(t *testing.T) {
 	}
 	mux.ServeHTTP(rec, req)
 
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 (H1 gate), got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Must not reveal which factor failed (email-existing vs. api_key-mismatch).
+	if !strings.Contains(rec.Body.String(), "api_key required") {
+		t.Errorf("expected 'api_key required' error, got: %s", rec.Body.String())
+	}
+}
+
+// TestActivateHandler_ExistingTenantRejectsWrongAPIKey verifies that supplying
+// any wrong api_key against an existing tenant is rejected with 401, regardless
+// of whether the api_key is missing, malformed, or belongs to a different
+// tenant. This guarantees the gate cannot be bypassed by guessing.
+func TestActivateHandler_ExistingTenantRejectsWrongAPIKey(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "wrongkeyten0001", "correctkey0000001", "active")
+	seedLicenseKey(t, app, "OZ-WRONGKEY-001", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{
+		"key": "OZ-WRONGKEY-001",
+		"email": "wrongkeyten0001@example.com",
+		"machine_id": "wrongkeymach001",
+		"api_key": "this-is-the-wrong-key00"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 (wrong api_key), got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Do NOT leak the real api_key (or any other tenant-record field) on failure.
+	bodyStr := rec.Body.String()
+	if strings.Contains(bodyStr, "correctkey0000001") {
+		t.Error("response leaked the real tenant api_key on wrong-key rejection")
+	}
+}
+
+// TestActivateHandler_ExistingTenantAcceptsValidAPIKey verifies the happy
+// path of the H1 gate: a caller who proves tenant-administrator status by
+// supplying the correct api_key for an existing tenant CAN re-activate and
+// receives the signed_payload, but the server does NOT re-emit the api_key
+// in the response (the caller already proved they have it; echoing it back
+// would be redundant on the wire and risks accidental logging leakage).
+func TestActivateHandler_ExistingTenantAcceptsValidAPIKey(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "validkeyten0001", "validkeykey00001", "active")
+	seedLicenseKey(t, app, "OZ-VALIDKEY-001", "pro", "unused",
+		"2099-12-31 23:59:59.000Z")
+
+	body := strings.NewReader(`{
+		"key": "OZ-VALIDKEY-001",
+		"email": "validkeyten0001@example.com",
+		"machine_id": "validmachin0001",
+		"api_key": "validkeykey00001"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 200 (correct api_key), got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var resp map[string]any
@@ -988,12 +1073,7 @@ func TestActivateHandler_ExistingTenantNoApiKeyLeak(t *testing.T) {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	// The response must NOT include api_key for an existing tenant.
-	if _, ok := resp["api_key"]; ok {
-		t.Error("api_key must NOT be returned for an existing tenant (prevents credential leakage)")
-	}
-
-	// Core fields must still be present.
+	// Core fields must be present.
 	if _, ok := resp["signed_payload"]; !ok {
 		t.Error("expected signed_payload in response")
 	}
@@ -1002,6 +1082,12 @@ func TestActivateHandler_ExistingTenantNoApiKeyLeak(t *testing.T) {
 	}
 	if _, ok := resp["tenant_id"]; !ok {
 		t.Error("expected tenant_id in response")
+	}
+
+	// api_key must NOT be re-issued on an existing-tenant first-time
+	// activation of an unused key — caller proved they already have it.
+	if _, ok := resp["api_key"]; ok {
+		t.Error("api_key must NOT be re-issued when caller proved they already hold it (no leak on the wire)")
 	}
 }
 
@@ -1205,7 +1291,8 @@ func TestActivateHandler_SameTenantKeyReuse(t *testing.T) {
 	body := strings.NewReader(`{
 		"key": "OZ-REUSE-KEY0001",
 		"email": "reuseTen0000001@example.com",
-		"machine_id": "newmachine00001"
+		"machine_id": "newmachine00001",
+		"api_key": "reuseApikey00001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -1231,7 +1318,9 @@ func TestActivateHandler_SameTenantKeyReuse(t *testing.T) {
 		t.Error("expected signature in response")
 	}
 	// api_key is included because keyStatus was "activated" — caller
-	// proved they know a key already bound to this tenant.
+	// proved they know both a key already bound to this tenant AND
+	// the matching api_key. Without the api_key match this branch
+	// is gated by the H1 fix in activate.go and returns 401.
 	if _, ok := resp["api_key"]; !ok {
 		t.Error("expected api_key in response on key reuse by same tenant")
 	}
@@ -1255,12 +1344,16 @@ func TestActivateHandler_EmailCaseInsensitive(t *testing.T) {
 	seedLicenseKey(t, app, "OZ-CASE-INSEN01", "pro", "unused",
 		"2099-12-31 23:59:59.000Z")
 
-	// POST with UPPERCASE email — handler should normalize it to
-	// lowercase and reuse the existing tenant (not create a new one).
+	// POST with UPPERCASE email + the existing tenant's api_key.
+	// The handler must:
+	// (a) normalize the email to lowercase and reuse the existing
+	//     tenant (matched on email) — NOT create a new one.
+	// (b) pass the H1 api_key gate since we provided the correct key.
 	body := strings.NewReader(`{
 		"key": "OZ-CASE-INSEN01",
 		"email": "CASEINSEN000001@EXAMPLE.COM",
-		"machine_id": "casemachin00001"
+		"machine_id": "casemachin00001",
+		"api_key": "caseInsenKey0001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")

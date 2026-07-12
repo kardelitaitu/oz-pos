@@ -16,6 +16,14 @@ type ActivateRequest struct {
 	TenantID  string `json:"tenant_id"`
 	MachineID string `json:"machine_id"`
 	Email     string `json:"email"` // required
+	// APIKey is required when re-activating an installation for a
+	// tenant that already exists (H1 audit fix). On first activation
+	// the server issues a new api_key in the response, which the POS
+	// persists and re-sends on subsequent calls. Without a matching
+	// api_key on existing-tenant activations, anyone who knows an
+	// email + has a valid license key could exfiltrate the tenant's
+	// signed_payload (sufficient to forge a working license offline).
+	APIKey string `json:"api_key,omitempty"`
 }
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
@@ -83,10 +91,20 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				})
 			}
 		} else {
-			// Tenant exists, check status
+			// Tenant exists — check status AND api_key match (H1 audit fix).
+			// Returning 401 (not 403) for the api_key mismatch is intentional:
+			// 401 means "authentication failed"; 403 would imply successful
+			// authentication followed by a permission check. The message is
+			// generic ("api_key required") and does not reveal whether the
+			// key was missing vs. wrong vs. tenant-not-found.
 			if tenant.GetString("status") != "active" {
 				return e.JSON(http.StatusForbidden, map[string]any{
 					"error": "tenant account is suspended or revoked",
+				})
+			}
+			if tenant.GetString("api_key") != req.APIKey {
+				return e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "api_key required (or mismatched) — caller is not the registered administrator of this tenant",
 				})
 			}
 		}
@@ -148,11 +166,12 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		machine.Set("tenant_id", tenantID)
 		machine.Set("first_seen_at", time.Now().UTC())
 		machine.Set("last_seen_at", time.Now().UTC())
-		if err := app.Save(machine); err != nil {
-			return e.JSON(http.StatusInternalServerError, map[string]any{
-				"error": "failed to register machine",
-			})
-		}
+	if err := app.Save(machine); err != nil {
+		log.Printf("H1 audit: machine registration failed (id=%q tenant_id=%q): %v", req.MachineID, tenantID, err)
+		return e.JSON(http.StatusInternalServerError, map[string]any{
+			"error": "failed to register machine",
+		})
+	}
 
 		var payloadStr, signature string
 

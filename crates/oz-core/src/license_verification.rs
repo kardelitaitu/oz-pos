@@ -51,6 +51,14 @@ pub struct ActivateLicenseRequest {
     pub email: String,
     /// The contact phone number for the licensee.
     pub phone: String,
+    /// The api_key of an existing tenant, required when re-activating
+    /// an installation whose tenant was previously activated (H1 audit
+    /// fix). New tenants omit this on the first activation; the server
+    /// issues a new api_key in the response which must be persisted
+    /// locally and re-sent on every subsequent activation call.
+    /// `None` for first activation; `Some(api_key)` for re-activation.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub api_key: Option<String>,
 }
 
 /// Response from `POST /api/v1/license/activate`.

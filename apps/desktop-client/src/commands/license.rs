@@ -58,11 +58,21 @@ pub async fn activate_license(
     machine_id: String,
     phone: String,
 ) -> Result<bool, AppError> {
+    // H1 audit fix: read the previously-stored api_key so the server can
+    // authenticate the caller as the legitimate tenant admin on re-
+    // activations. On first activation this returns None and a new
+    // api_key is issued in the response.
+    let stored_api_key: Option<String> = {
+        let conn = state.db.lock().await;
+        Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty())
+    };
+
     let req = ActivateLicenseRequest {
         key,
         email,
         machine_id,
         phone,
+        api_key: stored_api_key,
     };
 
     let resp = core_activate_license(&req)
