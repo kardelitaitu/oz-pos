@@ -128,9 +128,9 @@ describe('PriceOverrideModal', () => {
     // Step 3: PIN.
     await waitFor(() => {
       expect(screen.getByText('Enter manager PIN')).toBeInTheDocument();
-      // Should show 6 PIN dots.
+      // Should show 4 PIN dots.
       const dots = document.querySelectorAll('.price-override-pin-dot');
-      expect(dots.length).toBe(6);
+      expect(dots.length).toBe(4);
     });
   });
 
@@ -157,7 +157,7 @@ describe('PriceOverrideModal', () => {
     expect(filledDots.length).toBe(3);
   });
 
-  it('calls onConfirm when PIN reaches 6 digits and login succeeds', async () => {
+  it('calls onConfirm when PIN reaches 4 digits and login succeeds', async () => {
     const user = userEvent.setup();
     mockStaffLogin.mockResolvedValue({ session: { user_id: 'user-99' } });
     renderModal();
@@ -173,16 +173,14 @@ describe('PriceOverrideModal', () => {
       expect(screen.getByText('Enter manager PIN')).toBeInTheDocument();
     });
 
-    // Enter 6-digit PIN.
+    // Enter 4-digit PIN.
     await user.click(screen.getByText('1'));
     await user.click(screen.getByText('2'));
     await user.click(screen.getByText('3'));
     await user.click(screen.getByText('4'));
-    await user.click(screen.getByText('5'));
-    await user.click(screen.getByText('6'));
 
     await waitFor(() => {
-      expect(mockStaffLogin).toHaveBeenCalledWith({ username: 'manager', pin: '123456' });
+      expect(mockStaffLogin).toHaveBeenCalledWith({ username: 'manager', pin: '1234' });
       expect(defaultProps.onConfirm).toHaveBeenCalledWith(50000, 'user-99');
     });
   });
@@ -199,8 +197,8 @@ describe('PriceOverrideModal', () => {
 
     await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
 
-    // Enter full 6-digit PIN.
-    for (const d of ['1', '2', '3', '4', '5', '6']) {
+    // Enter full 4-digit PIN.
+    for (const d of ['1', '2', '3', '4']) {
       await user.click(screen.getByText(d));
     }
 
