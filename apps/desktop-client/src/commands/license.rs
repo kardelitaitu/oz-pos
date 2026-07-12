@@ -9,7 +9,8 @@ use oz_core::Settings;
 use oz_core::crypto::{decrypt_api_key, encrypt_api_key};
 use oz_core::license_verification::{
     ActivateLicenseRequest, SignedSubscriptionPayload, activate_license as core_activate_license,
-    check_license_status as core_check_license_status, verify_license_signature,
+    check_license_status as core_check_license_status, store_subscription,
+    verify_license_signature,
 };
 
 use crate::error::AppError;
@@ -108,8 +109,32 @@ pub async fn activate_license(
     let encrypted_api_key = encrypt_api_key(&resp.api_key, &machine_id_for_encryption)
         .map_err(|e| AppError::Internal(format!("failed to encrypt api_key: {e}")))?;
 
-    // Store in settings table
+    // ── Update tenant_subscription for quota enforcement ──────
+    // The activate_license response includes a signed_payload with
+    // tier, max_stores, max_pos_instances, etc. We persist this to
+    // the tenant_subscription table keyed as "default" (NOT the
+    // server-assigned tenant_id from resp.tenant_id) so workspace
+    // commands like create_workspace_instance_scoped pick it up via
+    // TenantSubscription::load("default"). Without this write, the
+    // quota system would remain stuck on the bootstrap Free tier
+    // (seeded by migration 061) regardless of what tier the user
+    // activated.
+    //
+    // This write comes BEFORE Settings::set_batch so a partial
+    // failure here doesn't leave the system in an inconsistent state
+    // where Settings reflect the new tier but tenant_subscription
+    // still has the old Free tier.
     let conn = state.db.lock().await;
+    store_subscription(
+        &conn,
+        "default",
+        &resp.signed_payload,
+        &resp.signature,
+        &resp.api_key,
+    )
+    .map_err(|e| AppError::Internal(format!("failed to persist subscription: {e}")))?;
+
+    // Store in settings table
     Settings::set_batch(
         &conn,
         &[
@@ -502,5 +527,47 @@ mod tests {
         let json = serde_json::to_string(&dto).unwrap();
         assert!(json.contains("\"expiresAt\":null"));
         assert!(json.contains("\"graceUntil\":null"));
+    }
+
+    // ── store_subscription → TenantSubscription round-trip ───────
+
+    #[test]
+    fn store_subscription_updates_tenant_subscription_default() {
+        use oz_core::migrations;
+        let conn = migrations::fresh_db();
+
+        // Verify bootstrap Free tier is seeded
+        let sub = TenantSubscription::load(&conn, "default")
+            .expect("load")
+            .expect("bootstrap row should exist");
+        assert_eq!(sub.tier, oz_core::SubscriptionTier::Free);
+
+        // Simulate a Pro activation — store_subscription should
+        // replace the bootstrap row with the activated tier.
+        let payload = r#"{
+            "tenant_id": "default",
+            "tier_key": "pro",
+            "status": "active",
+            "max_stores": 2,
+            "max_pos_instances": 3,
+            "allowed_types": ["restaurant-pos", "store-pos", "admin"],
+            "starts_at": "2026-07-12T00:00:00Z",
+            "expires_at": "2027-07-12T00:00:00Z",
+            "grace_until": "2027-07-26T00:00:00Z",
+            "issued_at": "2026-07-12T00:00:00Z"
+        }"#;
+
+        store_subscription(&conn, "default", payload, "SIG_PRO", "oz_apikey_pro")
+            .expect("store_subscription should succeed");
+
+        let updated = TenantSubscription::load(&conn, "default")
+            .expect("load")
+            .expect("row should exist after update");
+        assert_eq!(updated.tier, oz_core::SubscriptionTier::Pro);
+        assert_eq!(updated.max_stores, 2);
+        assert_eq!(updated.max_pos_instances, 3);
+        assert_eq!(updated.signature, "SIG_PRO");
+        assert_eq!(updated.api_key, "oz_apikey_pro");
+        assert_eq!(updated.signed_payload, payload);
     }
 }
