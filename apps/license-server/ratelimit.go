@@ -246,12 +246,20 @@ func (rl *rateLimiter) persistBucket(ip string, tokens int, lastFill time.Time) 
 			err = nil
 		}
 	}()
+	// MIN/MAX guards prevent token regression under concurrent UPSERTs
+	// (H2 audit): allow() releases the in-memory mutex BEFORE writing
+	// through, so multiple writers can race into SQLite. MIN(tokens, ...)
+	// ensures the persisted bucket can only ever drop, never refill
+	// via a stale snapshot — closing the restart-survival bypass where
+	// the LAST UPSERT wins regardless of "last"-ness. MAX(last_fill, ...)
+	// keeps the refill-marker monotonic so an out-of-order writer can't
+	// rewind it.
 	_, err = rl.db.DB().NewQuery(
 		`INSERT INTO rate_limit_ip_buckets (ip, tokens, last_fill)
 		 VALUES ({:ip}, {:tokens}, {:last_fill})
 		 ON CONFLICT(ip) DO UPDATE SET
-		   tokens = excluded.tokens,
-		   last_fill = excluded.last_fill`,
+		   tokens = MIN(tokens, excluded.tokens),
+		   last_fill = MAX(last_fill, excluded.last_fill)`,
 	).Bind(map[string]any{
 		"ip":        ip,
 		"tokens":    tokens,
@@ -567,13 +575,24 @@ func (kf *keyFailureTracker) persistFailure(key string, count int, lastAttempt, 
 	if !cooldownAt.IsZero() {
 		cooldownArg = cooldownAt.Format(time.RFC3339)
 	}
+	// MAX guards (H2 audit): MIN/MAX style monotonic UPSERT — under
+	// concurrent writers, recordFailure() releases kf.mu BEFORE the
+	// SQLite write, so the LAST UPSERT would otherwise win regardless
+	// of "last"-ness. MAX(count, ...) keeps the failure counter
+	// monotonic (no regression to a lower failure count after a
+	// stale writer arrives last). MAX(last_attempt, ...) and
+	// MAX(cooldown_until, ...) extend the cooldown only — never
+	// shorten or rewind — defeating restart-survival bypass for an
+	// attacker whose stale record arrives out of order. Empty-string
+	// cooldown_until sorts before any RFC3339 timestamp under SQLite's
+	// default BINARY collation, so MAX('', '2026-...') = '2026-...'.
 	_, err = kf.db.DB().NewQuery(
 		`INSERT INTO rate_limit_key_failures (key, count, last_attempt, cooldown_until)
 		 VALUES ({:key}, {:count}, {:last_attempt}, {:cooldown_until})
 		 ON CONFLICT(key) DO UPDATE SET
-		   count = excluded.count,
-		   last_attempt = excluded.last_attempt,
-		   cooldown_until = excluded.cooldown_until`,
+		   count = MAX(count, excluded.count),
+		   last_attempt = MAX(last_attempt, excluded.last_attempt),
+		   cooldown_until = MAX(cooldown_until, excluded.cooldown_until)`,
 	).Bind(map[string]any{
 		"key":            key,
 		"count":          count,
