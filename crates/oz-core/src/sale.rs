@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use foundation::{Cart, CartLine, Currency, InvalidTransition, Money, SaleStatus};
+use foundation::{Cart, Currency, InvalidTransition, Money, SaleStatus};
 
 /// A single line item within a sale.
 ///
