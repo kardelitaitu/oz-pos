@@ -59,7 +59,7 @@ describe('ThemeToggle', () => {
   });
 
   it('renders a sun icon in dark mode', () => {
-    localStorage.setItem('oz-pos-theme-v2', 'dark');
+    localStorage.setItem('oz-pos-theme-v3', 'dark');
     render(wrap(<ThemeToggle />));
     const button = screen.getByTestId('theme-toggle');
     const svgs = button.querySelectorAll('svg');

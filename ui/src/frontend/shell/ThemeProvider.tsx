@@ -30,7 +30,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = 'oz-pos-theme-v2';
+const STORAGE_KEY = 'oz-pos-theme-v3';
 
 // ── Provider ───────────────────────────────────────────────────────
 
@@ -86,18 +86,6 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     };
   }, [theme]);
 
-  // Listen for OS-level preference changes when no manual override is set.
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (e: MediaQueryListEvent) => {
-      // Only auto-switch if the user hasn't explicitly chosen.
-      if (!localStorage.getItem(STORAGE_KEY)) {
-        setThemeState(e.matches ? 'dark' : 'light');
-      }
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
 
   // Reactively apply brand accent palette whenever brand settings change.
   const { settings: brandSettings } = useBrand();
