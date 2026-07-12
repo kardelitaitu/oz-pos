@@ -56,6 +56,15 @@ func main() {
 
 	// ── Register custom license API routes ───────────────────────
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
+		// and logs-and-returns on schema/hydrate failure so the server can
+		// still boot in degraded in-memory-only mode if SQLite is unavailable.
+		// Runs BEFORE route registration — once routes are mounted, /activate
+		// and /renew requests immediately call allow()/recordFailure() which
+		// need the persistence handle.
+		ipRateLimiter.attachPersistence(app)
+		keyFailTracker.attachPersistence(app)
+
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		// /status uses POST + Authorization: Bearer <api_key> to keep the

@@ -109,6 +109,13 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 	t.Helper()
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Wire rate-limiter persistence to SQLite for H2-audit tests.
+		// Tests calling resetRateLimiters() detach the db before the
+		// next test, so cross-test pollution is bounded even though
+		// the tracker variables are package globals.
+		ipRateLimiter.attachPersistence(app)
+		keyFailTracker.attachPersistence(app)
+
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
@@ -283,6 +290,14 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 // "server misconfiguration" error paths in the handlers.
 func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests.TestApp, *core.ServeEvent) {
 	t.Helper()
+
+	// Detach stale SQLite handles from prior tests now that this
+	// test creates its own TestApp. Without this, the previous
+	// test's closed tests.TestApp would still be referenced by
+	// tracker.db; any handler call here would panic at the driver
+	// level (mitigated downstream by defer/recover on persist
+	// calls, but cleaner at the test boundary).
+	resetRateLimiters()
 
 	initPrivateKey(t)
 
@@ -713,10 +728,15 @@ func resetRateLimiters() {
 
 	ipRateLimiter.mu.Lock()
 	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	// Detach the DB handle so the next attachPersistence binds to its
+	// own TestApp rather than holding a dangling pointer to the
+	// previous test's (potentially closed) SQLite file.
+	ipRateLimiter.db = nil
 	ipRateLimiter.mu.Unlock()
 
 	keyFailTracker.mu.Lock()
 	keyFailTracker.failures = make(map[string]*keyFailures)
+	keyFailTracker.db = nil
 	keyFailTracker.mu.Unlock()
 
 	ipRateLimiter.startCleanup()
@@ -1707,6 +1727,226 @@ func TestKeyFailureTracker_CooldownEnvOverride(t *testing.T) {
 	if got := parseCooldown(); got != defaultKeyCooldown {
 		t.Errorf("expected defaultKeyCooldown=%v with malformed env, got %v", defaultKeyCooldown, got)
 	}
+}
+
+// ── Tests: Persistence (H2 audit) ────────────────────────────────
+
+// TestRateLimiters_Persistence_IP verifies the H2 audit fix:
+// ipRateLimiter bucket state survives an end-to-end "restart" via
+// SQLite persistence. Three sub-claims covered in sequence:
+//
+//  1. allow() writes through to SQLite — the row appears with the
+//     post-decrement token count after a single call.
+//  2. After a simulated restart (resetRateLimiters + reattach), hydrate
+//     loads non-stale rows from SQLite into the in-memory map.
+//  3. Stale rows (last_fill older than ipBucketTTL=2h) are filtered
+//     out by hydrate and never land in in-memory.
+func TestRateLimiters_Persistence_IP(t *testing.T) {
+	resetRateLimiters()
+	app, _ := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Phase 1 — write-through. setupDirectApp already triggered OnServe
+	// which called ipRateLimiter.attachPersistence(app), so the table
+	// is in place and the tracker is wired to this test's SQLite.
+	const freshIP = "192.0.2.10"
+	if !ipRateLimiter.allow(freshIP) {
+		t.Fatalf("first allow(%q) should have returned true", freshIP)
+	}
+
+	rows, err := app.DB().NewQuery(
+		`SELECT tokens FROM rate_limit_ip_buckets WHERE ip = {:ip}`,
+	).Bind(map[string]any{"ip": freshIP}).Rows()
+	if err != nil {
+		t.Fatalf("failed to query persisted row: %v", err)
+	}
+	if !rows.Next() {
+		rows.Close()
+		t.Fatal("expected hydration target row to exist in DB after allow()")
+	}
+	var dbTokens int
+	if err := rows.Scan(&dbTokens); err != nil {
+		rows.Close()
+		t.Fatalf("Scan failed: %v", err)
+	}
+	rows.Close()
+	// 5 fresh tokens, decremented to 4 on first allow.
+	if dbTokens != 4 {
+		t.Errorf("expected persisted tokens=4 after first allow, got %d", dbTokens)
+	}
+
+	// Phase 2 — restart-survival. resetRateLimiters clears in-memory +
+	// detaches db. Re-attach should hydrate the row written in phase 1.
+	resetRateLimiters()
+	ipRateLimiter.attachPersistence(app)
+
+	ipRateLimiter.mu.Lock()
+	b, ok := ipRateLimiter.buckets[freshIP]
+	ipRateLimiter.mu.Unlock()
+	if !ok {
+		t.Fatalf("expected hydrate to load %q from persist (phase 1 wrote tokens=4)", freshIP)
+	}
+	if b.tokens != 4 {
+		t.Errorf("expected hydrated tokens=4, got %d", b.tokens)
+	}
+
+	// Phase 3 — stale-row filter. Insert a row whose last_fill is well
+	// beyond ipBucketTTL=2h. Hydrate should skip it.
+	resetRateLimiters()
+	staleTime := time.Now().Add(-3 * ipBucketTTL).Format(time.RFC3339)
+	if _, err := app.DB().NewQuery(
+		`INSERT INTO rate_limit_ip_buckets (ip, tokens, last_fill)
+		 VALUES ({:ip}, {:tokens}, {:last_fill})`,
+	).Bind(map[string]any{
+		"ip":        "10.0.0.99",
+		"tokens":    0,
+		"last_fill": staleTime,
+	}).Execute(); err != nil {
+		t.Fatalf("failed to seed stale row: %v", err)
+	}
+	ipRateLimiter.attachPersistence(app)
+
+	ipRateLimiter.mu.Lock()
+	_, hasStale := ipRateLimiter.buckets["10.0.0.99"]
+	ipRateLimiter.mu.Unlock()
+	if hasStale {
+		t.Errorf("expected stale row (last_fill %v ago) to be filtered out by hydrate", staleTime)
+	}
+}
+
+// TestRateLimiters_Persistence_KeyFail verifies the H2 audit fix:
+// keyFailTracker failure state survives end-to-end restart.
+//
+//  1. recordFailure() writes through to SQLite (the DB row matches the
+//     in-memory count after 1 failure).
+//  2. After restart + reattach, hydrate loads failure rows from SQLite
+//     back into the in-memory map (with non-zero count).
+//  3. Stale partial-failure rows (last_attempt older than
+//     keyPartialFailureTTL=1h AND count < max=3) are filtered out at
+//     hydrate time and never land in in-memory.
+func TestRateLimiters_Persistence_KeyFail(t *testing.T) {
+	resetRateLimiters()
+	app, _ := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Phase 1 — write-through. setupDirectApp already wired persistence.
+	const recordKey = "OZ-PERSIST-001"
+	keyFailTracker.recordFailure(recordKey)
+
+	rows, err := app.DB().NewQuery(
+		`SELECT count FROM rate_limit_key_failures WHERE key = {:key}`,
+	).Bind(map[string]any{"key": recordKey}).Rows()
+	if err != nil {
+		t.Fatalf("failed to query persisted row: %v", err)
+	}
+	if !rows.Next() {
+		rows.Close()
+		t.Fatal("expected persistence row to exist after recordFailure")
+	}
+	var dbCount int
+	if err := rows.Scan(&dbCount); err != nil {
+		rows.Close()
+		t.Fatalf("Scan failed: %v", err)
+	}
+	rows.Close()
+	if dbCount != 1 {
+		t.Errorf("expected persisted count=1 after first recordFailure, got %d", dbCount)
+	}
+
+	// Phase 2 — restart-survival.
+	resetRateLimiters()
+	keyFailTracker.attachPersistence(app)
+
+	keyFailTracker.mu.Lock()
+	f, ok := keyFailTracker.failures[recordKey]
+	keyFailTracker.mu.Unlock()
+	if !ok {
+		t.Fatalf("expected hydrate to load %q from persist", recordKey)
+	}
+	if f.count != 1 {
+		t.Errorf("expected hydrated count=1, got %d", f.count)
+	}
+
+	// Phase 3 — stale-row filter. last_attempt > keyPartialFailureTTL=1h
+	// ago AND count=1 < max=3 → should NOT be rehydrated.
+	resetRateLimiters()
+	staleTime := time.Now().Add(-3 * keyPartialFailureTTL).Format(time.RFC3339)
+	if _, err := app.DB().NewQuery(
+		`INSERT INTO rate_limit_key_failures (key, count, last_attempt)
+		 VALUES ({:key}, {:count}, {:last_attempt})`,
+	).Bind(map[string]any{
+		"key":          "OZ-PERSIST-STALE",
+		"count":        1, // partial failure — below max=3
+		"last_attempt": staleTime,
+	}).Execute(); err != nil {
+		t.Fatalf("failed to seed stale failure row: %v", err)
+	}
+	keyFailTracker.attachPersistence(app)
+
+	keyFailTracker.mu.Lock()
+	_, hasStale := keyFailTracker.failures["OZ-PERSIST-STALE"]
+	keyFailTracker.mu.Unlock()
+	if hasStale {
+		t.Errorf("expected stale partial-failure row (last_attempt %v ago) to be filtered out by hydrate", staleTime)
+	}
+}
+
+// TestRateLimiter_PermittedAfterDBClose exercises the defer/recover
+// safety net in persistBucket and persistFailure (H2 audit fix).
+// After SQLite is closed mid-test (simulating a connection-pool
+// exhaustion or a server restart race), the in-memory allow() and
+// recordFailure() decisions must NOT panic. The recovery turns a
+// closed-connection panic into a logged error and nil return;
+// in-memory state remains authoritative for the allow decision.
+//
+// Without this test, the recover is unverified code that could
+// silently rot. Without the recover itself, this test would panic
+// at runtime and fail the suite — proving the safeguard is wired.
+// TestRateLimiter_PermittedAfterSQLiteClosed exercises the
+// defer/recover safety net in persistBucket and persistFailure
+// (H2 audit fix). After the test app's SQLite is closed mid-test
+// (simulating a closed DB at the driver layer — e.g. server restart
+// race or connection-pool exhaustion), the in-memory allow() and
+// recordFailure() decisions must NOT panic. The recovery turns a
+// closed-connection panic into a logged error and nil return;
+// in-memory state remains authoritative for the allow decision.
+//
+// Without this test, the recover is unverified code that could
+// silently rot. Without the recover itself, this test would panic
+// at runtime and fail the suite — proving the safeguard is wired.
+//
+// Implementation note: `app.DB()` returns PocketBase's *dbx.Builder
+// query wrapper which intentionally has no Close() method (close
+// is encapsulated in app.Cleanup() to avoid partial closes). We
+// invoke Cleanup() directly to break the SQLite connection; if
+// Close existed, we'd call that instead.
+func TestRateLimiter_PermittedAfterSQLiteClosed(t *testing.T) {
+	resetRateLimiters()
+	app, _ := setupDirectApp(t)
+
+	// Phase 1 — happy-path write-through. Confirms the fresh
+	// tracker.db is wired correctly via attachPersistence.
+	if !ipRateLimiter.allow("192.0.2.50") {
+		t.Fatal("first allow should succeed (5 fresh tokens)")
+	}
+
+	// Phase 2 — close SQLite via app.Cleanup(). Subsequent persist
+	// attempts hit a closed DB; defer/recover inside persistBucket
+	// and persistFailure must swallow any panic and return nil so
+	// the handler hot-path stays operational.
+	app.Cleanup()
+
+	// Phase 3 — second allow on the SAME ip (4 tokens left in
+	// memory). Reaching this assertion alive proves the recovery
+	// fired — otherwise the test would have panicked mid-call.
+	if !ipRateLimiter.allow("192.0.2.50") {
+		t.Error("second allow should succeed post-cleanup (4 fresh tokens in memory)")
+	}
+
+	// Phase 4 — recordFailure must also be panic-safe post-cleanup.
+	// Reaching here without panic confirms the recovery is correctly
+	// scoped to BOTH tracker persist calls.
+	keyFailTracker.recordFailure("OZ-CLOSED-DB001")
 }
 
 func TestActivateHandler_MachineAlreadyExists(t *testing.T) {

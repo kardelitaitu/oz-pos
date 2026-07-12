@@ -129,6 +129,7 @@ pub fn run() {
                 commands::gift_cards::unfreeze_gift_card,
                 commands::health::ping,
                 commands::health::version,
+                commands::health::get_local_ip,
                 commands::pos::start_sale,
                 commands::pos::add_line,
                 commands::pos::complete_sale,

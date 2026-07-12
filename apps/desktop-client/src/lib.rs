@@ -181,6 +181,7 @@ pub fn run() {
             commands::stock_transfers::cancel_stock_transfer,
             commands::health::ping,
             commands::health::version,
+            commands::health::get_local_ip,
             commands::pos::start_sale,
             commands::pos::start_sale_scoped,
             commands::pos::add_line,
