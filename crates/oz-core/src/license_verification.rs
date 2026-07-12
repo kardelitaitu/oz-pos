@@ -246,24 +246,32 @@ pub async fn activate_license(
         .timeout(std::time::Duration::from_secs(30))
         .send()
         .await
-        .map_err(|e| CoreError::Internal(format!("license server unreachable: {e}")))?;
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("activation: {msg}");
+            CoreError::Internal(msg)
+        })?;
 
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         let msg = extract_server_error(&body);
-        return Err(CoreError::Internal(format!(
-            "activation failed ({status}): {msg}"
-        )));
+        let err = format!("activation failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
     }
 
-    let result: ActivateLicenseResponse = resp
-        .json()
-        .await
-        .map_err(|e| CoreError::Internal(format!("failed to parse activation response: {e}")))?;
+    let result: ActivateLicenseResponse = resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse activation response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })?;
 
     // Verify the returned signature before trusting it.
-    verify_license_signature(&result.signed_payload, &result.signature)?;
+    if let Err(e) = verify_license_signature(&result.signed_payload, &result.signature) {
+        tracing::warn!("activation signature verification failed: {e}");
+        return Err(e);
+    }
 
     Ok(result)
 }
@@ -281,23 +289,31 @@ pub async fn renew_license(req: &RenewLicenseRequest) -> Result<RenewLicenseResp
         .timeout(std::time::Duration::from_secs(30))
         .send()
         .await
-        .map_err(|e| CoreError::Internal(format!("license server unreachable: {e}")))?;
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("renewal: {msg}");
+            CoreError::Internal(msg)
+        })?;
 
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         let msg = extract_server_error(&body);
-        return Err(CoreError::Internal(format!(
-            "renewal failed ({status}): {msg}"
-        )));
+        let err = format!("renewal failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
     }
 
-    let result: RenewLicenseResponse = resp
-        .json()
-        .await
-        .map_err(|e| CoreError::Internal(format!("failed to parse renewal response: {e}")))?;
+    let result: RenewLicenseResponse = resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse renewal response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })?;
 
-    verify_license_signature(&result.signed_payload, &result.signature)?;
+    if let Err(e) = verify_license_signature(&result.signed_payload, &result.signature) {
+        tracing::warn!("renewal signature verification failed: {e}");
+        return Err(e);
+    }
 
     Ok(result)
 }
@@ -324,20 +340,26 @@ pub async fn check_license_status(api_key: &str) -> Result<LicenseStatusResponse
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
-        .map_err(|e| CoreError::Internal(format!("license server unreachable: {e}")))?;
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("status check: {msg}");
+            CoreError::Internal(msg)
+        })?;
 
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         let msg = extract_server_error(&body);
-        return Err(CoreError::Internal(format!(
-            "status check failed ({status}): {msg}"
-        )));
+        let err = format!("status check failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
     }
 
-    resp.json()
-        .await
-        .map_err(|e| CoreError::Internal(format!("failed to parse status response: {e}")))
+    resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse status response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })
 }
 
 /// Store a signed subscription payload and API key in the local database.
