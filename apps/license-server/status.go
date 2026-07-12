@@ -7,11 +7,6 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// bearerPrefix is the RFC 6750 scheme required on the Authorization header.
-// The scheme itself ("Bearer") is case-sensitive per RFC 7235 §2.1; the
-// header NAME is case-insensitive and normalized by Go's http.Header.Get.
-const bearerPrefix = "Bearer "
-
 // handleStatus returns the current license status for a tenant.
 //
 // POST /api/v1/license/status

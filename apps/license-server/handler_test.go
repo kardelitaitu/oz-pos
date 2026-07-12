@@ -2526,3 +2526,227 @@ func TestActivateHandler_MachineAlreadyExists(t *testing.T) {
 		t.Fatalf("second activation failed (machine already exists): %v", rec2.Body.String())
 	}
 }
+
+// ── Tests: C1-followup auth migration (Bearer + body backward-compat) ───
+//
+// status.go was already migrated to Bearer-only in the C1 audit. activate.go
+// and renew.go still accept api_key in the JSON body for backward-compat with
+// deployed POS clients. These tests verify:
+//   - Authorization: Bearer <api_key> is the preferred path
+//   - Body api_key still works (legacy clients keep functioning)
+//   - Both present and matching works (idempotent)
+//   - Both present and mismatched is rejected (no silent guessing)
+// plus the logger-redaction helper that future debug-logging can use to
+// safely print request bodies.
+
+// TestRedactRequestBody verifies the logger-redaction helper that masks
+// the api_key field in a JSON payload. This is the test the user
+// explicitly asked for: any future debug-level log call that wants to
+// print the request body must use this helper so the credential never
+// lands in log files (which are typically retained longer, shared more
+// broadly, and may be scraped by log-aggregation tools).
+func TestRedactRequestBody(t *testing.T) {
+	cases := []struct {
+		name           string
+		in             string
+		mustContain    []string // substrings that MUST appear in output
+		mustNotContain []string // substrings that MUST NOT appear in output
+	}{
+		{
+			name:           "redacts api_key field with [REDACTED]",
+			in:             `{"tenant_id":"t1","api_key":"supersecret123","key":"OZ-123"}`,
+			mustContain:    []string{`"api_key":"[REDACTED]"`, `"tenant_id":"t1"`, `"key":"OZ-123"`},
+			mustNotContain: []string{"supersecret123"},
+		},
+		{
+			name:        "no api_key field passes through unchanged",
+			in:          `{"tenant_id":"t1","key":"OZ-123"}`,
+			mustContain: []string{`"tenant_id":"t1"`, `"key":"OZ-123"`},
+		},
+		{
+			name:        "empty api_key is preserved (not redacted to [REDACTED])",
+			in:          `{"api_key":"","key":"OZ-123"}`,
+			mustContain: []string{`"api_key":""`, `"key":"OZ-123"`},
+		},
+		{
+			name:        "malformed JSON returns original bytes (for debug usefulness)",
+			in:          `not json at all`,
+			mustContain: []string{"not json at all"},
+		},
+		{
+			name:        "empty body returns empty",
+			in:          ``,
+			mustContain: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := redactRequestBody([]byte(tc.in))
+			for _, want := range tc.mustContain {
+				if !strings.Contains(out, want) {
+					t.Errorf("expected substring %q in output, got: %s", want, out)
+				}
+			}
+			for _, dontWant := range tc.mustNotContain {
+				if strings.Contains(out, dontWant) {
+					t.Errorf("forbidden substring %q present in output: %s", dontWant, out)
+				}
+			}
+		})
+	}
+}
+
+// TestRenewHandler_AuthPaths verifies the C1-followup auth migration
+// for /renew: Authorization: Bearer <api_key> is preferred, body
+// api_key still works for backward-compat, both-present-and-match
+// succeeds, both-present-and-mismatch is rejected (no silent
+// guessing about which credential the client intended).
+func TestRenewHandler_AuthPaths(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "authtenantrnw00" // 15 chars (PocketBase implicit id field)
+	const apiKey = "authtestkey123456"
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscription(t, app, tenantID, "pro", "active")
+
+	cases := []struct {
+		name       string
+		authHeader string
+		bodyAPIKey string
+		expectCode int
+	}{
+		{
+			name:       "Bearer header only (preferred path)",
+			authHeader: "Bearer " + apiKey,
+			bodyAPIKey: "",
+			expectCode: http.StatusOK,
+		},
+		{
+			name:       "body api_key only (legacy backward-compat)",
+			authHeader: "",
+			bodyAPIKey: apiKey,
+			expectCode: http.StatusOK,
+		},
+		{
+			name:       "both present and matching (idempotent)",
+			authHeader: "Bearer " + apiKey,
+			bodyAPIKey: apiKey,
+			expectCode: http.StatusOK,
+		},
+		{
+			name:       "both present and mismatched (ambiguous -> 401)",
+			authHeader: "Bearer " + apiKey,
+			bodyAPIKey: "wrongapikeyrnw001",
+			expectCode: http.StatusUnauthorized,
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Each subtest needs its own unused key because the
+			// handler marks the key as activated on successful
+			// renewal (no two subtests can share a key).
+			newKey := fmt.Sprintf("OZ-AUTHPATH-%02d", i)
+			seedLicenseKey(t, app, newKey, "pro", "unused", "2099-12-31 23:59:59.000Z")
+
+			body := fmt.Sprintf(`{"tenant_id":"%s","api_key":"%s","key":"%s"}`,
+				tenantID, tc.bodyAPIKey, newKey)
+			req := httptest.NewRequest("POST", "/api/v1/license/renew", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			if tc.authHeader != "" {
+				req.Header.Set("Authorization", tc.authHeader)
+			}
+
+			rec := httptest.NewRecorder()
+			mux, _ := se.Router.BuildMux()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tc.expectCode {
+				t.Errorf("expected %d, got %d. Body: %s", tc.expectCode, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestActivateHandler_AuthPaths mirrors TestRenewHandler_AuthPaths for
+// /activate. The api_key check is only enforced for EXISTING tenants
+// (first-time activation issues a new api_key in the response). The
+// test focuses on the existing-tenant path to exercise the
+// C1-followup migration.
+func TestActivateHandler_AuthPaths(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "actauthtenant01" // 15 chars max — PocketBase implicit id field
+	const apiKey = "actauthtestkey123"
+	const email = "actauthtenant01@example.com"
+	seedTenant(t, app, tenantID, apiKey, "active")
+
+	cases := []struct {
+		name       string
+		authHeader string
+		bodyAPIKey string
+		expectCode int
+	}{
+		{
+			name:       "Bearer header only (preferred path)",
+			authHeader: "Bearer " + apiKey,
+			bodyAPIKey: "",
+			expectCode: http.StatusOK,
+		},
+		{
+			name:       "body api_key only (legacy backward-compat)",
+			authHeader: "",
+			bodyAPIKey: apiKey,
+			expectCode: http.StatusOK,
+		},
+		{
+			name:       "both present and matching (idempotent)",
+			authHeader: "Bearer " + apiKey,
+			bodyAPIKey: apiKey,
+			expectCode: http.StatusOK,
+		},
+		{
+			name:       "both present and mismatched (ambiguous -> 401)",
+			authHeader: "Bearer " + apiKey,
+			bodyAPIKey: "wrongapikeyact001",
+			expectCode: http.StatusUnauthorized,
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Each subtest needs its own unused key because the
+			// handler marks the key as activated on successful
+			// activation.
+			newKey := fmt.Sprintf("OZ-ACTPATH-%02d", i)
+			seedLicenseKey(t, app, newKey, "pro", "unused", "2099-12-31 23:59:59.000Z")
+			// Pre-seed a subscription so the handler can complete
+			// the create-new-subscription path on first activation
+			// for this tenant (without this, the test would still
+			// pass on auth but the handler might trip on
+			// subscription-creation assumptions; the seed makes the
+			// path deterministic).
+			seedSubscription(t, app, tenantID, "pro", "active")
+
+			body := fmt.Sprintf(`{"key":"%s","email":"%s","machine_id":"actpathmac%05d","api_key":"%s"}`,
+				newKey, email, i, tc.bodyAPIKey)
+			req := httptest.NewRequest("POST", "/api/v1/license/activate", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			if tc.authHeader != "" {
+				req.Header.Set("Authorization", tc.authHeader)
+			}
+
+			rec := httptest.NewRecorder()
+			mux, _ := se.Router.BuildMux()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tc.expectCode {
+				t.Errorf("expected %d, got %d. Body: %s", tc.expectCode, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}

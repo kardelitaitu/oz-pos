@@ -37,6 +37,21 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		})
 	}
 
+	// Resolve api_key: prefer Authorization: Bearer <key>, fall back to
+	// the body field for backward-compat with C1-pre-audit wire format
+	// (C1 audit fix that was only applied to /status). The Bearer path
+	// keeps the credential out of CDN / webserver access logs that
+	// capture request bodies, so we nudge body-fallback callers via a
+	// deprecation log line (logged ONLY on successful auth so attackers
+	// can't spam the log by sending failing body-auth requests).
+	apiKey, usedBodyFallback, authErr := extractAPIKey(req.APIKey, e.Request.Header.Get("Authorization"))
+	if authErr != nil {
+		return e.JSON(http.StatusUnauthorized, map[string]any{
+			"error": "api_key in body does not match Authorization header",
+		})
+	}
+	req.APIKey = apiKey
+
 	// Normalize email to lowercase + trim so that lookup-by-email
 	// is case-insensitive and whitespace-tolerant. Email addresses
 	// are case-insensitive per RFC 5321 §2.4 in practice, and we
@@ -108,6 +123,12 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				return e.JSON(http.StatusUnauthorized, map[string]any{
 					"error": "api_key required (or mismatched) — caller is not the registered administrator of this tenant",
 				})
+			}
+			if usedBodyFallback {
+				// Nudge operator toward the Bearer header. Logged
+				// post-auth-success only so failed-auth attempts (which
+				// hit the 401 branch above) don't spam the log.
+				log.Printf("DEPRECATION: /activate authenticated via legacy body api_key for tenant_id=%q; migrate client to Authorization: Bearer <api_key> to keep the credential out of CDN / webserver access logs that capture request bodies", tenant.Id)
 			}
 		}
 

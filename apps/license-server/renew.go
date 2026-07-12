@@ -27,6 +27,19 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// Resolve api_key: prefer Authorization: Bearer <key>, fall back to
+		// the body field for backward-compat with C1-pre-audit wire format.
+		// Bearer keeps the credential out of CDN / webserver access logs
+		// that capture request bodies; we deprecation-log the body path on
+		// successful auth only (failed attempts above are noise).
+		apiKey, usedBodyFallback, authErr := extractAPIKey(req.APIKey, e.Request.Header.Get("Authorization"))
+		if authErr != nil {
+			return e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "api_key in body does not match Authorization header",
+			})
+		}
+		req.APIKey = apiKey
+
 		// ── Validate required fields ──────────────────────────────
 		if req.TenantID == "" || req.APIKey == "" || req.Key == "" {
 			return e.JSON(http.StatusBadRequest, map[string]any{
@@ -59,6 +72,12 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "tenant_id does not match api_key",
 			})
+		}
+		if usedBodyFallback {
+			// Nudge operator toward the Bearer header. Logged
+			// post-auth-success only so failed-auth attempts don't
+			// spam the log.
+			log.Printf("DEPRECATION: /renew authenticated via legacy body api_key for tenant_id=%q; migrate client to Authorization: Bearer <api_key> to keep the credential out of CDN / webserver access logs that capture request bodies", tenant.Id)
 		}
 
 		// ── Per-key activation lock (C2/C3 audit fix) ──────────────
