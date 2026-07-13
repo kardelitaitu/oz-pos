@@ -5,7 +5,7 @@
 //! - **Import wizard**: pick a .ozpkg file, preview metadata, dry-run diff table, confirm
 //! - **Backup status**: last backup timestamp, one-click snapshot
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -110,6 +110,13 @@ export default function DataManagementScreen() {
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'backup'>('export');
   const { addToast } = useToast();
 
+  // ── Refs to hold latest form state so callbacks don't depend on
+  //     keystroke-level state (which would defeat useCallback).
+  const exportStateRef = useRef(exportState);
+  exportStateRef.current = exportState;
+  const importStateRef = useRef(importState);
+  importStateRef.current = importState;
+
   // ── Load backup status on mount ─────────────────────────────────
 
   useEffect(() => {
@@ -176,11 +183,12 @@ export default function DataManagementScreen() {
   }, [addToast, exportState.selectedTypes, l10n]);
 
   const confirmExport = useCallback(async () => {
-    if (exportState.password.length < 8) {
+    const es = exportStateRef.current;
+    if (es.password.length < 8) {
       addToast({ message: l10n.getString('data-mgmt-toast-export-password-length'), type: 'error' });
       return;
     }
-    if (exportState.password !== exportState.passwordConfirm) {
+    if (es.password !== es.passwordConfirm) {
       addToast({ message: l10n.getString('data-mgmt-toast-export-password-match'), type: 'error' });
       return;
     }
@@ -197,11 +205,11 @@ export default function DataManagementScreen() {
       setExportState((prev) => ({ ...prev, progress: 30 }));
 
       const result = await exportData({
-        types: Array.from(exportState.selectedTypes),
-        password: exportState.password,
+        types: Array.from(es.selectedTypes),
+        password: es.password,
         outputPath: filePath,
-        ...(exportState.dateFrom ? { dateFrom: exportState.dateFrom } : {}),
-        ...(exportState.dateTo ? { dateTo: exportState.dateTo } : {}),
+        ...(es.dateFrom ? { dateFrom: es.dateFrom } : {}),
+        ...(es.dateTo ? { dateTo: es.dateTo } : {}),
       });
 
       setExportState((prev) => ({
@@ -219,7 +227,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: l10n.getString('data-mgmt-toast-export-fail'), type: 'error' });
     }
-  }, [addToast, exportState.dateFrom, exportState.dateTo, exportState.password, exportState.passwordConfirm, exportState.selectedTypes, l10n]);
+  }, [addToast, l10n]);
 
   const resetExport = useCallback(() => {
     setExportState(INITIAL_EXPORT);
@@ -245,11 +253,12 @@ export default function DataManagementScreen() {
   }, [addToast, l10n]);
 
   const handleAnalyse = useCallback(async () => {
-    if (!importState.password) {
+    const is = importStateRef.current;
+    if (!is.password) {
       addToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), type: 'error' });
       return;
     }
-    if (!importState.selectedFile) {
+    if (!is.selectedFile) {
       addToast({ message: l10n.getString('data-mgmt-toast-import-no-file'), type: 'error' });
       return;
     }
@@ -257,7 +266,7 @@ export default function DataManagementScreen() {
     setImportState((prev) => ({ ...prev, progress: 10, error: null, analysing: true }));
 
     try {
-      const preview = await importPreview(importState.selectedFile, importState.password);
+      const preview = await importPreview(is.selectedFile, is.password);
       setImportState((prev) => ({
         ...prev,
         analysing: false,
@@ -288,10 +297,11 @@ export default function DataManagementScreen() {
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
       }));
     }
-  }, [addToast, importState.password, importState.selectedFile, l10n]);
+  }, [addToast, l10n]);
 
   const startImport = useCallback(async () => {
-    if (!importState.selectedFile || !importState.password) {
+    const is = importStateRef.current;
+    if (!is.selectedFile || !is.password) {
       addToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), type: 'error' });
       return;
     }
@@ -300,7 +310,7 @@ export default function DataManagementScreen() {
 
     try {
       // Execute import (preview already done in analyse step)
-      const result = await importData(importState.selectedFile, importState.password);
+      const result = await importData(is.selectedFile, is.password);
 
       setImportState((prev) => ({
         ...prev,
@@ -327,7 +337,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), type: 'error' });
     }
-  }, [addToast, importState.selectedFile, importState.password, l10n]);
+  }, [addToast, l10n]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
