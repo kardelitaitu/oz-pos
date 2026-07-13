@@ -57,29 +57,29 @@ function SkeletonGrid({ exiting }: { exiting?: boolean }) {
 
 // ── Randomized multilingual greeting ────────────────────────────
 
-const GREETINGS = [
-  'Hello',
-  'Hola',
-  'Bonjour',
-  'Ciao',
-  'Konnichiwa',
-  'Annyeong',
-  'Ni hao',
-  'Salaam',
-  'Sawasdee',
-  'Zdravstvuyte',
-  'Guten Tag',
-  'Olá',
-  'Namaste',
-  'Merhaba',
-  'Hej',
-  'Salut',
-  'Hallo',
-  'Ahoj',
-  'Selamat datang',
+const GREETINGS: { word: string; lang: string }[] = [
+  { word: 'Hello', lang: 'English' },
+  { word: 'Hola', lang: 'Spanish' },
+  { word: 'Bonjour', lang: 'French' },
+  { word: 'Ciao', lang: 'Italian' },
+  { word: 'Konnichiwa', lang: 'Japanese' },
+  { word: 'Annyeong', lang: 'Korean' },
+  { word: 'Ni hao', lang: 'Chinese' },
+  { word: 'Salaam', lang: 'Arabic' },
+  { word: 'Sawasdee', lang: 'Thai' },
+  { word: 'Zdravstvuyte', lang: 'Russian' },
+  { word: 'Guten Tag', lang: 'German' },
+  { word: 'Olá', lang: 'Portuguese' },
+  { word: 'Namaste', lang: 'Hindi' },
+  { word: 'Merhaba', lang: 'Turkish' },
+  { word: 'Hej', lang: 'Swedish' },
+  { word: 'Salut', lang: 'French' },
+  { word: 'Hallo', lang: 'Dutch' },
+  { word: 'Ahoj', lang: 'Czech' },
+  { word: 'Selamat datang', lang: 'Indonesian' },
 ];
 
-function pickGreeting(): string {
+function pickGreeting(): { word: string; lang: string } {
   return GREETINGS[Math.floor(Math.random() * GREETINGS.length)]!;
 }
 
@@ -196,13 +196,13 @@ function LayerFloatingButtons({
   handleLogoutClick: () => void;
   error: string | null;
   retry: () => void;
-  greeting: string;
+  greeting: { word: string; lang: string };
 }) {
   return (
     <>
     {session && displayName && (
-      <span className="ws-header-greeting">
-        {greeting}, {displayName}
+      <span className="ws-header-greeting" title={greeting.lang}>
+        {greeting.word}, {displayName}
       </span>
     )}
     <div className="ws-header-buttons">
