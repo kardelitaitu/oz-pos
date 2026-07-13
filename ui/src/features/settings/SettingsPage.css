@@ -63,9 +63,7 @@
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .settings-topbar-right {

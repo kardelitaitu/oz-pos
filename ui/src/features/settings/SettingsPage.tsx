@@ -984,9 +984,7 @@ export default function SettingsPage() {
               </svg>
             </div>
           </Tooltip>
-          <span className="settings-topbar-name">
-            {brandSettings.store_name || 'OZ-POS'} — Settings
-          </span>
+          <span className="settings-topbar-name">Settings</span>
         </div>
         <div className="settings-topbar-right">
           <span className="settings-topbar-clock" aria-label={`${today}, ${clock}`}>
