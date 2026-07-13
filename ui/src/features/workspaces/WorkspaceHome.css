@@ -892,6 +892,13 @@
   font-family: inherit;
   cursor: pointer;
   outline: none;
+  transition: color var(--duration-150), border-color var(--duration-150), background var(--duration-150);
+}
+
+.workspace-home-user-profile:hover {
+  color: var(--color-fg);
+  border-color: var(--color-border-hover);
+  background: var(--color-bg);
 }
 
 .workspace-home-user-profile:focus-visible {
@@ -912,11 +919,6 @@
   font-family: var(--font-mono);
   line-height: 1;
   flex-shrink: 0;
-}
-
-/* Continuous wiggle on hover — infinite so the user always sees it */
-.workspace-home-user-profile:hover .workspace-home-user-avatar .workspace-home-user-avatar-inner {
-  animation: ws-icon-wiggle 0.8s var(--ease-out) infinite;
 }
 
 .workspace-home-user-info {
@@ -1116,8 +1118,7 @@
   }
 
   .workspace-card:hover .workspace-card-icon,
-  .workspace-card:hover .workspace-card-icon-inner,
-  .workspace-home-user-profile:hover .workspace-home-user-avatar-inner {
+  .workspace-card:hover .workspace-card-icon-inner {
     animation: none;
     transform: none;
   }
