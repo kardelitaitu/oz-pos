@@ -290,10 +290,10 @@
 
 .workspace-card {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  text-align: center;
-  gap: var(--space-2);
+  text-align: left;
+  gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
@@ -426,7 +426,8 @@
 .workspace-card-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-0_5);
+  min-width: 0;
 }
 
 .workspace-card-name {
@@ -473,7 +474,8 @@
   color: var(--color-danger-fg);
   background: var(--color-danger);
   border-radius: var(--radius-full);
-  margin-top: var(--space-1);
+  margin-top: var(--space-0_5);
+  width: fit-content;
 }
 
 /* ── Active workspace indicator ───────────────────────────────── */
@@ -626,9 +628,9 @@
 
 .workspace-skeleton-card {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
