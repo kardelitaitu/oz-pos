@@ -445,22 +445,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [activeInstance, session]);
 
   // Backward-compat: sets the type_key string directly.
+  // Always updates lastWorkspace — even with null — so the active
+  // card visual is cleared when returning to the workspace picker.
   const handleSetActive = useCallback((key: string | null) => {
-    if (key) {
-      setLastWorkspace(key);
-    }
+    setLastWorkspace(key);
     setActiveWorkspace(key);
     // activeInstance syncs via useEffect above
   }, []);
 
   // ADR #4: set active instance directly.
+  // Always updates lastWorkspace — even with null — so the active
+  // card visual is cleared when returning to the workspace picker.
   const handleSetActiveInstance = useCallback(
     (instance: WorkspaceDto | null) => {
       if (instance) {
-        setLastWorkspace(instance.type_key);
         setActiveWorkspace(instance.type_key);
+        setLastWorkspace(instance.type_key);
       } else {
         setActiveWorkspace(null);
+        setLastWorkspace(null);
       }
       setActiveInstance(instance);
     },
