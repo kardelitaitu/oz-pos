@@ -104,6 +104,11 @@ if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/packag
     Write-Host "SKIP UI checks (npm not available or ui/package-lock.json missing)"
 }
 
+# --- Generate stats.json (for shields.io badges) --------------------------
+Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.ps1" -ScriptBlock {
+    & powershell -File scripts\stats.ps1
+}
+
 # --- Done -----------------------------------------------------------------
 $totalElapsed = (Get-Date) - $totalStart
 Write-Host ("all checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
