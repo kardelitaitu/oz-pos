@@ -95,6 +95,25 @@ const INITIAL_IMPORT: ImportState = {
   dryRun: null,
 };
 
+// ── Tab / icon helpers ───────────────────────────────────────────
+
+const ICON_PROPS = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+function tabIcon(tab: 'export' | 'import' | 'backup'): React.ReactNode {
+  switch (tab) {
+    case 'export':
+      return <svg {...ICON_PROPS}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
+    case 'import':
+      return <svg {...ICON_PROPS}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+    case 'backup':
+      return <svg {...ICON_PROPS}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
+  }
+}
+
+function folderIcon(): React.ReactNode {
+  return <svg {...ICON_PROPS} width={32} height={32}><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>;
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 /** Data management screen — encrypted export wizard, import wizard with dry-run preview, and one-click backup status. */
@@ -365,7 +384,7 @@ export default function DataManagementScreen() {
             className={`data-mgmt-tab ${activeTab === tab ? 'data-mgmt-tab--active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            <span aria-hidden="true">{tab === 'export' && '📤'}{tab === 'import' && '📥'}{tab === 'backup' && '💾'}</span>
+            <span className="data-mgmt-tab-icon" aria-hidden="true">{tabIcon(tab)}</span>
             {' '}
             <Localized id={`data-mgmt-tab-${tab}`}>
               <span>{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
@@ -574,7 +593,7 @@ export default function DataManagementScreen() {
 
                 <div className="data-mgmt-file-picker">
                   <div className="data-mgmt-file-dropzone">
-                    <span className="data-mgmt-file-icon">📂</span>
+                    <span className="data-mgmt-file-icon">{folderIcon()}</span>
                     <Localized id="data-mgmt-import-drop-text">
                       <p>Drag & drop a .ozpkg file here, or</p>
                     </Localized>
