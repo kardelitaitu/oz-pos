@@ -295,6 +295,7 @@
 
 .workspace-card:hover,
 .workspace-card:focus-visible {
+  transition-property: box-shadow, border-color, background;
   box-shadow:
     var(--shadow-glow, var(--shadow-2xl)),
     0 0 0 1px var(--ws-accent, transparent),
@@ -477,6 +478,7 @@
   border-color: var(--color-border);
   transform: none;
   background: var(--color-bg-elevated);
+  animation: none;
 }
 
 .workspace-card--disabled:hover .workspace-card-icon .workspace-card-icon-inner {
