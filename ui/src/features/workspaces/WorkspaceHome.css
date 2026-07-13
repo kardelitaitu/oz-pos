@@ -293,7 +293,7 @@
   align-items: center;
   text-align: left;
   gap: var(--space-5);
-  padding: var(--space-6) var(--space-6);
+  padding: clamp(12px, 5%, 28px) clamp(14px, 6%, 32px);
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
@@ -648,7 +648,7 @@
   flex-direction: row;
   align-items: center;
   gap: var(--space-5);
-  padding: var(--space-6) var(--space-6);
+  padding: clamp(12px, 5%, 28px) clamp(14px, 6%, 32px);
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
