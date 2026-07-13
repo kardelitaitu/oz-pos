@@ -86,6 +86,15 @@ function pickGreeting(): { word: string; lang: string } {
   return GREETINGS[Math.floor(Math.random() * GREETINGS.length)]!;
 }
 
+// ── Dummy coming-soon cards (placeholder for future workspaces) ──
+
+const COMING_SOON_CARDS = [
+  { name: 'Loyalty', description: 'Coming soon' },
+  { name: 'Marketing', description: 'Coming soon' },
+  { name: 'Online Orders', description: 'Coming soon' },
+  { name: 'Analytics', description: 'Coming soon' },
+];
+
 // ── LogoutModal ───────────────────────────────────────────────────
 
 function LogoutModal({
@@ -419,7 +428,7 @@ export default function WorkspaceHome() {
         if (idx < cards.length) {
           e.preventDefault();
           const target = cards[idx];
-          if (target && !target.disabled) {
+          if (target && !target.disabled && !target.classList.contains('workspace-card--coming-soon')) {
             // Programmatic click won't create a ripple,
             // but we still need to activate the workspace.
             // dispatchEvent is used to trigger the React onClick handler.
@@ -750,6 +759,25 @@ export default function WorkspaceHome() {
                   </button>
                 );
               })}
+              {COMING_SOON_CARDS.map((cs, i) => (
+                <div
+                  key={`coming-soon-${i}`}
+                  className="workspace-card workspace-card--coming-soon"
+                  aria-disabled="true"
+                >
+                  <div className="workspace-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="48" height="48">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <div className="workspace-card-body">
+                    <h2 className="workspace-card-name">{cs.name}</h2>
+                    <p className="workspace-card-desc">{cs.description}</p>
+                    <span className="workspace-card-badge workspace-card-badge--coming">Coming soon</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
