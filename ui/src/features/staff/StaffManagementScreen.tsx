@@ -188,29 +188,34 @@ export default function StaffManagementScreen() {
 
   // handleSave reads form state directly on every invocation — no useCallback
   // needed since it's only used as an onClick handler on a single button.
+  //
+  // Validation runs BEFORE setSaving(true) to avoid:
+  //   (a) calling setSaving(false) twice (once in try, once in finally)
+  //   (b) a visible loading flicker (saving → true → false instantly).
   const handleSave = async () => {
+    const username = form.username.trim().toLowerCase();
+    const displayName = form.displayName.trim();
+
+    if (!username) {
+      setError(l10n.getString('staff-error-username-required'));
+      return;
+    }
+    if (!displayName) {
+      setError(l10n.getString('staff-error-display-name-required'));
+      return;
+    }
+    if (!form.roleId) {
+      setError(l10n.getString('staff-error-role-required'));
+      return;
+    }
+    if (!editingId && (!form.pin || form.pin.length < 4)) {
+      setError(l10n.getString('staff-error-pin-length'));
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      const username = form.username.trim().toLowerCase();
-      const displayName = form.displayName.trim();
-
-      if (!username) {
-        setError(l10n.getString('staff-error-username-required'));
-        setSaving(false);
-        return;
-      }
-      if (!displayName) {
-        setError(l10n.getString('staff-error-display-name-required'));
-        setSaving(false);
-        return;
-      }
-      if (!form.roleId) {
-        setError(l10n.getString('staff-error-role-required'));
-        setSaving(false);
-        return;
-      }
-
       if (editingId) {
         await updateStaff({
           id: editingId,
@@ -228,11 +233,6 @@ export default function StaffManagementScreen() {
           callerUserId,
         );
       } else {
-        if (!form.pin || form.pin.length < 4) {
-          setError(l10n.getString('staff-error-pin-length'));
-          setSaving(false);
-          return;
-        }
         await createStaff({
           username,
           pin: form.pin,
