@@ -415,8 +415,10 @@
   animation: ws-icon-pulse 3s ease-in-out infinite;
 }
 
-/* Wiggle on hover (after active rule so it wins by source order) */
+/* Wiggle on hover — transition:none prevents the base transition:transform
+   from fighting with the animation for control of the transform property. */
 .workspace-card:hover .workspace-card-icon {
+  transition: none;
   animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
@@ -482,6 +484,7 @@
 }
 
 .workspace-card--disabled:hover .workspace-card-icon {
+  transition: none;
   animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
