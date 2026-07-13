@@ -76,6 +76,7 @@ const GREETINGS = [
   'Salut',
   'Hallo',
   'Ahoj',
+  'Selamat datang',
 ];
 
 function pickGreeting(): string {
