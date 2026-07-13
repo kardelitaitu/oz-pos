@@ -96,7 +96,21 @@ export default function AppShell() {
   //     non-blocking warning toast — never as a forced re-activation screen.
   //     Forcing re-activation on an existing install would attempt to create a
   //     second owner account (which the backend rejects) and is confusing.
+  //   • Dev mode (import.meta.env.DEV): skip the Rust license check entirely
+  //     and always report active. Saves the rebuild-Rust step during UI work.
   useEffect(() => {
+    // ── Dev-mode bypass ────────────────────────────────────────
+    // In Vite dev mode, the Rust backend may not have been rebuilt
+    // with the debug_assertions fix, causing a stale Missing/Expired
+    // status and an annoying toast on every F5. Skip the IPC call
+    // entirely and assume the license is valid.
+    if (import.meta.env.DEV) {
+      setHasCompletedSetup(true);
+      setHasActiveLicense(true);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
