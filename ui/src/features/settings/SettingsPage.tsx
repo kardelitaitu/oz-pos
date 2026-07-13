@@ -495,7 +495,7 @@ export default function SettingsPage() {
                   {l10n.getString('settings-field-store-name')}
                   <Localized id="settings-store-name-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input"
+                      className="settings-input" autoComplete="off"
                       type="text"
                       id="settings-field-store-name"
                       placeholder="OZ-POS Store"
@@ -509,7 +509,7 @@ export default function SettingsPage() {
                   {l10n.getString('settings-field-address')}
                   <Localized id="settings-address-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input"
+                      className="settings-input" autoComplete="off"
                       type="text"
                       id="settings-field-address"
                       placeholder="123 Main Street"
@@ -523,7 +523,7 @@ export default function SettingsPage() {
                   {l10n.getString('settings-field-tax-id')}
                   <Localized id="settings-tax-id-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input"
+                      className="settings-input" autoComplete="off"
                       type="text"
                       id="settings-field-tax-id"
                       placeholder="12-3456789"
@@ -764,7 +764,7 @@ export default function SettingsPage() {
                 {l10n.getString('settings-field-footer')}
                 <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
                   <input
-                    className="settings-input"
+                    className="settings-input" autoComplete="off"
                     type="text"
                     id="settings-field-receipt-footer"
                     placeholder="Thank you for shopping!"
@@ -812,7 +812,7 @@ export default function SettingsPage() {
                 {l10n.getString('settings-sync-server-url')}
                 <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
                   <input
-                    className="settings-input"
+                    className="settings-input" autoComplete="off"
                     type="url"
                     id="settings-field-server-url"
                     placeholder="https://api.example.com"
@@ -826,7 +826,7 @@ export default function SettingsPage() {
                 {l10n.getString('settings-sync-api-key')}
                 <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
                   <input
-                    className="settings-input"
+                    className="settings-input" autoComplete="off"
                     type="password"
                     id="settings-field-api-key"
                     placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
