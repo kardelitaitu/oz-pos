@@ -57,7 +57,7 @@
 }
 
 .settings-topbar-name {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
   flex-shrink: 0;
