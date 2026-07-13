@@ -63,14 +63,19 @@ To prevent constant server query load:
 - **Tokio Runtime**: The server will compile utilizing a single-threaded Tokio execution runtime. For a 1-core $2 VPS, this eliminates context-switching CPU overhead.
 - **Axum Guardrails**: Enforce a `ConcurrencyLimitLayer` at the Axum router level to cap concurrent active requests (e.g., max 50). Burst sync requests will be queued or shed gracefully rather than causing OOM crashes.
 
-### 7. 3-Month Data Retention & Pruning Strategy
-To keep the storage requirements of the server lightweight enough to run on cheap $2 VPS hosting with a 40 GB SSD:
-- **Retention Period**: The cloud server will only store a **3-month rolling window (90 days)** of sync data.
-- **Pruning**: A background task will periodically delete sync records older than 3 months.
+### 7. Smart Disk-Pressure Data Retention & Pruning Strategy
+To keep the storage requirements of the server lightweight enough to run on cheap $2 VPS hosting with a 40 GB SSD, while preserving historical sync anchors as long as possible:
+- **Baseline Retention**: The cloud server guarantees a minimum **3-month rolling window (90 days)** of sync data.
+- **Smart / Opportunistic Retention (Disk < 90%)**: The server does **not** actively delete files older than 3 months if the total SSD disk usage is under **90%**. This lets terminals retrieve historical delta-sync states even after long absences (e.g. seasonal stores).
+- **Disk-Pressure Pruning (Disk >= 90%)**: A lightweight hourly background task checks the server's filesystem disk space:
+  - If disk space exceeds **90%**, the server will locate all monthly sync log database files (e.g., `sync_log_YYYY_MM.db`) and sort them chronologically (oldest first).
+  - The server deletes the oldest files that are **older than the 3-month retention threshold** one by one.
+  - The check runs iteratively until either the disk space drops back below **85%** or all database files older than 3 months have been deleted.
 - **SQLite Storage Reclamation**: Since standard SQLite deletion does not shrink the file size on disk, we will deploy one of two reclamation mechanisms:
   - **Option A (Monthly Database Partitioning)**: Segment tenant sync logs into monthly database files (e.g. `sync_log_2026_06.db`). Deleting data older than 3 months is simplified to a standard OS file deletion (`rm sync_log_2026_03.db`), which releases space instantly back to the OS in less than 1 millisecond.
   - **Option B (Incremental Auto-Vacuum)**: Initialize the SQLite database with `PRAGMA auto_vacuum = INCREMENTAL;` and execute `PRAGMA incremental_vacuum(N);` after deletes to release free pages back to the OS without lock contention.
 - **Client Recovery**: If a client terminal attempts to sync with a `since` timestamp that points to a period already pruned by the server, the server returns an `AnchorExpired` error. The client will catch this error and trigger a full base sync instead of a delta sync.
+
 
 ---
 
