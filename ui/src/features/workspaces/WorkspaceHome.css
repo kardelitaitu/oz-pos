@@ -271,6 +271,7 @@
     transform var(--duration-300) cubic-bezier(0.22, 1, 0.36, 1),
     background var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
+  transform: perspective(800px) rotateX(0deg) rotateY(0deg) translateY(0px);
 }
 
 .workspace-card::before {
@@ -295,7 +296,10 @@
 
 .workspace-card:hover,
 .workspace-card:focus-visible {
-  transition-property: box-shadow, border-color, background;
+  transition:
+    box-shadow var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1),
+    border-color var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1),
+    background var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow:
     var(--shadow-glow, var(--shadow-2xl)),
     0 0 0 1px var(--ws-accent, transparent),
