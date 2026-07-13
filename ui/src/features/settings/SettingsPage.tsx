@@ -252,6 +252,13 @@ interface SettingsCategory {
   keys: string[];
 }
 
+const CATEGORY_I18N_KEYS: Record<string, string> = {
+  Business: 'settings-category-business',
+  Operations: 'settings-category-operations',
+  System: 'settings-category-system',
+  Management: 'settings-category-management',
+};
+
 const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
   { label: 'Operations', keys: ['receipt', 'sync'] },
@@ -291,18 +298,16 @@ function useClock(): string {
   return clock;
 }
 
-function useDate(): string {
-  const [date, setDate] = useState(() =>
-    new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
-  );
-  useEffect(() => {
-    const id = setInterval(
-      () => setDate(new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })),
-      60_000,
-    );
-    return () => clearInterval(id);
-  }, []);
-  return date;
+/** Return today's formatted date. The date only changes at midnight and
+ *  the settings page is not expected to stay open across day boundaries,
+ *  so we compute once at mount rather than polling every 60 seconds. */
+function getToday(): string {
+  return new Date().toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -396,7 +401,7 @@ export default function SettingsPage() {
   }, []);
 
   const clock = useClock();
-  const today = useDate();
+  const today = getToday();
 
   // Sync font-smoothing to <html> whenever it changes
   useEffect(() => {
@@ -1071,7 +1076,9 @@ export default function SettingsPage() {
                     onClick={() => toggleCategory(cat.label)}
                     aria-expanded={isExpanded}
                   >
-                    <span className="settings-sidebar-section-label">{cat.label}</span>
+                    <span className="settings-sidebar-section-label">
+                      <Localized id={CATEGORY_I18N_KEYS[cat.label] ?? ''}>{cat.label}</Localized>
+                    </span>
                     <svg
                       className={`settings-sidebar-chevron${isExpanded ? '' : ' collapsed'}`}
                       viewBox="0 0 24 24"

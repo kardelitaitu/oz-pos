@@ -178,6 +178,10 @@ ws-preview-name-admin = Admin
 
 # Settings Page
 settings-title = Settings
+settings-category-business = Business
+settings-category-operations = Operations
+settings-category-system = System
+settings-category-management = Management
 settings-sidebar-nav-aria = Settings navigation
 settings-sidebar-expand-aria = Expand settings sidebar
 settings-sidebar-collapse-aria = Collapse settings sidebar
@@ -273,6 +277,12 @@ settings-license-server-active = Server Active
 settings-license-server-expires = Server Expires
 settings-license-server-results = License Check Results
 settings-license-type-value = Proprietary
+settings-license-unlimited = Unlimited
+settings-license-yes = Yes
+settings-license-no = No
+settings-license-server-status-retrieved = Server license status retrieved.
+settings-license-server-check-failed = Server check failed
+settings-license-load-failed = Failed to load license info
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
 
 # Appearance / Brand settings

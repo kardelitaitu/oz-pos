@@ -1,4 +1,8 @@
 settings-title = Pengaturan
+settings-category-business = Bisnis
+settings-category-operations = Operasional
+settings-category-system = Sistem
+settings-category-management = Manajemen
 settings-sidebar-nav-aria = Navigasi pengaturan
 settings-sidebar-expand-aria = Buka bilah sisi pengaturan
 settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
@@ -602,6 +606,12 @@ settings-license-server-active = Server Aktif
 settings-license-server-expires = Server Kedaluwarsa
 settings-license-server-results = Hasil Pemeriksaan Lisensi
 settings-license-type-value = Proprietary
+settings-license-unlimited = Tidak Terbatas
+settings-license-yes = Ya
+settings-license-no = Tidak
+settings-license-server-status-retrieved = Status lisensi server berhasil diambil.
+settings-license-server-check-failed = Pemeriksaan server gagal
+settings-license-load-failed = Gagal memuat info lisensi
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
 
 # ── Toast messages ──

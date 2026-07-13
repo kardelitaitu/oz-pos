@@ -79,7 +79,7 @@ export default function LicenseSettings() {
         setPayload(parsed);
       }
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load license info');
+      setLoadError(err instanceof Error ? err.message : l10n.getString('settings-license-load-failed'));
     } finally {
       setLoading(false);
     }
@@ -92,14 +92,14 @@ export default function LicenseSettings() {
     try {
       const status = await checkLicenseStatus();
       setServerStatus(status);
-      addToast({ type: 'info', message: 'Server license status retrieved.' });
+      addToast({ type: 'info', message: l10n.getString('settings-license-server-status-retrieved') });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Server check failed';
+      const msg = err instanceof Error ? err.message : l10n.getString('settings-license-server-check-failed');
       addToast({ type: 'error', message: msg });
     } finally {
       setCheckingServer(false);
     }
-  }, [addToast]);
+  }, [addToast, l10n]);
 
   // ── Loading / Error states ──────────────────────────────────
   if (loading) {
@@ -188,7 +188,7 @@ export default function LicenseSettings() {
             <Localized id="settings-license-max-stores"><span>Max Stores</span></Localized>
           </span>
           <span className="settings-license-value settings-license-value--mono">
-            {payload.max_stores === 0 ? 'Unlimited' : String(payload.max_stores)}
+            {payload.max_stores === 0 ? l10n.getString('settings-license-unlimited') : String(payload.max_stores)}
           </span>
         </div>
 
@@ -197,7 +197,7 @@ export default function LicenseSettings() {
             <Localized id="settings-license-max-pos"><span>Max POS Instances</span></Localized>
           </span>
           <span className="settings-license-value settings-license-value--mono">
-            {payload.max_pos_instances === 0 ? 'Unlimited' : String(payload.max_pos_instances)}
+            {payload.max_pos_instances === 0 ? l10n.getString('settings-license-unlimited') : String(payload.max_pos_instances)}
           </span>
         </div>
 
@@ -250,7 +250,7 @@ export default function LicenseSettings() {
                 <Localized id="settings-license-server-active"><span>Server Active</span></Localized>
               </span>
               <span className={`settings-license-value${serverStatus.active ? ' settings-license-value--active' : ' settings-license-value--warning'}`}>
-                {serverStatus.active ? 'Yes' : 'No'}
+                {serverStatus.active ? l10n.getString('settings-license-yes') : l10n.getString('settings-license-no')}
               </span>
             </div>
             {serverStatus.expiresAt && (
