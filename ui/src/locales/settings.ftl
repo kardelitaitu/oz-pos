@@ -177,7 +177,7 @@ ws-preview-name-inventory = Inventory
 ws-preview-name-admin = Admin
 
 # Settings Page
-settings-page-title = Settings
+settings-title = Settings
 settings-loading = Loading settings…
 settings-section-store = Store
 settings-section-currency = Currency
