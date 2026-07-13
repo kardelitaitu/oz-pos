@@ -1,4 +1,9 @@
 settings-title = Pengaturan
+settings-sidebar-nav-aria = Navigasi pengaturan
+settings-sidebar-expand-aria = Buka bilah sisi pengaturan
+settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
+settings-theme-toggle-dark-aria = Alihkan ke mode gelap
+settings-theme-toggle-light-aria = Alihkan ke mode terang
 settings-store-name = Nama Toko
 settings-store-address = Alamat
 settings-tax-id = NPWP
@@ -213,6 +218,7 @@ settings-sync-enabled = Aktifkan Sinkronisasi Cloud
 settings-sync-enabled-aria = Alihkan sinkronisasi cloud
 settings-sync-sync-now = Sinkron Sekarang
 settings-sync-syncing = Menyinkronkan…
+settings-sync-error = Sinkronisasi gagal
 settings-sync-result = Sinkronisasi terakhir: { $synced } tersinkron, { $failed } gagal
 settings-store-name-placeholder = Toko OZ-POS
 settings-address-placeholder = Jl. Contoh No. 123

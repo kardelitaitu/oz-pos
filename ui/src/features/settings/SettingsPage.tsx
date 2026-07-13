@@ -266,11 +266,27 @@ function useClock(): string {
     new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   );
   useEffect(() => {
-    const id = setInterval(
-      () => setClock(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
-      60_000,
-    );
-    return () => clearInterval(id);
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    // Align the first tick to the next minute boundary so the clock
+    // is accurate from the start rather than drifting by mount time.
+    const now = new Date();
+    const msUntilNextMinute =
+      (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    const timeout = setTimeout(() => {
+      const tick = () =>
+        setClock(
+          new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        );
+      tick();
+      intervalId = setInterval(tick, 60_000);
+    }, msUntilNextMinute);
+    return () => {
+      clearTimeout(timeout);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
   return clock;
 }
@@ -865,7 +881,7 @@ export default function SettingsPage() {
                           const result = await syncRun();
                           setSyncResult(result);
                         } catch {
-                          setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });
+                          setSyncResult({ synced: 0, failed: 0, error: l10n.getString('settings-sync-error') });
                         } finally {
                           setSyncing(false);
                         }
@@ -1014,14 +1030,18 @@ export default function SettingsPage() {
         {/* ── Sidebar ────────────────────────────────── */}
         <aside
           className={`settings-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}
-          aria-label="Settings navigation"
+          aria-label={l10n.getString('settings-sidebar-nav-aria')}
         >
           <div className="settings-sidebar-header">
             <button
               type="button"
               className="settings-sidebar-toggle"
               onClick={() => setSidebarCollapsed((p) => !p)}
-              aria-label={sidebarCollapsed ? 'Expand settings sidebar' : 'Collapse settings sidebar'}
+              aria-label={
+                sidebarCollapsed
+                  ? l10n.getString('settings-sidebar-expand-aria')
+                  : l10n.getString('settings-sidebar-collapse-aria')
+              }
             >
               <svg
                 viewBox="0 0 24 24"
@@ -1109,7 +1129,11 @@ export default function SettingsPage() {
             type="button"
             className="settings-footer-theme-toggle"
             onClick={toggleTheme}
-            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            aria-label={
+              theme === 'light'
+                ? l10n.getString('settings-theme-toggle-dark-aria')
+                : l10n.getString('settings-theme-toggle-light-aria')
+            }
           >
             {theme === 'light' ? (
               /* Moon icon (click to go dark) */

@@ -178,6 +178,11 @@ ws-preview-name-admin = Admin
 
 # Settings Page
 settings-title = Settings
+settings-sidebar-nav-aria = Settings navigation
+settings-sidebar-expand-aria = Expand settings sidebar
+settings-sidebar-collapse-aria = Collapse settings sidebar
+settings-theme-toggle-dark-aria = Switch to dark mode
+settings-theme-toggle-light-aria = Switch to light mode
 settings-loading = Loading settings…
 settings-section-store = Store
 settings-section-currency = Currency
@@ -222,6 +227,7 @@ settings-sync-enabled = Enable Cloud Sync
 settings-sync-enabled-aria = Toggle cloud sync
 settings-sync-sync-now = Sync Now
 settings-sync-syncing = Syncing…
+settings-sync-error = Sync failed
 settings-sync-result = Last sync: { $synced } synced, { $failed } failed
 settings-store-name-placeholder = OZ-POS Store
 settings-address-placeholder = 123 Main Street
