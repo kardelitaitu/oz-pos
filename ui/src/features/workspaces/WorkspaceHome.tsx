@@ -711,38 +711,48 @@ export default function WorkspaceHome() {
                     )}
                     title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
                   >
-                    <div className="workspace-card-key-hint">{idx + 1}</div>
-                    {isActive && (
-                      <div className="workspace-card-active-dot" aria-label="Active workspace">
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
-                          <circle cx="12" cy="12" r="6" />
-                        </svg>
-                      </div>
-                    )}
-                    <div className="workspace-card-icon">
-                      {getIcon(ws.type_key)}
-                    </div>
-                    <div className="workspace-card-body">
-                      <h2 className="workspace-card-name">{ws.name}</h2>
-                      <p className="workspace-card-desc">{ws.description}</p>
-                      {disabled ? (
-                        <span className="workspace-card-badge">
-                          <Localized id="workspace-card-no-access-badge">
-                            <span>Not available</span>
-                          </Localized>
-                        </span>
-                      ) : (
-                        <span className="workspace-card-keyboard-hint">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                            <rect x="2" y="4" width="20" height="16" rx="2" />
-                            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
-                            <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
+                    <div className="workspace-card-badges">
+                      <div className="workspace-card-key-hint">{idx + 1}</div>
+                      {isActive && (
+                        <div className="workspace-card-active-dot" aria-label="Active workspace">
+                          <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
+                            <circle cx="12" cy="12" r="6" />
                           </svg>
-                          <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
-                            <span>Press {idx + 1} to open</span>
-                          </Localized>
-                        </span>
+                        </div>
                       )}
+                    </div>
+                    <div className="workspace-card-row">
+                      <div className="workspace-card-icon">
+                        {getIcon(ws.type_key)}
+                      </div>
+                      <div className="workspace-card-body">
+                        <div className="workspace-card-title">
+                          <h2 className="workspace-card-name">{ws.name}</h2>
+                        </div>
+                        <div className="workspace-card-text">
+                          <p className="workspace-card-desc">{ws.description}</p>
+                        </div>
+                        <div className="workspace-card-actions">
+                          {disabled ? (
+                            <span className="workspace-card-badge">
+                              <Localized id="workspace-card-no-access-badge">
+                                <span>Not available</span>
+                              </Localized>
+                            </span>
+                          ) : (
+                            <span className="workspace-card-keyboard-hint">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                                <rect x="2" y="4" width="20" height="16" rx="2" />
+                                <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
+                                <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
+                              </svg>
+                              <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
+                                <span>Press {idx + 1} to open</span>
+                              </Localized>
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </button>
                 );
@@ -752,17 +762,25 @@ export default function WorkspaceHome() {
                   key={cs.name}
                   className="workspace-card workspace-card--disabled"
                 >
-                  <div className="workspace-card-icon">
-                    {getIcon(cs.name)}
-                  </div>
-                  <div className="workspace-card-body">
-                    <h2 className="workspace-card-name">{cs.name}</h2>
-                    <p className="workspace-card-desc">{cs.description}</p>
-                    <span className="workspace-card-badge">
-                      <Localized id="workspace-card-no-access-badge">
-                        <span>Not available</span>
-                      </Localized>
-                    </span>
+                  <div className="workspace-card-row">
+                    <div className="workspace-card-icon">
+                      {getIcon(cs.name)}
+                    </div>
+                    <div className="workspace-card-body">
+                      <div className="workspace-card-title">
+                        <h2 className="workspace-card-name">{cs.name}</h2>
+                      </div>
+                      <div className="workspace-card-text">
+                        <p className="workspace-card-desc">{cs.description}</p>
+                      </div>
+                      <div className="workspace-card-actions">
+                        <span className="workspace-card-badge">
+                          <Localized id="workspace-card-no-access-badge">
+                            <span>Not available</span>
+                          </Localized>
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

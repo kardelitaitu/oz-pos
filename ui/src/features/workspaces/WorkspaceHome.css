@@ -288,11 +288,8 @@
 }
 
 .workspace-card {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
+  position: relative;
   text-align: left;
-  gap: var(--space-5);
   padding: clamp(12px, 5%, 28px) clamp(14px, 6%, 32px);
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
@@ -394,11 +391,43 @@
   100% { transform: scale(1); opacity: 1; }
 }
 
+.workspace-card-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-5);
+  height: 100%;
+}
+
+.workspace-card-badges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .workspace-card-icon {
   flex: 0 0 min(25%, 96px);
   aspect-ratio: 1;
   color: var(--ws-accent, var(--color-accent));
   transition: transform var(--duration-250) var(--ease-out);
+}
+
+.workspace-card-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-card-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-card-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
 }
 
 .workspace-card:hover .workspace-card-icon {
@@ -454,7 +483,7 @@
   line-height: var(--leading-relaxed);
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   text-overflow: ellipsis;
 }
