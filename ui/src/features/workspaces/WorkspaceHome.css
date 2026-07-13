@@ -279,7 +279,7 @@
   inset: 0;
   border-radius: inherit;
   background: radial-gradient(
-    600px circle at var(--mouse-x, 50%) var(--mouse-y, 0%),
+    600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
     var(--ws-glow, rgba(99, 102, 241, 0.08)) 0%,
     transparent 60%
   );
@@ -288,11 +288,13 @@
   pointer-events: none;
 }
 
-.workspace-card:hover::before {
+.workspace-card:hover::before,
+.workspace-card:focus-visible::before {
   opacity: 1;
 }
 
-.workspace-card:hover {
+.workspace-card:hover,
+.workspace-card:focus-visible {
   box-shadow:
     var(--shadow-glow, var(--shadow-2xl)),
     0 0 0 1px var(--ws-accent, transparent),
@@ -300,7 +302,7 @@
     var(--shadow-sm);
   border-color: var(--ws-accent, var(--color-border-hover));
   background: var(--ws-accent-bg, var(--color-bg-elevated));
-  transform: perspective(800px) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) translateY(-4px);
+  animation: ws-card-hover-sway 3.5s ease-in-out infinite;
 }
 
 /* ── Card exit animation ─────────────────────────────────────────── */
@@ -410,8 +412,9 @@
   animation: ws-icon-pulse 3s ease-in-out infinite;
 }
 
-/* Wiggle on hover */
-.workspace-card:hover .workspace-card-icon .workspace-card-icon-inner {
+/* Wiggle on hover or focus */
+.workspace-card:hover .workspace-card-icon .workspace-card-icon-inner,
+.workspace-card:focus-visible .workspace-card-icon .workspace-card-icon-inner {
   animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
@@ -1007,6 +1010,24 @@
   0%, 100% { transform: translateX(0); }
   10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); }
   20%, 40%, 60%, 80% { transform: translateX(3px); }
+}
+
+@keyframes ws-card-hover-sway {
+  0% {
+    transform: perspective(800px) rotateX(0deg) rotateY(0deg) translateY(-4px);
+  }
+  25% {
+    transform: perspective(800px) rotateX(3deg) rotateY(-1.5deg) translateY(-4px);
+  }
+  50% {
+    transform: perspective(800px) rotateX(0deg) rotateY(1.5deg) translateY(-6px);
+  }
+  75% {
+    transform: perspective(800px) rotateX(-2deg) rotateY(-1.5deg) translateY(-4px);
+  }
+  100% {
+    transform: perspective(800px) rotateX(0deg) rotateY(0deg) translateY(-4px);
+  }
 }
 
 @keyframes ws-card-exit {

@@ -477,65 +477,7 @@ export default function WorkspaceHome() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sortedWorkspaces, setActiveWorkspace, canAccess, error]);
 
-  // ── RAF-throttled mousemove: glow & 3D tilt ───────────────────
-  //
-  // getBoundingClientRect forces a synchronous style recalculation, so we
-  // throttle it to once per animation frame to prevent layout thrashing.
 
-  const rafRef = useRef<number>(0);
-  const lastMoveRef = useRef<{ card: HTMLButtonElement; clientX: number; clientY: number } | null>(null);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const card = e.currentTarget;
-    if (card.classList.contains('workspace-card--disabled') || card.classList.contains('workspace-card--exiting')) return;
-
-    // Store the latest event data
-    lastMoveRef.current = { card, clientX: e.clientX, clientY: e.clientY };
-
-    // If no RAF is queued, schedule one
-    if (!rafRef.current) {
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0;
-        const data = lastMoveRef.current;
-        if (!data) return;
-        lastMoveRef.current = null;
-
-        const { card: c, clientX, clientY } = data;
-        const rect = c.getBoundingClientRect();
-
-        // Glow position
-        const x = ((clientX - rect.left) / rect.width) * 100;
-        const y = ((clientY - rect.top) / rect.height) * 100;
-        c.style.setProperty('--mouse-x', `${x}%`);
-        c.style.setProperty('--mouse-y', `${y}%`);
-
-        // 3D tilt: max ±6 degrees
-        const rotateY = ((clientX - rect.left) / rect.width - 0.5) * 12;
-        const rotateX = ((clientY - rect.top) / rect.height - 0.5) * -12;
-        c.style.setProperty('--rotate-x', `${rotateX}deg`);
-        c.style.setProperty('--rotate-y', `${rotateY}deg`);
-      });
-    }
-  }, []);
-
-  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const card = e.currentTarget;
-    // Cancel any pending RAF to avoid stale updates
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = 0;
-    }
-    lastMoveRef.current = null;
-    card.style.setProperty('--rotate-x', '0deg');
-    card.style.setProperty('--rotate-y', '0deg');
-  }, []);
-
-  // Cleanup RAF on unmount
-  useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
 
   // ── Clear stale focus on mount ─────────────────────────────────
   // When returning from a workspace (Escape), the active element from
@@ -741,8 +683,6 @@ export default function WorkspaceHome() {
                     className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
                     onClick={(e) => handleCardClick(ws.type_key, e)}
                     disabled={exitingWorkspace !== null}
-                    onMouseMove={handleMouseMove}
-                    onMouseLeave={handleMouseLeave}
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
                   >
                     <div className="workspace-card-key-hint">{idx + 1}</div>
