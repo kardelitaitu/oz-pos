@@ -431,40 +431,53 @@ export default function SettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    // Use allSettled so a single failing API doesn't block the entire
+    // settings page — each successful result is applied independently.
+    const results = await Promise.allSettled([
+      getReceiptSettings(),
+      getStoreSettings(),
+      listCurrencies(),
+      getDefaultCurrency(),
+      getSyncSettings(),
+      getUserPreferences(userId),
+      getBrandSettings(),
+      getVersion(),
+    ]);
+    const [rR, sR, cR, dcR, syncR, prefsR, brandR, verR] = results;
+
     try {
-      const [r, s, currenciesData, defaultCurrencyData, syncData, prefs, brand, ver] = await Promise.all([
-        getReceiptSettings(),
-        getStoreSettings(),
-        listCurrencies(),
-        getDefaultCurrency(),
-        getSyncSettings(),
-        getUserPreferences(userId),
-        getBrandSettings(),
-        getVersion(),
-      ]);
-      setReceipt(r);
-      setStore(s);
-      setDecimalSep(r.decimalSeparator);
-      setCurrencies(currenciesData);
-      setDefaultCurrencyState(defaultCurrencyData ?? 'USD');
-      setSync(syncData);
-      setSyncServerUrl(syncData.serverUrl ?? '');
-      const cs = prefs['cardsize'];
-      if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
-      const fs = prefs['fontsize'];
-      if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
-      if (prefs['font-smoothing'] !== undefined) setDisplayFontSmoothing(prefs['font-smoothing']);
-      setBrandColour(brand.primary_colour);
-      setBrandStoreName(brand.store_name);
-      setAppVersion(ver.version);
-      const palette = deriveAccentPalette(brand.primary_colour);
-      applyAccentPalette(palette);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : l10n.getString('settings-load-failed'));
+      if (rR.status === 'fulfilled') { setReceipt(rR.value); setDecimalSep(rR.value.decimalSeparator); }
+      if (sR.status === 'fulfilled') setStore(sR.value);
+      if (cR.status === 'fulfilled') setCurrencies(cR.value);
+      if (dcR.status === 'fulfilled') setDefaultCurrencyState(dcR.value ?? 'USD');
+      if (syncR.status === 'fulfilled') { setSync(syncR.value); setSyncServerUrl(syncR.value.serverUrl ?? ''); }
+      if (prefsR.status === 'fulfilled') {
+        const p = prefsR.value;
+        const cs = p['cardsize'];
+        if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
+        const fs = p['fontsize'];
+        if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
+        if (p['font-smoothing'] !== undefined) setDisplayFontSmoothing(p['font-smoothing']);
+      }
+      if (brandR.status === 'fulfilled') {
+        setBrandColour(brandR.value.primary_colour);
+        setBrandStoreName(brandR.value.store_name);
+        const palette = deriveAccentPalette(brandR.value.primary_colour);
+        applyAccentPalette(palette);
+      }
+      if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
+
+      // Only surface a full-page error when every single API failed.
+      if (results.every((r) => r.status === 'rejected')) {
+        setLoadError(l10n.getString('settings-load-failed'));
+      } else if (results.some((r) => r.status === 'rejected')) {
+        // Some APIs failed — page loads partially; warn the user.
+        addToast({ message: l10n.getString('settings-load-partial'), type: 'error' });
+      }
     } finally {
       setLoading(false);
     }
-  }, [userId, l10n]);
+  }, [userId, l10n, addToast]);
 
   useEffect(() => { load(); }, [load]);
 

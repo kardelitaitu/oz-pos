@@ -199,6 +199,7 @@ ws-preview-name-admin = Admin
 settings-page-title = Pengaturan
 settings-loading = Memuat pengaturan…
 settings-load-failed = Gagal memuat pengaturan
+settings-load-partial = Sebagian pengaturan gagal dimuat. Coba lagi.
 settings-section-store = Toko
 settings-section-currency = Mata Uang
 settings-section-display = Tampilan
