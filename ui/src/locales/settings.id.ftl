@@ -311,6 +311,7 @@ data-mgmt-import-meta-contains = Berisi
 data-mgmt-import-password = Kata sandi dekripsi
 data-mgmt-import-password-placeholder = Masukkan kata sandi ekspor
 data-mgmt-import-cancel = Batal
+data-mgmt-analyse-file = Analisis file
 data-mgmt-import-start = Mulai impor
 data-mgmt-import-analysing = Menganalisis file…
 data-mgmt-import-dry-run-complete = Dry-run selesai — mengimpor…

@@ -367,6 +367,7 @@ data-mgmt-import-meta-contains = Contains
 data-mgmt-import-password = Decryption password
 data-mgmt-import-password-placeholder = Enter the export password
 data-mgmt-import-cancel = Cancel
+data-mgmt-analyse-file = Analyse file
 data-mgmt-import-start = Start import
 data-mgmt-import-analysing = Analysing file…
 data-mgmt-import-dry-run-complete = Dry-run complete — importing…
