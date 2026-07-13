@@ -31,7 +31,7 @@ const WS_ORDER: Record<string, number> = {
 // ── Icons ─────────────────────────────────────────────────────────
 
 function getIcon(key: string) {
-  const known = ['restaurant-pos', 'store-pos', 'kds', 'inventory', 'admin'];
+  const known = ['restaurant-pos', 'store-pos', 'kds', 'inventory', 'admin', 'Loyalty', 'Marketing', 'Online Orders', 'Analytics'];
   if (!known.includes(key)) {
     console.warn(`WorkspaceHome: unknown workspace key "${key}" — using default icon`);
   }
@@ -747,22 +747,22 @@ export default function WorkspaceHome() {
                   </button>
                 );
               })}
-              {COMING_SOON_CARDS.map((cs, i) => (
+              {COMING_SOON_CARDS.map((cs) => (
                 <div
-                  key={`coming-soon-${i}`}
+                  key={cs.name}
                   className="workspace-card workspace-card--disabled"
-                  aria-disabled="true"
                 >
                   <div className="workspace-card-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="56" height="56">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
+                    {getIcon(cs.name)}
                   </div>
                   <div className="workspace-card-body">
                     <h2 className="workspace-card-name">{cs.name}</h2>
                     <p className="workspace-card-desc">{cs.description}</p>
-                    <span className="workspace-card-badge workspace-card-badge--coming">Coming soon</span>
+                    <span className="workspace-card-badge">
+                      <Localized id="workspace-card-no-access-badge">
+                        <span>Not available</span>
+                      </Localized>
+                    </span>
                   </div>
                 </div>
               ))}
