@@ -430,6 +430,10 @@
   margin-top: var(--space-1);
 }
 
+.workspace-card-actions:empty {
+  display: none;
+}
+
 .workspace-card:hover .workspace-card-icon {
   animation: ws-icon-bounce 0.5s var(--ease-out);
 }
@@ -617,30 +621,45 @@
   transform: scale(1.1);
 }
 
-/* ── Card keyboard shortcut hint text ──────────────────────────── */
+/* ── Card overlay (keyboard shortcut hint) ─────────────────────── */
 
-.workspace-card-keyboard-hint {
-  display: inline-flex;
+.workspace-card-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
   align-items: center;
-  gap: var(--space-1);
-  margin-top: var(--space-0_5);
-  font-size: 10px;
-  color: var(--color-fg-tertiary);
+  justify-content: center;
+  padding: var(--space-2) var(--space-4);
+  background: linear-gradient(
+    to top,
+    var(--color-bg-elevated) 0%,
+    color-mix(in srgb, var(--color-bg-elevated) 80%, transparent) 100%
+  );
+  backdrop-filter: blur(8px);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   opacity: 0;
+  transform: translateY(4px);
   transition: opacity var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1), transform var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1);
-  transform: translateY(2px);
+  pointer-events: none;
+  z-index: 1;
 }
 
-.workspace-card:hover .workspace-card-keyboard-hint,
-.workspace-card:focus-visible .workspace-card-keyboard-hint {
+.workspace-card:hover .workspace-card-overlay,
+.workspace-card:focus-visible .workspace-card-overlay {
   opacity: 1;
   transform: translateY(0);
 }
 
-.workspace-card-keyboard-hint svg {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
+.workspace-card-overlay-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-size: 10px;
+  color: var(--color-fg-secondary);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.3px;
 }
 
 /* ── Skeleton loading ────────────────────────────────────────────── */
@@ -1223,6 +1242,17 @@
   .workspace-card-key-hint {
     animation: none;
     opacity: 0.7;
+  }
+
+  .workspace-card-overlay {
+    transition: none;
+    opacity: 0;
+  }
+
+  .workspace-card:hover .workspace-card-overlay,
+  .workspace-card:focus-visible .workspace-card-overlay {
+    opacity: 1;
+    transform: none;
   }
 
   .ws-header-buttons > * {
