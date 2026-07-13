@@ -34,28 +34,18 @@ function formatDate(rfc3339: string): string {
   }
 }
 
-/** Human-readable tier label. */
-function tierLabel(tier: string): string {
-  const map: Record<string, string> = {
-    free: 'Free',
-    pro: 'Pro',
-    premium: 'Premium',
-    enterprise: 'Enterprise',
-  };
-  return map[tier] || tier;
+/** Human-readable tier label via l10n. */
+function tierLabel(tier: string, l10n: ReturnType<typeof useLocalization>['l10n']): string {
+  const key = `settings-license-tier-${tier}`;
+  const v = l10n.getString(key);
+  return v !== key ? v : tier;
 }
 
-/** Human-readable labels for workspace type slugs. */
-function workspaceTypeLabel(type: string): string {
-  const map: Record<string, string> = {
-    retail: 'Retail',
-    restaurant: 'Restaurant',
-    cafe: 'Café',
-    kiosk: 'Kiosk',
-    franchise: 'Franchise',
-    warehouse: 'Warehouse',
-  };
-  return map[type] || type;
+/** Human-readable labels for workspace type slugs via l10n. */
+function workspaceTypeLabel(type: string, l10n: ReturnType<typeof useLocalization>['l10n']): string {
+  const key = `settings-license-ws-${type}`;
+  const v = l10n.getString(key);
+  return v !== key ? v : type;
 }
 
 /** License settings section — displays tier, expiry, grace period, and quotas. */
@@ -83,7 +73,7 @@ export default function LicenseSettings() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -152,7 +142,7 @@ export default function LicenseSettings() {
             <Localized id="settings-license-tier"><span>Tier</span></Localized>
           </span>
           <span className={`settings-license-value settings-license-value--tier settings-license-value--tier-${payload.tier_key}`}>
-            {tierLabel(payload.tier_key)}
+            {tierLabel(payload.tier_key, l10n)}
           </span>
         </div>
 
@@ -161,7 +151,7 @@ export default function LicenseSettings() {
             <Localized id="settings-license-status-label"><span>Status</span></Localized>
           </span>
           <span className={`settings-license-value${payload.status === 'active' ? ' settings-license-value--active' : ' settings-license-value--warning'}`}>
-            {payload.status}
+            {payload.status === 'active' ? l10n.getString('settings-license-status-active') : payload.status}
           </span>
         </div>
 
@@ -217,7 +207,7 @@ export default function LicenseSettings() {
           <span className="settings-license-value">
             {(payload.allowed_types ?? []).length === 0
               ? (<Localized id="settings-license-allowed-types-all"><span>All</span></Localized>)
-              : payload.allowed_types.map(workspaceTypeLabel).join(', ')}
+              : payload.allowed_types.map((t) => workspaceTypeLabel(t, l10n)).join(', ')}
           </span>
         </div>
 
@@ -242,7 +232,7 @@ export default function LicenseSettings() {
                 <Localized id="settings-license-server-tier"><span>Server Tier</span></Localized>
               </span>
               <span className={`settings-license-value settings-license-value--tier settings-license-value--tier-${serverStatus.tier}`}>
-                {tierLabel(serverStatus.tier)}
+                {tierLabel(serverStatus.tier, l10n)}
               </span>
             </div>
             <div className="settings-license-row">

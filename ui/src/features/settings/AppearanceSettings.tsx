@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import {
   getBrandSettings,
@@ -77,13 +77,18 @@ export function AppearanceSettings({
     }
   }, [refreshBrandSettings]);
 
+  const colourRef = useRef(activeColour);
+  colourRef.current = activeColour;
+  const nameRef = useRef(activeStoreName);
+  nameRef.current = activeStoreName;
+
   const save = useCallback(async () => {
     setSaving(true);
-    await setBrandPrimaryColour(activeColour);
-    await setBrandStoreName(activeStoreName);
+    await setBrandPrimaryColour(colourRef.current);
+    await setBrandStoreName(nameRef.current);
     refreshBrandSettings();
     setSaving(false);
-  }, [activeColour, activeStoreName, refreshBrandSettings]);
+  }, [refreshBrandSettings]);
 
   const content = (
     <div className="settings-form">
@@ -162,11 +167,11 @@ export function AppearanceSettings({
           onChange={(e) => setZoomLevel(e.target.value as ZoomLevel)}
           className="settings-select"
         >
-          <option value="auto">Automatic (Scale with screen)</option>
-          <option value="100">100% (Default)</option>
-          <option value="125">125%</option>
-          <option value="150">150%</option>
-          <option value="200">200%</option>
+          <option value="auto"><Localized id="appearance-zoom-auto">Automatic (Scale with screen)</Localized></option>
+          <option value="100"><Localized id="appearance-zoom-100">100% (Default)</Localized></option>
+          <option value="125"><Localized id="appearance-zoom-125">125%</Localized></option>
+          <option value="150"><Localized id="appearance-zoom-150">150%</Localized></option>
+          <option value="200"><Localized id="appearance-zoom-200">200%</Localized></option>
         </select>
       </div>
 

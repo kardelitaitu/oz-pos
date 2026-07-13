@@ -266,6 +266,26 @@ const CATEGORIES: SettingsCategory[] = [
   { label: 'Management', keys: ['staff', 'terminals', 'stores', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
 ];
 
+const NAV_L10N_KEYS: Record<string, string> = {
+  general: 'settings-nav-general',
+  appearance: 'settings-nav-appearance',
+  receipt: 'settings-nav-receipt',
+  sync: 'settings-nav-sync',
+  about: 'settings-nav-about',
+  features: 'settings-nav-features',
+  data: 'settings-nav-data',
+  staff: 'settings-nav-staff',
+  terminals: 'settings-nav-terminals',
+  stores: 'settings-nav-stores',
+  audit: 'settings-nav-audit',
+  offline: 'settings-nav-offline',
+  shifts: 'settings-nav-shifts',
+  tax: 'settings-nav-tax',
+  license: 'settings-nav-license',
+  exchange: 'settings-nav-exchange',
+  promotions: 'settings-nav-promotions',
+};
+
 // ── Clock helper ──────────────────────────────────────────────────
 
 function useClock(): string {
@@ -1099,16 +1119,18 @@ export default function SettingsPage() {
                       {cat.keys.map((key) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
-                          <Tooltip key={key} content={item.label} showDelay={800}>
+                          <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
                             <button
                               type="button"
                               className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
                               onClick={() => setActiveSection(key)}
                               aria-current={activeSection === key ? 'page' : undefined}
-                              aria-label={item.label}
+                              aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
                             >
                               <span className="settings-nav-icon">{item.icon}</span>
-                              <span className="settings-nav-label">{item.label}</span>
+                              <span className="settings-nav-label">
+                                <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                              </span>
                             </button>
                           </Tooltip>
                         );
