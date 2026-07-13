@@ -158,7 +158,9 @@ describe('RefundModal', () => {
     render(wrap(<RefundModal {...defaultProps} onClose={onClose} />));
     const closeBtns = screen.getAllByRole('button', { name: /cancel refund/i });
     await userEvent.click(closeBtns[0]!);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('calls processRefund with correct args on submit', async () => {
@@ -235,7 +237,9 @@ describe('RefundModal', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /done/i }));
     expect(onRefunded).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('shows refund total row', () => {

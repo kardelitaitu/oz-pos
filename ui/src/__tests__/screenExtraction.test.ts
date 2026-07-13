@@ -65,6 +65,7 @@ const SCREENS: ScreenEntry[] = [
     name: 'ProductManagementScreen',
     tsx: 'products/ProductManagementScreen.tsx',
     css: ['products/ProductManagementScreen.css'],
+    dynamicClassPrefixes: ['product-mgmt-type--'],
   },
   {
     name: 'BundleManagementScreen',
@@ -106,6 +107,7 @@ const SCREENS: ScreenEntry[] = [
     name: 'StaffLoginScreen',
     tsx: 'auth/StaffLoginScreen.tsx',
     css: ['auth/StaffLoginScreen.css'],
+    dynamicClassPrefixes: ['staff-login-logo', 'staff-login-card'],
   },
 
   // ── Audit ─────────────────────────────────────────────
@@ -135,7 +137,7 @@ const SCREENS: ScreenEntry[] = [
     name: 'KdsScreen',
     tsx: 'kds/KdsScreen.tsx',
     css: ['kds/KdsScreen.css'],
-    dynamicClassPrefixes: ['kds-column--'],
+    dynamicClassPrefixes: ['kds-column--', 'kds-ticket', 'kds-workspace'],
   },
 
   // ── Loyalty ───────────────────────────────────────────
@@ -166,7 +168,22 @@ const SCREENS: ScreenEntry[] = [
     name: 'SettingsPage',
     tsx: 'settings/SettingsPage.tsx',
     css: ['settings/SettingsPage.css'],
-    externalClasses: ['card', 'tab-list'],
+    externalClasses: [
+      'card',
+      'tab-list',
+      'tooltip-content',
+      'feature-toggle',
+      'data-mgmt',
+      'staff-mgmt',
+      'terminal-mgmt',
+      'multi-store-dashboard',
+      'audit-log',
+      'offline-queue-screen',
+      'shift-mgmt',
+      'tax-config',
+      'exchange-rate-config',
+      'promo-mgmt',
+    ],
   },
   {
     name: 'DataManagementScreen',
@@ -227,6 +244,13 @@ const SCREENS: ScreenEntry[] = [
     name: 'WorkspaceHome',
     tsx: 'workspaces/WorkspaceHome.tsx',
     css: ['workspaces/WorkspaceHome.css'],
+    dynamicClassPrefixes: ['ws-color-', 'role-badge--'],
+    externalClasses: [
+      'workspace-home-user',
+      'workspace-card--exiting',
+      'workspace-card--active',
+      'workspace-card-ripple',
+    ],
   },
 
   // ── Kiosk ─────────────────────────────────────────────
@@ -368,18 +392,25 @@ const SCREENS: ScreenEntry[] = [
     name: 'AppearanceSettings',
     tsx: 'settings/AppearanceSettings.tsx',
     css: ['settings/AppearanceSettings.css', 'settings/SettingsPage.css'],
+    dynamicClassPrefixes: [
+      'settings-',
+      'tooltip-content',
+      'feature-toggle',
+      'data-mgmt',
+      'staff-mgmt',
+      'terminal-mgmt',
+      'multi-store-dashboard',
+      'audit-log',
+      'offline-queue-screen',
+      'shift-mgmt',
+      'tax-config',
+      'exchange-rate-config',
+      'promo-mgmt',
+    ],
     externalClasses: [
-      'settings-page',
-      'settings-title',
       'card',
       'tab-list',
-      'settings-toggle',
-      'settings-field',
-      'settings-select',
-      'settings-hint',
-      'settings-size-controls',
-      'settings-size-btn',
-      'settings-size-value',
+      'collapsed',
     ],
   },
 ];

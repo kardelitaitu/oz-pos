@@ -50,21 +50,13 @@ describe('ThemeToggle', () => {
     expect(screen.getByTestId('theme-toggle').tagName).toBe('BUTTON');
   });
 
-  it('renders a sun icon in default mode (to switch to light)', () => {
+  it('renders a paint palette icon', () => {
     render(wrap(<ThemeToggle />));
     const button = screen.getByTestId('theme-toggle');
     const svgs = button.querySelectorAll('svg');
     expect(svgs.length).toBe(1);
-    expect(svgs[0]?.querySelector('circle')).toBeInTheDocument();
-  });
-
-  it('renders a sun icon in dark mode', () => {
-    localStorage.setItem('oz-pos-theme-v4', 'dark');
-    render(wrap(<ThemeToggle />));
-    const button = screen.getByTestId('theme-toggle');
-    const svgs = button.querySelectorAll('svg');
-    expect(svgs.length).toBe(1);
-    // Sun icon has a <circle> element.
+    // Paint palette icon has a path and circle elements.
+    expect(svgs[0]?.querySelector('path')).toBeInTheDocument();
     expect(svgs[0]?.querySelector('circle')).toBeInTheDocument();
   });
 
@@ -107,10 +99,8 @@ describe('ThemeToggle', () => {
 
     await userEvent.click(button);
 
-    // After toggling to light, the moon icon (path only) should appear.
-    const svg = button.querySelector('svg');
-    expect(svg?.querySelector('path')).toBeInTheDocument();
-    expect(svg?.querySelector('circle')).toBeNull();
+    // After toggling to light, the document element should have data-theme="light".
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 
   it('clicking twice toggles to dark', async () => {
@@ -120,8 +110,7 @@ describe('ThemeToggle', () => {
     await userEvent.click(button); // default → light
     await userEvent.click(button); // light → dark
 
-    // In dark mode: sun icon (circle).
-    const svg = button.querySelector('svg');
-    expect(svg?.querySelector('circle')).toBeInTheDocument();
+    // In dark mode: document element should have data-theme="dark".
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 });

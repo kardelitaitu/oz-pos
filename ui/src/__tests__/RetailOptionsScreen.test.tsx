@@ -174,7 +174,7 @@ describe('RetailOptionsScreen', () => {
     await userEvent.click(screen.getByText('System'));
 
     expect(screen.getByText(/App version/)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('0.0.3')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('0.0.4')).toBeInTheDocument();
     expect(screen.getByDisplayValue(/Budi Manager/)).toBeInTheDocument();
   });
 
