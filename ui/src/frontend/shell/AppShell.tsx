@@ -73,9 +73,13 @@ export default function AppShell() {
       goToWorkspacePicker();
       addToast({
         type: 'info',
-        message: 'Returned to workspace picker due to inactivity',
+        message: 'Returned to workspace picker due to inactivity. Configure auto-lock from Settings.',
       });
     } else if (session) {
+      addToast({
+        type: 'info',
+        message: 'Automatic logout enabled. Configure from Settings.',
+      });
       logout();
     }
   });
@@ -132,7 +136,8 @@ export default function AppShell() {
           // gated behind a license check that failed for a transient reason.
           setHasActiveLicense(true);
           setHasCompletedSetup(true);
-          addToastRef.current({ type: 'error', message: `Could not verify license: ${String(err)}` });
+          console.error('License verification failed:', err);
+          addToastRef.current({ type: 'error', message: 'Could not verify license status. Check your connection.' });
         }
       } finally {
         if (!cancelled) {
