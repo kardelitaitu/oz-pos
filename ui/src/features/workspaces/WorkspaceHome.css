@@ -441,14 +441,14 @@
 }
 
 .workspace-card-name {
-  font-size: var(--text-xl);
+  font-size: clamp(var(--text-base), 1.5vw, var(--text-2xl));
   font-weight: var(--font-weight-bold);
   color: var(--color-fg);
   margin: 0;
 }
 
 .workspace-card-desc {
-  font-size: var(--text-sm);
+  font-size: clamp(var(--text-xs), 1vw, var(--text-base));
   color: var(--color-fg-secondary);
   margin: 0;
   line-height: var(--leading-relaxed);
