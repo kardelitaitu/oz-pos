@@ -541,6 +541,7 @@ export default function WorkspaceHome() {
             </header>
             <SkeletonGrid exiting={skeletonExiting} />
           </div>
+          <div className="ws-footer" />
         </div>
 
         {/* SR-only status */}
@@ -605,6 +606,7 @@ export default function WorkspaceHome() {
               </button>
             </div>
           </div>
+          <div className="ws-footer" />
         </div>
 
         {/* Layer 5: Overlays */}
@@ -728,6 +730,7 @@ export default function WorkspaceHome() {
             </div>
           )}
         </div>
+        <div className="ws-footer" />
       </div>
 
       {/* Layer 5: Overlays */}
