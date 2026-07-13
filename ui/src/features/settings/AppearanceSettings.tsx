@@ -50,6 +50,12 @@ export function AppearanceSettings({
   const activeColour = embedded ? (colourProp ?? colour) : colour;
   const activeStoreName = embedded ? (storeNameProp ?? storeName) : storeName;
 
+  // Contrast text is absolute — light accent needs dark text, dark accent needs
+  // light text, regardless of theme. Centralised as CSS variables instead of
+  // duplicated inline styles.
+  const isLightBg = parseInt(activeColour.slice(1), 16) > 0x7fffff;
+  const previewBtnText = isLightBg ? '#0a0a0a' : '#ffffff';
+
   const updateColour = useCallback((c: string) => {
     if (embedded) {
       onColourChange?.(c);
@@ -181,10 +187,15 @@ export function AppearanceSettings({
         </h3>
         <div
           className="appearance-preview-box"
-          style={{ '--preview-colour': activeColour } as React.CSSProperties}
+          style={{
+            '--preview-colour': activeColour,
+            '--preview-btn-text': previewBtnText,
+            '--preview-colour-alpha-10': `${activeColour}1a`,
+            '--preview-colour-alpha-20': `${activeColour}33`,
+          } as React.CSSProperties}
         >
           <div className="appearance-preview-sample">
-            <span className="appearance-preview-text" style={{ color: activeColour }}>
+            <span className="appearance-preview-text">
               {activeStoreName ? activeStoreName : <Localized id="appearance-store-name-fallback"><span>OZ-POS</span></Localized>}
             </span>
           </div>
@@ -192,11 +203,6 @@ export function AppearanceSettings({
             <button
               type="button"
               className="appearance-preview-btn"
-              style={{
-                backgroundColor: activeColour,
-                borderColor: activeColour,
-                color: parseInt(activeColour.slice(1), 16) > 0x7fffff ? '#0a0a0a' : '#ffffff',
-              }}
               disabled
             >
               <Localized id="appearance-preview-btn-label">Primary Button</Localized>
@@ -204,22 +210,11 @@ export function AppearanceSettings({
             <button
               type="button"
               className="appearance-preview-btn-outline"
-              style={{
-                borderColor: activeColour,
-                color: activeColour,
-              }}
               disabled
             >
               <Localized id="appearance-preview-btn-outline-label">Secondary</Localized>
             </button>
-            <span
-              className="appearance-preview-badge"
-              style={{
-                backgroundColor: `${activeColour}1a`,
-                color: activeColour,
-                borderColor: `${activeColour}33`,
-              }}
-            >
+            <span className="appearance-preview-badge">
               <Localized id="appearance-preview-badge-label">Live</Localized>
             </span>
           </div>
