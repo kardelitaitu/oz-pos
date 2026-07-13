@@ -352,7 +352,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--space-6) var(--space-8);
-  max-width: 800px;
 }
 
 /* Spacing between cards inside the content area. */
