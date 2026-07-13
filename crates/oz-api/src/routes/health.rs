@@ -56,6 +56,6 @@ mod tests {
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"status\":\"ok\""));
-        assert!(json.contains("\"version\":\"0.0.4\""));
+        assert!(json.contains("\"version\":\"0.0.6\""));
     }
 }

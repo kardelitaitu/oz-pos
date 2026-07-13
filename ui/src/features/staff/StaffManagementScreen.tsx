@@ -221,12 +221,18 @@ export default function StaffManagementScreen() {
 
   const roleVariant = (roleName: string): 'warning' | 'info' | 'default' | 'success' => {
     switch (roleName.toLowerCase()) {
-      case 'owner': return 'warning';
-      case 'manager': return 'info';
-      case 'kitchen': return 'success';
-      case 'cashier': return 'default';
-      case 'staff': return 'default';
-      default: return 'default';
+      case 'owner':
+      case 'role-owner':
+      case 'admin':
+      case 'role-admin':   return 'warning';
+      case 'manager':
+      case 'role-manager': return 'info';
+      case 'kitchen':
+      case 'role-kitchen': return 'success';
+      case 'cashier':
+      case 'role-cashier': return 'default';
+      case 'staff':        return 'default';
+      default:             return 'default';
     }
   };
 

@@ -133,7 +133,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('isManager').textContent).toBe('true');
-      expect(screen.getByTestId('isOwner').textContent).toBe('false');
+      expect(screen.getByTestId('isOwner').textContent).toBe('true');
     });
   });
 

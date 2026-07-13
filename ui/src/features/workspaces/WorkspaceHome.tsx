@@ -161,11 +161,17 @@ function getInitials(name: string): string {
 
 function getRoleColor(role: string): string {
   switch (role.toLowerCase()) {
-    case 'owner':   return 'role-badge--owner';
-    case 'manager': return 'role-badge--manager';
-    case 'cashier': return 'role-badge--cashier';
-    case 'kitchen': return 'role-badge--kitchen';
-    default:        return 'role-badge--default';
+    case 'owner':
+    case 'role-owner':
+    case 'admin':
+    case 'role-admin':   return 'role-badge--owner';
+    case 'manager':
+    case 'role-manager': return 'role-badge--manager';
+    case 'cashier':
+    case 'role-cashier': return 'role-badge--cashier';
+    case 'kitchen':
+    case 'role-kitchen': return 'role-badge--kitchen';
+    default:             return 'role-badge--default';
   }
 }
 
@@ -298,7 +304,11 @@ export default function WorkspaceHome() {
   const canAccess = useCallback(
     (key: string) =>
       roleName === 'owner' ||
+      roleName === 'role-owner' ||
+      roleName === 'admin' ||
+      roleName === 'role-admin' ||
       roleName === 'manager' ||
+      roleName === 'role-manager' ||
       cashierOnly.has(key) ||
       (roleName === 'kitchen' && kitchenOnly.has(key)),
     [roleName, cashierOnly, kitchenOnly],
