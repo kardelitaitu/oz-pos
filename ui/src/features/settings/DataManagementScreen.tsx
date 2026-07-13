@@ -465,6 +465,7 @@ export default function DataManagementScreen() {
                       id="export-password"
                       className="data-mgmt-input"
                       type="password"
+                      autoComplete="off"
                       placeholder={l10n.getString('data-mgmt-encrypt-password-placeholder')}
                       value={exportState.password}
                       onChange={(e) => setExportState((prev) => ({ ...prev, password: e.target.value }))}
@@ -478,6 +479,7 @@ export default function DataManagementScreen() {
                       id="export-password-confirm"
                       className="data-mgmt-input"
                       type="password"
+                      autoComplete="off"
                       placeholder={l10n.getString('data-mgmt-encrypt-confirm-placeholder')}
                       value={exportState.passwordConfirm}
                       onChange={(e) => setExportState((prev) => ({ ...prev, passwordConfirm: e.target.value }))}
@@ -599,6 +601,7 @@ export default function DataManagementScreen() {
                     id="import-password"
                     className="data-mgmt-input"
                     type="password"
+                    autoComplete="off"
                     placeholder={l10n.getString('data-mgmt-import-password-placeholder')}
                     value={importState.password}
                     onChange={(e) => setImportState((prev) => ({ ...prev, password: e.target.value }))}

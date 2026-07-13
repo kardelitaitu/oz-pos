@@ -442,7 +442,7 @@ export default function SettingsPage() {
         ]),
         updateSyncSettings({
           serverUrl: syncServerUrl || null,
-          apiKey: syncApiKey || null,
+          ...(syncApiKey ? { apiKey: syncApiKey } : {}),
           enabled: sync.enabled,
         }),
         setBrandPrimaryColour(brandColour),
@@ -450,7 +450,9 @@ export default function SettingsPage() {
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      setSyncApiKey('');
+      if (syncApiKey) {
+        setSyncApiKey('');
+      }
       refreshBrandSettings();
     } catch {
       addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
@@ -1064,7 +1066,7 @@ export default function SettingsPage() {
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </button>
-                  {isExpanded && (
+                  {(isExpanded || sidebarCollapsed) && (
                     <div className="settings-sidebar-section-items">
                       {cat.keys.map((key) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
@@ -1148,7 +1150,9 @@ export default function SettingsPage() {
               </svg>
             )}
           </button>
-          OZ-POS Enterprise v{appVersion}
+          <Localized id="settings-app-version" vars={{ version: appVersion }}>
+            <span>OZ-POS Enterprise v{appVersion}</span>
+          </Localized>
         </span>
         <span className="settings-footer-right">
           <Localized id="settings-license-type-value">

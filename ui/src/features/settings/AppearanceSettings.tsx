@@ -108,6 +108,7 @@ export function AppearanceSettings({
               value={activeColour}
               onChange={(e) => updateColour(e.target.value)}
               className="appearance-colour-hex settings-input"
+              autoComplete="off"
               aria-label="Colour hex value"
             />
           </Localized>
@@ -147,6 +148,7 @@ export function AppearanceSettings({
           value={activeStoreName}
           onChange={(e) => updateStoreName(e.target.value)}
           className="settings-input"
+          autoComplete="off"
         />
       </div>
 
@@ -158,7 +160,7 @@ export function AppearanceSettings({
           id="interface-zoom"
           value={zoomLevel}
           onChange={(e) => setZoomLevel(e.target.value as ZoomLevel)}
-          className="settings-input"
+          className="settings-select"
         >
           <option value="auto">Automatic (Scale with screen)</option>
           <option value="100">100% (Default)</option>

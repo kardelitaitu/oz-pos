@@ -628,6 +628,11 @@
   font-size: var(--text-xs);
 }
 
+/* Match the <option> dropdown popup to the active theme. */
+[data-theme="dark"] .settings-select {
+  color-scheme: dark;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .settings-select,
   .settings-input {

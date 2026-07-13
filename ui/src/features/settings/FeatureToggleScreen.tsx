@@ -261,6 +261,7 @@ export default function FeatureToggleScreen() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={l10n.getString('feature-toggle-search-aria')}
+              autoComplete="off"
             />
           </Localized>
           {searchQuery && (
@@ -348,8 +349,7 @@ export default function FeatureToggleScreen() {
                 return (
                   <div key={feat.key} className="feature-toggle-item">
                     <div className="feature-toggle-item-info">
-                      <span className="feature-toggle-item-name">{feat.name}</span>
-                      <span className="feature-toggle-item-desc">{feat.description}</span>
+                      <span className="feature-toggle-item-name">{feat.name}</span>                        <span id={`desc-${feat.key}`} className="feature-toggle-item-desc">{feat.description}</span>
                       {feat.dependencies.length > 0 && (
                         <span className="feature-toggle-item-deps">
                           {l10n.getString('feature-toggle-requires', { deps: depNames })}
