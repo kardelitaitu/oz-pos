@@ -175,12 +175,13 @@ export default function DataManagementScreen() {
   // ── Export flow ─────────────────────────────────────────────────
 
   const startExport = useCallback(() => {
-    if (exportState.selectedTypes.size === 0) {
+    const es = exportStateRef.current;
+    if (es.selectedTypes.size === 0) {
       addToast({ message: l10n.getString('data-mgmt-toast-export-select-type'), type: 'error' });
       return;
     }
     setExportState((prev) => ({ ...prev, step: 'encrypt', error: null }));
-  }, [addToast, exportState.selectedTypes, l10n]);
+  }, [addToast, l10n]);
 
   const confirmExport = useCallback(async () => {
     const es = exportStateRef.current;

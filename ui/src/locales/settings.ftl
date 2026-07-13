@@ -207,6 +207,7 @@ settings-sidebar-collapse-aria = Collapse settings sidebar
 settings-theme-toggle-dark-aria = Switch to dark mode
 settings-theme-toggle-light-aria = Switch to light mode
 settings-loading = Loading settings…
+settings-load-failed = Failed to load settings
 settings-section-store = Store
 settings-section-currency = Currency
 settings-section-display = Display

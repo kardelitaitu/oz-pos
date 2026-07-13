@@ -460,11 +460,11 @@ export default function SettingsPage() {
       const palette = deriveAccentPalette(brand.primary_colour);
       applyAccentPalette(palette);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
+      setLoadError(err instanceof Error ? err.message : l10n.getString('settings-load-failed'));
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, l10n]);
 
   useEffect(() => { load(); }, [load]);
 
