@@ -137,6 +137,19 @@ codegen-units = 256
 debug = true
 overflow-checks = false
 
+# Cryptographic and compression crates optimized for speed in tests and dev mode
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.aes-gcm]
+opt-level = 3
+
+[profile.dev.package.aead]
+opt-level = 3
+
+[profile.dev.package.zstd]
+opt-level = 3
+
 # TDD profile: fastest possible compile for tight test loops
 [profile.tdd]
 inherits = "dev"
