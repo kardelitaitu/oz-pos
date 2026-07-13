@@ -335,19 +335,19 @@
 /* ── Card icon ───────────────────────────────────────────────────── */
 
 @keyframes ws-icon-wiggle {
-  0% { transform: scale(calc(var(--ws-icon-scale, 1) * 0.95)) rotate(0deg) translateZ(0); }
-  15% { transform: scale(calc(var(--ws-icon-scale, 1) * 0.95)) rotate(-6deg) translateZ(0); }
-  30% { transform: scale(calc(var(--ws-icon-scale, 1) * 0.95)) rotate(5deg) translateZ(0); }
-  45% { transform: scale(calc(var(--ws-icon-scale, 1) * 0.95)) rotate(-4deg) translateZ(0); }
-  60% { transform: scale(calc(var(--ws-icon-scale, 1) * 0.95)) rotate(3deg) translateZ(0); }
-  80% { transform: scale(calc(var(--ws-icon-scale, 1) * 0.95)) rotate(-1.5deg) translateZ(0); }
-  100% { transform: scale(calc(var(--ws-icon-scale, 1) * 0.95)) rotate(0deg) translateZ(0); }
+  0% { transform: scale(0.95) rotate(0deg); }
+  15% { transform: scale(0.95) rotate(-6deg); }
+  30% { transform: scale(0.95) rotate(5deg); }
+  45% { transform: scale(0.95) rotate(-4deg); }
+  60% { transform: scale(0.95) rotate(3deg); }
+  80% { transform: scale(0.95) rotate(-1.5deg); }
+  100% { transform: scale(0.95) rotate(0deg); }
 }
 
 @keyframes ws-icon-pulse {
-  0% { transform: scale(1) translateZ(0); opacity: 1; }
-  50% { transform: scale(1.08) translateZ(0); opacity: 0.85; }
-  100% { transform: scale(1) translateZ(0); opacity: 1; }
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.85; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .workspace-card-row {
@@ -398,14 +398,12 @@
 }
 
 /* Active pulse — only when NOT hovering */
-.workspace-card--active .workspace-card-icon {
+.workspace-card--active .workspace-card-icon svg {
   animation: ws-icon-pulse 3s ease-in-out infinite;
 }
 
-/* Wiggle on hover — transition:none prevents the base transition:transform
-   from fighting with the animation for control of the transform property. */
-.workspace-card:hover .workspace-card-icon {
-  transition: none;
+/* Wiggle on hover */
+.workspace-card:hover .workspace-card-icon svg {
   animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
@@ -470,8 +468,7 @@
   background: var(--color-bg-elevated);
 }
 
-.workspace-card--disabled:hover .workspace-card-icon {
-  transition: none;
+.workspace-card--disabled:hover .workspace-card-icon svg {
   animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
