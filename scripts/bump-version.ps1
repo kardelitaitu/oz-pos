@@ -1,7 +1,20 @@
-# scripts/bump-version.ps1 — Automates version bumping across the OZ-POS codebase.
-#
-# Usage:  powershell -File scripts\bump-version.ps1 "0.0.6"
-#         (run from the workspace root)
+<#
+.SYNOPSIS
+    Automates version bumping across the entire OZ-POS codebase.
+
+.DESCRIPTION
+    This script finds all occurrences of the current codebase version (read dynamically from Cargo.toml)
+    across Rust Cargo config files, Tauri app config files, UI packages, health route tests, and React
+    status/footer views, and updates them to the target version.
+    It then automatically refreshes the package lockfiles (Cargo.lock and package-lock.json).
+
+.PARAMETER TargetVersion
+    The new version number to bump the codebase to (e.g., "0.0.6").
+
+.EXAMPLE
+    powershell -File scripts\bump-version.ps1 "0.0.6"
+    (Run this command from the project root workspace directory)
+#>
 
 param(
     [Parameter(Mandatory=$true)]
