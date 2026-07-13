@@ -906,6 +906,7 @@
 }
 
 .workspace-home-user-profile:hover .workspace-home-user-avatar .workspace-home-user-avatar-inner {
+  transition: none;
   animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
@@ -1088,7 +1089,8 @@
   }
 
   .workspace-card:hover .workspace-card-icon,
-  .workspace-card:hover .workspace-card-icon-inner {
+  .workspace-card:hover .workspace-card-icon-inner,
+  .workspace-home-user-profile:hover .workspace-home-user-avatar-inner {
     animation: none;
     transform: none;
   }
