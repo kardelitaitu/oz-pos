@@ -391,7 +391,7 @@ export default function WorkspaceHome() {
     const grid = gridRef.current;
     if (!grid) return;
 
-    const cards = grid.querySelectorAll<HTMLButtonElement>('.workspace-card');
+    const cards = grid.querySelectorAll<HTMLButtonElement>('.workspace-card:not(.workspace-card--disabled)');
     if (cards.length === 0) return;
 
     function focusCard(index: number) {
@@ -694,30 +694,60 @@ export default function WorkspaceHome() {
                 const disabled = !canAccess(ws.type_key);
                 const colorClass = WS_COLORS[ws.type_key] ?? '';
                 const isActive = ws.type_key === lastWorkspace && !disabled;
+                if (disabled) {
+                  return (
+                    <div
+                      key={ws.type_key}
+                      className={`workspace-card ${colorClass} workspace-card--disabled`}
+                      aria-label={l10n.getString('workspace-card-no-access-aria', { name: ws.name })}
+                      title={l10n.getString('workspace-card-no-access-title', { role: roleName })}
+                    >
+                      <div className="workspace-card-key-hint">{idx + 1}</div>
+                      <div className="workspace-card-row">
+                        <div className="workspace-card-icon">
+                          {getIcon(ws.type_key)}
+                        </div>
+                        <div className="workspace-card-body">
+                          <div className="workspace-card-title">
+                            <h2 className="workspace-card-name">{ws.name}</h2>
+                          </div>
+                          <div className="workspace-card-text">
+                            <p className="workspace-card-desc">{ws.description}</p>
+                          </div>
+                          <div className="workspace-card-actions">
+                            <span className="workspace-card-badge">
+                              <Localized id="workspace-card-no-access-badge">
+                                <span>Not available</span>
+                              </Localized>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <button
                     key={ws.type_key}
                     type="button"
                     aria-current={isActive ? 'true' : undefined}
-                    className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
+                    className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
                     onClick={(e) => handleCardClick(ws.type_key, e)}
-                    disabled={disabled || exitingWorkspace !== null}
+                    disabled={exitingWorkspace !== null}
                     onMouseMove={handleMouseMove}
                     onMouseLeave={handleMouseLeave}
-                    aria-label={l10n.getString(
-                      disabled ? 'workspace-card-no-access-aria' : 'workspace-card-open-aria',
-                      { name: ws.name },
-                    )}
-                    title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
+                    aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
+                    title={ws.name}
                   >
                     <div className="workspace-card-key-hint">{idx + 1}</div>
-                      {isActive && (
-                        <div className="workspace-card-active-dot" aria-label="Active workspace">
-                          <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
-                            <circle cx="12" cy="12" r="6" />
-                          </svg>
-                        </div>
-                      )}
+                    {isActive && (
+                      <div className="workspace-card-active-dot" aria-label="Active workspace">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
+                          <circle cx="12" cy="12" r="6" />
+                        </svg>
+                      </div>
+                    )}
                     <div className="workspace-card-row">
                       <div className="workspace-card-icon">
                         {getIcon(ws.type_key)}
@@ -729,33 +759,23 @@ export default function WorkspaceHome() {
                         <div className="workspace-card-text">
                           <p className="workspace-card-desc">{ws.description}</p>
                         </div>
-                        <div className="workspace-card-actions">
-                          {disabled ? (
-                            <span className="workspace-card-badge">
-                              <Localized id="workspace-card-no-access-badge">
-                                <span>Not available</span>
-                              </Localized>
-                            </span>
-                          ) : null}
-                        </div>
+                        <div className="workspace-card-actions" />
                       </div>
                     </div>
 
                     {/* Overlay: keyboard shortcut hint */}
-                    {!disabled && (
-                      <div className="workspace-card-overlay" aria-hidden="true">
-                        <span className="workspace-card-overlay-hint">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                            <rect x="2" y="4" width="20" height="16" rx="2" />
-                            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
-                            <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
-                          </svg>
-                          <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
-                            <span>Press {idx + 1} to open</span>
-                          </Localized>
-                        </span>
-                      </div>
-                    )}
+                    <div className="workspace-card-overlay" aria-hidden="true">
+                      <span className="workspace-card-overlay-hint">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                          <rect x="2" y="4" width="20" height="16" rx="2" />
+                          <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
+                          <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
+                        </svg>
+                        <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
+                          <span>Press {idx + 1} to open</span>
+                        </Localized>
+                      </span>
+                    </div>
                   </button>
                 );
               })}

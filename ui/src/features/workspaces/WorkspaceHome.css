@@ -231,22 +231,7 @@
 
 /* ── Header ──────────────────────────────────────────────────────── */
 
-.workspace-home-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-weight-bold);
-  margin: 0 0 var(--space-2);
-  letter-spacing: -0.02em;
-  background: linear-gradient(90deg, var(--color-fg), var(--color-accent));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.workspace-home-subtitle {
-  font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
-  margin: 0 0 var(--space-2);
-}
+.workspace-home-header {}
 
 .workspace-home-user {
   font-size: var(--text-sm);
@@ -333,7 +318,7 @@
 
 /* Subtle scale-in for the icon on the active card */
 .workspace-card--active .workspace-card-icon {
-  transform: scale(1.05);
+  transform: scale(1.05) translateZ(0);
 }
 
 .workspace-card:focus-visible {
@@ -350,13 +335,13 @@
 /* ── Card icon ───────────────────────────────────────────────────── */
 
 @keyframes ws-icon-wiggle {
-  0% { transform: rotate(0deg); }
-  15% { transform: rotate(-10deg); }
-  30% { transform: rotate(8deg); }
-  45% { transform: rotate(-6deg); }
-  60% { transform: rotate(4deg); }
-  80% { transform: rotate(-2deg); }
-  100% { transform: rotate(0deg); }
+  0% { transform: scale(var(--ws-icon-scale, 1)) rotate(0deg); }
+  15% { transform: scale(var(--ws-icon-scale, 1)) rotate(-10deg); }
+  30% { transform: scale(var(--ws-icon-scale, 1)) rotate(8deg); }
+  45% { transform: scale(var(--ws-icon-scale, 1)) rotate(-6deg); }
+  60% { transform: scale(var(--ws-icon-scale, 1)) rotate(4deg); }
+  80% { transform: scale(var(--ws-icon-scale, 1)) rotate(-2deg); }
+  100% { transform: scale(var(--ws-icon-scale, 1)) rotate(0deg); }
 }
 
 @keyframes ws-icon-pulse {
@@ -379,6 +364,8 @@
   color: var(--ws-accent, var(--color-accent));
   transform-origin: center;
   transition: transform var(--duration-250) var(--ease-out);
+  will-change: transform;
+  transform: translateZ(0); /* Promote to composited layer to isolate child animation from parent 3D tilt repaint cycles */
 }
 
 .workspace-card-title {
@@ -513,6 +500,7 @@
 }
 
 .workspace-card--active {
+  --ws-icon-scale: 1.05;
   opacity: 1;
   border-color: var(--ws-accent, var(--color-accent)) !important;
   background: var(--ws-accent-bg, var(--color-bg-elevated));

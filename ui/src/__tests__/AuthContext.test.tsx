@@ -48,6 +48,7 @@ async function renderProvider() {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('starts with no session, no loading, no error', async () => {
