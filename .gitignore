@@ -54,6 +54,7 @@ ui/vitest-output.log
 # apps/*/icons/*.ico   ← committed, do not ignore
 
 # UI
+/ui/node_modules/
 /ui/.vite/
 /ui/.eslintcache
 /ui/.stylelintcache
