@@ -394,15 +394,14 @@ export default function DataManagementScreen() {
                         checked={exportState.selectedTypes.has(dt.key)}
                         onChange={() => toggleType(dt.key)}
                       />
-                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text comes from <Localized> */}
-                      <label className="data-mgmt-type-info" htmlFor={`type-${dt.key}`}>
+                      <div className="data-mgmt-type-info">
                         <Localized id={`data-mgmt-type-${dt.key}`}>
-                          <span className="data-mgmt-type-label">{dt.label}</span>
+                          <label className="data-mgmt-type-label" htmlFor={`type-${dt.key}`}>{dt.label}</label>
                         </Localized>
                         <Localized id={`data-mgmt-type-${dt.key}-desc`}>
                           <span className="data-mgmt-type-desc">{dt.description}</span>
                         </Localized>
-                      </label>
+                      </div>
                     </div>
                   ))}
                 </div>
