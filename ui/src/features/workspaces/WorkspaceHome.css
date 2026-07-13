@@ -644,8 +644,7 @@
   z-index: 1;
 }
 
-.workspace-card:hover .workspace-card-overlay,
-.workspace-card:focus-visible .workspace-card-overlay {
+.workspace-card:hover .workspace-card-overlay {
   opacity: 1;
   transform: translateY(0);
 }
@@ -1241,8 +1240,7 @@
     opacity: 0;
   }
 
-  .workspace-card:hover .workspace-card-overlay,
-  .workspace-card:focus-visible .workspace-card-overlay {
+  .workspace-card:hover .workspace-card-overlay {
     opacity: 1;
     transform: none;
   }
