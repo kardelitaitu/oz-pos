@@ -484,35 +484,43 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
-    try {
-      await Promise.all([
-        setReceiptSettings(receipt, session?.user_id ?? ''),
-        setStoreSettings(store, session?.user_id ?? ''),
-        setDefaultCurrency({ code: defaultCurrency }),
-        setUserPreferences(userId, [
-          { key: 'cardsize', value: String(displayCardSize) },
-          { key: 'fontsize', value: String(displayFontSize) },
-          { key: 'font-smoothing', value: displayFontSmoothing },
-        ]),
-        updateSyncSettings({
-          serverUrl: syncServerUrl || null,
-          ...(syncApiKey ? { apiKey: syncApiKey } : {}),
-          enabled: sync.enabled,
-        }),
-        setBrandPrimaryColour(brandColour),
-        setBrandStoreNameApi(brandStoreName),
-      ]);
+    // Use allSettled so a single failing save doesn't silently block
+    // the others — the user gets a warning about partial failures.
+    const results = await Promise.allSettled([
+      setReceiptSettings(receipt, session?.user_id ?? ''),
+      setStoreSettings(store, session?.user_id ?? ''),
+      setDefaultCurrency({ code: defaultCurrency }),
+      setUserPreferences(userId, [
+        { key: 'cardsize', value: String(displayCardSize) },
+        { key: 'fontsize', value: String(displayFontSize) },
+        { key: 'font-smoothing', value: displayFontSmoothing },
+      ]),
+      updateSyncSettings({
+        serverUrl: syncServerUrl || null,
+        ...(syncApiKey ? { apiKey: syncApiKey } : {}),
+        enabled: sync.enabled,
+      }),
+      setBrandPrimaryColour(brandColour),
+      setBrandStoreNameApi(brandStoreName),
+    ]);
+
+    const failed = results.filter((r) => r.status === 'rejected').length;
+
+    // At least one save succeeded — show confirmation and refresh.
+    if (failed < results.length) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      if (syncApiKey) {
-        setSyncApiKey('');
-      }
+      if (syncApiKey) setSyncApiKey('');
       refreshBrandSettings();
-    } catch {
-      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
-    } finally {
-      setSaving(false);
     }
+
+    if (failed === results.length) {
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
+    } else if (failed > 0) {
+      addToast({ message: l10n.getString('settings-save-partial'), type: 'error' });
+    }
+
+    setSaving(false);
   };
 
   // ── Loading / Error states ───────────────────────────────────

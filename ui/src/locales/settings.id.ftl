@@ -258,6 +258,7 @@ settings-btn-save-aria =
        *[save] Simpan pengaturan
     }
 settings-save-error = Gagal menyimpan pengaturan. Silakan coba lagi.
+settings-save-partial = Sebagian pengaturan gagal disimpan. Coba lagi.
 settings-retry = Coba Lagi
 settings-sync-not-configured = Sinkronisasi belum dikonfigurasi. Masukkan URL server dan aktifkan sinkronisasi.
 settings-appearance = Tampilan

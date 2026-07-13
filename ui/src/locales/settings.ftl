@@ -267,6 +267,7 @@ settings-btn-save-aria =
        *[save] Save settings
     }
 settings-save-error = Failed to save settings. Please try again.
+settings-save-partial = Some settings could not be saved. Try again.
 settings-retry = Retry
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
 settings-font-smoothing-antialiased = Antialiased (crisp)
