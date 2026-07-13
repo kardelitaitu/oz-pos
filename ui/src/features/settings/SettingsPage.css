@@ -305,13 +305,13 @@
 }
 
 .settings-nav-item--active {
-  background: var(--color-accent-subtle);
+  background: transparent;
   color: var(--color-accent);
   font-weight: var(--font-weight-semibold);
 }
 
 .settings-nav-item--active:hover {
-  background: var(--color-accent-subtle);
+  background: transparent;
   color: var(--color-accent);
 }
 
