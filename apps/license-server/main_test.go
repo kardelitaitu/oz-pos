@@ -8,8 +8,8 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -50,12 +50,12 @@ func TestKeyFailureTracker_BlocksAfterLimit(t *testing.T) {
 	kf := &keyFailureTracker{failures: make(map[string]*keyFailures), maxAttempts: 3, cooldown: time.Hour}
 	key := "OZ-TEST-BRUTE"
 	for i := 0; i < 3; i++ {
-		if kf.isBlocked(key) {
+		if kf.isBlockedBool(key) {
 			t.Errorf("should not be blocked after %d failures", i)
 		}
 		kf.recordFailure(key)
 	}
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 failures")
 	}
 }
@@ -66,11 +66,11 @@ func TestKeyFailureTracker_CooldownExpires(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		kf.recordFailure(key)
 	}
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 failures")
 	}
 	time.Sleep(10 * time.Millisecond)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after cooldown expires")
 	}
 }
@@ -537,9 +537,14 @@ func TestKeyFailureTracker_SweepEmpty(t *testing.T) {
 }
 
 // ── Tests: Key Activation Locks ───────────────────────────────────
+//
+// These tests target the sharded-mutex implementation (Memory-Leak Audit
+// fix): `&keyActivationLocks{}` is the zero-value struct (256 sync.Mutex
+// shards). The prior unbounded `map[string]*sync.Mutex` field has been
+// replaced and these tests no longer initialise it.
 
 func TestActivationLocks_SerialisesSameKey(t *testing.T) {
-	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
+	kal := &keyActivationLocks{}
 	key := "OZ-CONCURRENT"
 
 	unlock1 := kal.lock(key)
@@ -552,8 +557,8 @@ func TestActivationLocks_SerialisesSameKey(t *testing.T) {
 		done <- true
 	}()
 
-	// Give goroutine time to attempt lock acquisition.
-	time.Sleep(50 * time.Millisecond)
+	// 100ms mirrors TestActivationLocks_ConcurrentSameKeyBlocks grace in handler_test.go — absorbs CI scheduler latency spikes.
+	time.Sleep(100 * time.Millisecond)
 	select {
 	case <-done:
 		t.Error("second lock should block until first is released")
@@ -571,13 +576,33 @@ func TestActivationLocks_SerialisesSameKey(t *testing.T) {
 	}
 }
 
-func TestActivationLocks_DifferentKeysAreIndependent(t *testing.T) {
-	kal := &keyActivationLocks{locks: make(map[string]*sync.Mutex)}
-
-	unlock1 := kal.lock("KEY-A")
-	unlock2 := kal.lock("KEY-B") // different key, should not block
-	unlock1()
-	unlock2()
+// TestActivationLocks_NoGlobalMutexRegression verifies that locking
+// two DIFFERENT keys does not deadlock AND completes promptly (no
+// global-mutex regression). Under the sharded-mutex design distinct
+// keys can occasionally hash to the same shard (~0.4% per pair across
+// 256 buckets) and serialize — but the implementation MUST NOT deadlock
+// or hold a global lock. We loop over 100 pairs and assert the wall
+// clock stays under a generous bound (5s) — a regression to a single
+// global mutex would serialise all 200 lock/unlock pairs and blow past
+// this budget on any reasonably-loaded CI runner.
+func TestActivationLocks_NoGlobalMutexRegression(t *testing.T) {
+	kal := &keyActivationLocks{}
+	const pairCount = 100
+	const maxWallClock = 5 * time.Second
+	start := time.Now()
+	for i := 0; i < pairCount; i++ {
+		keyA := fmt.Sprintf("KEY-A-%04d", i)
+		keyB := fmt.Sprintf("KEY-B-%04d", i)
+		unlock1 := kal.lock(keyA)
+		unlock2 := kal.lock(keyB)
+		unlock1()
+		unlock2()
+	}
+	elapsed := time.Since(start)
+	if elapsed > maxWallClock {
+		t.Errorf("100 distinct-key lock pairs took %v; expected <%v (regression to global-mutex or serialised hot spot?)",
+			elapsed, maxWallClock)
+	}
 }
 
 // ── Tests: Key Failure Tracker Edge Cases ─────────────────────────
@@ -591,11 +616,11 @@ func TestKeyFailureTracker_IsolatedByKey(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		kf.recordFailure(key1)
 	}
-	if !kf.isBlocked(key1) {
+	if !kf.isBlockedBool(key1) {
 		t.Error("key1 should be blocked after 3 failures")
 	}
 	// key2 should not be affected.
-	if kf.isBlocked(key2) {
+	if kf.isBlockedBool(key2) {
 		t.Error("key2 should not be blocked (isolated from key1)")
 	}
 }
@@ -607,12 +632,12 @@ func TestKeyFailureTracker_PartialFailures(t *testing.T) {
 	// 2 failures should not block.
 	kf.recordFailure(key)
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after only 2 failures")
 	}
 	// 3rd failure should block.
 	kf.recordFailure(key)
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3rd failure")
 	}
 }
@@ -624,7 +649,7 @@ func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
 	// Record 2 failures.
 	kf.recordFailure(key)
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after 2 failures")
 	}
 
@@ -634,7 +659,7 @@ func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
 	kf.mu.Unlock()
 
 	// After TTL expires, the counter should reset, and the key should NOT be blocked.
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after partial failures decay")
 	}
 
@@ -652,11 +677,11 @@ func TestKeyFailureTracker_PartialDecayAfterTTL(t *testing.T) {
 	// Fresh failures should count from 0 (not from 2).
 	kf.recordFailure(key)
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after 2 fresh failures post-decay")
 	}
 	kf.recordFailure(key)
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 fresh failures post-decay")
 	}
 }
@@ -668,19 +693,19 @@ func TestKeyFailureTracker_CleanupAfterCooldown(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		kf.recordFailure(key)
 	}
-	if !kf.isBlocked(key) {
+	if !kf.isBlockedBool(key) {
 		t.Error("should be blocked after 3 failures")
 	}
 
 	time.Sleep(150 * time.Millisecond)
 
 	// After cooldown, the entry should be cleaned up on next check.
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after cooldown expires")
 	}
 	// New failures should start fresh.
 	kf.recordFailure(key)
-	if kf.isBlocked(key) {
+	if kf.isBlockedBool(key) {
 		t.Error("should not be blocked after single fresh failure")
 	}
 }

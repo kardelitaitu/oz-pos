@@ -28,6 +28,8 @@ pub mod cart;
 pub mod cash_payout;
 /// Product category tree.
 pub mod category;
+/// Cryptographic helpers — encrypt sensitive data at rest.
+pub mod crypto;
 /// Customer profiles and contact data.
 pub mod customer;
 /// SQLite data access layer — one module per domain aggregate.

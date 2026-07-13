@@ -22,6 +22,28 @@ pub mod lan_server;
 /// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;
 
+/// Embed `Microsoft.Windows.Common-Controls` v6 dependency into the
+/// test binary's manifest via an MSVC `.drectve` linker directive
+/// section.  Required by `WebView2Loader.dll` at startup, which the
+/// test binary otherwise lacks (it bypasses `tauri-bundler`).
+///
+/// `/MANIFESTINPUT` causes `CVT1100: duplicate resource` on `[[bin]]`
+/// test targets; `/MANIFESTDEPENDENCY` in `build.rs` fails with
+/// `LNK1181` because Cargo splits the argument on spaces.  The
+/// `.drectve` section injects the directives directly into the object
+/// file, bypassing Cargo's argument parsing entirely.
+///
+/// See: https://github.com/orgs/tauri-apps/discussions/11179
+///
+/// **NOTE:** If you modify the byte string below, update the array size
+/// (currently 184).  The compiler error message will report the exact
+/// expected size if there's a mismatch.
+#[cfg(all(test, windows, target_env = "msvc"))]
+#[used]
+#[unsafe(link_section = ".drectve")]
+#[rustfmt::skip]
+static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
+
 use crate::error::AppError;
 use crate::state::AppState;
 use tauri::Manager;
@@ -43,6 +65,7 @@ pub fn run() {
     let result: Result<(), AppError> = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             let state = AppState::new(app.handle())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -128,6 +151,7 @@ pub fn run() {
             commands::staff::list_roles,
             commands::staff::create_staff,
             commands::staff::update_staff,
+            commands::staff::bootstrap_owner,
             commands::categories::list_categories,
             commands::categories::create_category,
             commands::categories::update_category,
@@ -180,6 +204,7 @@ pub fn run() {
             commands::stock_transfers::cancel_stock_transfer,
             commands::health::ping,
             commands::health::version,
+            commands::health::get_local_ip,
             commands::pos::start_sale,
             commands::pos::start_sale_scoped,
             commands::pos::add_line,
@@ -424,7 +449,9 @@ pub fn run() {
             commands::workspaces::list_workspace_screens,
             commands::license::activate_license,
             commands::license::get_machine_id,
+            commands::license::renew_license,
             commands::license::get_license_status,
+            commands::license::check_license_status,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);

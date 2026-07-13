@@ -1,0 +1,49 @@
+/* Machine ID chip — extends .connection-status base styles from ConnectionStatus.css */
+
+.machine-id-chip {
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.machine-id-value {
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Copy icon — hidden by default, visible on hover */
+.machine-id-copy-icon {
+  opacity: 0;
+  color: var(--color-fg-secondary);
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.machine-id-chip--ready:hover .machine-id-copy-icon {
+  opacity: 1;
+  color: var(--primary-500);
+}
+
+/* Loading shimmer */
+.machine-id-chip--loading .machine-id-value {
+  animation: machine-id-shimmer 1.4s ease-in-out infinite;
+  color: transparent;
+  background: linear-gradient(
+    90deg,
+    var(--color-border) 25%,
+    var(--color-fg-secondary) 50%,
+    var(--color-border) 75%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+@keyframes machine-id-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

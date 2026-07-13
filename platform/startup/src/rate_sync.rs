@@ -17,6 +17,12 @@ use tracing;
 /// temporary [`Store`] instances inside `spawn_blocking` closures.
 pub type DbConnection = Arc<std::sync::Mutex<rusqlite::Connection>>;
 
+/// Fixed-point scale from `f64` API rate to `i64` millionths for the
+/// `exchange_rates.rate_millionths` column. `1.0` decimal rate = 1_000_000.
+/// `6` decimals is sufficient for every fixture in the test suite
+/// including the `0.00025` (JPY→KWD) extreme.
+const RATE_SCALE: f64 = 1_000_000.0;
+
 /// Snapshot of the daemon's current state.
 #[derive(Debug, Clone, Default)]
 pub struct RateSyncStatus {
@@ -204,9 +210,21 @@ impl RateSyncDaemon {
             let store = Store::new(&conn);
             let mut updated = 0usize;
             for (to_currency, rate) in &rates {
-                if let Err(e) =
-                    store.upsert_exchange_rate(&base_inner, to_currency, *rate, source, &date_inner)
-                {
+                // The Frankfurter API returns `f64` rates. Convert to
+                // `i64` millionths via fixed-point scale + `.round()` to
+                // neutralise the unavoidable fp→integer off-by-one at
+                // the 6th decimal. The cast is wrapped-precision-safe
+                // because legitimate FX rates are bounded (< 1e7
+                // dollars-per-base), well inside `i64`.
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let rate_millionths = (rate * RATE_SCALE).round() as i64;
+                if let Err(e) = store.upsert_exchange_rate(
+                    &base_inner,
+                    to_currency,
+                    rate_millionths,
+                    source,
+                    &date_inner,
+                ) {
                     tracing::warn!(
                         from = %base_inner,
                         to = %to_currency,

@@ -164,7 +164,8 @@ pub async fn create_workspace_instance_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
-    store.enforce_instance_quota(&sub.tier, &req.type_key, &req.store_id)?;
+    let effective = sub.effective_tier();
+    store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance(
         &req.id,
         &req.type_key,
@@ -212,12 +213,13 @@ pub async fn recover_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let restored = store.auto_recover_instances(&session.store_id, &sub.tier)?;
+    let effective = sub.effective_tier();
+    let restored = store.auto_recover_instances(&session.store_id, &effective)?;
     drop(db);
     tracing::info!(
         store_id = %session.store_id,
         restored = %restored,
-        tier = %sub.tier.name(),
+        tier = %effective.name(),
         "workspace instances recovered after tier upgrade"
     );
     Ok(restored as u32)
@@ -252,12 +254,13 @@ pub async fn suspend_surplus_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let suspended = store.suspend_surplus_instances(&session.store_id, &sub.tier)?;
+    let effective = sub.effective_tier();
+    let suspended = store.suspend_surplus_instances(&session.store_id, &effective)?;
     drop(db);
     tracing::info!(
         store_id = %session.store_id,
         suspended = %suspended,
-        tier = %sub.tier.name(),
+        tier = %effective.name(),
         "surplus workspace instances suspended after tier downgrade"
     );
     Ok(suspended as u32)
@@ -373,15 +376,35 @@ pub async fn get_workspace_instance(
 /// Create a new workspace instance (admin).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `create_workspace_instance_scoped`.
+///
+/// ADR #5 retro-fit (H1 audit gap fix): Now enforces subscription tier
+/// quota before creating. Previously this deprecated command bypassed the
+/// quota system entirely, allowing an attacker to create unlimited
+/// instances regardless of tier by calling it directly.
 #[command]
 pub async fn create_workspace_instance(
     state: State<'_, AppState>,
     req: CreateInstanceRequest,
     caller_user_id: String,
 ) -> Result<WorkspaceDto, AppError> {
+    // ── Subscription enforcement (H1 audit gap fix) ────────
+    // Load subscription from the global DB, validate clock,
+    // verify signature, and enforce quota — same as the scoped
+    // variant. This prevents bypassing tier limits by calling
+    // the deprecated command directly.
+    let sub = {
+        let global_db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&global_db)?;
+        TenantSubscription::load(&global_db, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
+    };
+    sub.verify_signature()?;
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &caller_user_id, permissions::STAFF_UPDATE)?;
+    let effective = sub.effective_tier();
+    store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance(
         &req.id,
         &req.type_key,
@@ -633,6 +656,36 @@ pub struct BootResolution {
     pub instance_id: Option<String>,
 }
 
+/// Verify a device-binding HMAC signature using constant-time comparison.
+///
+/// Uses `mac.verify_slice()` which internally uses `subtle::ConstantTimeEq`
+/// to prevent timing side-channel attacks. The previous implementation
+/// used `hex::encode(mac.finalize().into_bytes()) == signature`, which
+/// short-circuits on the first differing byte — leaking the position
+/// of the mismatch to an attacker.
+fn verify_binding_hmac(
+    secret: &str,
+    terminal_id: &str,
+    store_id: &str,
+    instance_id: &str,
+    hex_signature: &str,
+) -> bool {
+    let expected_bytes = match hex::decode(hex_signature) {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+    let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    mac.update(terminal_id.as_bytes());
+    mac.update(b":");
+    mac.update(store_id.as_bytes());
+    mac.update(b":");
+    mac.update(instance_id.as_bytes());
+    mac.verify_slice(&expected_bytes).is_ok()
+}
+
 /// Resolve the active store and instance from device binding.
 ///
 /// This is called once at boot time (before authentication). It does not use
@@ -695,16 +748,13 @@ pub async fn resolve_boot_store(
                 .map_err(|e| AppError::Internal(format!("keyring read failed: {e}")))?;
 
             match secret {
-                Some(secret) => {
-                    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-                        .map_err(|e| AppError::Internal(format!("HMAC init failed: {e}")))?;
-                    mac.update(terminal_id.as_bytes());
-                    mac.update(b":");
-                    mac.update(bound_store_id.as_bytes());
-                    mac.update(b":");
-                    mac.update(bound_instance_id.as_bytes());
-                    hex::encode(mac.finalize().into_bytes()) == signature
-                }
+                Some(secret) => verify_binding_hmac(
+                    &secret,
+                    &terminal_id,
+                    &bound_store_id,
+                    &bound_instance_id,
+                    &signature,
+                ),
                 None => false,
             }
         };

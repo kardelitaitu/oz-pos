@@ -187,7 +187,7 @@ describe("FastPINOverlay", () => {
     it("shows PIN dots and keypad", async () => {
       await advanceToPinStep();
       const dots = document.querySelectorAll(".fastpin-pin-dot");
-      expect(dots.length).toBe(6);
+      expect(dots.length).toBe(4);
       const keys = document.querySelectorAll(".fastpin-pad-key");
       expect(keys.length).toBeGreaterThanOrEqual(10);
     });
@@ -264,13 +264,11 @@ describe("FastPINOverlay", () => {
       fireEvent.click(screen.getByLabelText("2"));
       fireEvent.click(screen.getByLabelText("3"));
       fireEvent.click(screen.getByLabelText("4"));
-      fireEvent.click(screen.getByLabelText("5"));
-      fireEvent.click(screen.getByLabelText("6"));
 
       await waitFor(() => {
         expect(mockStaffLogin).toHaveBeenCalledWith({
           username: "bob",
-          pin: "123456",
+          pin: "1234",
         });
       });
 

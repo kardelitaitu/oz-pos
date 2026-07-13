@@ -23,6 +23,7 @@
     "@fluent/bundle": "^0.18.0",
     "@fluent/react": "^0.15.0",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "react": "^18.3.1",

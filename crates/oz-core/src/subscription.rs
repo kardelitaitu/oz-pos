@@ -12,15 +12,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
 
-/// Maximum clock skew tolerance before detecting tampering (5 minutes).
-const CLOCK_SKEW_TOLERANCE_MINUTES: i64 = 5;
+/// Maximum clock skew tolerance before detecting tampering (30 seconds).
+///
+/// Tightened from the previous 5-minute window (M1 audit finding) to
+/// catch clock-rollback bypass attempts sooner. 30s is the smallest
+/// value that still absorbs typical RTC drift on consumer hardware
+/// without producing false positives on slow or paused devices.
+const CLOCK_SKEW_TOLERANCE_SECONDS: i64 = 30;
 
 /// Offline grace period for paid tiers (14 days). After this period
 /// without a successful cloud sync, the tier reverts to Free quotas.
 const OFFLINE_GRACE_DAYS: i64 = 14;
-
-/// Tolerance window in seconds for timestamp comparison.
-const CLOCK_SKEW_TOLERANCE_SECONDS: i64 = CLOCK_SKEW_TOLERANCE_MINUTES * 60;
 
 // ── Instance Status ─────────────────────────────────────────────────
 
@@ -788,8 +790,7 @@ mod tests {
 
     #[test]
     fn clock_skew_constants_are_reasonable() {
-        assert_eq!(CLOCK_SKEW_TOLERANCE_MINUTES, 5);
-        assert_eq!(CLOCK_SKEW_TOLERANCE_SECONDS, 300);
+        assert_eq!(CLOCK_SKEW_TOLERANCE_SECONDS, 30);
         assert_eq!(OFFLINE_GRACE_DAYS, 14);
     }
 }

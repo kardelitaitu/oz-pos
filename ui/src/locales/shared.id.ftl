@@ -249,3 +249,28 @@ workspace-home-retry = Coba Lagi
 workspace-home-retry-btn = Muat Ulang
 
 
+
+# Auth / License Activation
+auth-activate-title = Aktifkan Lisensi
+auth-activate-subtitle = Masukkan informasi Anda di bawah ini
+auth-email-label = Alamat Email
+auth-email-placeholder = toko@example.com
+auth-phone-label = Nomor Telepon
+auth-phone-placeholder = 08123456789
+auth-license-label = Kunci Lisensi
+auth-license-placeholder = OZ-PRO-XXXX-XXXX-XXXX
+auth-activate-button = Aktifkan Lisensi
+auth-activating = Mengaktifkan...
+auth-activation-success = Lisensi berhasil diaktifkan!
+auth-activation-failed = Gagal mengaktifkan lisensi.
+auth-activation-error = Terjadi kesalahan saat aktivasi.
+auth-validation-required = Kunci lisensi dan Email wajib diisi.
+auth-validation-invalid-email = Format email tidak valid.
+auth-validation-phone-required = Nomor telepon wajib diisi.
+auth-validation-invalid-phone = Format nomor telepon tidak valid. Masukkan minimal 7 digit.
+auth-paste = Tempel
+auth-version = Versi { $version }
+auth-ip-address = Alamat IP : { $ip }
+auth-copyright = OZ-POS © { $year } Hak Cipta Dilindungi.
+auth-clipboard-error = Kesalahan papan klip: { $message }
+auth-error-title = Kesalahan

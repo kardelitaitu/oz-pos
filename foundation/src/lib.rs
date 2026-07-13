@@ -35,6 +35,7 @@ pub use constants::{
     MAX_SKU_LENGTH, PIN_MIN_LENGTH,
 };
 pub use contact::{Email, Phone};
+pub use contracts::{EventHandler, Module, Service};
 pub use enums::{InvalidTransition, PaymentMethod, SaleStatus};
 pub use errors::{ConflictError, NotFoundError, ValidationError};
 pub use money::{Currency, InvalidCurrencyCode, Money};

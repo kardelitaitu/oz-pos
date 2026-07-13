@@ -21,6 +21,7 @@ import PosScreen from '@/features/sales/PosScreen';
 import KdsScreen from '@/features/kds/KdsScreen';
 import { getLicenseStatus } from '@/api/license';
 import LicenseActivationScreen from '@/features/auth/LicenseActivationScreen';
+import CreatePinScreen from '@/features/auth/CreatePinScreen';
 
 // ── Workspace navigation keyboard shortcuts ───────────────────────
 // Escape: return to workspace picker (only when no modal is open).
@@ -193,9 +194,9 @@ export default function AppShell() {
 
   if (!hasActiveLicense) {
     return (
-      <LicenseActivationScreen 
+      <ActivationFlow
         initialError={licenseError}
-        onActivated={() => setHasActiveLicense(true)} 
+        onComplete={() => setHasActiveLicense(true)}
       />
     );
   }
@@ -331,4 +332,30 @@ export default function AppShell() {
       ) : null}
     </AppLayout>
   );
+}
+
+/**
+ * Manages the license-activation → owner-PIN-creation flow locally
+ * so that the parent (AppShell) does not need to synchronise two
+ * state variables across the transition boundary.
+ */
+function ActivationFlow({
+  initialError,
+  onComplete,
+}: {
+  initialError: string | null;
+  onComplete: () => void;
+}) {
+  const [step, setStep] = useState<'activate' | 'bootstrap'>('activate');
+
+  if (step === 'activate') {
+    return (
+      <LicenseActivationScreen
+        initialError={initialError}
+        onActivated={() => setStep('bootstrap')}
+      />
+    );
+  }
+
+  return <CreatePinScreen onCreated={onComplete} />;
 }

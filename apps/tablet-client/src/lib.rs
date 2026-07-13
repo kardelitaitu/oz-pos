@@ -17,6 +17,28 @@ pub mod error;
 /// Global application state (DB, kernel, sync daemon).
 pub mod state;
 
+/// Embed `Microsoft.Windows.Common-Controls` v6 dependency into the
+/// test binary's manifest via an MSVC `.drectve` linker directive
+/// section.  Required by `WebView2Loader.dll` at startup, which the
+/// test binary otherwise lacks (it bypasses `tauri-bundler`).
+///
+/// `/MANIFESTINPUT` causes `CVT1100: duplicate resource` on `[[bin]]`
+/// test targets; `/MANIFESTDEPENDENCY` in `build.rs` fails with
+/// `LNK1181` because Cargo splits the argument on spaces.  The
+/// `.drectve` section injects the directives directly into the object
+/// file, bypassing Cargo's argument parsing entirely.
+///
+/// See: https://github.com/orgs/tauri-apps/discussions/11179
+///
+/// **NOTE:** If you modify the byte string below, update the array size
+/// (currently 184).  The compiler error message will report the exact
+/// expected size if there's a mismatch.
+#[cfg(all(test, windows, target_env = "msvc"))]
+#[used]
+#[unsafe(link_section = ".drectve")]
+#[rustfmt::skip]
+static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
+
 #[cfg(not(test))]
 use crate::error::AppError;
 #[cfg(not(test))]
@@ -39,6 +61,7 @@ pub fn run() {
     #[cfg(not(test))]
     {
         let result: Result<(), AppError> = tauri::Builder::default()
+            .plugin(tauri_plugin_clipboard_manager::init())
             .setup(|app| {
                 let state = AppState::new(app.handle())
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -129,6 +152,7 @@ pub fn run() {
                 commands::gift_cards::unfreeze_gift_card,
                 commands::health::ping,
                 commands::health::version,
+                commands::health::get_local_ip,
                 commands::pos::start_sale,
                 commands::pos::add_line,
                 commands::pos::complete_sale,

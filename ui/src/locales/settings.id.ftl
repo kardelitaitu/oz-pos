@@ -311,6 +311,7 @@ data-mgmt-import-meta-contains = Berisi
 data-mgmt-import-password = Kata sandi dekripsi
 data-mgmt-import-password-placeholder = Masukkan kata sandi ekspor
 data-mgmt-import-cancel = Batal
+data-mgmt-analyse-file = Analisis file
 data-mgmt-import-start = Mulai impor
 data-mgmt-import-analysing = Menganalisis file…
 data-mgmt-import-dry-run-complete = Dry-run selesai — mengimpor…
@@ -576,6 +577,26 @@ settings-license-type = Tipe Lisensi
 settings-copyright-notice = Pemberitahuan Hak Cipta
 settings-commercial-contact = Kontak Komersial
 settings-app-version = OZ-POS Enterprise v{ $version }
+
+# ── License Info Section ──
+settings-section-license = Lisensi
+settings-license-tier = Tingkat
+settings-license-status-label = Status
+settings-license-expires = Kedaluwarsa
+settings-license-grace = Masa Tenggang Hingga
+settings-license-max-stores = Maks Toko
+settings-license-max-pos = Maks Instansi POS
+settings-license-tenant-id = ID Tenant
+settings-license-allowed-types = Tipe Ruang Kerja Diizinkan
+settings-license-allowed-types-all = Semua
+settings-license-not-activated = Tidak ada lisensi yang diaktifkan. Aktifkan lisensi untuk melihat detail di sini.
+settings-license-check-server = Periksa Status Server
+settings-license-server-tier = Tingkat Server
+settings-license-server-active = Server Aktif
+settings-license-server-expires = Server Kedaluwarsa
+settings-license-server-results = Hasil Pemeriksaan Lisensi
+settings-license-type-value = Proprietary
+settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
 
 # ── Toast messages ──
 settings-toast-failed-tax-rates = Gagal memuat tarif pajak

@@ -96,7 +96,7 @@ impl Store<'_> {
         &self,
     ) -> Result<Vec<crate::exchange_rate::ExchangeRateRow>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate, source, effective_date, created_at
+            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
              FROM exchange_rates ORDER BY from_currency, to_currency",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -104,7 +104,7 @@ impl Store<'_> {
                 id: row.get(0)?,
                 from_currency: row.get(1)?,
                 to_currency: row.get(2)?,
-                rate: row.get(3)?,
+                rate_millionths: row.get(3)?,
                 source: row.get(4)?,
                 effective_date: row.get(5)?,
                 created_at: row.get(6)?,
@@ -118,28 +118,41 @@ impl Store<'_> {
     }
 
     /// Create a new exchange rate entry.
+    ///
+    /// `rate_millionths` is the fixed-point exchange rate at a 6-decimal
+    /// scale (e.g. `0.92` → `920_000`). Strictly positive — zero and
+    /// negative rates are rejected at this layer (defence in depth; the
+    /// Tauri command layer also rejects them).
     pub fn create_exchange_rate(
         &self,
         from_currency: &str,
         to_currency: &str,
-        rate: f64,
+        rate_millionths: i64,
         source: &str,
         effective_date: &str,
     ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
+        if rate_millionths <= 0 {
+            return Err(CoreError::Validation {
+                field: "rate_millionths",
+                message:
+                    "rate must be strictly positive; zero and negative exchange rates are not valid"
+                        .into(),
+            });
+        }
         let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
-            "INSERT INTO exchange_rates (id, from_currency, to_currency, rate, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![id, from_currency, to_currency, rate, source, effective_date],
+            "INSERT INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
         )?;
         let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
+            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
         )?;
         let row = stmt.query_row(rusqlite::params![id], |row| {
             Ok(crate::exchange_rate::ExchangeRateRow {
                 id: row.get(0)?,
                 from_currency: row.get(1)?,
                 to_currency: row.get(2)?,
-                rate: row.get(3)?,
+                rate_millionths: row.get(3)?,
                 source: row.get(4)?,
                 effective_date: row.get(5)?,
                 created_at: row.get(6)?,
@@ -152,29 +165,39 @@ impl Store<'_> {
     ///
     /// Uses `INSERT OR REPLACE` so that a rate with the same
     /// `(from_currency, to_currency, effective_date)` is replaced
-    /// with a new row and a fresh id.
+    /// with a new row and a fresh id. `rate_millionths` is at the 6-decimal
+    /// scale (see [`crate::exchange_rate::ExchangeRateRow`]). Zero and
+    /// negative rates are rejected (matching [`Self::create_exchange_rate`]).
     pub fn upsert_exchange_rate(
         &self,
         from_currency: &str,
         to_currency: &str,
-        rate: f64,
+        rate_millionths: i64,
         source: &str,
         effective_date: &str,
     ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
+        if rate_millionths <= 0 {
+            return Err(CoreError::Validation {
+                field: "rate_millionths",
+                message:
+                    "rate must be strictly positive; zero and negative exchange rates are not valid"
+                        .into(),
+            });
+        }
         let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
-            "INSERT OR REPLACE INTO exchange_rates (id, from_currency, to_currency, rate, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![id, from_currency, to_currency, rate, source, effective_date],
+            "INSERT OR REPLACE INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
         )?;
         let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
+            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
         )?;
         let row = stmt.query_row(rusqlite::params![id], |row| {
             Ok(crate::exchange_rate::ExchangeRateRow {
                 id: row.get(0)?,
                 from_currency: row.get(1)?,
                 to_currency: row.get(2)?,
-                rate: row.get(3)?,
+                rate_millionths: row.get(3)?,
                 source: row.get(4)?,
                 effective_date: row.get(5)?,
                 created_at: row.get(6)?,
@@ -360,9 +383,9 @@ mod tests {
         seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
         seed_currency(&conn, "JPY", "392", "Japanese Yen", 0, "\u{a5}");
         let s = store(&conn);
-        s.create_exchange_rate("USD", "EUR", 0.92, "ecb", "2026-06-28")
+        s.create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
             .unwrap();
-        s.create_exchange_rate("USD", "JPY", 149.50, "ecb", "2026-06-28")
+        s.create_exchange_rate("USD", "JPY", 149_500_000, "ecb", "2026-06-28")
             .unwrap();
 
         let rates = s.list_exchange_rates().unwrap();
@@ -378,11 +401,34 @@ mod tests {
         seed_currency(&conn, "GBP", "826", "Pound", 2, "\u{a3}");
         let s = store(&conn);
         let row = s
-            .create_exchange_rate("EUR", "GBP", 0.86, "ecb", "2026-06-28")
+            .create_exchange_rate("EUR", "GBP", 860_000, "ecb", "2026-06-28")
             .unwrap();
         assert_eq!(row.from_currency, "EUR");
         assert_eq!(row.to_currency, "GBP");
-        assert!((row.rate - 0.86).abs() < 0.001);
+        assert_eq!(row.rate_millionths, 860_000);
+    }
+
+    #[test]
+    fn create_exchange_rate_rejects_zero_rate() {
+        // C-1 closure: zero is a domain error in the Store layer (the
+        // Tauri command layer also rejects `<= 0`, this is the
+        // defence-in-depth check).
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let s = store(&conn);
+        let result = s.create_exchange_rate("USD", "EUR", 0, "manual", "2026-01-01");
+        assert!(result.is_err(), "zero rate must be rejected");
+    }
+
+    #[test]
+    fn create_exchange_rate_rejects_negative_rate() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let s = store(&conn);
+        let result = s.create_exchange_rate("USD", "EUR", -500_000, "manual", "2026-01-01");
+        assert!(result.is_err(), "negative rate must be rejected");
     }
 
     #[test]
@@ -392,7 +438,7 @@ mod tests {
         seed_currency(&conn, "CAD", "124", "Canadian Dollar", 2, "CA$");
         let s = store(&conn);
         let row = s
-            .create_exchange_rate("USD", "CAD", 1.36, "manual", "2026-06-28")
+            .create_exchange_rate("USD", "CAD", 1_360_000, "manual", "2026-06-28")
             .unwrap();
         s.delete_exchange_rate(&row.id).unwrap();
         let rates = s.list_exchange_rates().unwrap();
@@ -406,14 +452,14 @@ mod tests {
         seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
         let s = store(&conn);
         let first = s
-            .create_exchange_rate("USD", "EUR", 0.90, "manual", "2026-07-01")
+            .create_exchange_rate("USD", "EUR", 900_000, "manual", "2026-07-01")
             .unwrap();
         let second = s
-            .upsert_exchange_rate("USD", "EUR", 0.92, "auto-sync", "2026-07-01")
+            .upsert_exchange_rate("USD", "EUR", 920_000, "auto-sync", "2026-07-01")
             .unwrap();
         // Same (from, to, date) but different id and updated rate
         assert_ne!(first.id, second.id);
-        assert!((second.rate - 0.92).abs() < 0.001);
+        assert_eq!(second.rate_millionths, 920_000);
         assert_eq!(second.source, "auto-sync");
         // Only one row in the table
         let rates = s.list_exchange_rates().unwrap();

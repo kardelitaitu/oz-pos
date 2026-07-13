@@ -21,3 +21,7 @@ export const ping = (): Promise<string> => invoke<string>('ping');
 /** Get the application version and build details. */
 export const getVersion = (): Promise<VersionInfo> =>
   invoke<VersionInfo>('version');
+
+/** Get the local IP address of the device. */
+export const getLocalIp = (): Promise<string> =>
+  invoke<string>('get_local_ip');

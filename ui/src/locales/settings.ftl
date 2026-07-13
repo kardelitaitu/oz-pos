@@ -249,6 +249,26 @@ settings-copyright-notice = Copyright Notice
 settings-commercial-contact = Commercial Contact
 settings-app-version = OZ-POS Enterprise v{ $version }
 
+# ── License Info Section ──
+settings-section-license = License
+settings-license-tier = Tier
+settings-license-status-label = Status
+settings-license-expires = Expires
+settings-license-grace = Grace Period Until
+settings-license-max-stores = Max Stores
+settings-license-max-pos = Max POS Instances
+settings-license-tenant-id = Tenant ID
+settings-license-allowed-types = Allowed Workspace Types
+settings-license-allowed-types-all = All
+settings-license-not-activated = No license activated. Activate a license to see details here.
+settings-license-check-server = Check Server Status
+settings-license-server-tier = Server Tier
+settings-license-server-active = Server Active
+settings-license-server-expires = Server Expires
+settings-license-server-results = License Check Results
+settings-license-type-value = Proprietary
+settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
+
 # Appearance / Brand settings
 settings-appearance = Appearance
 appearance-primary-colour = Primary Colour
@@ -347,6 +367,7 @@ data-mgmt-import-meta-contains = Contains
 data-mgmt-import-password = Decryption password
 data-mgmt-import-password-placeholder = Enter the export password
 data-mgmt-import-cancel = Cancel
+data-mgmt-analyse-file = Analyse file
 data-mgmt-import-start = Start import
 data-mgmt-import-analysing = Analysing file…
 data-mgmt-import-dry-run-complete = Dry-run complete — importing…

@@ -3,19 +3,19 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   font-size: 0.75rem;
-  color: #94a3b8;
-  opacity: 0.5;
+  color: var(--color-fg);
+  opacity: 1;
   transition: all 0.2s;
   user-select: none;
 }
 
 .connection-status:hover {
-  background: rgba(255, 255, 255, 0.1);
-  opacity: 1;
+  background: var(--color-bg-hover, var(--color-bg-surface));
+  border-color: var(--color-border-hover);
 }
 
 .status-indicator {
@@ -53,7 +53,7 @@
 
 .connection-latency {
   font-family: var(--font-mono);
-  color: #cbd5e1;
+  color: var(--color-fg-secondary);
   margin-left: 0.25rem;
 }
 

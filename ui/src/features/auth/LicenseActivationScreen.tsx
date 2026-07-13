@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { activateLicense, getMachineId } from '@/api/license';
+import { getVersion, getLocalIp } from '@/api/system';
+import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import ConnectionStatus from '@/components/ConnectionStatus';
+import MachineIdStatus from '@/components/MachineIdStatus';
+import { Localized, useLocalization } from '@fluent/react';
+import ThemeToggle from '@/frontend/shell/ThemeToggle';
 import './LicenseActivationScreen.css';
 
 /** Props for the LicenseActivationScreen component. */
@@ -14,39 +19,79 @@ export interface LicenseActivationScreenProps {
 
 /** License activation screen — form for entering a license key and email to activate the POS software. */
 export default function LicenseActivationScreen({ initialError, onActivated }: LicenseActivationScreenProps) {
+  const { l10n } = useLocalization();
   const [key, setKey] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
+  const [appVersion, setAppVersion] = useState<string>('0.0.4');
+  const [ipAddress, setIpAddress] = useState<string>('Detecting...');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    let mounted = true;
+    getVersion().then(v => {
+      if (mounted) setAppVersion(v.version);
+    }).catch(() => {});
+    
+    getLocalIp().then(ip => {
+      if (mounted) setIpAddress(ip);
+    }).catch(() => {
+      if (mounted) setIpAddress('Unknown');
+    });
+
+    return () => { mounted = false; };
+  }, []);
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     if (!key.trim() || !email.trim()) {
-      setErrorMsg('License key and Email are required.');
+      setErrorMsg(l10n.getString('auth-validation-required'));
+      return;
+    }
+
+    // Basic regex validation for email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setErrorMsg(l10n.getString('auth-validation-invalid-email'));
+      return;
+    }
+
+    // Phone is required for tenant identity matching during re-activation.
+    // Accept international format (+country) or plain digits (min 7).
+    const phoneTrimmed = phone.trim();
+    if (!phoneTrimmed) {
+      setErrorMsg(l10n.getString('auth-validation-phone-required'));
+      return;
+    }
+    const phoneDigits = phoneTrimmed.replace(/[^+\d]/g, '');
+    if (phoneDigits.length < 7) {
+      setErrorMsg(l10n.getString('auth-validation-invalid-phone'));
       return;
     }
 
     setLoading(true);
     try {
-      // Get the persistent, cryptographically-generated machine ID from Rust.
       const machineId = await getMachineId();
 
       const success = await activateLicense(
         key.trim(),
         email.trim(),
-        machineId
+        machineId,
+        phone.trim()
       );
 
       if (success) {
-        addToast({ type: 'success', message: 'License activated successfully!' });
+        addToast({ type: 'success', message: l10n.getString('auth-activation-success') });
         onActivated();
       } else {
-        setErrorMsg('Failed to activate license.');
+        setErrorMsg(l10n.getString('auth-activation-failed'));
       }
     } catch (err: unknown) {
-      let message = 'An error occurred during activation.';
+      let message = l10n.getString('auth-activation-error');
       if (err instanceof Error) {
         message = err.message;
       } else if (typeof err === 'string') {
@@ -64,65 +109,181 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent, field: 'email' | 'phone' | 'licenseKey') => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, field });
+  };
+
+  const handleGlobalContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu(null);
+  };
+
+  const handlePaste = async () => {
+    if (!contextMenu) return;
+    try {
+      const text = await readText();
+      if (text) {
+        if (contextMenu.field === 'email') setEmail(text);
+        if (contextMenu.field === 'phone') setPhone(text);
+        if (contextMenu.field === 'licenseKey') setKey(text.toUpperCase());
+      }
+    } catch (err: unknown) {
+      console.error('Failed to read clipboard', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      addToast({ 
+        message: `${l10n.getString('auth-error-title')}: ${l10n.getString('auth-clipboard-error', { message: errMsg })}`, 
+        type: 'error' 
+      });
+    }
+    setContextMenu(null);
+  };
+
   return (
-    <div className="license-activation-container">
-      <div className="license-activation-card">
-        <div className="license-activation-header">
-          <h1>Activate OZ-POS</h1>
-          <p>Enter your license key to unlock your terminal</p>
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
+    <div 
+      className="license-activation-container" 
+      onContextMenu={handleGlobalContextMenu}
+      onClick={() => setContextMenu(null)}
+    >
+      <div style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 1000 }}>
+        <ThemeToggle />
+      </div>
+      <div className="license-activation-layout">
+        <div className="license-activation-hero">
+          <img src="/256x256.png" alt="OZ-POS Logo" className="license-activation-logo" />
         </div>
-
-        {errorMsg && (
-          <div className="license-error-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
-            {errorMsg}
-          </div>
-        )}
-
-        <form onSubmit={handleActivate}>
-          <div className="license-form-group">
-            <label htmlFor="email">Email Address</label>
-            <input
-              id="email"
-              type="email"
-              className="license-input"
-              placeholder="store@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-            />
+        
+        <div className="license-activation-card">
+          <div className="license-activation-header">
+            <Localized id="auth-activate-title">
+              <h1>Activate License</h1>
+            </Localized>
+            <Localized id="auth-activate-subtitle">
+              <p>Enter your information below</p>
+            </Localized>
           </div>
 
-          <div className="license-form-group">
-            <label htmlFor="licenseKey">License Key</label>
-            <input
-              id="licenseKey"
-              type="text"
-              className="license-input"
-              placeholder="OZ-PRO-XXXX-XXXX-XXXX"
-              value={key}
-              onChange={(e) => setKey(e.target.value.toUpperCase())}
-              disabled={loading}
-            />
-          </div>
+          {errorMsg && (
+            <div className="license-error-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
+              {errorMsg}
+            </div>
+          )}
 
-          <button 
-            type="submit" 
-            className="license-submit-btn" 
-            disabled={loading || !key || !email}
-          >
-            {loading ? (
-              <>
-                <svg className="spinner" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
-                  <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-                  <path d="M12 2a10 10 0 0 1 10 10" />
-                </svg>
-                Activating...
-              </>
-            ) : (
-              'Activate License'
-            )}
-          </button>
-        </form>
+          <form onSubmit={handleActivate} autoComplete="off">
+            <div className="license-form-group">
+              <Localized id="auth-email-label">
+                <label htmlFor="email">Email Address</label>
+              </Localized>
+              <div className="license-input-wrapper">
+                <input
+                  id="email"
+                  name="email-off"
+                  type="email"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-1p-ignore="true"
+                  className="license-input"
+                  placeholder={l10n.getString('auth-email-placeholder')}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onContextMenu={(e) => handleContextMenu(e, 'email')}
+                  disabled={loading}
+                />
+                {email && !loading && (
+                  <button type="button" className="license-input-clear" onClick={() => setEmail('')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="license-form-group">
+              <Localized id="auth-phone-label">
+                <label htmlFor="phone">Phone Number</label>
+              </Localized>
+              <div className="license-input-wrapper">
+                <input
+                  id="phone"
+                  name="phone-off"
+                  type="tel"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-1p-ignore="true"
+                  className="license-input"
+                  placeholder={l10n.getString('auth-phone-placeholder')}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onContextMenu={(e) => handleContextMenu(e, 'phone')}
+                  disabled={loading}
+                />
+                {phone && !loading && (
+                  <button type="button" className="license-input-clear" onClick={() => setPhone('')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="license-form-group">
+              <Localized id="auth-license-label">
+                <label htmlFor="licenseKey">License Key</label>
+              </Localized>
+              <div className="license-input-wrapper">
+                <input
+                  id="licenseKey"
+                  name="key-off"
+                  type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-1p-ignore="true"
+                  className="license-input"
+                  placeholder={l10n.getString('auth-license-placeholder')}
+                  value={key}
+                  onChange={(e) => setKey(e.target.value.toUpperCase())}
+                  onContextMenu={(e) => handleContextMenu(e, 'licenseKey')}
+                  disabled={loading}
+                />
+                {key && !loading && (
+                  <button type="button" className="license-input-clear" onClick={() => setKey('')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              className="license-submit-btn" 
+              disabled={loading || !key || !email || !phone.trim()}
+            >
+              {loading ? (
+                <>
+                  <svg className="spinner" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
+                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                    <path d="M12 2a10 10 0 0 1 10 10" />
+                  </svg>
+                  <Localized id="auth-activating">Activating...</Localized>
+                </>
+              ) : (
+                <Localized id="auth-activate-button">Activate License</Localized>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
 
       <div className="license-server-status-container">
@@ -134,7 +295,45 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
           label="Sync" 
           url="" 
         />
+        <MachineIdStatus />
       </div>
+
+      <div className="activation-device-info">
+        <Localized id="auth-version" vars={{ version: appVersion }}>
+          <span>Version {appVersion}</span>
+        </Localized>
+        <Localized id="auth-ip-address" vars={{ ip: ipAddress }}>
+          <span>IP Address : {ipAddress}</span>
+        </Localized>
+        <Localized id="auth-copyright" vars={{ year: new Date().getFullYear().toString() }}>
+          <span>OZ-POS © {new Date().getFullYear()} All rights reserved.</span>
+        </Localized>
+      </div>
+
+      {contextMenu && (
+        <div 
+          className="custom-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePaste();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handlePaste();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+          </svg>
+          <Localized id="auth-paste">Paste</Localized>
+        </div>
+      )}
     </div>
   );
 }

@@ -109,7 +109,7 @@ pub struct Sale {
     pub discount_label: Option<String>,
 
     /// Subtotal before discount (sum of line totals).
-    /// Defaults to [`total`] when no subtotal has been computed
+    /// Defaults to [`Self::total`] when no subtotal has been computed
     /// (backward-compat with sales created before Phase 3).
     #[serde(default)]
     pub subtotal: Money,
@@ -145,7 +145,7 @@ impl Sale {
 
     /// Create a new sale from a [`Cart`], with an optional user_id.
     ///
-    /// Like [`from_cart`] but also attaches the user_id of the cashier
+    /// Like [`Self::from_cart`] but also attaches the user_id of the cashier
     /// who processed the sale.
     pub fn from_cart_with_user(cart: &Cart, user_id: Option<String>) -> Option<Self> {
         let id = uuid::Uuid::now_v7().to_string();

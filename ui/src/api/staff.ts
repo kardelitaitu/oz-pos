@@ -1,4 +1,4 @@
-// ── Staff: Login, CRUD ─────────────────────────────────────────────
+// ── Staff: Login, Bootstrap, CRUD ──────────────────────────────────
 
 import { invoke } from '@tauri-apps/api/core';
 
@@ -26,6 +26,30 @@ export interface StaffLoginResult {
 /** Authenticate a staff member with username and PIN. */
 export const staffLogin = (args: StaffLoginArgs): Promise<StaffLoginResult> =>
   invoke<StaffLoginResult>('staff_login', { args });
+
+// ── Bootstrap (first-owner, no auth required) ─────────────────────
+
+/** Arguments for bootstrapping the first owner account. */
+export interface BootstrapOwnerArgs {
+  username: string;
+  pin: string;
+  display_name: string;
+}
+
+/** Result of bootstrapping the first owner account. */
+export interface BootstrapOwnerResult {
+  session: LoginSessionDto;
+}
+
+/**
+ * Create the first owner user in a fresh installation.
+ *
+ * Only succeeds when no staff accounts exist yet. Seeds default roles
+ * automatically and returns a login session so the front-end can
+ * auto-login immediately.
+ */
+export const bootstrapOwner = (args: BootstrapOwnerArgs): Promise<BootstrapOwnerResult> =>
+  invoke<BootstrapOwnerResult>('bootstrap_owner', { args });
 
 // ── Staff Management ──────────────────────────────────────────────
 

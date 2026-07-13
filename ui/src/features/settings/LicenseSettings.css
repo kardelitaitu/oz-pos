@@ -1,0 +1,89 @@
+/* ── License Settings Section ─────────────────────────────── */
+
+.settings-license-section .settings-license-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-license-section .settings-license-row:last-of-type:not(.settings-license-row--actions) {
+  border-bottom: none;
+}
+
+.settings-license-section .settings-license-row--actions {
+  border-bottom: none;
+  padding-top: 16px;
+  justify-content: flex-start;
+}
+
+.settings-license-label {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  font-weight: 500;
+}
+
+.settings-license-value {
+  font-size: var(--text-sm);
+  color: var(--color-fg-primary);
+  font-weight: 500;
+}
+
+.settings-license-value--mono {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+}
+
+.settings-license-value--medium {
+  font-weight: 500;
+}
+
+.settings-license-value--active {
+  color: var(--color-accent, #10b981);
+}
+
+.settings-license-value--warning {
+  color: #f59e0b;
+}
+
+/* Tier badges */
+.settings-license-value--tier {
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-license-value--tier-free {
+  background: rgba(107, 114, 128, 0.12);
+  color: var(--color-fg-secondary);
+}
+
+.settings-license-value--tier-pro {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.settings-license-value--tier-premium {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+.settings-license-value--tier-enterprise {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+/* Server status sub-section */
+.settings-license-server-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.settings-license-server-section .settings-license-row {
+  padding: 8px 0;
+}

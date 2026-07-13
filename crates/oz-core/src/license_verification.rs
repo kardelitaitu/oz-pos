@@ -38,6 +38,23 @@ pub fn license_server_url() -> String {
     std::env::var("OZ_LICENSE_SERVER_URL").unwrap_or_else(|_| LICENSE_SERVER_URL.to_string())
 }
 
+/// Extract a human-readable error message from a JSON error body
+/// returned by the license server.
+///
+/// The server returns errors as `{"error": "message"}`. This helper
+/// extracts the `error` field so the user sees the clean message
+/// (e.g. "Wrong email or phone number") instead of the raw JSON blob.
+///
+/// Falls back to the raw body string if parsing fails.
+fn extract_server_error(body: &str) -> String {
+    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(body)
+        && let Some(msg) = obj.get("error").and_then(|v| v.as_str())
+    {
+        return msg.to_string();
+    }
+    body.to_string()
+}
+
 // ── Request/Response types ──────────────────────────────────────────
 
 /// Request body for `POST /api/v1/license/activate`.
@@ -49,6 +66,16 @@ pub struct ActivateLicenseRequest {
     pub machine_id: String,
     /// The contact email (used as primary tenant identifier).
     pub email: String,
+    /// The contact phone number for the licensee.
+    pub phone: String,
+    /// The api_key of an existing tenant, required when re-activating
+    /// an installation whose tenant was previously activated (H1 audit
+    /// fix). New tenants omit this on the first activation; the server
+    /// issues a new api_key in the response which must be persisted
+    /// locally and re-sent on every subsequent activation call.
+    /// `None` for first activation; `Some(api_key)` for re-activation.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub api_key: Option<String>,
 }
 
 /// Response from `POST /api/v1/license/activate`.
@@ -86,7 +113,7 @@ pub struct RenewLicenseResponse {
     pub signature: String,
 }
 
-/// Response from `GET /api/v1/license/status/:tenant_id`.
+/// Response from `POST /api/v1/license/status`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LicenseStatusResponse {
     /// The tenant ID.
@@ -219,23 +246,32 @@ pub async fn activate_license(
         .timeout(std::time::Duration::from_secs(30))
         .send()
         .await
-        .map_err(|e| CoreError::Internal(format!("license server unreachable: {e}")))?;
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("activation: {msg}");
+            CoreError::Internal(msg)
+        })?;
 
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        return Err(CoreError::Internal(format!(
-            "activation failed ({status}): {body}"
-        )));
+        let msg = extract_server_error(&body);
+        let err = format!("activation failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
     }
 
-    let result: ActivateLicenseResponse = resp
-        .json()
-        .await
-        .map_err(|e| CoreError::Internal(format!("failed to parse activation response: {e}")))?;
+    let result: ActivateLicenseResponse = resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse activation response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })?;
 
     // Verify the returned signature before trusting it.
-    verify_license_signature(&result.signed_payload, &result.signature)?;
+    if let Err(e) = verify_license_signature(&result.signed_payload, &result.signature) {
+        tracing::warn!("activation signature verification failed: {e}");
+        return Err(e);
+    }
 
     Ok(result)
 }
@@ -253,59 +289,77 @@ pub async fn renew_license(req: &RenewLicenseRequest) -> Result<RenewLicenseResp
         .timeout(std::time::Duration::from_secs(30))
         .send()
         .await
-        .map_err(|e| CoreError::Internal(format!("license server unreachable: {e}")))?;
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("renewal: {msg}");
+            CoreError::Internal(msg)
+        })?;
 
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        return Err(CoreError::Internal(format!(
-            "renewal failed ({status}): {body}"
-        )));
+        let msg = extract_server_error(&body);
+        let err = format!("renewal failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
     }
 
-    let result: RenewLicenseResponse = resp
-        .json()
-        .await
-        .map_err(|e| CoreError::Internal(format!("failed to parse renewal response: {e}")))?;
+    let result: RenewLicenseResponse = resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse renewal response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })?;
 
-    verify_license_signature(&result.signed_payload, &result.signature)?;
+    if let Err(e) = verify_license_signature(&result.signed_payload, &result.signature) {
+        tracing::warn!("renewal signature verification failed: {e}");
+        return Err(e);
+    }
 
     Ok(result)
 }
 
 /// Check the current license status from the license server.
 ///
-/// GETs `/api/v1/license/status/:tenant_id?api_key=...`.
-pub async fn check_license_status(
-    tenant_id: &str,
-    api_key: &str,
-) -> Result<LicenseStatusResponse, CoreError> {
-    let url = format!(
-        "{}/api/v1/license/status/{}?api_key={}",
-        license_server_url(),
-        tenant_id,
-        api_key
-    );
+/// POSTs to `/api/v1/license/status` with the api_key carried in an
+/// `Authorization: Bearer <api_key>` header. The server authenticates the
+/// caller by this header alone (no `tenant_id` path parameter). Moving
+/// the credential out of the URL into a header prevents it from being
+/// captured in webserver access logs, CDN logs, browser history, or
+/// `Referer` request headers.
+///
+/// # Arguments
+/// * `api_key` - The API key returned by the activation response, used
+///   to authenticate this status check.
+pub async fn check_license_status(api_key: &str) -> Result<LicenseStatusResponse, CoreError> {
+    let url = format!("{}/api/v1/license/status", license_server_url());
     let client = reqwest::Client::new();
 
     let resp = client
-        .get(&url)
+        .post(&url)
+        .bearer_auth(api_key)
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
-        .map_err(|e| CoreError::Internal(format!("license server unreachable: {e}")))?;
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("status check: {msg}");
+            CoreError::Internal(msg)
+        })?;
 
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        return Err(CoreError::Internal(format!(
-            "status check failed ({status}): {body}"
-        )));
+        let msg = extract_server_error(&body);
+        let err = format!("status check failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
     }
 
-    resp.json()
-        .await
-        .map_err(|e| CoreError::Internal(format!("failed to parse status response: {e}")))
+    resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse status response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })
 }
 
 /// Store a signed subscription payload and API key in the local database.
@@ -513,4 +567,41 @@ mod tests {
 
     // We need to import TenantSubscription for the test above.
     use crate::subscription::TenantSubscription;
+
+    // ── extract_server_error tests ────────────────────────────────
+
+    #[test]
+    fn extract_error_from_json_body() {
+        let body = r#"{"error":"Wrong email or phone number"}"#;
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "Wrong email or phone number");
+    }
+
+    #[test]
+    fn extract_error_escaped_json() {
+        let body = r#"{"error":"invalid or already used license key"}"#;
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "invalid or already used license key");
+    }
+
+    #[test]
+    fn extract_error_falls_back_to_raw_body() {
+        // Non-JSON body should be returned as-is.
+        let body = "Internal Server Error";
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "Internal Server Error");
+    }
+
+    #[test]
+    fn extract_error_empty_json() {
+        let body = "{}";
+        let msg = super::extract_server_error(body);
+        assert_eq!(msg, "{}");
+    }
+
+    #[test]
+    fn extract_error_empty_string() {
+        let msg = super::extract_server_error("");
+        assert_eq!(msg, "");
+    }
 }

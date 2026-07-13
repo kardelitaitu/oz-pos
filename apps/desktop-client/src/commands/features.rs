@@ -1,3 +1,9 @@
+/*
+last audited 12-07-26 by RSA-Agent
+crate: oz-pos-app | status: UNSAFE | lint: ISSUES
+findings: lines 316, 330 use unsafe env::set_var from async command (UB) | next: typed setter in AppState + tokio::sync::watch; callers migrate | perf: not in request hot path; concurrency is the concern
+*/
+
 //! Feature flag management Tauri commands.
 //!
 //! Exposes `list_all_features` (returns all 32 features with enabled

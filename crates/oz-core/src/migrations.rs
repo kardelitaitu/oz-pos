@@ -275,6 +275,14 @@ pub const ALL: &[Migration] = &[
         id: "069_data_scoping_columns.sql",
         sql: include_str!("../migrations/069_data_scoping_columns.sql"),
     },
+    Migration {
+        id: "070_reset_machine_id.sql",
+        sql: include_str!("../migrations/070_reset_machine_id.sql"),
+    },
+    Migration {
+        id: "071_exchange_rate_minor_units.sql",
+        sql: include_str!("../migrations/071_exchange_rate_minor_units.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
