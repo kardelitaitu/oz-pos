@@ -427,7 +427,7 @@ export default function SettingsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = async () => {
     setSaving(true);
     setSaved(false);
     try {
@@ -459,7 +459,7 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [receipt, store, defaultCurrency, userId, session?.user_id, sync.enabled, syncServerUrl, syncApiKey, displayCardSize, displayFontSize, displayFontSmoothing, brandColour, brandStoreName, addToast, l10n, refreshBrandSettings]);
+  };
 
   // ── Loading / Error states ───────────────────────────────────
 
