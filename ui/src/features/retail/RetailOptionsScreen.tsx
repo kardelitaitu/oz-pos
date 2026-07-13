@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
@@ -50,6 +50,22 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'sync', label: 'Sync' },
 ];
 
+// ── SVG icon constants ───────────────────────────────────────
+
+const ICON_PROPS = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+function CreditCardIcon() {
+  return <svg {...ICON_PROPS}><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>;
+}
+
+function SquareIcon() {
+  return <svg {...ICON_PROPS}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>;
+}
+
+function QrCodeIcon() {
+  return <svg {...ICON_PROPS}><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="3" height="3" rx="0.5"/><rect x="18" y="14" width="3" height="3" rx="0.5"/><rect x="14" y="18" width="3" height="3" rx="0.5"/><rect x="18" y="18" width="3" height="3" rx="0.5"/></svg>;
+}
+
 // ── Paper dimensions (mm) ──────────────────────────────────────
 
 const PAPER_DIMS: Record<string, { w: number; h: number }> = {
@@ -98,7 +114,6 @@ function ReceiptContent({
     { name: 'Nasi Goreng Spesial', qty: 1, price: 15000 },
   ];
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
-  // Compute tax from configured rates instead of hardcoded 11%.
   const tax = taxRates.length > 0
     ? items.reduce((totalTax, item) => {
         const lineTotal = item.price * item.qty;
@@ -308,10 +323,8 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       })
       .catch(() => {
         if (!mounted) return;
-        // Treat failure as no gateways so the UI shows the fallback message.
         setGateways([]);
       });
-    // Load existing keys from secure DB-backed settings
     (async () => {
       try {
         const sk: string | null = await invoke('get_setting', { key: 'stripe.api_key' });
@@ -321,7 +334,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         if (sk) setStripeKey(sk);
         if (sq) setSquareKey(sq);
         if (mt) setMidtransKey(mt);
-      } catch { /* ignore — settings DB may not be available yet */ }
+      } catch { /* ignore */ }
     })();
     return () => { mounted = false; };
   }, []);
@@ -378,7 +391,10 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
   // ── Save ──────────────────────────────────────────────────────
 
-  const handleSave = useCallback(async () => {
+  // Not wrapped in useCallback — depends on store/receipt/credit/hardware
+  // which change on every keystroke (12 deps total). Only used as onClick
+  // on a single button, so useCallback adds overhead with no benefit.
+  const handleSave = async () => {
     setSaving(true);
     try {
       await setStoreSettings(store, userId);
@@ -386,7 +402,6 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       await setCreditSettings(credit, userId);
       await setHardwareSettings(hardware, userId);
 
-      // Save payment gateway keys via secure settings IPC
       try {
         if (stripeKey) await invoke('set_setting', { key: 'stripe.api_key', value: stripeKey, user_id: userId });
         else await invoke('set_setting', { key: 'stripe.api_key', value: '', user_id: userId });
@@ -394,15 +409,11 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         else await invoke('set_setting', { key: 'square.api_key', value: '', user_id: userId });
         if (midtransKey) await invoke('set_setting', { key: 'midtrans.server_key', value: midtransKey, user_id: userId });
         else await invoke('set_setting', { key: 'midtrans.server_key', value: '', user_id: userId });
-      } catch { /* ignore — settings DB may not be available */ }
+      } catch { /* ignore */ }
 
-      // Save cloud sync settings (non-secret config to localStorage,
-      // auth token to the secure DB-backed setting channel).
       await persistSync(userId);
 
-      // Save tender presets to localStorage
       localStorage.setItem('retail-tender-presets', JSON.stringify(tenderPresets));
-      // Save sound preference
       localStorage.setItem('retail-sound-enabled', String(soundEnabled));
 
       addToast({ message: l10n.getString('settings-toast-saved') || 'Settings saved', type: 'success' });
@@ -411,12 +422,12 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
     } finally {
       setSaving(false);
     }
-  }, [store, receipt, credit, hardware, stripeKey, squareKey, midtransKey, tenderPresets, soundEnabled, persistSync, userId, addToast, l10n]);
+  };
 
   if (!storeLoaded || !receiptLoaded || !creditLoaded || !hardwareLoaded) {
     return (
       <div className="retail-pos">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#888', fontSize: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--color-fg-tertiary)', fontSize: 14 }}>
           {l10n.getString('loading')}
         </div>
       </div>
@@ -561,7 +572,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   placeholder={l10n.getString('settings-footer-placeholder')}
                 />
               </div>
-              <h4 style={{ margin: '16px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>{l10n.getString('settings-margins-heading')}</h4>
+              <h4 className="retail-options-subheading">{l10n.getString('settings-margins-heading')}</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
                 <div className="retail-options-field">
                   <label htmlFor="receipt-margin-top">{l10n.getString('settings-margin-top')}</label>
@@ -648,7 +659,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   <option value="9.5x5.5">{l10n.getString('settings-paper-9x5')}</option>
                 </select>
               </div>
-              <div style={{ padding: '12px', background: '#e8e8e8', border: '1px solid #ccc', fontSize: 12, color: '#666' }}>
+              <div className="retail-options-info-box">
                 {l10n.getString('settings-printer-info')}
               </div>
             </div>
@@ -658,7 +669,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
             <div className="retail-options-section">
               <h3 className="retail-options-heading">{l10n.getString('settings-scanner-heading')}</h3>
               {scanners.length === 0 ? (
-                <div style={{ padding: 16, background: '#e8e8e8', border: '1px solid #ccc', fontSize: 13, color: '#666' }}>
+                <div className="retail-options-info-box">
                   {l10n.getString('settings-scanner-none')}
                 </div>
               ) : (
@@ -716,7 +727,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                       value={credit.reminderIntervalHours}
                       onChange={(e) => setCredit({ ...credit, reminderIntervalHours: Math.max(1, Number(e.target.value)) })}
                     />
-                    <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                    <span className="retail-options-hint">
                       {l10n.getString('settings-reminder-interval-hint')}
                     </span>
                   </div>
@@ -728,11 +739,11 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                       value={credit.maxLimitMinor / 100}
                       onChange={(e) => setCredit({ ...credit, maxLimitMinor: Math.max(0, Math.round(Number(e.target.value) * 100)) })}
                     />
-                    <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                    <span className="retail-options-hint">
                       {l10n.getString('settings-max-credit-hint')}
                     </span>
                   </div>
-                  <div style={{ marginTop: 16, padding: 12, background: '#e8f4e8', border: '1px solid #b0d8b0', fontSize: 12, color: '#2a6a2a' }}>
+                  <div className="retail-options-info-box retail-options-info-box--success" style={{ marginTop: 16 }}>
                     {l10n.getString('settings-credit-status-label', { status: credit.enabled ? l10n.getString('settings-credit-status-enabled') : l10n.getString('settings-credit-status-disabled') })}
                     {credit.maxLimitMinor > 0
                       ? ` ${l10n.getString('settings-credit-status-max', { amount: (credit.maxLimitMinor / 100).toLocaleString('id-ID') })}`
@@ -750,36 +761,25 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               {/* ── Gateway status badges ────────── */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                 {gateways.length === 0 ? (
-                  <span style={{ fontSize: 12, color: '#888' }}>{l10n.getString('settings-payments-no-gateways') || 'No payment gateways configured'}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-fg-tertiary)' }}>{l10n.getString('settings-payments-no-gateways') || 'No payment gateways configured'}</span>
                 ) : (
-                  gateways.map((g) => (
-                    <span
-                      key={g.name}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '4px 10px', borderRadius: 4, fontSize: 12,
-                        background: g.configured ? '#e8f4e8' : '#f8e8e8',
-                        color: g.configured ? '#2a6a2a' : '#8a2a2a',
-                        border: `1px solid ${g.configured ? '#b0d8b0' : '#d8b0b0'}`,
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 8, height: 8, borderRadius: '50%',
-                          background: g.configured && g.online ? '#2a6a2a' : g.configured ? '#d8a030' : '#8a2a2a',
-                          display: 'inline-block',
-                        }}
-                      />
-                      {g.name}
-                    </span>
-                  ))
+                  gateways.map((g) => {
+                    const dotClass = g.configured && g.online ? 'retail-options-gateway-dot--online' : g.configured ? 'retail-options-gateway-dot--configured-offline' : 'retail-options-gateway-dot--unconfigured';
+                    const badgeClass = g.configured ? 'retail-options-gateway-badge--configured' : 'retail-options-gateway-badge--unconfigured';
+                    return (
+                      <span key={g.name} className={`retail-options-gateway-badge ${badgeClass}`}>
+                        <span className={`retail-options-gateway-dot ${dotClass}`} />
+                        {g.name}
+                      </span>
+                    );
+                  })
                 )}
               </div>
 
               {/* ── Stripe ──────────────────────── */}
               <details style={{ marginBottom: 12 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }} aria-label="Stripe">
-                  💳 Stripe
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }} aria-label="Stripe">
+                  <CreditCardIcon /> Stripe
                 </summary>
                 <div className="retail-options-field" style={{ marginTop: 8 }}>
                   <label htmlFor="payments-stripe-key">{l10n.getString('settings-stripe-api-key') || 'Stripe API Key'}</label>
@@ -790,7 +790,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                     value={stripeKey}
                     onChange={(e) => setStripeKey(e.target.value)}
                   />
-                  <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                  <span className="retail-options-hint">
                     {l10n.getString('settings-stripe-key-hint') || 'Enter your Stripe secret key to enable card payments'}
                   </span>
                 </div>
@@ -798,8 +798,8 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
               {/* ── Square ─────────────────────── */}
               <details style={{ marginBottom: 12 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }} aria-label="Square">
-                  🟦 Square
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }} aria-label="Square">
+                  <SquareIcon /> Square
                 </summary>
                 <div className="retail-options-field" style={{ marginTop: 8 }}>
                   <label htmlFor="payments-square-key">{l10n.getString('settings-square-api-key') || 'Square API Key'}</label>
@@ -810,7 +810,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                     value={squareKey}
                     onChange={(e) => setSquareKey(e.target.value)}
                   />
-                  <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                  <span className="retail-options-hint">
                     {l10n.getString('settings-square-key-hint') || 'Enter your Square access token to enable card payments'}
                   </span>
                 </div>
@@ -818,8 +818,8 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
               {/* ── QRIS (Midtrans) ────────────── */}
               <details style={{ marginBottom: 12 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0' }} aria-label="QRIS Midtrans">
-                  📱 QRIS (Midtrans)
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }} aria-label="QRIS Midtrans">
+                  <QrCodeIcon /> QRIS (Midtrans)
                 </summary>
                 <div className="retail-options-field" style={{ marginTop: 8 }}>
                   <label htmlFor="payments-midtrans-key">{l10n.getString('settings-midtrans-key') || 'Midtrans Server Key'}</label>
@@ -830,17 +830,17 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                     value={midtransKey}
                     onChange={(e) => setMidtransKey(e.target.value)}
                   />
-                  <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                  <span className="retail-options-hint">
                     {l10n.getString('settings-midtrans-key-hint') || 'Enter your Midtrans server key for QRIS payments'}
                   </span>
                 </div>
               </details>
 
               {/* ── Quick tender presets ───────── */}
-              <h4 style={{ margin: '20px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>
+              <h4 className="retail-options-subheading">
                 {l10n.getString('settings-tender-presets-heading') || 'Quick Cash Tender Buttons'}
               </h4>
-              <p style={{ fontSize: 12, color: '#666', margin: '0 0 8px' }}>
+              <p className="retail-options-tender-hint">
                 {l10n.getString('settings-tender-presets-desc') || 'Customize the quick tender buttons shown on the cash payment screen. Values are in rupiah (e.g., 50000 = Rp 50,000).'}
               </p>
               {tenderPresets.map((val, idx) => (
@@ -861,18 +861,14 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                         setTenderPresets((prev) => prev.map((p, i) => (i === idx ? v : p)));
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#888' }}>
+                    <span style={{ fontSize: 12, color: 'var(--color-fg-tertiary)' }}>
                       {store.currency} {(val).toLocaleString('id-ID')}
                     </span>
                     <button
                       type="button"
                       onClick={() => setTenderPresets((prev) => prev.filter((_, i) => i !== idx))}
                       disabled={tenderPresets.length <= 2}
-                      style={{
-                        padding: '2px 6px', fontSize: 12, background: 'none',
-                        border: '1px solid #ccc', cursor: tenderPresets.length <= 2 ? 'not-allowed' : 'pointer',
-                        opacity: tenderPresets.length <= 2 ? 0.4 : 1,
-                      }}
+                      className="retail-options-tender-remove"
                       aria-label={`Remove preset ${idx + 1}`}
                     >
                       &times;
@@ -884,11 +880,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 type="button"
                 onClick={() => setTenderPresets((prev) => [...prev, 0])}
                 disabled={tenderPresets.length >= 8}
-                style={{
-                  marginTop: 4, padding: '4px 12px', fontSize: 12, cursor: tenderPresets.length >= 8 ? 'not-allowed' : 'pointer',
-                  background: '#1a3a5c', color: '#fff', border: 'none',
-                  opacity: tenderPresets.length >= 8 ? 0.4 : 1,
-                }}
+                className="retail-options-tender-add"
               >
                 + {l10n.getString('settings-tender-preset-add') || 'Add preset'}
               </button>
@@ -900,15 +892,15 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               <h3 className="retail-options-heading">{l10n.getString('settings-system-heading')}</h3>
               <div className="retail-options-field">
                 <label htmlFor="system-app-version">{l10n.getString('settings-app-version-label')}</label>
-                <input id="system-app-version" value="0.0.6" disabled style={{ background: '#e8e8e8', color: '#888' }} />
+                <input id="system-app-version" value="0.0.6" disabled className="retail-options-input-disabled" />
               </div>
               <div className="retail-options-field">
                 <label htmlFor="system-cashier">{l10n.getString('settings-cashier-label')}</label>
-                <input id="system-cashier" value={`${session?.display_name} (${session?.role_name})`} disabled style={{ background: '#e8e8e8', color: '#888' }} />
+                <input id="system-cashier" value={`${session?.display_name} (${session?.role_name})`} disabled className="retail-options-input-disabled" />
               </div>
               <div className="retail-options-field">
                 <label htmlFor="system-terminal">{l10n.getString('settings-terminal-label')}</label>
-                  <input id="system-terminal" value="local" disabled style={{ background: '#e8e8e8', color: '#888' }} />
+                  <input id="system-terminal" value="local" disabled className="retail-options-input-disabled" />
               </div>
               <div className="retail-options-field retail-options-field--row">
                 <label htmlFor="system-theme">{l10n.getString('settings-theme-label')}</label>
@@ -948,30 +940,30 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                     setAutoLockMinutes(v);
                   }}
                 />
-                <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                <span className="retail-options-hint">
                   {l10n.getString('settings-auto-lock-hint')}
                 </span>
               </div>
 
               {/* ── Quick links to other configuration screens ─── */}
-              <h4 style={{ margin: '20px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>
+              <h4 className="retail-options-subheading">
                 {l10n.getString('settings-quick-links-heading') || 'More Configuration'}
               </h4>
-              <div style={{ padding: '8px 12px', background: '#f0f0f0', border: '1px solid #ddd', fontSize: 12, color: '#666', lineHeight: 1.5 }}>
+              <div className="retail-options-info-box">
                 {l10n.getString('settings-quick-links-note') || 'Tax rates and feature toggles can be configured from the main Settings page, accessible via the sidebar.'}
               </div>
 
               {/* ── Customer Display ──────────────────────────────── */}
-              <h4 style={{ margin: '20px 0 8px', fontSize: 12, textTransform: 'uppercase', color: '#555' }}>
+              <h4 className="retail-options-subheading">
                 {l10n.getString('settings-display-heading') || 'Customer-Facing Display'}
               </h4>
               {displays.length === 0 ? (
-                <div style={{ padding: 12, background: '#f5f5f5', border: '1px solid #ddd', fontSize: 12, color: '#888' }}>
+                <div className="retail-options-info-box">
                   {l10n.getString('settings-display-none') || 'No pole displays detected. Connect a customer-facing display to enable this feature.'}
                 </div>
               ) : (
                 <>
-                  <p style={{ fontSize: 12, color: '#666', margin: '0 0 8px' }}>
+                  <p style={{ fontSize: 12, color: 'var(--color-fg-secondary)', margin: '0 0 8px' }}>
                     {l10n.getString('settings-display-count', { count: displays.length }) || `${displays.length} display(s) connected`}
                   </p>
                   <div className="retail-options-field">
@@ -1002,17 +994,13 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                           }
                         }}
                         disabled={!displayTestMsg.trim()}
-                        style={{
-                          padding: '4px 12px', fontSize: 11, background: '#1a3a5c', color: '#fff',
-                          border: 'none', cursor: displayTestMsg.trim() ? 'pointer' : 'not-allowed',
-                          opacity: displayTestMsg.trim() ? 1 : 0.5,
-                        }}
+                        className="retail-options-display-send"
                       >
                         {l10n.getString('settings-display-test-btn') || 'Show'}
                       </button>
                     </div>
                   </div>
-                  <div style={{ padding: '8px 12px', background: '#f0f0f0', border: '1px solid #ddd', fontSize: 11, color: '#888', marginTop: 8 }}>
+                  <div className="retail-options-info-box" style={{ marginTop: 8, fontSize: 11 }}>
                     {l10n.getString('settings-display-info') || 'The customer-facing display shows item names and totals as they are scanned during a sale.'}
                   </div>
                 </>
@@ -1062,7 +1050,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   value={sync.serverURL}
                   onChange={(e) => sync.setServerURL(e.target.value)}
                 />
-                <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                <span className="retail-options-hint">
                   {l10n.getString('settings-sync-server-hint') || 'The endpoint that receives your encrypted backup snapshots'}
                 </span>
               </div>
@@ -1077,7 +1065,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   value={sync.token}
                   onChange={(e) => sync.setToken(e.target.value)}
                 />
-                <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                <span className="retail-options-hint">
                   {l10n.getString('settings-sync-token-hint') || 'Stored securely in the database — never in localStorage'}
                 </span>
               </div>
@@ -1093,7 +1081,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                   value={sync.autoMinutes}
                   onChange={(e) => sync.setAutoMinutes(Math.max(0, Math.min(1440, Number(e.target.value))))}
                 />
-                <span style={{ fontSize: 11, color: '#888', display: 'block', marginTop: 2 }}>
+                <span className="retail-options-hint">
                   {l10n.getString('settings-sync-interval-hint') || 'Set to 0 to disable automatic sync'}
                 </span>
               </div>
@@ -1138,13 +1126,9 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               </div>
 
               {/* ── Status & last sync ─────────── */}
-              <div style={{ marginTop: 16, padding: 12, background: sync.status === 'online' ? '#e8f4e8' : '#f8e8e8', border: `1px solid ${sync.status === 'online' ? '#b0d8b0' : '#d8b0b0'}`, fontSize: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: sync.status === 'online' ? '#2a6a2a' : '#8a2a2a',
-                    display: 'inline-block',
-                  }} />
+              <div className={`retail-options-sync-box ${sync.status === 'online' ? 'retail-options-sync-box--online' : 'retail-options-sync-box--offline'}`}>
+                <div className="retail-options-sync-status">
+                  <span className={`retail-options-sync-dot ${sync.status === 'online' ? 'retail-options-sync-dot--online' : 'retail-options-sync-dot--offline'}`} />
                   <strong>
                     {sync.status === 'online'
                       ? (l10n.getString('settings-sync-status-online') || 'Online')
@@ -1161,7 +1145,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               </div>
 
               {!sync.tokenLoaded && (
-                <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-fg-tertiary)' }}>
                   {l10n.getString('loading') || 'Loading…'}
                 </div>
               )}
