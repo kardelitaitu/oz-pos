@@ -46,7 +46,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-accent-subtle);
   color: var(--color-accent);
   border-radius: var(--radius-md);
   flex-shrink: 0;
