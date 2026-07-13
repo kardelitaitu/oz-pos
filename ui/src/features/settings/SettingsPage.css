@@ -628,9 +628,10 @@
   font-size: var(--text-xs);
 }
 
-/* Match the <option> dropdown popup to the active theme. */
+/* Match the <option> dropdown popup and select chevron to the active theme. */
 [data-theme="dark"] .settings-select {
   color-scheme: dark;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23d1d5db' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
 }
 
 @media (prefers-reduced-motion: no-preference) {

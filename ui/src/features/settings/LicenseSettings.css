@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
+  padding: var(--space-3) 0;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -14,7 +14,7 @@
 
 .settings-license-section .settings-license-row--actions {
   border-bottom: none;
-  padding-top: 16px;
+  padding-top: var(--space-4);
   justify-content: flex-start;
 }
 
@@ -44,7 +44,7 @@
 }
 
 .settings-license-value--warning {
-  color: #f59e0b;
+  color: var(--color-warning, #f59e0b);
 }
 
 /* Tier badges */
@@ -79,11 +79,11 @@
 
 /* Server status sub-section */
 .settings-license-server-section {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
   border-top: 1px dashed var(--color-border);
 }
 
 .settings-license-server-section .settings-license-row {
-  padding: 8px 0;
+  padding: var(--space-2) 0;
 }
