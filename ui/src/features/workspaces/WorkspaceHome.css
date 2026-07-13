@@ -199,8 +199,6 @@
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
-  animation: ws-greeting-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  animation-delay: 0.15s;
 }
 
 .ws-header-buttons {
@@ -232,10 +230,6 @@
  * ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Header ──────────────────────────────────────────────────────── */
-
-.workspace-home-header {
-  animation: ws-slide-down 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
 
 .workspace-home-title {
   font-size: var(--text-3xl);
@@ -269,21 +263,10 @@
   max-width: none;
   flex: 1;
   grid-auto-rows: 1fr;
-  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: 0.1s;
-  opacity: 0;
+  opacity: 1;
 }
 
 /* ── Card ────────────────────────────────────────────────────────── */
-
-@keyframes fade-up {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
 
 .workspace-card {
   position: relative;
@@ -296,19 +279,13 @@
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  opacity: 0;
   box-shadow: var(--shadow-glow, var(--shadow-2xl)), var(--shadow-sm);
   transition:
-    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1),
     border-color var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1),
     transform var(--duration-300) cubic-bezier(0.22, 1, 0.36, 1),
     background var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
-}
-
-.ws-loaded .workspace-card {
-  opacity: 1;
 }
 
 .workspace-card::before {
@@ -368,13 +345,7 @@
   border-color: var(--color-border-focus);
 }
 
-/* Staggered entrance delays (also briefly delays hover-out — negligible at 50ms) */
-.workspace-card:nth-child(1) { transition-delay: 0.05s; }
-.workspace-card:nth-child(2) { transition-delay: 0.10s; }
-.workspace-card:nth-child(3) { transition-delay: 0.15s; }
-.workspace-card:nth-child(4) { transition-delay: 0.20s; }
-.workspace-card:nth-child(5) { transition-delay: 0.25s; }
-.workspace-card:nth-child(6) { transition-delay: 0.30s; }
+
 
 /* ── Card icon ───────────────────────────────────────────────────── */
 
@@ -681,13 +652,6 @@
   max-width: none;
   flex: 1;
   grid-auto-rows: 1fr;
-  animation: ws-fade-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
-  transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-out);
-}
-
-.workspace-skeleton-grid--exiting {
-  opacity: 0;
-  transform: translateY(-8px);
 }
 
 .workspace-skeleton-grid .workspace-skeleton-card {
@@ -761,7 +725,6 @@
   padding: var(--space-12) var(--space-4);
   max-width: 400px;
   margin: 0 auto;
-  animation: ws-fade-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .workspace-empty-icon {
@@ -798,7 +761,6 @@
   padding: var(--space-12) var(--space-4);
   max-width: 400px;
   margin: 0 auto;
-  animation: ws-fade-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .workspace-error-icon {
@@ -806,8 +768,6 @@
   height: 64px;
   margin: 0 auto var(--space-4);
   color: var(--color-danger);
-  animation: ws-shake 0.5s cubic-bezier(0.36, 0, 0.66, -0.56) both;
-  animation-delay: 0.15s;
 }
 
 .workspace-error-icon svg {
@@ -857,18 +817,6 @@
   width: 16px;
   height: 16px;
 }
-
-/* ═══════════════════════════════════════════════════════════════════
- * Toolbar entrance animations
- * ═══════════════════════════════════════════════════════════════════ */
-
-.ws-header-buttons > * {
-  animation: ws-slide-down 0.35s var(--ease-out) both;
-}
-
-.ws-header-buttons > :nth-child(1) { animation-delay: 0.05s; }
-.ws-header-buttons > :nth-child(2) { animation-delay: 0.10s; }
-.ws-header-buttons > :nth-child(3) { animation-delay: 0.15s; }
 
 /* ── Fullscreen toggle button ───────────────────────────────── */
 
@@ -1047,35 +995,10 @@
  * Shared Animations
  * ═══════════════════════════════════════════════════════════════════ */
 
-@keyframes ws-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes ws-slide-down {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @keyframes ws-shake {
   0%, 100% { transform: translateX(0); }
   10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); }
   20%, 40%, 60%, 80% { transform: translateX(3px); }
-}
-
-@keyframes ws-float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
 }
 
 @keyframes ws-card-exit {
@@ -1089,34 +1012,12 @@
   }
 }
 
-@keyframes ws-greeting-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 @keyframes ws-glow-breath {
   0%, 100% {
     opacity: 0.6;
   }
   50% {
     opacity: 1;
-  }
-}
-
-@keyframes ws-grid-enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -1155,10 +1056,6 @@
     display: none;
   }
 
-  .workspace-home-header {
-    animation: none;
-  }
-
   .workspace-card {
     animation: none;
     opacity: 1;
@@ -1169,17 +1066,7 @@
     transform: none;
   }
 
-  .workspace-skeleton-grid {
-    animation: none;
-  }
-
-  .workspace-skeleton-grid--exiting {
-    opacity: 1;
-    transform: none;
-  }
-
   .workspace-grid {
-    animation: none;
     opacity: 1;
   }
 
@@ -1249,10 +1136,6 @@
   .workspace-card:hover .workspace-card-overlay {
     opacity: 1;
     transform: none;
-  }
-
-  .ws-header-buttons > * {
-    animation: none;
   }
 
   .workspace-card--exiting {

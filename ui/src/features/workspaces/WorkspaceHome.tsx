@@ -40,9 +40,9 @@ function getIcon(key: string) {
 
 // ── Skeleton ──────────────────────────────────────────────────────
 
-function SkeletonGrid({ exiting }: { exiting?: boolean }) {
+function SkeletonGrid() {
   return (
-    <div className={`workspace-skeleton-grid${exiting ? ' workspace-skeleton-grid--exiting' : ''}`} aria-label="Loading workspaces">
+    <div className="workspace-skeleton-grid" aria-label="Loading workspaces">
       {[1, 2, 3].map((i) => (
         <div key={i} className="workspace-skeleton-card">
           <div className="workspace-skeleton-icon" />
@@ -308,22 +308,9 @@ export default function WorkspaceHome() {
 
   const displayName = session?.display_name ?? session?.role_name ?? '';
 
-  // ── Skeleton → grid cross-fade ────────────────────────────────
+  // ── Loading state (no entrance animations) ────────────────────
 
-  const [holdLoading, setHoldLoading] = useState(false);
-  const prevLoadingRef = useRef(loading);
-  useEffect(() => {
-    if (prevLoadingRef.current && !loading) {
-      // Loading just finished — keep skeleton in DOM for exit animation
-      setHoldLoading(true);
-      const timer = setTimeout(() => setHoldLoading(false), 300);
-      return () => clearTimeout(timer);
-    }
-    prevLoadingRef.current = loading;
-  }, [loading]);
-
-  const showSkeleton = loading || holdLoading;
-  const skeletonExiting = holdLoading && !loading;
+  const showSkeleton = loading;
 
   // ── Fullscreen toggle ─────────────────────────────────────────
   const { toggleFullscreen } = useFullscreen();
@@ -544,18 +531,6 @@ export default function WorkspaceHome() {
     };
   }, []);
 
-  // ── Entrance animation (loaded state) ──────────────────────────
-  // Cards mount with opacity: 0. Once this effect runs, ws-loaded is
-  // toggled on the grid so the CSS transition (with staggered delays
-  // from nth-child) fades them in. No CSS animation involved — the
-  // old fade-up animation caused cascade interference with :hover.
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => setLoaded(true));
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
   // ── Clear stale focus on mount ─────────────────────────────────
   // When returning from a workspace (Escape), the active element from
   // the previous view may still be focused in the DOM, or the browser
@@ -596,7 +571,7 @@ export default function WorkspaceHome() {
           </div>
           <div className="ws-main">
             <header className="workspace-home-header" />
-            <SkeletonGrid exiting={skeletonExiting} />
+            <SkeletonGrid />
           </div>
           <div className="ws-footer" />
         </div>
@@ -713,7 +688,7 @@ export default function WorkspaceHome() {
               </p>
             </div>
           ) : (
-            <div className={`workspace-grid${loaded ? ' ws-loaded' : ''}`} ref={gridRef} role="group" aria-label="Workspaces">
+            <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
               {sortedWorkspaces.map((ws, idx) => {
                 const disabled = !canAccess(ws.type_key);
                 const colorClass = WS_COLORS[ws.type_key] ?? '';
