@@ -59,13 +59,13 @@ registerSalesWidgets();
 // ── SVG icon factory ────────────────────────────────────────────────
 // Accepts a path `d` string and optional children (ReactNode) for
 // extra SVG elements beyond the first <path>.
-import type { ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
 
 function icon(path: string, ...children: ReactNode[]) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={path} />
-      {children}
+      {Children.toArray(children)}
     </svg>
   );
 }

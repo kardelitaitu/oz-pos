@@ -362,6 +362,8 @@ export default function StaffLoginScreen() {
                     <input
                       ref={usernameInputRef}
                       type="text"
+                      id="staff-login-username"
+                      name="username"
                       className="staff-login-input"
                       placeholder="Username"
                       value={username}
