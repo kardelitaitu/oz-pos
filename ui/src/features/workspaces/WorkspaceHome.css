@@ -218,7 +218,6 @@
   align-items: stretch;
   justify-content: flex-start;
   padding: var(--space-3) 10%;
-  gap: var(--space-3);
 }
 
 /* ── Footer box (bottom 8%) ─────────────────────────────────────── */
