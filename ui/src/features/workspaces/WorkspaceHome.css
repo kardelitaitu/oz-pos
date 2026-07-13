@@ -203,9 +203,12 @@
 .workspace-home-title {
   font-size: var(--text-3xl);
   font-weight: var(--font-weight-bold);
-  color: var(--color-fg);
   margin: 0 0 var(--space-2);
   letter-spacing: -0.02em;
+  background: linear-gradient(90deg, var(--color-fg), var(--color-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .workspace-home-subtitle {
@@ -253,8 +256,10 @@
   gap: var(--space-4);
   padding: var(--space-6) var(--space-5);
   background: var(--color-bg-elevated);
+  backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--shadow-glow, var(--shadow-2xl)), var(--shadow-sm);
   min-height: var(--touch-target-comfortable);
 }
 
@@ -312,8 +317,10 @@
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--space-4);
   width: 100%;
-  max-width: 900px;
-  animation: ws-grid-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  max-width: 64rem;
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.1s;
+  opacity: 0;
 }
 
 @media (max-width: 400px) {
@@ -343,6 +350,17 @@
   }
 }
 
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .workspace-card {
   display: flex;
   flex-direction: column;
@@ -351,8 +369,9 @@
   gap: var(--space-4);
   padding: var(--space-6) var(--space-5);
   background: var(--color-bg-elevated);
+  backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-3xl);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -362,10 +381,10 @@
     transform var(--duration-300) cubic-bezier(0.22, 1, 0.36, 1),
     background var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1);
   min-height: var(--touch-target-comfortable);
-  animation: ws-card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 1px 4px rgba(0, 0, 0, 0.02);
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.1s;
+  opacity: 0;
+  box-shadow: var(--shadow-glow, var(--shadow-2xl)), var(--shadow-sm);
   transform: perspective(800px) rotateX(0deg) rotateY(0deg);
 }
 
@@ -390,9 +409,10 @@
 
 .workspace-card:hover {
   box-shadow:
-    var(--shadow-md),
+    var(--shadow-glow, var(--shadow-2xl)),
     0 0 0 1px var(--ws-accent, transparent),
-    0 4px 12px var(--ws-glow, transparent);
+    0 4px 12px var(--ws-glow, transparent),
+    var(--shadow-sm);
   border-color: var(--ws-accent, var(--color-border-hover));
   background: var(--ws-accent-bg, var(--color-bg-elevated));
   transform: perspective(800px) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) translateY(-4px);
@@ -653,18 +673,22 @@
 }
 
 .workspace-card--active {
+  opacity: 1;
   border-color: var(--ws-accent, var(--color-accent)) !important;
   background: var(--ws-accent-bg, var(--color-bg-elevated));
+  backdrop-filter: blur(var(--blur-amount, 20px));
   box-shadow:
+    var(--shadow-glow, var(--shadow-2xl)),
     0 0 0 1px var(--ws-accent, var(--color-accent)),
-    var(--shadow-md),
-    0 0 20px var(--ws-glow, transparent);
+    0 0 20px var(--ws-glow, transparent),
+    var(--shadow-sm);
   animation: ws-glow-breath 3s ease-in-out infinite;
 }
 
 .workspace-card--active:hover {
   border-color: var(--ws-accent, var(--color-accent)) !important;
   background: var(--ws-accent-bg, var(--color-bg-elevated));
+  backdrop-filter: blur(var(--blur-amount, 20px));
   transform: perspective(800px) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) translateY(-4px);
 }
 
@@ -989,6 +1013,7 @@
 
   .workspace-card {
     animation: none;
+    opacity: 1;
     transform: none;
   }
 
@@ -1007,6 +1032,7 @@
 
   .workspace-grid {
     animation: none;
+    opacity: 1;
   }
 
   .workspace-skeleton-icon,
