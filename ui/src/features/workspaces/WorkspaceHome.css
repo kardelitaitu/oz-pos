@@ -173,7 +173,7 @@
 
 /* ═══════════════════════════════════════════════════════════════════
  * Layer 2: Content Container
- * Flex centering for the content. Sits above the background.
+ * Split into toolbar (15%) + main content (85%).
  * ═══════════════════════════════════════════════════════════════════ */
 
 .ws-layer-content {
@@ -181,10 +181,34 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
+  min-height: 100%;
+}
+
+/* ── Toolbar box (top 15%) ───────────────────────────────────────── */
+
+.ws-toolbar {
+  flex: 0 0 15%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 var(--space-8);
+}
+
+.ws-toolbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ── Main content box (remaining 85%) ───────────────────────────── */
+
+.ws-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100%;
-  padding: var(--space-8);
+  padding: 0 var(--space-8) var(--space-8);
   gap: var(--space-8);
 }
 
@@ -762,41 +786,16 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * Layer 4: Floating Elements
- * Top bar with buttons, user profile. Sits above content.
+ * Toolbar entrance animations
  * ═══════════════════════════════════════════════════════════════════ */
 
-.ws-layer-floating {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.ws-layer-floating > * {
-  pointer-events: auto;
-}
-
-/* ── Top bar ─────────────────────────────────────────────────────── */
-
-.workspace-home-top-bar {
-  position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* ── Top-bar entrance animations ────────────────────────────────── */
-
-.workspace-home-top-bar > * {
+.ws-toolbar-buttons > * {
   animation: ws-slide-down 0.35s var(--ease-out) both;
 }
 
-.workspace-home-top-bar > :nth-child(1) { animation-delay: 0.05s; }
-.workspace-home-top-bar > :nth-child(2) { animation-delay: 0.10s; }
-.workspace-home-top-bar > :nth-child(3) { animation-delay: 0.15s; }
+.ws-toolbar-buttons > :nth-child(1) { animation-delay: 0.05s; }
+.ws-toolbar-buttons > :nth-child(2) { animation-delay: 0.10s; }
+.ws-toolbar-buttons > :nth-child(3) { animation-delay: 0.15s; }
 
 /* ── Fullscreen toggle button ───────────────────────────────── */
 
@@ -1057,11 +1056,15 @@
     grid-template-columns: 1fr;
   }
 
-  .ws-layer-content {
-    padding: var(--space-6) var(--space-4);
+  .ws-main {
+    padding: 0 var(--space-4) var(--space-6);
   }
 
-  .workspace-home-top-bar {
+  .ws-toolbar {
+    padding: 0 var(--space-4);
+  }
+
+  .ws-toolbar-buttons {
     gap: var(--space-1);
   }
 }
@@ -1164,7 +1167,7 @@
     opacity: 0.7;
   }
 
-  .workspace-home-top-bar > * {
+  .ws-toolbar-buttons > * {
     animation: none;
   }
 

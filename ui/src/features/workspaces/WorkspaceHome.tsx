@@ -156,9 +156,9 @@ function LayerBackground() {
   );
 }
 
-// ── Layer 4: Floating (top bar) ─────────────────────────────────
+// ── Toolbar buttons (fullscreen, user profile, logout) ────────
 
-function LayerFloating({
+function LayerFloatingButtons({
   session,
   displayName,
   roleName,
@@ -178,8 +178,7 @@ function LayerFloating({
   retry: () => void;
 }) {
   return (
-    <div className="ws-layer-floating">
-      <div className="workspace-home-top-bar">
+    <div className="ws-toolbar-buttons">
         <button
           type="button"
           className="workspace-home-fullscreen-btn"
@@ -226,7 +225,6 @@ function LayerFloating({
             </Localized>
           </button>
         )}
-      </div>
     </div>
   );
 }
@@ -529,19 +527,21 @@ export default function WorkspaceHome() {
 
         {/* Layer 2+3: Content container + content */}
         <div className="ws-layer-content">
-          <header className="workspace-home-header">
-            <h1 className="workspace-home-title">OZ-POS</h1>
-            <p className="workspace-home-subtitle">
-              <Localized id="workspace-home-subtitle">
-                <span>Select a workspace to start</span>
-              </Localized>
-            </p>
-          </header>
-          <SkeletonGrid exiting={skeletonExiting} />
+          <div className="ws-toolbar">
+            <LayerFloatingButtons {...floatingProps} />
+          </div>
+          <div className="ws-main">
+            <header className="workspace-home-header">
+              <h1 className="workspace-home-title">OZ-POS</h1>
+              <p className="workspace-home-subtitle">
+                <Localized id="workspace-home-subtitle">
+                  <span>Select a workspace to start</span>
+                </Localized>
+              </p>
+            </header>
+            <SkeletonGrid exiting={skeletonExiting} />
+          </div>
         </div>
-
-        {/* Layer 4: Floating elements */}
-        <LayerFloating {...floatingProps} />
 
         {/* SR-only status */}
         <span className="ws-sr-status" role="status" aria-live="polite">
@@ -568,42 +568,44 @@ export default function WorkspaceHome() {
 
         {/* Layer 2+3: Content container + content */}
         <div className="ws-layer-content">
-          <div className="workspace-error">
-            <div className="workspace-error-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+          <div className="ws-toolbar">
+            <LayerFloatingButtons {...floatingProps} />
+          </div>
+          <div className="ws-main">
+            <div className="workspace-error">
+              <div className="workspace-error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <p className="workspace-error-title">
+                <Localized id="workspace-home-error-title">
+                  <span>Connection Error</span>
+                </Localized>
+              </p>
+              <p className="workspace-error-desc">
+                <Localized id="workspace-home-error-desc">
+                  <span>Could not load your workspaces. Check your connection and try again.</span>
+                </Localized>
+              </p>
+              <button
+                type="button"
+                className="workspace-error-retry"
+                onClick={retry}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                <Localized id="workspace-home-retry">
+                  <span>Try Again</span>
+                </Localized>
+              </button>
             </div>
-            <p className="workspace-error-title">
-              <Localized id="workspace-home-error-title">
-                <span>Connection Error</span>
-              </Localized>
-            </p>
-            <p className="workspace-error-desc">
-              <Localized id="workspace-home-error-desc">
-                <span>Could not load your workspaces. Check your connection and try again.</span>
-              </Localized>
-            </p>
-            <button
-              type="button"
-              className="workspace-error-retry"
-              onClick={retry}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
-              <Localized id="workspace-home-retry">
-                <span>Try Again</span>
-              </Localized>
-            </button>
           </div>
         </div>
-
-        {/* Layer 4: Floating elements */}
-        <LayerFloating {...floatingProps} />
 
         {/* Layer 5: Overlays */}
         <LogoutModal
@@ -624,107 +626,109 @@ export default function WorkspaceHome() {
 
       {/* Layer 2+3: Content container + content */}
       <div className="ws-layer-content">
-        <header className="workspace-home-header">
-          <h1 className="workspace-home-title">OZ-POS</h1>
-          <p className="workspace-home-subtitle">
-            <Localized id="workspace-home-subtitle">
-              <span>Select a workspace to start</span>
-            </Localized>
-          </p>
-          {session && displayName && (
-            <p className="workspace-home-greeting">
-              <Localized id={greeting.id} vars={{ name: displayName }}>
-                <span>Hello, {displayName}</span>
+        <div className="ws-toolbar">
+          <LayerFloatingButtons {...floatingProps} />
+        </div>
+        <div className="ws-main">
+          <header className="workspace-home-header">
+            <h1 className="workspace-home-title">OZ-POS</h1>
+            <p className="workspace-home-subtitle">
+              <Localized id="workspace-home-subtitle">
+                <span>Select a workspace to start</span>
               </Localized>
             </p>
-          )}
-        </header>
+            {session && displayName && (
+              <p className="workspace-home-greeting">
+                <Localized id={greeting.id} vars={{ name: displayName }}>
+                  <span>Hello, {displayName}</span>
+                </Localized>
+              </p>
+            )}
+          </header>
 
-        {sortedWorkspaces.length === 0 ? (
-          <div className="workspace-empty">
-            <div className="workspace-empty-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-                <line x1="7" y1="9" x2="17" y2="9" />
-              </svg>
+          {sortedWorkspaces.length === 0 ? (
+            <div className="workspace-empty">
+              <div className="workspace-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                  <line x1="7" y1="9" x2="17" y2="9" />
+                </svg>
+              </div>
+              <p className="workspace-empty-title">
+                <Localized id="workspace-home-empty">
+                  <span>No workspaces available</span>
+                </Localized>
+              </p>
+              <p className="workspace-empty-desc">
+                <Localized id="workspace-home-empty-desc">
+                  <span>You don&apos;t have access to any workspaces yet. Contact an administrator.</span>
+                </Localized>
+              </p>
             </div>
-            <p className="workspace-empty-title">
-              <Localized id="workspace-home-empty">
-                <span>No workspaces available</span>
-              </Localized>
-            </p>
-            <p className="workspace-empty-desc">
-              <Localized id="workspace-home-empty-desc">
-                <span>You don&apos;t have access to any workspaces yet. Contact an administrator.</span>
-              </Localized>
-            </p>
-          </div>
-        ) : (
-          <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
-            {sortedWorkspaces.map((ws, idx) => {
-              const disabled = !canAccess(ws.type_key);
-              const colorClass = WS_COLORS[ws.type_key] ?? '';
-              const isActive = ws.type_key === lastWorkspace && !disabled;
-              return (
-                <button
-                  key={ws.type_key}
-                  type="button"
-                  aria-current={isActive ? 'true' : undefined}
-                  className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
-                  onClick={(e) => handleCardClick(ws.type_key, e)}
-                  disabled={disabled || exitingWorkspace !== null}
-                  onMouseMove={handleMouseMove}
-                  onMouseLeave={handleMouseLeave}
-                  aria-label={l10n.getString(
-                    disabled ? 'workspace-card-no-access-aria' : 'workspace-card-open-aria',
-                    { name: ws.name },
-                  )}
-                  title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
-                >
-                  <div className="workspace-card-key-hint">{idx + 1}</div>
-                  {isActive && (
-                    <div className="workspace-card-active-dot" aria-label="Active workspace">
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
-                        <circle cx="12" cy="12" r="6" />
-                      </svg>
-                    </div>
-                  )}
-                  <div className="workspace-card-icon">
-                    {getIcon(ws.type_key)}
-                  </div>
-                  <div className="workspace-card-body">
-                    <h2 className="workspace-card-name">{ws.name}</h2>
-                    <p className="workspace-card-desc">{ws.description}</p>
-                    {disabled ? (
-                      <span className="workspace-card-badge">
-                        <Localized id="workspace-card-no-access-badge">
-                          <span>Not available</span>
-                        </Localized>
-                      </span>
-                    ) : (
-                      <span className="workspace-card-keyboard-hint">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                          <rect x="2" y="4" width="20" height="16" rx="2" />
-                          <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
-                          <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
-                        </svg>
-                        <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
-                          <span>Press {idx + 1} to open</span>
-                        </Localized>
-                      </span>
+          ) : (
+            <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
+              {sortedWorkspaces.map((ws, idx) => {
+                const disabled = !canAccess(ws.type_key);
+                const colorClass = WS_COLORS[ws.type_key] ?? '';
+                const isActive = ws.type_key === lastWorkspace && !disabled;
+                return (
+                  <button
+                    key={ws.type_key}
+                    type="button"
+                    aria-current={isActive ? 'true' : undefined}
+                    className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
+                    onClick={(e) => handleCardClick(ws.type_key, e)}
+                    disabled={disabled || exitingWorkspace !== null}
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
+                    aria-label={l10n.getString(
+                      disabled ? 'workspace-card-no-access-aria' : 'workspace-card-open-aria',
+                      { name: ws.name },
                     )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                    title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
+                  >
+                    <div className="workspace-card-key-hint">{idx + 1}</div>
+                    {isActive && (
+                      <div className="workspace-card-active-dot" aria-label="Active workspace">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
+                          <circle cx="12" cy="12" r="6" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="workspace-card-icon">
+                      {getIcon(ws.type_key)}
+                    </div>
+                    <div className="workspace-card-body">
+                      <h2 className="workspace-card-name">{ws.name}</h2>
+                      <p className="workspace-card-desc">{ws.description}</p>
+                      {disabled ? (
+                        <span className="workspace-card-badge">
+                          <Localized id="workspace-card-no-access-badge">
+                            <span>Not available</span>
+                          </Localized>
+                        </span>
+                      ) : (
+                        <span className="workspace-card-keyboard-hint">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                            <rect x="2" y="4" width="20" height="16" rx="2" />
+                            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
+                            <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
+                          </svg>
+                          <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
+                            <span>Press {idx + 1} to open</span>
+                          </Localized>
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Layer 4: Floating elements */}
-      <LayerFloating {...floatingProps} />
 
       {/* Layer 5: Overlays */}
       <LogoutModal
