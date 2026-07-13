@@ -208,6 +208,11 @@
   line-height: 1;
 }
 
+.data-mgmt-progress-done svg {
+  width: 1em;
+  height: 1em;
+}
+
 /* ── Done state ──────────────────────────────────────────────────── */
 
 .data-mgmt-done-text {

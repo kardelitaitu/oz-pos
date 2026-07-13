@@ -114,6 +114,10 @@ function folderIcon(): React.ReactNode {
   return <svg {...ICON_PROPS} width={32} height={32}><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>;
 }
 
+function checkIcon(): React.ReactNode {
+  return <svg {...ICON_PROPS}><polyline points="20 6 9 17 4 12"/></svg>;
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 /** Data management screen — encrypted export wizard, import wizard with dry-run preview, and one-click backup status. */
@@ -549,7 +553,7 @@ export default function DataManagementScreen() {
                   {exportState.step === 'exporting' ? (
                     <Spinner size="md" />
                   ) : (
-                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-export-complete-aria')}>✓</span>
+                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-export-complete-aria')}>{checkIcon()}</span>
                   )}
                 </div>
 
@@ -722,7 +726,7 @@ export default function DataManagementScreen() {
                   {importState.step === 'importing' ? (
                     <Spinner size="md" />
                   ) : (
-                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-import-complete-aria')}>✓</span>
+                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-import-complete-aria')}>{checkIcon()}</span>
                   )}
                 </div>
 
