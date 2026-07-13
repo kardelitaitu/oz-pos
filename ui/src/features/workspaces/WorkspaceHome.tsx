@@ -228,7 +228,7 @@ function LayerFloatingButtons({
         </button>
         {session && (
           <>
-            <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
+            <button type="button" className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
               <div className="workspace-home-user-avatar">
                 <RoleIcon role={roleName} size={16} />
               </div>
@@ -236,7 +236,7 @@ function LayerFloatingButtons({
                 <span className="workspace-home-user-name">{displayName}</span>
                 <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
               </div>
-            </div>
+            </button>
             <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

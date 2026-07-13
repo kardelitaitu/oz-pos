@@ -871,7 +871,15 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  cursor: default;
+  color: var(--color-fg);
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.workspace-home-user-profile:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .workspace-home-user-avatar {
