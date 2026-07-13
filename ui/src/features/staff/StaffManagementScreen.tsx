@@ -19,7 +19,27 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { RoleIcon } from '@/components/RoleIcon';
+import { useToast } from '@/frontend/shared/Toast';
 import './StaffManagementScreen.css';
+
+// ── SVG icon props ────────────────────────────────────────────────
+
+const ICON_PROPS = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+function wsIcon(key: string): React.ReactNode {
+  switch (key) {
+    case 'restaurant':
+      return <svg {...ICON_PROPS}><path d="M6 2v20m12-20v5.3c0 3.3-2.7 6-6 6s-6-2.7-6-6V2"/></svg>;
+    case 'store':
+      return <svg {...ICON_PROPS}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+    case 'inventory':
+      return <svg {...ICON_PROPS}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>;
+    case 'admin':
+      return <svg {...ICON_PROPS}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9.9-4.9l1.4 1.4m12.8 1.4l1.4-1.4M1 12h2m18 0h2M4.2 4.2l1.4 1.4m12.8 12.8l1.4 1.4"/></svg>;
+    default:
+      return <svg {...ICON_PROPS}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
+  }
+}
 
 // ── Form state ──────────────────────────────────────────────────────
 
@@ -49,6 +69,7 @@ const EMPTY_FORM: FormData = {
 export default function StaffManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { addToast } = useToast();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceTypeDto[]>([]);
@@ -165,7 +186,9 @@ export default function StaffManagementScreen() {
 
   // ── Save / Update ──────────────────────────────────────────────
 
-  const handleSave = useCallback(async () => {
+  // handleSave reads form state directly on every invocation — no useCallback
+  // needed since it's only used as an onClick handler on a single button.
+  const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
@@ -226,7 +249,7 @@ export default function StaffManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load, l10n, callerUserId]);
+  };
 
   // ── Deactivate / Reactivate ────────────────────────────────────
 
@@ -242,9 +265,9 @@ export default function StaffManagementScreen() {
       });
       await load();
     } catch {
-      // Error handling.
+      addToast({ message: l10n.getString('staff-error-save-failed'), type: 'error' });
     }
-  }, [load, callerUserId]);
+  }, [load, callerUserId, addToast, l10n]);
 
   // ── Role colour mapping ────────────────────────────────────────
 
@@ -540,10 +563,7 @@ export default function StaffManagementScreen() {
                             <span className="staff-mgmt-ws-checkbox-label">
                               {ws.icon && (
                                 <span className="staff-mgmt-ws-icon" aria-hidden="true">
-                                  {ws.icon === 'restaurant' && '🍽 '}
-                                  {ws.icon === 'store' && '🏪 '}
-                                  {ws.icon === 'inventory' && '📦 '}
-                                  {ws.icon === 'admin' && '⚙ '}
+                                  {wsIcon(ws.icon)}
                                 </span>
                               )}
                               {ws.name}
