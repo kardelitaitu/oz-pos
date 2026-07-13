@@ -46,7 +46,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-accent);
+  color: #fff;
   border-radius: var(--radius-md);
   flex-shrink: 0;
 }
