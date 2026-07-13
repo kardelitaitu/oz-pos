@@ -61,6 +61,12 @@ export default function AppShell() {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { isKdsKiosk } = useTerminalProfile();
   const { addToast } = useToast();
+  // Stable ref so the mount effect below can call addToast without
+  // listing it as a dependency (which would cause the effect to re-run
+  // whenever the toast context re-creates its callback reference, resetting
+  // hasActiveLicense back to false mid-flow).
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
 
   useIdleTimer(() => {
     if (activeWorkspace) {
@@ -74,7 +80,9 @@ export default function AppShell() {
     }
   });
 
-  // On mount, check if setup was already completed.
+  // On mount, check license status and whether setup was already completed.
+  // addToastRef (not addToast) is used so this effect runs exactly once and
+  // cannot be re-triggered by a reference change in the toast context.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -83,7 +91,7 @@ export default function AppShell() {
         if (!cancelled) {
           setHasActiveLicense(licenseStatus.is_active);
           if (licenseStatus.status === 'gracePeriod') {
-            addToast({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
+            addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
           } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
             setLicenseError(licenseStatus.message);
           }
@@ -106,7 +114,8 @@ export default function AppShell() {
       }
     })();
     return () => { cancelled = true; };
-  }, [addToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount — addToastRef keeps the callback current
 
   // Navigate to workspace-appropriate route on selection.
   const prevWorkspaceRef = useRef(activeWorkspace);
@@ -138,6 +147,17 @@ export default function AppShell() {
   const handleSkip = useCallback(() => {
     dismissSetupWizard().catch(console.error);
     setHasCompletedSetup(true);
+  }, []);
+
+  /**
+   * Called when the activation flow finishes (license activated + owner
+   * account created). Marks setup as dismissed so the wizard is not
+   * shown — users land directly on the workspace picker.
+   */
+  const handleActivationComplete = useCallback(() => {
+    dismissSetupWizard().catch(console.error);
+    setHasCompletedSetup(true);
+    setHasActiveLicense(true);
   }, []);
 
   // ── F11 toggles fullscreen across all workpaces ───────────────
@@ -196,7 +216,7 @@ export default function AppShell() {
     return (
       <ActivationFlow
         initialError={licenseError}
-        onComplete={() => setHasActiveLicense(true)}
+        onComplete={handleActivationComplete}
       />
     );
   }
