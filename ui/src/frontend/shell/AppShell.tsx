@@ -83,29 +83,56 @@ export default function AppShell() {
   // On mount, check license status and whether setup was already completed.
   // addToastRef (not addToast) is used so this effect runs exactly once and
   // cannot be re-triggered by a reference change in the toast context.
+  //
+  // Decision logic:
+  //   • Fresh install (setup NOT done): the license gate applies. No active
+  //     license → ActivationFlow (activate license + create owner account).
+  //   • Existing install (setup DONE, user data present): always let the user
+  //     through. License issues (expired, grace period, invalid) surface as a
+  //     non-blocking warning toast — never as a forced re-activation screen.
+  //     Forcing re-activation on an existing install would attempt to create a
+  //     second owner account (which the backend rejects) and is confusing.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const licenseStatus = await getLicenseStatus();
-        if (!cancelled) {
-          setHasActiveLicense(licenseStatus.is_active);
-          if (licenseStatus.status === 'gracePeriod') {
-            addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
-          } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
-            setLicenseError(licenseStatus.message);
-          }
-        }
+        const [licenseStatus, status] = await Promise.all([
+          getLicenseStatus(),
+          getSetupStatus(),
+        ]);
 
-        const status = await getSetupStatus();
         if (!cancelled) {
           setHasCompletedSetup(status.completed);
+
+          if (status.completed) {
+            // ── Existing install ───────────────────────────────────────
+            // Always let the user through to the login screen; surface
+            // license issues as toasts so they can renew from Settings.
+            setHasActiveLicense(true);
+            if (licenseStatus.status === 'gracePeriod') {
+              addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
+            } else if (!licenseStatus.is_active) {
+              addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is inactive. Please renew from Settings.' });
+            }
+          } else {
+            // ── Fresh install ──────────────────────────────────────────
+            // Respect the license gate; show ActivationFlow if not active.
+            setHasActiveLicense(licenseStatus.is_active);
+            if (licenseStatus.status === 'gracePeriod') {
+              addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
+            } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
+              setLicenseError(licenseStatus.message);
+            }
+          }
         }
       } catch (err) {
         if (!cancelled) {
-          setHasCompletedSetup(false);
-          setHasActiveLicense(false);
-          setLicenseError(String(err));
+          // On any startup error, let the user through rather than blocking
+          // them with the activation screen. Existing data should not be
+          // gated behind a license check that failed for a transient reason.
+          setHasActiveLicense(true);
+          setHasCompletedSetup(true);
+          addToastRef.current({ type: 'error', message: `Could not verify license: ${String(err)}` });
         }
       } finally {
         if (!cancelled) {
