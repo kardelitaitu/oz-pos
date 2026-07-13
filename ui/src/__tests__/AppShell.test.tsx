@@ -145,6 +145,8 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
 }));
 
 // ── page-registry: register the kds route so handleNavigate works ──
+import { getLicenseStatus } from '@/api/license';
+import { getSetupStatus } from '@/api/settings';
 import { registerPage, clearPages } from '@/platform/ui/page-registry';
 
 // ── Test wrapper ─────────────────────────────────────────────
@@ -306,7 +308,7 @@ describe('AppShell — KDS workspace navigation', () => {
       await act(async () => {});
 
       await waitFor(() => {
-        expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
+        expect(screen.getByText('No workspaces available')).toBeInTheDocument();
       });
 
       // Invoke the idle callback to simulate timeout on the picker inside act
@@ -352,7 +354,7 @@ describe('AppShell — KDS workspace navigation', () => {
       await act(async () => {});
 
       await waitFor(() => {
-        expect(screen.getByText('Select a workspace to start')).toBeInTheDocument();
+        expect(screen.getByText('No workspaces available')).toBeInTheDocument();
       });
 
       // Invoke the idle callback inside act
@@ -389,7 +391,7 @@ describe('AppShell — KDS workspace navigation', () => {
       // No back button in kiosk lockdown
       expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument();
       // No workspace picker
-      expect(screen.queryByText('Select a workspace to start')).not.toBeInTheDocument();
+      expect(screen.queryByText('No workspaces available')).not.toBeInTheDocument();
     });
 
     it('skips workspace picker when terminal is in kds_kiosk lockdown', async () => {
@@ -407,7 +409,7 @@ describe('AppShell — KDS workspace navigation', () => {
       await waitFor(() => {
         expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
       });
-      expect(screen.queryByText('Select a workspace to start')).not.toBeInTheDocument();
+      expect(screen.queryByText('No workspaces available')).not.toBeInTheDocument();
     });
 
     it('renders normal KDS workspace when not in kiosk lockdown', async () => {
@@ -556,6 +558,69 @@ describe('AppShell — KDS workspace navigation', () => {
       // Neither POS screen should be visible
       expect(screen.queryByTestId('retail-pos-screen')).not.toBeInTheDocument();
       expect(screen.queryByTestId('pos-screen')).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Dev-mode license bypass ───────────────────────────────
+
+  describe('dev-mode license bypass', () => {
+    beforeEach(() => {
+      // Reset workspace to no active workspace (workspace picker)
+      mockWorkspace.mockReturnValue({
+        activeWorkspace: null,
+        setActiveWorkspace: vi.fn(),
+        availableWorkspaces: [],
+        workspaceScreens: [],
+        loading: false,
+      });
+    });
+
+    it('skips license check and renders login screen in dev mode', async () => {
+      // Override auth to no session → login screen
+      mockAuthSession.mockReturnValue({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        session: null as any,
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        clearError: vi.fn(),
+        isManager: false,
+        isOwner: false,
+      });
+
+      await renderInAct(wrap(<AppShell />));
+
+      // Dev bypass means no license IPC calls should be made
+      expect(vi.mocked(getLicenseStatus)).not.toHaveBeenCalled();
+      expect(vi.mocked(getSetupStatus)).not.toHaveBeenCalled();
+
+      // Login screen should render (no session, dev bypass skips license check)
+      await waitFor(() => {
+        expect(screen.getByText('Enter your username')).toBeInTheDocument();
+      });
+
+      // No license warning toast should appear
+      expect(screen.queryByText(/License is inactive/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/License is in grace period/i)).not.toBeInTheDocument();
+    });
+
+    it('renders workspace picker for logged-in users in dev mode', async () => {
+      // Uses default cashier session from parent beforeEach
+
+      await renderInAct(wrap(<AppShell />));
+
+      // No license IPC calls
+      expect(vi.mocked(getLicenseStatus)).not.toHaveBeenCalled();
+      expect(vi.mocked(getSetupStatus)).not.toHaveBeenCalled();
+
+      // Workspace picker should render (empty state)
+      await waitFor(() => {
+        expect(screen.getByText('No workspaces available')).toBeInTheDocument();
+      });
+
+      // No license toast
+      expect(screen.queryByText(/License is inactive/i)).not.toBeInTheDocument();
     });
   });
 
