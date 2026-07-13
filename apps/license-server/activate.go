@@ -86,14 +86,13 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Per-key activation lock ─────────────────────────────
-		// Serialise requests for the same key to prevent concurrent
-		// activation races (two goroutines both seeing "unused" and
-		// both creating subscriptions for the same key).
-		unlock := activationLocks.lock(req.Key)
-		defer unlock()
-
 		// ── Validate license key FIRST ──────────────────────────
+		// Key lookup is read-only and happens before any lock
+		// acquisition to determine whether this is a re-activation
+		// or new activation (which determines the lock strategy).
+		// The per-key lock is acquired later, inside the appropriate
+		// branch, to maintain consistent lock ordering with renew.go
+		// (tenant→key) and avoid deadlock.
 		// Look up the key record before touching tenant state, so we
 		// can check whether this is a re-activation of an already-
 		// activated key — which lets us skip the api_key requirement
@@ -128,6 +127,31 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			}
 
 			isNewTenant = true
+
+			// ── Per-key activation lock ─────────────────────────
+			// Acquired BEFORE tenant creation to prevent:
+			// (a) orphaned tenant records from concurrent same-key
+			//     requests that both read keyStatus=="unused"
+			// (b) activation overwrite where a stale keyStatus
+			//     allows re-activating an already-activated key.
+			// For new tenants there is no tenant lock (no existing
+			// tenant to lock on), so key-only ordering is safe and
+			// consistent with renew.go (no cross-path deadlock).
+			unlock := activationLocks.lock(req.Key)
+			defer unlock()
+
+			// Re-read key status under lock — another request may
+			// have activated this key between our initial read and
+			// lock acquisition.
+			keyRecord, err = app.FindFirstRecordByData("license_keys", "key", req.Key)
+			if err != nil || (keyRecord.GetString("status") != "unused" && keyRecord.GetString("status") != "") {
+				keyFailTracker.recordFailure(req.Key)
+				return e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "invalid or already used license key",
+				})
+			}
+			keyStatus = keyRecord.GetString("status")
+
 			tenantColl, collErr := app.FindCollectionByNameOrId("tenants")
 			if collErr != nil {
 				return e.JSON(http.StatusInternalServerError, map[string]any{
@@ -156,6 +180,33 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				})
 			}
 
+			// ── Per-tenant lock (mirrors renew.go Fix #3) ─────────
+			// Serialise concurrent activations for the same tenant
+			// (different keys) to prevent TOCTOU races on machine limits
+			// and multiple active subscriptions.
+			unlockTenant := tenantLocks.lock(tenant.Id)
+			defer unlockTenant()
+
+			// ── Per-key activation lock (tenant→key ordering) ─────
+			// Acquired AFTER the tenant lock to maintain consistent
+			// lock ordering with renew.go and avoid deadlock.
+			unlock := activationLocks.lock(req.Key)
+			defer unlock()
+
+			// Re-read key status under lock — another request may
+			// have activated this key between our initial read and
+			// lock acquisition. Without this re-check, a stale
+			// keyStatus=="unused" could cause a duplicate subscription.
+			keyRecord, err = app.FindFirstRecordByData("license_keys", "key", req.Key)
+			if err != nil {
+				keyFailTracker.recordFailure(req.Key)
+				return e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "invalid or already used license key",
+				})
+			}
+			keyStatus = keyRecord.GetString("status")
+			activatedBy = ""
+
 			// Resolve the activated_by tenant ID (defensive for legacy
 			// JSON-array format). Only non-"unused" keys have an
 			// activated_by relation set.
@@ -174,13 +225,24 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// WITHOUT requiring the api_key. The email + key pair is sufficient
 			// proof that the caller owns this activation.
 			if keyStatus == "activated" && activatedBy == tenant.Id {
-				// Find existing active subscription
-				subRecord, err := app.FindFirstRecordByData("subscriptions", "tenant_id", tenant.Id)
-				if err != nil || subRecord.GetString("status") != "active" {
+				// Find existing ACTIVE subscription. Use FindRecordsByFilter
+				// with explicit status='active' filter and order by -starts_at
+				// to get the latest. FindFirstRecordByData without a status
+				// filter would return an expired subscription for renewed
+				// tenants (SQLite returns in insertion order), breaking
+				// re-activation for any tenant who has ever renewed.
+				subs, err := app.FindRecordsByFilter(
+					"subscriptions",
+					"tenant_id = {:tenant_id} && status = 'active'",
+					"-starts_at", 1, 0,
+					map[string]any{"tenant_id": tenant.Id},
+				)
+				if err != nil || len(subs) == 0 {
 					return e.JSON(http.StatusInternalServerError, map[string]any{
 						"error": "failed to find active subscription for reused key",
 					})
 				}
+				subRecord := subs[0]
 
 				log.Printf("Re-activation: key=%q already activated by tenant=%q (email=%q), returning existing subscription",
 					req.Key, tenant.Id, req.Email)
@@ -188,8 +250,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				// ── Machine count enforcement on re-activation ─────────
 				// Without this check, a Free-tier key holder could install
 				// on unlimited machines by repeatedly re-activating with the
-				// correct email+key pair.
-				rTier := keyRecord.GetString("tier_key")
+				// correct email+key pair. Use the ACTIVE SUBSCRIPTION's tier
+				// (not the key's tier) so that a tenant who downgraded via
+				// renewal is correctly subject to the lower tier's limits.
+				rTier := subRecord.GetString("tier_key")
 				rMax := maxMachinesForTier(rTier)
 				if rMax > 0 {
 					existingMachines, _ := app.FindRecordsByFilter(
