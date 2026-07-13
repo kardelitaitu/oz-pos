@@ -339,7 +339,12 @@ export default function WorkspaceHome() {
     };
   }, []);
 
-  // ── Click ripple + exit animation ───────────────────────────────
+  // ── Click ripple + immediate navigation ──────────────────────────
+  //
+  // Navigates on the same event loop tick — no 300ms exit delay.
+  // The exiting state is set briefly for the CSS animation but the
+  // component unmounts before it completes; on re-entry the state is
+  // fresh from the useState initialiser.
 
   const handleCardClick = useCallback(
     (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
@@ -373,13 +378,9 @@ export default function WorkspaceHome() {
         }
       }, 600);
 
-      // Exit animation: mark this card as exiting, then navigate after animation
+      // Navigate immediately — no exit animation delay
       setExitingWorkspace(key);
-      setTimeout(() => {
-        setActiveWorkspace(key);
-        // Reset exiting state so the component is ready for re-entry
-        setExitingWorkspace(null);
-      }, 300);
+      setActiveWorkspace(key);
     },
     [canAccess, setActiveWorkspace, error, exitingWorkspace],
   );
