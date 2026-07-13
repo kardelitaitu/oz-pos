@@ -173,7 +173,7 @@
 
 /* ═══════════════════════════════════════════════════════════════════
  * Layer 2: Content Container
- * Split into header (6%) + main content (88%) + footer (6%).
+ * Split into header (12%) + main content (82%) + footer (6%).
  * ═══════════════════════════════════════════════════════════════════ */
 
 .ws-layer-content {
@@ -188,7 +188,7 @@
 /* ── Header box (top 8%) ─────────────────────────────────────────── */
 
 .ws-header {
-  flex: 0 0 6%;
+  flex: 0 0 12%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -209,7 +209,7 @@
   gap: var(--space-2);
 }
 
-/* ── Main content box (remaining 88%) ───────────────────────────── */
+/* ── Main content box (remaining 82%) ───────────────────────────── */
 
 .ws-main {
   flex: 1;
