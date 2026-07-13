@@ -4,6 +4,22 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.6] — 2026-07-13
+
+### Added
+- **Version Bumping Automation**: Introduced the `scripts/bump-version.ps1` PowerShell script to automate updating version strings in 18+ configuration, test, route, and UI files, and auto-refresh lockfiles.
+
+### Changed
+- **Cargo Test Optimization**: Configured package-specific optimization overrides (`opt-level = 3`) under `[profile.dev]` in `Cargo.toml` for `argon2`, `aes-gcm`, `aead`, and `zstd` dependencies to accelerate dev and test suite execution times (specifically targeting `oz-core`).
+
+### Fixed
+- **UI Test Suite Failures**:
+  - `ThemeToggle.test.tsx`: Swapped obsolete Sun/Moon SVG element assertions with actual DOM `data-theme` updates.
+  - `SalesHistoryScreen.test.tsx`: Corrected Voided filter chip query selector role to `'radio'`.
+  - `RetailOptionsScreen.test.tsx`: Adjusted app version expectation to match locked system version.
+  - `RefundModal.test.tsx`: Wrapped assertions on `onClose` in `vi.waitFor(...)` to support exit animation timers.
+  - `screenExtraction.test.ts`: Whitelisted dynamic and external classes on `KdsScreen`, `SettingsPage`, `WorkspaceHome`, and `AppearanceSettings` to resolve false positives in CSS integrity static checks.
+
 ## [0.0.5] — 2026-07-11
 
 ### Added
@@ -187,7 +203,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.4
 [0.0.3]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.3
