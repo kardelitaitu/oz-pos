@@ -44,7 +44,7 @@
 
 .workspace-home {
   position: relative;
-  height: 100%;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -182,6 +182,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
 
 /* ── Toolbar box (top 15%) ───────────────────────────────────────── */
@@ -208,7 +209,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 var(--space-8);
+  padding: var(--space-8);
   gap: var(--space-8);
   overflow-y: auto;
 }
@@ -1058,7 +1059,7 @@
   }
 
   .ws-main {
-    padding: 0 var(--space-4);
+    padding: var(--space-4);
   }
 
   .ws-toolbar {
