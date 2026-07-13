@@ -78,7 +78,6 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   padding: var(--space-1) var(--space-2);
-  background: var(--color-bg-surface);
   border-radius: var(--radius-md);
   line-height: 1;
 }
@@ -367,6 +366,7 @@
 
 .settings-footer {
   flex: 0 0 3%;
+  min-height: 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -375,6 +375,7 @@
   border-top: 1px solid var(--color-border);
   font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
+  overflow: hidden;
 }
 
 .settings-footer-left,
@@ -382,6 +383,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .settings-footer-theme-toggle {
