@@ -230,7 +230,9 @@ function LayerFloatingButtons({
           <>
             <button type="button" className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
               <div className="workspace-home-user-avatar">
-                <RoleIcon role={roleName} size={16} />
+                <div className="workspace-home-user-avatar-inner">
+                  <RoleIcon role={roleName} size={16} />
+                </div>
               </div>
               <div className="workspace-home-user-info">
                 <span className="workspace-home-user-name">{displayName}</span>
@@ -707,7 +709,9 @@ export default function WorkspaceHome() {
                       <div className="workspace-card-key-hint">{idx + 1}</div>
                       <div className="workspace-card-row">
                         <div className="workspace-card-icon">
-                          {getIcon(ws.type_key)}
+                          <div className="workspace-card-icon-inner">
+                            {getIcon(ws.type_key)}
+                          </div>
                         </div>
                         <div className="workspace-card-body">
                           <div className="workspace-card-title">
@@ -751,7 +755,9 @@ export default function WorkspaceHome() {
                     )}
                     <div className="workspace-card-row">
                       <div className="workspace-card-icon">
-                        {getIcon(ws.type_key)}
+                        <div className="workspace-card-icon-inner">
+                          {getIcon(ws.type_key)}
+                        </div>
                       </div>
                       <div className="workspace-card-body">
                         <div className="workspace-card-title">
@@ -787,7 +793,9 @@ export default function WorkspaceHome() {
                 >
                   <div className="workspace-card-row">
                     <div className="workspace-card-icon">
-                      {getIcon(cs.name)}
+                      <div className="workspace-card-icon-inner">
+                        {getIcon(cs.name)}
+                      </div>
                     </div>
                     <div className="workspace-card-body">
                       <div className="workspace-card-title">
