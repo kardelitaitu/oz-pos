@@ -377,12 +377,14 @@
 
 /* ── Card icon ───────────────────────────────────────────────────── */
 
-@keyframes ws-icon-bounce {
-  0% { transform: scale(1); }
-  30% { transform: scale(1.12); }
-  50% { transform: scale(0.95); }
-  70% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+@keyframes ws-icon-wiggle {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(-10deg); }
+  30% { transform: rotate(8deg); }
+  45% { transform: rotate(-6deg); }
+  60% { transform: rotate(4deg); }
+  80% { transform: rotate(-2deg); }
+  100% { transform: rotate(0deg); }
 }
 
 @keyframes ws-icon-pulse {
@@ -403,6 +405,7 @@
   flex: 0 0 min(25%, 96px);
   aspect-ratio: 1;
   color: var(--ws-accent, var(--color-accent));
+  transform-origin: center;
   transition: transform var(--duration-250) var(--ease-out);
 }
 
@@ -429,7 +432,7 @@
 }
 
 .workspace-card:hover .workspace-card-icon {
-  animation: ws-icon-bounce 0.5s var(--ease-out);
+  animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
 .workspace-card--active .workspace-card-icon {
