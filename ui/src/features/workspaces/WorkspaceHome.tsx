@@ -167,6 +167,7 @@ function LayerFloatingButtons({
   handleLogoutClick,
   error,
   retry,
+  greeting,
 }: {
   session: LoginSessionDto | null;
   displayName: string;
@@ -176,8 +177,17 @@ function LayerFloatingButtons({
   handleLogoutClick: () => void;
   error: string | null;
   retry: () => void;
+  greeting: { id: string };
 }) {
   return (
+    <>
+    {session && displayName && (
+      <span className="ws-header-greeting">
+        <Localized id={greeting.id} vars={{ name: displayName }}>
+          <span>Hello, {displayName}</span>
+        </Localized>
+      </span>
+    )}
     <div className="ws-header-buttons">
         <button
           type="button"
@@ -226,6 +236,7 @@ function LayerFloatingButtons({
           </button>
         )}
     </div>
+    </>
   );
 }
 
@@ -515,6 +526,7 @@ export default function WorkspaceHome() {
     handleLogoutClick,
     error,
     retry,
+    greeting,
   };
 
   // ── Loading state ────────────────────────────────────────────
@@ -637,13 +649,6 @@ export default function WorkspaceHome() {
                 <span>Select a workspace to start</span>
               </Localized>
             </p>
-            {session && displayName && (
-              <p className="workspace-home-greeting">
-                <Localized id={greeting.id} vars={{ name: displayName }}>
-                  <span>Hello, {displayName}</span>
-                </Localized>
-              </p>
-            )}
           </header>
 
           {sortedWorkspaces.length === 0 ? (

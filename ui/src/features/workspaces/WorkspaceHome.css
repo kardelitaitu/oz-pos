@@ -191,8 +191,15 @@
   flex: 0 0 8%;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 0 var(--space-8);
+}
+
+.ws-header-greeting {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  animation: ws-slide-down 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .ws-header-buttons {
@@ -253,16 +260,6 @@
 .workspace-home-user {
   font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
-}
-
-/* ── Greeting ───────────────────────────────────────────────────── */
-
-.workspace-home-greeting {
-  font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
-  margin: var(--space-1) 0 0;
-  animation: ws-slide-down 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.15s;
 }
 
 /* ── Grid ────────────────────────────────────────────────────────── */
