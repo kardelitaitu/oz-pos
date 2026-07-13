@@ -366,7 +366,7 @@
 /* ── Footer ─────────────────────────────────────────────────── */
 
 .settings-footer {
-  flex: 0 0 6%;
+  flex: 0 0 3%;
   display: flex;
   align-items: center;
   justify-content: space-between;
