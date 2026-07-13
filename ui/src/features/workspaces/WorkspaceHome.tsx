@@ -532,7 +532,6 @@ export default function WorkspaceHome() {
           </div>
           <div className="ws-main">
             <header className="workspace-home-header">
-              <h1 className="workspace-home-title">OZ-POS</h1>
               <p className="workspace-home-subtitle">
                 <Localized id="workspace-home-subtitle">
                   <span>Select a workspace to start</span>
@@ -633,7 +632,6 @@ export default function WorkspaceHome() {
         </div>
         <div className="ws-main">
           <header className="workspace-home-header">
-            <h1 className="workspace-home-title">OZ-POS</h1>
             <p className="workspace-home-subtitle">
               <Localized id="workspace-home-subtitle">
                 <span>Select a workspace to start</span>
