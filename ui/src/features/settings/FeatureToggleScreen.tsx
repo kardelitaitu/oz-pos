@@ -179,8 +179,6 @@ export default function FeatureToggleScreen() {
     }))
     .filter((g) => g.features.length > 0);
 
-  const hasSearchResults = grouped.length > 0 || !query;
-
   // ── Bulk toggle handlers ───────────────────────────────────────
 
   const toggleGroup = useCallback(async (group: string, enable: boolean) => {
@@ -280,20 +278,16 @@ export default function FeatureToggleScreen() {
         </div>
       )}
 
-      {!loading && !error && !hasSearchResults && (
+      {!loading && !error && grouped.length === 0 && (
         <Card shadow="sm">
           <div className="feature-toggle-empty">
-            <Localized id="feature-toggle-empty-search">
-              <p>No features match your search.</p>
-            </Localized>
-          </div>
-        </Card>
-      )}
-
-      {!loading && !error && grouped.length === 0 && hasSearchResults && features.length === 0 && (
-        <Card shadow="sm">
-          <div className="feature-toggle-empty">
-            <Localized id="feature-toggle-empty"><p>No features found.</p></Localized>
+            {features.length === 0 ? (
+              <Localized id="feature-toggle-empty"><p>No features found.</p></Localized>
+            ) : (
+              <Localized id="feature-toggle-empty-search">
+                <p>No features match your search.</p>
+              </Localized>
+            )}
           </div>
         </Card>
       )}
