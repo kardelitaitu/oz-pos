@@ -640,8 +640,10 @@
   backdrop-filter: blur(8px);
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   opacity: 0;
-  transform: translateY(4px);
-  transition: opacity var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1), transform var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(100%);
+  transition:
+    opacity var(--duration-300) cubic-bezier(0.22, 1, 0.36, 1),
+    transform var(--duration-400) cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
   z-index: 1;
 }
