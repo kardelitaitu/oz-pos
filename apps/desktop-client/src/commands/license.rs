@@ -455,24 +455,52 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
                 )),
             })
         } else {
-            Ok(LicenseStatusDto {
-                is_active: false,
-                status: LicenseVerificationStatus::Expired,
-                payload: None,
-                message: Some(format!(
-                    "License expired on {}. Grace period ended on {}.",
-                    expires_at.format("%Y-%m-%d"),
-                    grace_until.format("%Y-%m-%d")
-                )),
-            })
+            // ── Expired (past grace period) ───────────────────
+            #[cfg(debug_assertions)]
+            {
+                tracing::debug!("License expired in debug mode — returning Valid");
+                return Ok(LicenseStatusDto {
+                    is_active: true,
+                    status: LicenseVerificationStatus::Valid,
+                    payload: None,
+                    message: None,
+                });
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                return Ok(LicenseStatusDto {
+                    is_active: false,
+                    status: LicenseVerificationStatus::Expired,
+                    payload: None,
+                    message: Some(format!(
+                        "License expired on {}. Grace period ended on {}.",
+                        expires_at.format("%Y-%m-%d"),
+                        grace_until.format("%Y-%m-%d")
+                    )),
+                });
+            }
         }
     } else {
-        Ok(LicenseStatusDto {
-            is_active: false,
-            status: LicenseVerificationStatus::Missing,
-            payload: None,
-            message: Some("No license found. Please activate.".to_string()),
-        })
+        // ── No stored payload/signature ─────────────────────
+        #[cfg(debug_assertions)]
+        {
+            tracing::debug!("No license payload found in debug mode — returning Valid");
+            return Ok(LicenseStatusDto {
+                is_active: true,
+                status: LicenseVerificationStatus::Valid,
+                payload: None,
+                message: None,
+            });
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            return Ok(LicenseStatusDto {
+                is_active: false,
+                status: LicenseVerificationStatus::Missing,
+                payload: None,
+                message: Some("No license found. Please activate.".to_string()),
+            });
+        }
     }
 }
 
