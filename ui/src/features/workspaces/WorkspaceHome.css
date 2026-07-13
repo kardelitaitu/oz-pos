@@ -173,7 +173,7 @@
 
 /* ═══════════════════════════════════════════════════════════════════
  * Layer 2: Content Container
- * Split into toolbar (15%) + main content (85%).
+ * Split into header (8%) + main content (92%).
  * ═══════════════════════════════════════════════════════════════════ */
 
 .ws-layer-content {
@@ -185,10 +185,10 @@
   overflow: hidden;
 }
 
-/* ── Toolbar box (top 15%) ───────────────────────────────────────── */
+/* ── Header box (top 8%) ─────────────────────────────────────────── */
 
 .ws-header {
-  flex: 0 0 15%;
+  flex: 0 0 8%;
   display: flex;
   align-items: center;
   justify-content: flex-end;
