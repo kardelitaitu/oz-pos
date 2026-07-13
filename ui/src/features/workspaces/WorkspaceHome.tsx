@@ -572,13 +572,7 @@ export default function WorkspaceHome() {
             <LayerFloatingButtons {...floatingProps} />
           </div>
           <div className="ws-main">
-            <header className="workspace-home-header">
-              <p className="workspace-home-subtitle">
-                <Localized id="workspace-home-subtitle">
-                  <span>Select a workspace to start</span>
-                </Localized>
-              </p>
-            </header>
+            <header className="workspace-home-header" />
             <SkeletonGrid exiting={skeletonExiting} />
           </div>
           <div className="ws-footer" />
@@ -672,13 +666,7 @@ export default function WorkspaceHome() {
           <LayerFloatingButtons {...floatingProps} />
         </div>
         <div className="ws-main">
-          <header className="workspace-home-header">
-            <p className="workspace-home-subtitle">
-              <Localized id="workspace-home-subtitle">
-                <span>Select a workspace to start</span>
-              </Localized>
-            </p>
-          </header>
+          <header className="workspace-home-header" />
 
           {sortedWorkspaces.length === 0 ? (
             <div className="workspace-empty">
