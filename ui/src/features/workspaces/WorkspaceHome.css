@@ -318,7 +318,7 @@
 
 /* Subtle scale-in for the icon on the active card */
 .workspace-card--active .workspace-card-icon {
-  transform: scale(1.05) translateZ(0);
+  transform: scale(1.05);
 }
 
 .workspace-card:focus-visible {
@@ -364,8 +364,6 @@
   color: var(--ws-accent, var(--color-accent));
   transform-origin: center;
   transition: transform var(--duration-250) var(--ease-out);
-  will-change: transform;
-  transform: translateZ(0); /* Promote to composited layer to isolate child animation from parent 3D tilt repaint cycles */
 }
 
 .workspace-card-title {
