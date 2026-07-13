@@ -1770,7 +1770,7 @@ dependencies = [
 
 [[package]]
 name = "foundation"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "regex",
@@ -3341,7 +3341,7 @@ dependencies = [
 
 [[package]]
 name = "modules-crm"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3356,7 +3356,7 @@ dependencies = [
 
 [[package]]
 name = "modules-currency"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3368,7 +3368,7 @@ dependencies = [
 
 [[package]]
 name = "modules-inventory"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3383,7 +3383,7 @@ dependencies = [
 
 [[package]]
 name = "modules-reporting"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3398,7 +3398,7 @@ dependencies = [
 
 [[package]]
 name = "modules-sales"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3410,7 +3410,7 @@ dependencies = [
 
 [[package]]
 name = "modules-settings"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3422,7 +3422,7 @@ dependencies = [
 
 [[package]]
 name = "modules-staff"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3433,7 +3433,7 @@ dependencies = [
 
 [[package]]
 name = "modules-tax"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3445,7 +3445,7 @@ dependencies = [
 
 [[package]]
 name = "modules-terminal"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "foundation",
  "oz-core",
@@ -4020,7 +4020,7 @@ dependencies = [
 
 [[package]]
 name = "oz-api"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4040,7 +4040,7 @@ dependencies = [
 
 [[package]]
 name = "oz-cli"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4064,7 +4064,7 @@ dependencies = [
 
 [[package]]
 name = "oz-cloud-server"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4089,7 +4089,7 @@ dependencies = [
 
 [[package]]
 name = "oz-core"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -4118,7 +4118,7 @@ dependencies = [
 
 [[package]]
 name = "oz-hal"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -4132,7 +4132,7 @@ dependencies = [
 
 [[package]]
 name = "oz-logging"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "chrono",
  "filetime",
@@ -4147,7 +4147,7 @@ dependencies = [
 
 [[package]]
 name = "oz-lua"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "oz-core",
  "rlua",
@@ -4158,7 +4158,7 @@ dependencies = [
 
 [[package]]
 name = "oz-payment"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4178,7 +4178,7 @@ dependencies = [
 
 [[package]]
 name = "oz-plugin"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4198,7 +4198,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-app"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4243,7 +4243,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-tablet"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4277,7 +4277,7 @@ dependencies = [
 
 [[package]]
 name = "oz-reporting"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4290,7 +4290,7 @@ dependencies = [
 
 [[package]]
 name = "oz-security"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "oz-core",
  "security-framework",
@@ -4520,7 +4520,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform-core"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "argon2",
  "chrono",
@@ -4534,7 +4534,7 @@ dependencies = [
 
 [[package]]
 name = "platform-kernel"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "foundation",
@@ -4547,7 +4547,7 @@ dependencies = [
 
 [[package]]
 name = "platform-startup"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4575,7 +4575,7 @@ dependencies = [
 
 [[package]]
 name = "platform-sync"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "axum 0.8.9",
  "chrono",

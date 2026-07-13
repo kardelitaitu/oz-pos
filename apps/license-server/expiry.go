@@ -31,10 +31,11 @@ func calculateGraceUntil(expiresAt time.Time) time.Time {
 // maxMachinesForTier returns the maximum number of machines allowed for
 // the given tier. Returns 0 for unlimited (Enterprise).
 // Machine limits mirror the subscription tier quotas:
-//   Free:       1
-//   Pro:        3
-//   Premium:    10
-//   Enterprise: unlimited
+//
+//	Free:       1
+//	Pro:        3
+//	Premium:    10
+//	Enterprise: unlimited
 func maxMachinesForTier(tier string) int {
 	switch tier {
 	case "free":

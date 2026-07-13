@@ -4,7 +4,7 @@
     "message":  "258.0k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  257956,
+                  "totalLines":  257980,
                   "totalFiles":  1298,
                   "languages":  {
                                     "sql":  {
@@ -28,7 +28,7 @@
                                                  "files":  488
                                              },
                                     "typescript":  {
-                                                       "lines":  73803,
+                                                       "lines":  73827,
                                                        "files":  315
                                                    }
                                 }
