@@ -267,7 +267,7 @@
 .workspace-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-3);
   width: 100%;
   max-width: 64rem;
   animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -293,8 +293,8 @@
   flex-direction: row;
   align-items: center;
   text-align: left;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
@@ -396,8 +396,8 @@
 }
 
 .workspace-card-icon {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   color: var(--ws-accent, var(--color-accent));
   transition: transform var(--duration-250) var(--ease-out);
 }
@@ -630,8 +630,8 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
@@ -640,8 +640,8 @@
 }
 
 .workspace-skeleton-icon {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-lg);
   background: linear-gradient(
     90deg,
