@@ -258,7 +258,7 @@
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-3xl);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-glow, var(--shadow-2xl)), var(--shadow-sm);
   min-height: var(--touch-target-comfortable);
 }
@@ -371,7 +371,7 @@
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-3xl);
+  border-radius: var(--radius-xl);
   cursor: pointer;
   position: relative;
   overflow: hidden;
