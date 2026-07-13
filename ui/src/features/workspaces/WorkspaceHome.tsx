@@ -77,6 +77,9 @@ const GREETINGS: { word: string; lang: string }[] = [
   { word: 'Hallo', lang: 'Dutch' },
   { word: 'Ahoj', lang: 'Czech' },
   { word: 'Selamat datang', lang: 'Indonesian' },
+  { word: 'Sawubona', lang: 'Zulu' },
+  { word: 'Shalom', lang: 'Hebrew' },
+  { word: 'Jambo', lang: 'Swahili' },
 ];
 
 function pickGreeting(): { word: string; lang: string } {
