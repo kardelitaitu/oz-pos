@@ -232,7 +232,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
   // ── Store settings ────────────────────────────────────────────
 
-  const [store, setStore] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' });
+  const [store, setStore] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '' });
   const [storeLoaded, setStoreLoaded] = useState(false);
 
   useEffect(() => {

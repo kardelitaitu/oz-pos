@@ -365,7 +365,6 @@ export default function SettingsPage() {
     taxId: '',
     currency: 'IDR',
     branch: '',
-    logo: '',
   });
 
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
