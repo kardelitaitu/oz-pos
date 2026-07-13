@@ -178,7 +178,7 @@ function LayerFloatingButtons({
   retry: () => void;
 }) {
   return (
-    <div className="ws-toolbar-buttons">
+    <div className="ws-header-buttons">
         <button
           type="button"
           className="workspace-home-fullscreen-btn"
@@ -527,7 +527,7 @@ export default function WorkspaceHome() {
 
         {/* Layer 2+3: Content container + content */}
         <div className="ws-layer-content">
-          <div className="ws-toolbar">
+          <div className="ws-header">
             <LayerFloatingButtons {...floatingProps} />
           </div>
           <div className="ws-main">
@@ -568,7 +568,7 @@ export default function WorkspaceHome() {
 
         {/* Layer 2+3: Content container + content */}
         <div className="ws-layer-content">
-          <div className="ws-toolbar">
+          <div className="ws-header">
             <LayerFloatingButtons {...floatingProps} />
           </div>
           <div className="ws-main">
@@ -626,7 +626,7 @@ export default function WorkspaceHome() {
 
       {/* Layer 2+3: Content container + content */}
       <div className="ws-layer-content">
-        <div className="ws-toolbar">
+        <div className="ws-header">
           <LayerFloatingButtons {...floatingProps} />
         </div>
         <div className="ws-main">

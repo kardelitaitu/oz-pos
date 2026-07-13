@@ -187,7 +187,7 @@
 
 /* ── Toolbar box (top 15%) ───────────────────────────────────────── */
 
-.ws-toolbar {
+.ws-header {
   flex: 0 0 15%;
   display: flex;
   align-items: center;
@@ -195,7 +195,7 @@
   padding: 0 var(--space-8);
 }
 
-.ws-toolbar-buttons {
+.ws-header-buttons {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -791,13 +791,13 @@
  * Toolbar entrance animations
  * ═══════════════════════════════════════════════════════════════════ */
 
-.ws-toolbar-buttons > * {
+.ws-header-buttons > * {
   animation: ws-slide-down 0.35s var(--ease-out) both;
 }
 
-.ws-toolbar-buttons > :nth-child(1) { animation-delay: 0.05s; }
-.ws-toolbar-buttons > :nth-child(2) { animation-delay: 0.10s; }
-.ws-toolbar-buttons > :nth-child(3) { animation-delay: 0.15s; }
+.ws-header-buttons > :nth-child(1) { animation-delay: 0.05s; }
+.ws-header-buttons > :nth-child(2) { animation-delay: 0.10s; }
+.ws-header-buttons > :nth-child(3) { animation-delay: 0.15s; }
 
 /* ── Fullscreen toggle button ───────────────────────────────── */
 
@@ -1062,11 +1062,11 @@
     padding: var(--space-4);
   }
 
-  .ws-toolbar {
+  .ws-header {
     padding: 0 var(--space-4);
   }
 
-  .ws-toolbar-buttons {
+  .ws-header-buttons {
     gap: var(--space-1);
   }
 }
@@ -1169,7 +1169,7 @@
     opacity: 0.7;
   }
 
-  .ws-toolbar-buttons > * {
+  .ws-header-buttons > * {
     animation: none;
   }
 
