@@ -322,7 +322,8 @@ export default function StaffManagementScreen() {
                       </Localized>
                     )}
                   </td>
-                  <td className="staff-mgmt-cell-actions">
+                  <td>
+                    <div className="staff-mgmt-cell-actions">
                     <Localized id="staff-edit-aria" attrs={{ "aria-label": true }} vars={{ name: member.display_name }}>
                       <button
                         type="button"
@@ -345,6 +346,7 @@ export default function StaffManagementScreen() {
                         </Localized>
                       </button>
                     </Localized>
+                    </div>
                   </td>
                 </tr>
               ))}
