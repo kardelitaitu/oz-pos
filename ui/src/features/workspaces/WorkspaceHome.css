@@ -914,9 +914,9 @@
   flex-shrink: 0;
 }
 
+/* Continuous wiggle on hover — infinite so the user always sees it */
 .workspace-home-user-profile:hover .workspace-home-user-avatar .workspace-home-user-avatar-inner {
-  transition: none;
-  animation: ws-icon-wiggle 0.6s var(--ease-out);
+  animation: ws-icon-wiggle 0.8s var(--ease-out) infinite;
 }
 
 .workspace-home-user-info {
