@@ -711,8 +711,7 @@ export default function WorkspaceHome() {
                     )}
                     title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
                   >
-                    <div className="workspace-card-badges">
-                      <div className="workspace-card-key-hint">{idx + 1}</div>
+                    <div className="workspace-card-key-hint">{idx + 1}</div>
                       {isActive && (
                         <div className="workspace-card-active-dot" aria-label="Active workspace">
                           <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
@@ -720,7 +719,6 @@ export default function WorkspaceHome() {
                           </svg>
                         </div>
                       )}
-                    </div>
                     <div className="workspace-card-row">
                       <div className="workspace-card-icon">
                         {getIcon(ws.type_key)}

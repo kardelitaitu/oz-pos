@@ -399,12 +399,6 @@
   height: 100%;
 }
 
-.workspace-card-badges {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
 .workspace-card-icon {
   flex: 0 0 min(25%, 96px);
   aspect-ratio: 1;
@@ -560,11 +554,12 @@
 
 .workspace-card-active-dot {
   position: absolute;
-  top: var(--space-1);
-  right: var(--space-1);
+  top: 0;
+  right: 0;
   width: 8px;
   height: 8px;
   color: var(--ws-accent, var(--color-accent));
+  transform: translate(-4px, 4px);
   animation: ws-dot-pulse 2s ease-in-out infinite;
 }
 
@@ -594,8 +589,8 @@
 
 .workspace-card-key-hint {
   position: absolute;
-  top: var(--space-1);
-  left: var(--space-1);
+  top: 0;
+  left: 0;
   width: 18px;
   height: 18px;
   display: flex;
@@ -609,20 +604,17 @@
   font-weight: var(--font-weight-semibold);
   font-family: var(--font-mono);
   opacity: 0;
-  animation: ws-badge-enter 0.3s var(--ease-out) forwards;
-  transition: opacity var(--duration-150) var(--ease-out), transform var(--duration-150) var(--ease-out);
+  transform: translate(4px, calc(-100% - 4px));
+  transition:
+    opacity var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1),
+    transform var(--duration-300) cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  z-index: 1;
 }
-
-.workspace-card:nth-child(1) .workspace-card-key-hint { animation-delay: calc(0.05s + 0.08s); }
-.workspace-card:nth-child(2) .workspace-card-key-hint { animation-delay: calc(0.10s + 0.08s); }
-.workspace-card:nth-child(3) .workspace-card-key-hint { animation-delay: calc(0.15s + 0.08s); }
-.workspace-card:nth-child(4) .workspace-card-key-hint { animation-delay: calc(0.20s + 0.08s); }
-.workspace-card:nth-child(5) .workspace-card-key-hint { animation-delay: calc(0.25s + 0.08s); }
-.workspace-card:nth-child(6) .workspace-card-key-hint { animation-delay: calc(0.30s + 0.08s); }
 
 .workspace-card:hover .workspace-card-key-hint {
   opacity: 1;
-  transform: scale(1.1);
+  transform: translate(4px, 4px);
 }
 
 /* ── Card overlay (keyboard shortcut hint) ─────────────────────── */
@@ -1066,17 +1058,6 @@
   }
 }
 
-@keyframes ws-badge-enter {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  to {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-}
-
 @keyframes ws-shake {
   0%, 100% { transform: translateX(0); }
   10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); }
@@ -1246,8 +1227,13 @@
   }
 
   .workspace-card-key-hint {
-    animation: none;
+    transition: none;
+    opacity: 0;
+  }
+
+  .workspace-card:hover .workspace-card-key-hint {
     opacity: 0.7;
+    transform: translate(4px, 4px);
   }
 
   .workspace-card-overlay {
