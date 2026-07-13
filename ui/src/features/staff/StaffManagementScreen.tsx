@@ -52,6 +52,8 @@ export default function StaffManagementScreen() {
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceTypeDto[]>([]);
+  const [workspaceNameMap, setWorkspaceNameMap] = useState<Map<string, string>>(new Map());
+  const [staffWorkspaces, setStaffWorkspaces] = useState<Map<string, string[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,12 +74,39 @@ export default function StaffManagementScreen() {
       ]);
       setStaff(staffData);
       setRoles(rolesData);
+
+      // Load workspace names and assignments for the table column.
+      try {
+        const workspaces = await listAllWorkspaces(callerUserId);
+        const nameMap = new Map<string, string>();
+        for (const w of workspaces) {
+          nameMap.set(w.key, w.name);
+        }
+        setWorkspaceNameMap(nameMap);
+
+        const wsMap = new Map<string, string[]>();
+        const results = await Promise.allSettled(
+          staffData.map((m) => getUserWorkspaces(m.id)),
+        );
+        for (let i = 0; i < results.length; i++) {
+          const member = staffData[i];
+          const r = results[i];
+          if (member && r && r.status === 'fulfilled') {
+            wsMap.set(member.id, r.value);
+          } else if (member) {
+            wsMap.set(member.id, []);
+          }
+        }
+        setStaffWorkspaces(wsMap);
+      } catch {
+        // Workspace data unavailable — column will be empty.
+      }
     } catch {
       // IPC unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [callerUserId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -286,6 +315,7 @@ export default function StaffManagementScreen() {
                 <Localized id="staff-col-username"><th>Username</th></Localized>
                 <Localized id="staff-col-role"><th>Role</th></Localized>
                 <Localized id="staff-col-status"><th>Status</th></Localized>
+                <Localized id="staff-col-workspace"><th>Workspace</th></Localized>
                 <Localized id="staff-col-actions" attrs={{ "aria-label": true }}>
                   <th aria-label="Actions"> </th>
                 </Localized>
@@ -321,6 +351,11 @@ export default function StaffManagementScreen() {
                         <span className="staff-mgmt-status-inactive">Inactive</span>
                       </Localized>
                     )}
+                  </td>
+                  <td className="staff-mgmt-cell-username">
+                    {(staffWorkspaces.get(member.id) ?? [])
+                      .map((k) => workspaceNameMap.get(k) ?? k)
+                      .join(', ') || '—'}
                   </td>
                   <td>
                     <div className="staff-mgmt-cell-actions">
