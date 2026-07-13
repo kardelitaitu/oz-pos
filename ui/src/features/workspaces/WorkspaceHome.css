@@ -447,31 +447,6 @@
 
 /* ── Card disabled ───────────────────────────────────────────────── */
 
-.workspace-card--coming-soon {
-  opacity: 0.5;
-  cursor: default;
-  border-style: dashed;
-  pointer-events: none;
-}
-
-.workspace-card--coming-soon .workspace-card-icon {
-  color: var(--color-fg-tertiary);
-}
-
-.workspace-card--coming-soon .workspace-card-name {
-  color: var(--color-fg-secondary);
-}
-
-.workspace-card--coming-soon .workspace-card-desc {
-  color: var(--color-fg-tertiary);
-}
-
-.workspace-card-badge--coming {
-  background: var(--color-bg-surface) !important;
-  color: var(--color-fg-tertiary) !important;
-  border: 1px dashed var(--color-border);
-}
-
 .workspace-card--disabled {
   opacity: 0.45;
   cursor: not-allowed;

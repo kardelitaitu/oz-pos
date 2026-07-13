@@ -428,7 +428,7 @@ export default function WorkspaceHome() {
         if (idx < cards.length) {
           e.preventDefault();
           const target = cards[idx];
-          if (target && !target.disabled && !target.classList.contains('workspace-card--coming-soon')) {
+          if (target && !target.disabled && !target.classList.contains('workspace-card--disabled')) {
             // Programmatic click won't create a ripple,
             // but we still need to activate the workspace.
             // dispatchEvent is used to trigger the React onClick handler.
@@ -762,7 +762,7 @@ export default function WorkspaceHome() {
               {COMING_SOON_CARDS.map((cs, i) => (
                 <div
                   key={`coming-soon-${i}`}
-                  className="workspace-card workspace-card--coming-soon"
+                  className="workspace-card workspace-card--disabled"
                   aria-disabled="true"
                 >
                   <div className="workspace-card-icon">
