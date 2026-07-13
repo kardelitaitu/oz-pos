@@ -5,6 +5,7 @@ import { useFullscreen } from '@/hooks/useFullscreen';
 import { Localized, useLocalization } from '@fluent/react';
 import { Modal } from '@/components/Modal';
 import { WorkspaceIcon } from '@/components/WorkspaceIcon';
+import { RoleIcon } from '@/components/RoleIcon';
 import type { LoginSessionDto } from '@/api/staff';
 import './WorkspaceHome.css';
 
@@ -145,17 +146,7 @@ function LogoutModal({
   );
 }
 
-// ── Avatar initials ────────────────────────────────────────────────
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-}
 
 // ── Role color map ────────────────────────────────────────────────
 
@@ -238,7 +229,9 @@ function LayerFloatingButtons({
         {session && (
           <>
             <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
-              <div className="workspace-home-user-avatar">{getInitials(displayName)}</div>
+              <div className="workspace-home-user-avatar">
+                <RoleIcon role={roleName} size={16} />
+              </div>
               <div className="workspace-home-user-info">
                 <span className="workspace-home-user-name">{displayName}</span>
                 <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>

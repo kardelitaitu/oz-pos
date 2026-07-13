@@ -890,6 +890,14 @@
   flex-shrink: 0;
 }
 
+.workspace-home-user-profile:hover .workspace-home-user-avatar svg {
+  animation: ws-icon-wiggle 0.6s var(--ease-out);
+}
+
+.workspace-home-user-avatar svg {
+  transform-origin: center;
+}
+
 .workspace-home-user-info {
   display: flex;
   flex-direction: column;
