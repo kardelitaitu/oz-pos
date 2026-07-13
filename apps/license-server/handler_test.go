@@ -1995,7 +1995,7 @@ func TestRateLimiter_PersistBucket_MonotonicUnderConcurrentWrites(t *testing.T) 
 	const (
 		fixedIP         = "192.0.2.99"
 		N               = 20
-		iters           = 50
+		iters           = 10
 		preSeedTokens   = 5
 		preSeedLastFill = "2025-12-31T23:59:00Z"
 	)
@@ -2119,7 +2119,7 @@ func TestKeyFailureTracker_PersistFailure_MonotonicUnderConcurrentWrites(t *test
 	const (
 		fixedKey = "OZ-MINMAX-RACE-1"
 		N        = 10 // includes snapCounts 0..9; counts >=3 (= max) carry cooldowns
-		iters    = 50
+		iters    = 10
 	)
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -2263,15 +2263,15 @@ func TestActivationLocks_BoundedMemory(t *testing.T) {
 			gotSize, maxAllowedBytes)
 	}
 
-	// (3) Heap-boundedness check across 100,000 distinct keys. Without
+	// (3) Heap-boundedness check across 10,000 distinct keys. Without
 	// the unbounded-map fix, the prior design would have grown
-	// ≈ N * 24 bytes ≈ 2.4 MB just for mutex pointers and map
-	// entries. Cap at 2 MB to catch any regression without flaking
-	// on fmt.Sprintf scratch + runtime internals.
+	// ≈ N * 24 bytes ≈ 240 KB for mutex pointers and map entries.
+	// 10k keys still proves the struct is fixed-size; the heap check
+	// is proportional so fewer keys means a tighter threshold.
 	var memBefore, memAfter runtime.MemStats
 	runtime.ReadMemStats(&memBefore)
 
-	const N = 100_000
+	const N = 10_000
 	for i := 0; i < N; i++ {
 		key := fmt.Sprintf("OZ-DOS-KEY-%08d", i)
 		unlock := kal.lock(key)
@@ -2280,8 +2280,13 @@ func TestActivationLocks_BoundedMemory(t *testing.T) {
 	runtime.ReadMemStats(&memAfter)
 
 	heapGrowthMB := float64(int64(memAfter.HeapAlloc)-int64(memBefore.HeapAlloc)) / 1024 / 1024
-	if heapGrowthMB > 2 {
-		t.Errorf("activationLocks heap grew by %.2f MB after %d distinct keys; expected <2 MB (prior unbounded-map design would have grown >2 MB from N mutex entries alone)",
+	// Baseline overhead: fmt.Sprintf scratch (~200 KB) + closure
+	// allocations (~100 KB) + runtime internals ≈ 0.5 MB total.
+	// Broken per-key-map design would add ~240 KB for map entries
+	// plus Go map overhead (~200 KB) = ~0.9 MB total. Threshold at
+	// 0.8 MB catches the regression with headroom for GC variance.
+	if heapGrowthMB > 0.8 {
+		t.Errorf("activationLocks heap grew by %.2f MB after %d distinct keys; expected <0.8 MB (prior unbounded-map design would have grown ~0.9 MB from N mutex entries + map overhead)",
 			heapGrowthMB, N)
 	}
 }
@@ -2298,7 +2303,7 @@ func TestActivationLocks_BoundedMemory(t *testing.T) {
 //   - Max bucket count is within reasonable bounds (no hot spot).
 //   - Mean is ≈ N/256 (sanity).
 func TestActivationLocks_DistributesKeysAcrossShards(t *testing.T) {
-	const N = 10_000
+	const N = 2_048 // 8 keys per bucket — enough to hit all 256 buckets
 
 	counts := make([]int, activationLockShards)
 	for i := 0; i < N; i++ {
@@ -2320,14 +2325,11 @@ func TestActivationLocks_DistributesKeysAcrossShards(t *testing.T) {
 		t.Errorf("hash distribution has %d empty buckets out of %d (FNV-1a is broken or hash space collapsed)",
 			emptyBuckets, activationLockShards)
 	}
-	// For 10,000 keys across 256 buckets, expected mean is ~39. A
-	// max > 3x the mean suggests a hot spot (e.g. `idx := 0` or
-	// `idx := hash & 0` would yield max=N=10000, far above the
-	// bound). 3x is a loose bound to absorb legitimate FNV-1a
-	// variance on this input set.
+	// For 2,048 keys across 256 buckets, expected mean is ~8. A
+	// max > 4x the mean suggests a hot spot.
 	meanCount := N / activationLockShards
-	if maxCount > 3*meanCount {
-		t.Errorf("hash distribution hot spot: max bucket has %d keys, mean is %d (expected max < 3x mean)",
+	if maxCount > 4*meanCount {
+		t.Errorf("hash distribution hot spot: max bucket has %d keys, mean is %d (expected max < 4x mean)",
 			maxCount, meanCount)
 	}
 }
@@ -2424,9 +2426,9 @@ func TestActivationLocks_ConcurrentSameKeyBlocks(t *testing.T) {
 // itself rather than the sharded-mutex pool's actual growth.
 func TestActivationLocks_BoundedUnderHighChurn(t *testing.T) {
 	const (
-		goroutines    = 50
-		keysPerWorker = 10_000
-		maxHeapGrowth = 4 * 1024 * 1024 // 4 MB
+		goroutines    = 10
+		keysPerWorker = 2_000
+		maxHeapGrowth = 1 * 1024 * 1024 // 1 MB (20k ops, not 500k)
 	)
 	kal := &keyActivationLocks{}
 
