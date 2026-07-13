@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   listTerminals,
   registerTerminal,
@@ -135,6 +136,7 @@ function formatDate(iso: string): string {
 export default function TerminalManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { addToast } = useToast();
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -305,7 +307,7 @@ export default function TerminalManagementScreen() {
 
   // ── Device binding handlers (ADR #4 Phase 3) ────────────────────
 
-  const handleBind = useCallback(async () => {
+  const handleBind = async () => {
     if (!editingId || !selectedStoreId || !selectedInstanceId) return;
     setBindingSaving(true);
     setBindingError(null);
@@ -318,9 +320,9 @@ export default function TerminalManagementScreen() {
     } finally {
       setBindingSaving(false);
     }
-  }, [editingId, selectedStoreId, selectedInstanceId, session?.user_id, l10n]);
+  };
 
-  const handleClearBinding = useCallback(async () => {
+  const handleClearBinding = async () => {
     if (!editingId) return;
     setBindingSaving(true);
     setBindingError(null);
@@ -334,7 +336,7 @@ export default function TerminalManagementScreen() {
     } finally {
       setBindingSaving(false);
     }
-  }, [editingId, session?.user_id, l10n]);
+  };
 
   const openDelete = useCallback((terminal: TerminalDto) => {
     setDeleteTarget(terminal);
@@ -348,32 +350,25 @@ export default function TerminalManagementScreen() {
 
   // ── Feature override handlers ─────────────────────────────────
 
-  const overrideEnabled = useCallback(
-    (featureKey: string): boolean | undefined => {
-      const ov = overrides.find((o) => o.feature === featureKey);
-      return ov?.enabled;
-    },
-    [overrides],
-  );
+  const overrideEnabled = (featureKey: string): boolean | undefined => {
+    const ov = overrides.find((o) => o.feature === featureKey);
+    return ov?.enabled;
+  };
 
-  const handleToggleOverride = useCallback(
-    async (featureKey: string, currentEnabled: boolean) => {
-      if (!editingId) return;
-      try {
-        await setTerminalOverride(session?.user_id ?? '', editingId, featureKey, !currentEnabled);
-        const data = await listTerminalOverrides(editingId);
-        setOverrides(data);
-      } catch {
-        setOverridesError(l10n.getString('terminal-error-override-update'));
-      }
-    },
-    [editingId, session?.user_id, l10n],
-  );
-
-  const handleResetOverrides = useCallback(async () => {
+  const handleToggleOverride = async (featureKey: string, currentEnabled: boolean) => {
     if (!editingId) return;
     try {
-      // Delete each known override.
+      await setTerminalOverride(session?.user_id ?? '', editingId, featureKey, !currentEnabled);
+      const data = await listTerminalOverrides(editingId);
+      setOverrides(data);
+    } catch {
+      setOverridesError(l10n.getString('terminal-error-override-update'));
+    }
+  };
+
+  const handleResetOverrides = async () => {
+    if (!editingId) return;
+    try {
       const promises = overrides.map((o) =>
         deleteTerminalOverride(session?.user_id ?? '', editingId, o.feature),
       );
@@ -382,26 +377,27 @@ export default function TerminalManagementScreen() {
     } catch {
       setOverridesError(l10n.getString('terminal-error-override-reset'));
     }
-  }, [editingId, overrides, session?.user_id, l10n]);
+  };
 
-  const handleSave = useCallback(async () => {
+  // Validation runs BEFORE setSaving(true) to avoid calling setSaving(false)
+  // twice (once in try, once in finally) and a visible loading flicker.
+  // No useCallback needed — only used as onClick on a single button.
+  const handleSave = async () => {
+    const name = form.name.trim();
+    const deviceId = form.deviceId.trim();
+
+    if (!name) {
+      setError(l10n.getString('terminal-error-name-required'));
+      return;
+    }
+    if (!deviceId) {
+      setError(l10n.getString('terminal-error-device-id-required'));
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      const name = form.name.trim();
-      const deviceId = form.deviceId.trim();
-
-      if (!name) {
-        setError(l10n.getString('terminal-error-name-required'));
-        setSaving(false);
-        return;
-      }
-      if (!deviceId) {
-        setError(l10n.getString('terminal-error-device-id-required'));
-        setSaving(false);
-        return;
-      }
-
       if (editingId) {
         await updateTerminal(session?.user_id ?? '', {
           id: editingId,
@@ -426,11 +422,11 @@ export default function TerminalManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, session?.user_id, closeModal, load, l10n]);
+  };
 
   // ── Delete ─────────────────────────────────────────────────────
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
@@ -438,11 +434,11 @@ export default function TerminalManagementScreen() {
       closeDelete();
       await load();
     } catch {
-      // Error handling.
+      addToast({ message: l10n.getString('terminal-error-save'), type: 'error' });
     } finally {
       setDeleting(false);
     }
-  }, [deleteTarget, session?.user_id, closeDelete, load]);
+  };
 
   // ── Render ─────────────────────────────────────────────────────
 
