@@ -534,7 +534,8 @@ export default function TerminalManagementScreen() {
                     )}
                   </td>
                   <td className="terminal-mgmt-cell-created">{formatDate(terminal.createdAt)}</td>
-                  <td className="terminal-mgmt-cell-actions">
+                  <td>
+                    <div className="terminal-mgmt-cell-actions">
                     <Localized id="terminal-edit-action" attrs={{ "aria-label": true }} vars={{ name: terminal.name }}>
                       <button
                         type="button"
@@ -555,6 +556,7 @@ export default function TerminalManagementScreen() {
                         <Localized id="terminal-delete-action"><span>Delete</span></Localized>
                       </button>
                     </Localized>
+                    </div>
                   </td>
                 </tr>
               ))}
