@@ -55,13 +55,31 @@ function SkeletonGrid({ exiting }: { exiting?: boolean }) {
   );
 }
 
-// ── Time-based greeting ───────────────────────────────────────
+// ── Randomized multilingual greeting ────────────────────────────
 
-function getGreeting(hour: number): { id: string } {
-  if (hour >= 5 && hour < 12) return { id: 'workspace-home-greeting-morning' };
-  if (hour >= 12 && hour < 18) return { id: 'workspace-home-greeting-afternoon' };
-  if (hour >= 18 && hour < 22) return { id: 'workspace-home-greeting-evening' };
-  return { id: 'workspace-home-greeting-night' };
+const GREETINGS = [
+  'Hello',
+  'Hola',
+  'Bonjour',
+  'Ciao',
+  'Konnichiwa',
+  'Annyeong',
+  'Ni hao',
+  'Salaam',
+  'Sawasdee',
+  'Zdravstvuyte',
+  'Guten Tag',
+  'Olá',
+  'Namaste',
+  'Merhaba',
+  'Hej',
+  'Salut',
+  'Hallo',
+  'Ahoj',
+];
+
+function pickGreeting(): string {
+  return GREETINGS[Math.floor(Math.random() * GREETINGS.length)]!;
 }
 
 // ── LogoutModal ───────────────────────────────────────────────────
@@ -177,15 +195,13 @@ function LayerFloatingButtons({
   handleLogoutClick: () => void;
   error: string | null;
   retry: () => void;
-  greeting: { id: string };
+  greeting: string;
 }) {
   return (
     <>
     {session && displayName && (
       <span className="ws-header-greeting">
-        <Localized id={greeting.id} vars={{ name: displayName }}>
-          <span>Hello, {displayName}</span>
-        </Localized>
+        {greeting}, {displayName}
       </span>
     )}
     <div className="ws-header-buttons">
@@ -275,7 +291,7 @@ export default function WorkspaceHome() {
     [roleName, cashierOnly, kitchenOnly],
   );
 
-  const greeting = getGreeting(new Date().getHours());
+  const greeting = useMemo(() => pickGreeting(), []);
 
   const displayName = session?.display_name ?? session?.role_name ?? '';
 
