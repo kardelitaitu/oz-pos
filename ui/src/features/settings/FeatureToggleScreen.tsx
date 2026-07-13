@@ -6,7 +6,7 @@
 //! enabling a feature, required dependencies are also enabled.
 //! When disabling, only the selected feature is turned off.
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
@@ -181,8 +181,15 @@ export default function FeatureToggleScreen() {
 
   // ── Bulk toggle handlers ───────────────────────────────────────
 
+  // Keep a ref to the latest features so toggleGroup doesn't need to
+  // depend on `features` (which changes on every toggle, defeating
+  // useCallback memoization).
+  const featuresRef = useRef(features);
+  featuresRef.current = features;
+
   const toggleGroup = useCallback(async (group: string, enable: boolean) => {
-    const groupFeatures = features.filter((f) => f.group === group);
+    const currentFeatures = featuresRef.current;
+    const groupFeatures = currentFeatures.filter((f) => f.group === group);
     const keys = groupFeatures
       .filter((f) => f.enabled !== enable)
       .map((f) => f.key);
@@ -210,7 +217,7 @@ export default function FeatureToggleScreen() {
     } finally {
       setTogglingBatch(null);
     }
-  }, [features, l10n, addToast]);
+  }, [l10n, addToast]);
 
   // ── Render ────────────────────────────────────────────────────
 
