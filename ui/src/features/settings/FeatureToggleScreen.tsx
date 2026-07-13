@@ -323,15 +323,13 @@ export default function FeatureToggleScreen() {
       {!loading && !error && grouped.map(({ group, features: groupFeatures }) => (
         <div key={group} className="feature-toggle-group">
           <div className="feature-toggle-group-header">
-            <Localized id={GROUP_L10N_IDS[group] ?? ''}>
-              <h2 className="feature-toggle-group-title">
-                <span className="feature-toggle-group-icon" aria-hidden="true">{getGroupIcon(group)}</span>
-                {group}
-                <span className="feature-toggle-group-count">
+            <h2 className="feature-toggle-group-title">
+              <span className="feature-toggle-group-icon" aria-hidden="true">{getGroupIcon(group)}</span>
+              <Localized id={GROUP_L10N_IDS[group] ?? ''}>{group}</Localized>
+              <span className="feature-toggle-group-count">
                 {groupFeatures.filter((f) => f.enabled).length}/{groupFeatures.length}
               </span>
             </h2>
-            </Localized>
             <div className="feature-toggle-bulk-actions">
               <button
                 type="button"

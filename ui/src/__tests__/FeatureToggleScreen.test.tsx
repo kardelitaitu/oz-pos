@@ -153,11 +153,23 @@ describe('FeatureToggleScreen', () => {
     expect(screen.getByText('Card Payment')).toBeInTheDocument();
   });
 
-  // NOTE: Group-level enabled/total counts (e.g. "1/1") are not rendered
-  // because the `.feature-toggle-group-count` span sits inside a `<Localized>`
-  // wrapper whose FTL value is a plain string (e.g. "Core") — @fluent/react
-  // strips the count span. This is a known component bug (not a test gap).
-  // TODO: Move the count span outside of <Localized> in FeatureToggleScreen.tsx.
+  it('renders group-level enabled/total count in each heading', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    // Core: cash_payment is enabled → "1/1".
+    const coreHeading = screen.getByRole('heading', { name: /core/i });
+    expect(within(coreHeading).getByText('1/1')).toBeInTheDocument();
+
+    // Hardware: barcode_scanning is disabled → "0/1".
+    const hardwareHeading = screen.getByRole('heading', { name: /hardware/i });
+    expect(within(hardwareHeading).getByText('0/1')).toBeInTheDocument();
+  });
 
   it('renders Enable All / Disable All bulk buttons per group', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
