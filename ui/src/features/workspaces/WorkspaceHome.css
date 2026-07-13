@@ -279,11 +279,9 @@
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(20px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -298,16 +296,19 @@
   cursor: pointer;
   position: relative;
   overflow: hidden;
+  opacity: 0;
+  box-shadow: var(--shadow-glow, var(--shadow-2xl)), var(--shadow-sm);
   transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1),
     border-color var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1),
     transform var(--duration-300) cubic-bezier(0.22, 1, 0.36, 1),
     background var(--duration-250) cubic-bezier(0.22, 1, 0.36, 1);
-  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: 0.1s;
-  opacity: 0;
-  box-shadow: var(--shadow-glow, var(--shadow-2xl)), var(--shadow-sm);
-  transform: perspective(800px) rotateX(0deg) rotateY(0deg);
+  will-change: transform, opacity;
+}
+
+.ws-loaded .workspace-card {
+  opacity: 1;
 }
 
 .workspace-card::before {
@@ -367,13 +368,13 @@
   border-color: var(--color-border-focus);
 }
 
-/* Staggered animation delays */
-.workspace-card:nth-child(1) { animation-delay: 0.05s; }
-.workspace-card:nth-child(2) { animation-delay: 0.10s; }
-.workspace-card:nth-child(3) { animation-delay: 0.15s; }
-.workspace-card:nth-child(4) { animation-delay: 0.20s; }
-.workspace-card:nth-child(5) { animation-delay: 0.25s; }
-.workspace-card:nth-child(6) { animation-delay: 0.30s; }
+/* Staggered entrance delays (also briefly delays hover-out — negligible at 50ms) */
+.workspace-card:nth-child(1) { transition-delay: 0.05s; }
+.workspace-card:nth-child(2) { transition-delay: 0.10s; }
+.workspace-card:nth-child(3) { transition-delay: 0.15s; }
+.workspace-card:nth-child(4) { transition-delay: 0.20s; }
+.workspace-card:nth-child(5) { transition-delay: 0.25s; }
+.workspace-card:nth-child(6) { transition-delay: 0.30s; }
 
 /* ── Card icon ───────────────────────────────────────────────────── */
 
