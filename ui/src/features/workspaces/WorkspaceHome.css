@@ -335,19 +335,19 @@
 /* ── Card icon ───────────────────────────────────────────────────── */
 
 @keyframes ws-icon-wiggle {
-  0% { transform: scale(var(--ws-icon-scale, 1)) rotate(0deg); }
-  15% { transform: scale(var(--ws-icon-scale, 1)) rotate(-10deg); }
-  30% { transform: scale(var(--ws-icon-scale, 1)) rotate(8deg); }
-  45% { transform: scale(var(--ws-icon-scale, 1)) rotate(-6deg); }
-  60% { transform: scale(var(--ws-icon-scale, 1)) rotate(4deg); }
-  80% { transform: scale(var(--ws-icon-scale, 1)) rotate(-2deg); }
-  100% { transform: scale(var(--ws-icon-scale, 1)) rotate(0deg); }
+  0% { transform: scale(var(--ws-icon-scale, 1)) rotate(0deg) translateZ(0); }
+  15% { transform: scale(var(--ws-icon-scale, 1)) rotate(-10deg) translateZ(0); }
+  30% { transform: scale(var(--ws-icon-scale, 1)) rotate(8deg) translateZ(0); }
+  45% { transform: scale(var(--ws-icon-scale, 1)) rotate(-6deg) translateZ(0); }
+  60% { transform: scale(var(--ws-icon-scale, 1)) rotate(4deg) translateZ(0); }
+  80% { transform: scale(var(--ws-icon-scale, 1)) rotate(-2deg) translateZ(0); }
+  100% { transform: scale(var(--ws-icon-scale, 1)) rotate(0deg) translateZ(0); }
 }
 
 @keyframes ws-icon-pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.08); opacity: 0.85; }
-  100% { transform: scale(1); opacity: 1; }
+  0% { transform: scale(1) translateZ(0); opacity: 1; }
+  50% { transform: scale(1.08) translateZ(0); opacity: 0.85; }
+  100% { transform: scale(1) translateZ(0); opacity: 1; }
 }
 
 .workspace-card-row {

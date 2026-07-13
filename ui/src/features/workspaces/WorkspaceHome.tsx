@@ -710,7 +710,6 @@ export default function WorkspaceHome() {
                       key={ws.type_key}
                       className={`workspace-card ${colorClass} workspace-card--disabled`}
                       aria-label={l10n.getString('workspace-card-no-access-aria', { name: ws.name })}
-                      title={l10n.getString('workspace-card-no-access-title', { role: roleName })}
                     >
                       <div className="workspace-card-key-hint">{idx + 1}</div>
                       <div className="workspace-card-row">
@@ -748,7 +747,6 @@ export default function WorkspaceHome() {
                     onMouseMove={handleMouseMove}
                     onMouseLeave={handleMouseLeave}
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
-                    title={ws.name}
                   >
                     <div className="workspace-card-key-hint">{idx + 1}</div>
                     {isActive && (
