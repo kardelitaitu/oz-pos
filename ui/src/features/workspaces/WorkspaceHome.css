@@ -495,8 +495,12 @@
 /* ── Card disabled ───────────────────────────────────────────────── */
 
 .workspace-card--disabled {
-  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.workspace-card--disabled .workspace-card-row,
+.workspace-card--disabled .workspace-card-badge {
+  opacity: 0.45;
 }
 
 .workspace-card--disabled:hover {

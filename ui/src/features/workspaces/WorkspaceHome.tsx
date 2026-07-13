@@ -787,6 +787,17 @@ export default function WorkspaceHome() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Overlay: coming soon hint */}
+                  <div className="workspace-card-overlay" aria-hidden="true">
+                    <span className="workspace-card-overlay-hint">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      Coming soon
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
