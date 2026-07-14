@@ -18,6 +18,7 @@
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
 mod db;
+mod prune;
 mod sync_api;
 
 use std::sync::Arc;
@@ -59,6 +60,8 @@ async fn main() {
         db::DbPool::Sqlite(conn) => {
             info!("running with SQLite backend");
             let state = CloudServerState { db: conn.clone() };
+            // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
+            prune::start_prune_loop(conn.clone());
             let app = build_router(state);
             serve(app).await;
         }

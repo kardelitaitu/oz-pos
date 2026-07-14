@@ -83,6 +83,12 @@ pub fn run() {
                 state.sync_daemon.start(db).await;
             });
 
+            // ── Background prune daemon (ADR #6 Q4 / P-1 Ledger Retention) ─
+            let prune_db = app.state::<AppState>().db.clone();
+            tauri::async_runtime::spawn(async move {
+                platform_sync::daemon::SyncDaemon::start_prune_task(prune_db);
+            });
+
             // ── LAN event forwarder ────────────────────────────────────
             let forwarder = crate::lan_server::LanEventForwarder::new();
             let handle = forwarder.handle();

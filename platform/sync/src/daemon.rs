@@ -286,6 +286,47 @@ impl SyncDaemon {
         }
     }
 
+    /// Start a background pruning task that calls [`Store::archive_stock_movements`]
+    /// on the local database (ADR #6 Q4 / P-1 Ledger Retention).
+    ///
+    /// Runs independently of the sync daemon with a random sleep interval of
+    /// 60-120 seconds, matching the daemon's rhythm. The task is fire-and-
+    /// forget — it runs until the process exits.
+    pub fn start_prune_task(db: DbConnection) {
+        tokio::spawn(async move {
+            tracing::info!("prune daemon started interval_range_secs=60..=120");
+
+            loop {
+                let sleep_dur =
+                    Duration::from_secs(rand::thread_rng().gen_range(60..=120));
+                tokio::time::sleep(sleep_dur).await;
+
+                let db = db.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    let conn = db.blocking_lock();
+                    let store = Store::new(&conn);
+                    store.archive_stock_movements(90, 50)
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(count)) => {
+                        if count > 0 {
+                            tracing::info!(count, "prune cycle: archived stock movements");
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!(error = %e, "prune cycle failed");
+                    }
+                    Err(join_err) => {
+                        tracing::error!(error = %join_err, "prune spawn_blocking panicked");
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
     /// Gracefully stop the background sync daemon.
     pub async fn stop(&self) {
         let tx = self.shutdown_tx.lock().await.take();
