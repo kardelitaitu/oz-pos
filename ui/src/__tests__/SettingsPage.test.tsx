@@ -96,13 +96,11 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  // Clear any timers the component may have left behind (useClock,
-  // ThemeProvider, Tooltip, handleSave, etc.) that survive unmount.
-  const maxId = window.setTimeout(() => {}, 0);
-  for (let i = 0; i <= maxId; i++) {
-    window.clearTimeout(i);
-    window.clearInterval(i);
-  }
+  // Timers are cleaned up by React's useEffect cleanup functions
+  // (useClock, ThemeProvider, Tooltip, ToastProvider) which pass
+  // Timeout objects directly to clearTimeout.  The old blanket loop
+  // (`clearTimeout(number)`) was a no-op in Node.js 15+ where
+  // setTimeout returns Timeout objects, not numbers.
 });
 
 function TestWrapper({ children }: { children: ReactNode }) {

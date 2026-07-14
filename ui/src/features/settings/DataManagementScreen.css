@@ -47,6 +47,20 @@
   font-weight: 600;
 }
 
+.data-mgmt-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}
+
+.data-mgmt-tab-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
 /* ── Sections ────────────────────────────────────────────────────── */
 
 .data-mgmt-section {
