@@ -61,43 +61,97 @@ export default function AppShell() {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { isKdsKiosk } = useTerminalProfile();
   const { addToast } = useToast();
+  // Stable ref so the mount effect below can call addToast without
+  // listing it as a dependency (which would cause the effect to re-run
+  // whenever the toast context re-creates its callback reference, resetting
+  // hasActiveLicense back to false mid-flow).
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
 
   useIdleTimer(() => {
     if (activeWorkspace) {
       goToWorkspacePicker();
       addToast({
         type: 'info',
-        message: 'Returned to workspace picker due to inactivity',
+        message: 'Returned to workspace picker due to inactivity. Configure auto-lock from Settings.',
       });
     } else if (session) {
+      addToast({
+        type: 'info',
+        message: 'Automatic logout enabled. Configure from Settings.',
+      });
       logout();
     }
   });
 
-  // On mount, check if setup was already completed.
+  // On mount, check license status and whether setup was already completed.
+  // addToastRef (not addToast) is used so this effect runs exactly once and
+  // cannot be re-triggered by a reference change in the toast context.
+  //
+  // Decision logic:
+  //   • Fresh install (setup NOT done): the license gate applies. No active
+  //     license → ActivationFlow (activate license + create owner account).
+  //   • Existing install (setup DONE, user data present): always let the user
+  //     through. License issues (expired, grace period, invalid) surface as a
+  //     non-blocking warning toast — never as a forced re-activation screen.
+  //     Forcing re-activation on an existing install would attempt to create a
+  //     second owner account (which the backend rejects) and is confusing.
+  //   • Dev mode (import.meta.env.DEV): skip the Rust license check entirely
+  //     and always report active. Saves the rebuild-Rust step during UI work.
   useEffect(() => {
+    // ── Dev-mode bypass ────────────────────────────────────────
+    // In Vite dev mode, the Rust backend may not have been rebuilt
+    // with the debug_assertions fix, causing a stale Missing/Expired
+    // status and an annoying toast on every F5. Skip the IPC call
+    // entirely and assume the license is valid.
+    if (import.meta.env.DEV) {
+      setHasCompletedSetup(true);
+      setHasActiveLicense(true);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
-        const licenseStatus = await getLicenseStatus();
-        if (!cancelled) {
-          setHasActiveLicense(licenseStatus.is_active);
-          if (licenseStatus.status === 'gracePeriod') {
-            addToast({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
-          } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
-            setLicenseError(licenseStatus.message);
-          }
-        }
+        const [licenseStatus, status] = await Promise.all([
+          getLicenseStatus(),
+          getSetupStatus(),
+        ]);
 
-        const status = await getSetupStatus();
         if (!cancelled) {
           setHasCompletedSetup(status.completed);
+
+          if (status.completed) {
+            // ── Existing install ───────────────────────────────────────
+            // Always let the user through to the login screen; surface
+            // license issues as toasts so they can renew from Settings.
+            setHasActiveLicense(true);
+            if (licenseStatus.status === 'gracePeriod') {
+              addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
+            } else if (!licenseStatus.is_active) {
+              addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is inactive. Please renew from Settings.' });
+            }
+          } else {
+            // ── Fresh install ──────────────────────────────────────────
+            // Respect the license gate; show ActivationFlow if not active.
+            setHasActiveLicense(licenseStatus.is_active);
+            if (licenseStatus.status === 'gracePeriod') {
+              addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
+            } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
+              setLicenseError(licenseStatus.message);
+            }
+          }
         }
       } catch (err) {
         if (!cancelled) {
-          setHasCompletedSetup(false);
-          setHasActiveLicense(false);
-          setLicenseError(String(err));
+          // On any startup error, let the user through rather than blocking
+          // them with the activation screen. Existing data should not be
+          // gated behind a license check that failed for a transient reason.
+          setHasActiveLicense(true);
+          setHasCompletedSetup(true);
+          console.error('License verification failed:', err);
+          addToastRef.current({ type: 'error', message: 'Could not verify license status. Check your connection.' });
         }
       } finally {
         if (!cancelled) {
@@ -106,7 +160,8 @@ export default function AppShell() {
       }
     })();
     return () => { cancelled = true; };
-  }, [addToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount — addToastRef keeps the callback current
 
   // Navigate to workspace-appropriate route on selection.
   const prevWorkspaceRef = useRef(activeWorkspace);
@@ -138,6 +193,17 @@ export default function AppShell() {
   const handleSkip = useCallback(() => {
     dismissSetupWizard().catch(console.error);
     setHasCompletedSetup(true);
+  }, []);
+
+  /**
+   * Called when the activation flow finishes (license activated + owner
+   * account created). Marks setup as dismissed so the wizard is not
+   * shown — users land directly on the workspace picker.
+   */
+  const handleActivationComplete = useCallback(() => {
+    dismissSetupWizard().catch(console.error);
+    setHasCompletedSetup(true);
+    setHasActiveLicense(true);
   }, []);
 
   // ── F11 toggles fullscreen across all workpaces ───────────────
@@ -196,7 +262,7 @@ export default function AppShell() {
     return (
       <ActivationFlow
         initialError={licenseError}
-        onComplete={() => setHasActiveLicense(true)}
+        onComplete={handleActivationComplete}
       />
     );
   }

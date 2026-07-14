@@ -39,7 +39,7 @@ export interface StoreSettingsDto {
   taxId: string;
   currency: string;
   branch: string;
-  logo: string;
+  logo?: string;
 }
 
 /** Get the store settings. */

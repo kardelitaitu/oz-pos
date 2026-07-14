@@ -47,6 +47,9 @@ REM `%~dp0` is this bat's own directory; `apps\desktop-client` is relative
 REM to that, which keeps the bat independent of its invocation CWD.
 cd /d "%~dp0apps\desktop-client"
 
+echo Killing any stale process listening on port 1420...
+powershell -Command "Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"
+
 cargo tauri dev
 
 REM Keep the window open so any startup error from the line above

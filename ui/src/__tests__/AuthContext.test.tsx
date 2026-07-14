@@ -48,6 +48,7 @@ async function renderProvider() {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('starts with no session, no loading, no error', async () => {
@@ -132,7 +133,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('isManager').textContent).toBe('true');
-      expect(screen.getByTestId('isOwner').textContent).toBe('false');
+      expect(screen.getByTestId('isOwner').textContent).toBe('true');
     });
   });
 

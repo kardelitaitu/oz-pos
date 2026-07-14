@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ACME POS — Monochrome Logo (single fill for e-paper, thermal, watermarks) -->
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120">
+  <g fill="#000000">
+    <!-- Logo mark background (solid black) -->
+    <rect x="4" y="12" width="96" height="96" rx="20"/>
+    <!-- Logo mark bolt (inverted) -->
+    <path fill="#FFFFFF" d="M62,26 L34,66 L46,66 L36,100 L80,50 L66,50 L74,26 Z"/>
+  </g>
+  <g fill="#000000" font-family="'DM Sans', 'Inter', Arial, sans-serif" font-weight="700">
+    <text x="116" y="64" font-size="56" letter-spacing="3">ACME</text>
+  </g>
+  <g fill="#000000" font-family="'DM Sans', 'Inter', Arial, sans-serif" font-weight="500">
+    <text x="118" y="92" font-size="18" letter-spacing="4" text-transform="uppercase">POINT OF SALE</text>
+  </g>
+</svg>

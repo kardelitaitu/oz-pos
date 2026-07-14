@@ -219,7 +219,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
       expect(screen.getByText('Store POS')).toBeInTheDocument();
       expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const hints = document.querySelectorAll('.workspace-card-key-hint');
@@ -287,11 +287,11 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Each card should have a shortcut hint (hidden until hover)
-      const hints = document.querySelectorAll('.workspace-card-keyboard-hint');
+      const hints = document.querySelectorAll('button.workspace-card .workspace-card-overlay');
       expect(hints.length).toBe(5);
       expect(hints[0]?.textContent).toMatch(/1/);
       expect(hints[4]?.textContent).toMatch(/5/);
@@ -312,7 +312,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the first workspace card (Restaurant POS)
@@ -338,10 +338,10 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
-      const cards = document.querySelectorAll('.workspace-card');
+      const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon'));
       expect(cards.length).toBe(5);
       const names = Array.from(cards).map((c) => c.querySelector('.workspace-card-name')?.textContent);
       expect(names).toEqual([
@@ -368,7 +368,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const cards = document.querySelectorAll('.workspace-card');
@@ -397,10 +397,10 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
-      const cards = document.querySelectorAll('.workspace-card--disabled');
+      const cards = Array.from(document.querySelectorAll('.workspace-card--disabled')).filter(c => !c.textContent?.includes('Coming soon'));
       // Cashier can only access restaurant-pos and store-pos
       expect(cards.length).toBe(3);
       const disabledNames = Array.from(cards).map(
@@ -427,14 +427,16 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
-      const badges = screen.getAllByText('Not available');
+      const badges = Array.from(screen.getAllByText('Not available')).filter(
+        (b) => !b.closest('.workspace-card')?.textContent?.includes('Coming soon')
+      );
       expect(badges.length).toBe(3);
     });
 
-    it('allows owner role to access all workspaces', async () => {
+    it('allows owner role to click Admin workspace', async () => {
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
         loading: false,
@@ -449,11 +451,11 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Owner has access to all cards — none should be disabled
-      const disabledCards = document.querySelectorAll('.workspace-card--disabled');
+      const disabledCards = Array.from(document.querySelectorAll('.workspace-card--disabled')).filter(c => !c.textContent?.includes('Coming soon'));
       expect(disabledCards.length).toBe(0);
 
       // Find the Admin card by its heading text and click it
@@ -462,8 +464,27 @@ describe('WorkspaceHome', () => {
       await waitFor(() => {
         expect(mockSetActiveWorkspace).toHaveBeenCalledWith('admin');
       });
+    });
 
-      // Verify the KDS card is also clickable
+    it('allows owner role to click KDS workspace', async () => {
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderInAct(wrap(<WorkspaceHome />));
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+
+      // Verify the KDS card is clickable
       const kdsCard = document.querySelectorAll('.workspace-card')[2] as HTMLButtonElement;
       await userEvent.click(kdsCard);
       await waitFor(() => {
@@ -490,7 +511,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the logout button
@@ -536,7 +557,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the logout button
@@ -586,7 +607,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the logout button
@@ -623,7 +644,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Press '3' to select the third card (KDS)
@@ -648,7 +669,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       fireEvent.keyDown(document.activeElement!, { key: '1' });
@@ -672,7 +693,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Press '9' — only 5 cards, so no action
@@ -699,7 +720,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
@@ -772,7 +793,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const activeCards = document.querySelectorAll('.workspace-card--active');
@@ -856,7 +877,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Focus the first card
@@ -888,7 +909,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const lastCard = document.querySelectorAll('.workspace-card')[4] as HTMLButtonElement;
@@ -914,7 +935,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const firstCard = document.querySelectorAll('.workspace-card')[0] as HTMLButtonElement;

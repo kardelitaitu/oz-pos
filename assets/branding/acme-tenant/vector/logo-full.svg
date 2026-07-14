@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ACME POS — Full Logo (light variant, for light backgrounds) -->
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120">
+  <defs>
+    <linearGradient id="bolt-grad-full" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5A1F"/>
+      <stop offset="100%" stop-color="#E84500"/>
+    </linearGradient>
+  </defs>
+  <!-- Logo mark -->
+  <rect x="4" y="12" width="96" height="96" rx="20" fill="url(#bolt-grad-full)"/>
+  <path d="M62,26 L34,66 L46,66 L36,100 L80,50 L66,50 L74,26 Z" fill="#FFFFFF"/>
+  <!-- "ACME" wordmark -->
+  <g fill="#2D2D2D" font-family="'DM Sans', 'Inter', Arial, sans-serif" font-weight="700">
+    <text x="116" y="64" font-size="56" letter-spacing="3">ACME</text>
+  </g>
+  <!-- Tagline -->
+  <g fill="#888888" font-family="'DM Sans', 'Inter', Arial, sans-serif" font-weight="500">
+    <text x="118" y="92" font-size="18" letter-spacing="4" text-transform="uppercase">POINT OF SALE</text>
+  </g>
+</svg>

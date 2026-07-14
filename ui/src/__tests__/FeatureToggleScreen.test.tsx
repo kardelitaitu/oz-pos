@@ -1,236 +1,433 @@
+// ── FeatureToggleScreen component tests ─────────────────────────────
+//
+// Covers: loading state, error state with retry, empty state (no features),
+// search with no results, feature list rendering, single toggle, bulk
+// enable/disable, dependency display, and group headers.
+
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
-import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
+import { withFluent } from '@/locales/test-utils';
 import settingsFtl from '@/locales/settings.ftl?raw';
-import salesFtl from '@/locales/sales.ftl?raw';
-import { withToastProviders } from '@/__tests__/test-utils/providers';
+import sharedFtl from '@/locales/shared.ftl?raw';
+import { ToastProvider } from '@/frontend/shared/Toast';
+import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 
-// ── Mock Tauri IPC ─────────────────────────────────────────────────
+// ── Mock @tauri-apps/api/core ────────────────────────────────────
 
-const mockFeatures = [
-  { key: 'simple-retail', name: 'Simple Retail', description: 'Core retail POS', group: 'Core', enabled: true, dependencies: [] },
-  { key: 'restaurant', name: 'Restaurant', description: 'Restaurant mode with tables', group: 'Core', enabled: false, dependencies: [] },
-  { key: 'cash-payment', name: 'Cash', description: 'Accept cash payments', group: 'Payments', enabled: true, dependencies: [] },
-  { key: 'card-payment', name: 'Card', description: 'Accept card payments', group: 'Payments', enabled: false, dependencies: [] },
-  { key: 'multi-currency', name: 'Multi-Currency', description: 'Support multiple currencies', group: 'Payments', enabled: false, dependencies: [] },
-  { key: 'kitchen-display', name: 'Kitchen Display', description: 'KDS for order routing', group: 'Restaurant', enabled: false, dependencies: ['restaurant'] },
-  { key: 'table-management', name: 'Table Management', description: 'Interactive floor plan', group: 'Restaurant', enabled: false, dependencies: ['restaurant'] },
-];
-
-let currentFeatures = [...mockFeatures];
+const mockInvoke = vi.fn();
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn((cmd: string, args?: { args: Record<string, unknown> }) => {
-    if (cmd === 'list_all_features') {
-      return Promise.resolve({ features: currentFeatures });
-    }
-    if (cmd === 'set_feature' && args?.args) {
-      const { key, enabled } = args.args as { key: string; enabled: boolean };
-      currentFeatures = currentFeatures.map((f) =>
-        f.key === key ? { ...f, enabled } : f,
-      );
-      return Promise.resolve({ success: true, features: currentFeatures, auto_enabled: [] });
-    }
-    if (cmd === 'set_features_bulk' && args?.args) {
-      const { keys, enabled } = args.args as { keys: string[]; enabled: boolean };
-      currentFeatures = currentFeatures.map((f) =>
-        keys.includes(f.key) ? { ...f, enabled } : f,
-      );
-      return Promise.resolve({ features: currentFeatures });
-    }
-    return Promise.reject(new Error(`Unknown command: ${cmd}`));
+  invoke: (...args: unknown[]) => mockInvoke(...args),
+}));
+
+// ── Mock useAuth ─────────────────────────────────────────────────
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    session: { user_id: 'user-1', display_name: 'Admin', role_name: 'admin' },
   }),
 }));
 
-function FluentWrapper({ children }: { children: ReactNode }) {
-  return withToastProviders(children, settingsFtl, salesFtl);
+// ── Test wrapper ──────────────────────────────────────────────────
+
+function wrap(children: React.ReactNode) {
+  return withFluent(
+    <ToastProvider>{children}</ToastProvider>,
+    settingsFtl,
+    sharedFtl,
+  );
 }
+
+// ── Sample data ───────────────────────────────────────────────────
+
+const sampleFeatures = [
+  { key: 'cash_payment', name: 'Cash Payment', description: 'Accept cash payments', group: 'Core', enabled: true, dependencies: [] },
+  { key: 'card_payment', name: 'Card Payment', description: 'Accept card payments', group: 'Payments', enabled: false, dependencies: ['cash_payment'] },
+  { key: 'inventory_tracking', name: 'Inventory Tracking', description: 'Track stock levels', group: 'Products', enabled: true, dependencies: [] },
+  { key: 'staff_login', name: 'Staff Login', description: 'PIN-based staff login', group: 'Staff', enabled: true, dependencies: [] },
+  { key: 'barcode_scanning', name: 'Barcode Scanner', description: 'USB barcode scanning', group: 'Hardware', enabled: false, dependencies: [] },
+];
+
+const sampleFeaturesResult = { features: sampleFeatures };
+
+// ── Tests ─────────────────────────────────────────────────────────
 
 describe('FeatureToggleScreen', () => {
   beforeEach(() => {
-    // Reset mock state.
-    currentFeatures = [...mockFeatures];
+    vi.clearAllMocks();
   });
 
-  // ── Initial render ─────────────────────────────────────────────
+  // ── Loading state ────────────────────────────────────────────
 
-  it('renders the feature toggle screen title and subtitle', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  it('renders loading spinner while fetching features', async () => {
+    mockInvoke.mockReturnValue(new Promise(() => {}));
 
-    expect(await screen.findByText('Feature Toggles')).toBeInTheDocument();
-    // The subtitle shows count via Fluent, check it contains '2' and '7'.
-    expect(screen.getByText((content) => content.includes('2') && content.includes('7') && content.includes('enabled'))).toBeInTheDocument();
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    expect(screen.getByText(/loading features/i)).toBeInTheDocument();
   });
 
-  it('renders feature groups', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  // ── Error state ──────────────────────────────────────────────
 
-    await screen.findByText('Feature Toggles');
+  it('renders error with retry button when load fails', async () => {
+    mockInvoke.mockRejectedValue(new Error('IPC error'));
 
-    // Core group (2 features) — use getAllByText since 'Core' also appears elsewhere.
-    expect(screen.getAllByText('Core').length).toBeGreaterThanOrEqual(1);
-    // Payments group
-    expect(screen.getAllByText('Payments').length).toBeGreaterThanOrEqual(1);
-    // Restaurant appears as both group title and feature name — check via getAllByText.
-    expect(screen.getAllByText('Restaurant').length).toBeGreaterThanOrEqual(1);
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('IPC error')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 
-  it('renders the Live Setup Preview', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  it('calls load again when retry is clicked', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('IPC error'));
+    mockInvoke.mockResolvedValueOnce(sampleFeaturesResult);
 
-    expect(await screen.findByText('Feature Preview')).toBeInTheDocument();
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
   });
 
-  // ── Search bar ─────────────────────────────────────────────────
+  // ── Empty state ──────────────────────────────────────────────
 
-  it('renders the search input', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  it('renders empty state when no features exist', async () => {
+    mockInvoke.mockResolvedValue({ features: [] });
 
-    await screen.findByText('Feature Toggles');
+    await renderInAct(wrap(<FeatureToggleScreen />));
 
-    expect(
-      screen.getByRole('searchbox', { name: /search features/i }),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/No features found/i)).toBeInTheDocument();
+    });
   });
 
-  it('filters features by key when searching', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  // ── Main render ──────────────────────────────────────────────
 
-    await screen.findByText('Feature Toggles');
+  it('renders the title and subtitle with feature count', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    const searchInput = screen.getByRole('searchbox', { name: /search features/i });
-    await userEvent.type(searchInput, 'cash');
+    await renderInAct(wrap(<FeatureToggleScreen />));
 
-    // Cash payment should match (key: 'cash-payment')
-    expect(screen.getByText('Cash')).toBeInTheDocument();
-
-    // Non-matching features in the same group should be hidden.
-    expect(screen.queryByText('Card')).not.toBeInTheDocument();
-    expect(screen.queryByText('Multi-Currency')).not.toBeInTheDocument();
-
-    // Non-matching groups entirely should be hidden.
-    expect(screen.queryByText('Restaurant')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Feature Toggles')).toBeInTheDocument();
+    });
+    // 3 of 5 enabled
+    expect(screen.getByText(/3 \/ 5 enabled/)).toBeInTheDocument();
   });
 
-  it('filters features by name when searching', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  it('renders all feature groups with correct headers', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await screen.findByText('Feature Toggles');
+    await renderInAct(wrap(<FeatureToggleScreen />));
 
-    const searchInput = screen.getByRole('searchbox', { name: /search features/i });
-    await userEvent.type(searchInput, 'Display');
-
-    // Kitchen Display should match (name contains 'Display')
-    // Use getAllByText since it may appear in feature list and group header.
-    expect(screen.getAllByText('Kitchen Display').length).toBeGreaterThanOrEqual(1);
-
-    // Restaurant group header should appear (Kitchen Display is in it).
-    expect(screen.getAllByText('Restaurant').length).toBeGreaterThanOrEqual(1);
-
-    // Others should be hidden.
-    expect(screen.queryByText('Core')).not.toBeInTheDocument();
-    expect(screen.queryByText('Payments')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+    // Use heading role to disambiguate from LSP nav chips that share group names
+    expect(screen.getByRole('heading', { name: /core/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /payments/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /products/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /staff/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /hardware/i })).toBeInTheDocument();
   });
 
-  it('filters features by description when searching', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  it('renders feature names and descriptions', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await screen.findByText('Feature Toggles');
+    await renderInAct(wrap(<FeatureToggleScreen />));
 
-    const searchInput = screen.getByRole('searchbox', { name: /search features/i });
-    await userEvent.type(searchInput, 'floor plan');
-
-    // Table Management description contains 'floor plan'
-    expect(screen.getByText('Table Management')).toBeInTheDocument();
-
-    // Other features should be hidden.
-    expect(screen.queryByText('Simple Retail')).not.toBeInTheDocument();
-    expect(screen.queryByText('Cash')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Accept cash payments')).toBeInTheDocument();
+    expect(screen.getByText('Card Payment')).toBeInTheDocument();
   });
 
-  it('shows empty state when search matches nothing', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  it('renders group-level enabled/total count in each heading', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await screen.findByText('Feature Toggles');
+    await renderInAct(wrap(<FeatureToggleScreen />));
 
-    const searchInput = screen.getByRole('searchbox', { name: /search features/i });
-    await userEvent.type(searchInput, 'zzzzz');
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
 
-    expect(
-      screen.getByText('No features match your search.'),
-    ).toBeInTheDocument();
+    // Core: cash_payment is enabled → "1/1".
+    const coreHeading = screen.getByRole('heading', { name: /core/i });
+    expect(within(coreHeading).getByText('1/1')).toBeInTheDocument();
+
+    // Hardware: barcode_scanning is disabled → "0/1".
+    const hardwareHeading = screen.getByRole('heading', { name: /hardware/i });
+    expect(within(hardwareHeading).getByText('0/1')).toBeInTheDocument();
   });
 
-  it('clears search when clear button is clicked', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
+  it('renders Enable All / Disable All bulk buttons per group', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await screen.findByText('Feature Toggles');
+    await renderInAct(wrap(<FeatureToggleScreen />));
 
-    const searchInput = screen.getByRole('searchbox', { name: /search features/i });
-    await userEvent.type(searchInput, 'cash');
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
 
-    // Clear button should appear.
-    const clearBtn = screen.getByLabelText('Clear search');
+    // Each group with features gets Enable All / Disable All buttons
+    const enableButtons = screen.getAllByText(/enable all/i);
+    const disableButtons = screen.getAllByText(/disable all/i);
+    expect(enableButtons.length).toBe(5);
+    expect(disableButtons.length).toBe(5);
+  });
+
+  // ── Search ────────────────────────────────────────────────────
+
+  it('renders a search input', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    expect(screen.getByPlaceholderText(/search features/i)).toBeInTheDocument();
+  });
+
+  it('filters features when searching', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/search features/i);
+    await userEvent.type(searchInput, 'card');
+
+    await waitFor(() => {
+      expect(screen.getByText('Card Payment')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Cash Payment')).not.toBeInTheDocument();
+  });
+
+  it('shows search-no-results message when query has no matches', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/search features/i);
+    await userEvent.type(searchInput, 'zzzznotfound');
+
+    await waitFor(() => {
+      expect(screen.getByText(/No features match your search/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows clear button when search has a value', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/search features/i);
+    await userEvent.type(searchInput, 'card');
+
+    const clearBtn = screen.getByRole('button', { name: /clear search/i });
+    expect(clearBtn).toBeInTheDocument();
+
     await userEvent.click(clearBtn);
-
-    // After clearing, all features should be visible again.
     expect(searchInput).toHaveValue('');
-    expect(screen.getByText('Simple Retail')).toBeInTheDocument();
-    expect(screen.getByText('Cash')).toBeInTheDocument();
-    // Kitchen Display may appear multiple times — use getAllByText.
-    expect(screen.getAllByText('Kitchen Display').length).toBeGreaterThanOrEqual(1);
   });
 
-  // ── Bulk actions ───────────────────────────────────────────────
+  // ── Single toggle ─────────────────────────────────────────────
 
-  it('renders Enable All and Disable All buttons per group', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
-
-    await screen.findByText('Feature Toggles');
-
-    const enableButtons = screen.getAllByText('Enable All');
-    const disableButtons = screen.getAllByText('Disable All');
-
-    // 3 groups visible: Core, Payments, Restaurant.
-    expect(enableButtons).toHaveLength(3);
-    expect(disableButtons).toHaveLength(3);
-  });
-
-  it('Enable All toggles all features in a group on', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
-
-    await screen.findByText('Feature Toggles');
-
-    // Payments group has: Cash (on), Card (off), Multi-Currency (off).
-    const enableBtns = screen.getAllByText('Enable All');
-
-    // Click the Enable All for the Payments group (index 1 — Core is 0).
-    await userEvent.click(enableBtns[1]!);
-
-    // The toast should confirm (use flexible text matcher).
-    const toast = await screen.findByText((content) =>
-      content.includes('Payments') && content.includes('enabled'),
+  it('toggles a feature on when clicked', async () => {
+    const toggledFeatures = sampleFeatures.map((f) =>
+      f.key === 'card_payment' ? { ...f, enabled: true } : f,
     );
-    expect(toast).toBeInTheDocument();
+    mockInvoke
+      .mockResolvedValueOnce(sampleFeaturesResult)
+      .mockResolvedValueOnce({ success: true, features: toggledFeatures, auto_enabled: [] });
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Card Payment')).toBeInTheDocument();
+    });
+
+    // Find the Card Payment toggle checkbox and click it
+    const cardRow = screen.getByText('Card Payment').closest('.feature-toggle-item') as HTMLElement;
+    const toggle = cardRow.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(toggle).not.toBeNull();
+    expect(toggle!.checked).toBe(false);
+
+    await userEvent.click(toggle!);
+
+    await waitFor(() => {
+      // After toggle, the feature list updates and card_payment should be enabled
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'set_feature',
+        expect.objectContaining({ args: { key: 'card_payment', enabled: true } }),
+      );
+    });
   });
 
-  it('Disable All toggles all features in a group off', async () => {
-    render(<FeatureToggleScreen />, { wrapper: FluentWrapper });
-
-    await screen.findByText('Feature Toggles');
-
-    // Core group has: Simple Retail (on), Restaurant (off).
-    const disableBtns = screen.getAllByText('Disable All');
-
-    // Click the Disable All for the Core group (index 0).
-    await userEvent.click(disableBtns[0]!);
-
-    // The toast should confirm (use flexible text matcher).
-    const toast = await screen.findByText((content) =>
-      content.includes('Core') && content.includes('disabled'),
+  it('shows auto-enabled dependency toast when toggle enables dependencies', async () => {
+    const toggledFeatures = sampleFeatures.map((f) =>
+      f.key === 'card_payment' ? { ...f, enabled: true } : f,
     );
-    expect(toast).toBeInTheDocument();
+    mockInvoke
+      .mockResolvedValueOnce(sampleFeaturesResult)
+      .mockResolvedValueOnce({
+        success: true,
+        features: toggledFeatures,
+        auto_enabled: ['cash_payment'],
+      });
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Card Payment')).toBeInTheDocument();
+    });
+
+    const autoCardRow = screen.getByText('Card Payment').closest('.feature-toggle-item') as HTMLElement;
+    const autoToggle = autoCardRow.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(autoToggle).not.toBeNull();
+    await userEvent.click(autoToggle!);
+
+    await waitFor(() => {
+      expect(screen.getByText(/auto-enabled dependencies/i)).toBeInTheDocument();
+    });
+  });
+
+  // ── Bulk toggle ───────────────────────────────────────────────
+
+  it('bulk-enables all features in a group', async () => {
+    const allHardwareEnabled = sampleFeatures.map((f) =>
+      f.group === 'Hardware' ? { ...f, enabled: true } : f,
+    );
+    mockInvoke
+      .mockResolvedValueOnce(sampleFeaturesResult)
+      .mockResolvedValueOnce({ features: allHardwareEnabled });
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Barcode Scanner')).toBeInTheDocument();
+    });
+
+    // Find Hardware group's Enable All button and click it
+    const hardwareGroup = screen.getByRole('heading', { name: /hardware/i }).closest('.feature-toggle-group') as HTMLElement;
+    const enableAllBtn = within(hardwareGroup).getByText(/enable all/i);
+    await userEvent.click(enableAllBtn);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'set_features_bulk',
+        expect.objectContaining({
+          args: expect.objectContaining({ keys: ['barcode_scanning'], enabled: true }),
+        }),
+      );
+    });
+  });
+
+  it('bulk-disables all features in a group', async () => {
+    const allCoreDisabled = sampleFeatures.map((f) =>
+      f.group === 'Core' ? { ...f, enabled: false } : f,
+    );
+    mockInvoke
+      .mockResolvedValueOnce(sampleFeaturesResult)
+      .mockResolvedValueOnce({ features: allCoreDisabled });
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    // Find Core group's Disable All button and click it
+    const coreGroup = screen.getByRole('heading', { name: /core/i }).closest('.feature-toggle-group') as HTMLElement;
+    const disableAllBtn = within(coreGroup).getByText(/disable all/i);
+    await userEvent.click(disableAllBtn);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'set_features_bulk',
+        expect.objectContaining({
+          args: expect.objectContaining({ keys: ['cash_payment'], enabled: false }),
+        }),
+      );
+    });
+  });
+
+  // ── Dependency display ────────────────────────────────────────
+
+  it('shows dependency info for features with dependencies', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Card Payment')).toBeInTheDocument();
+    });
+
+    // Card Payment depends on Cash Payment
+    expect(screen.getByText(/requires: cash payment/i)).toBeInTheDocument();
+  });
+
+  it('does not show dependency info for features without dependencies', async () => {
+    mockInvoke.mockResolvedValue(sampleFeaturesResult);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    // Cash Payment has no dependencies — the requires text should not appear in its row
+    const cashRow = screen.getByText('Cash Payment').closest('.feature-toggle-item') as HTMLElement;
+    expect(cashRow.querySelector('.feature-toggle-item-deps')).toBeNull();
+  });
+
+  // ── Disabled state on toggle ──────────────────────────────────
+
+  it('disables toggle input while toggling is in progress', async () => {
+    // Don't resolve the setFeature call — keeps toggling=true
+    const togglePromise = new Promise(() => {});
+    mockInvoke
+      .mockResolvedValueOnce(sampleFeaturesResult)
+      .mockReturnValueOnce(togglePromise);
+
+    await renderInAct(wrap(<FeatureToggleScreen />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cash Payment')).toBeInTheDocument();
+    });
+
+    const disabledCashRow = screen.getByText('Cash Payment').closest('.feature-toggle-item') as HTMLElement;
+    const disabledToggle = disabledCashRow.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(disabledToggle).not.toBeNull();
+
+    // Click to start toggling
+    await userEvent.click(disabledToggle!);
+
+    // Toggle should be disabled while in progress
+    expect(disabledToggle!).toBeDisabled();
   });
 });

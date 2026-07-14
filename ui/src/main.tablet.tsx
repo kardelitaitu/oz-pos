@@ -39,7 +39,7 @@ import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import _DesignSystem from '@/features/design/DesignSystem';
 import MenuEngineeringScreen from '@/features/reports/MenuEngineeringScreen';
-import type { ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
 
 // ── SVG icon factory ─────────────────────────────────────────────
 function icon(path: string, ...children: ReactNode[]) {
@@ -47,7 +47,7 @@ function icon(path: string, ...children: ReactNode[]) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={path} />
-      {children}
+      {Children.toArray(children)}
     </svg>
   );
 }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ACME POS — Logo Mark (lightning bolt icon) -->
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="bolt-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5A1F"/>
+      <stop offset="100%" stop-color="#E84500"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square backdrop -->
+  <rect x="4" y="4" width="112" height="112" rx="24" fill="url(#bolt-grad)"/>
+  <!-- Lightning bolt -->
+  <path d="M72,14 L38,62 L52,62 L40,106 L84,54 L68,54 L78,14 Z"
+        fill="#FFFFFF"/>
+</svg>

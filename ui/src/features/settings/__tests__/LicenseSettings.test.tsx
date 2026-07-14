@@ -15,35 +15,56 @@ vi.mock('@/api/license', () => ({
   checkLicenseStatus: vi.fn(),
 }));
 
+const { mockL10n } = vi.hoisted(() => ({
+  mockL10n: {
+    getString: (id: string) => {
+      const map: Record<string, string> = {
+        'settings-loading': 'Loading…',
+        'settings-retry': 'Retry',
+        'settings-section-license': 'License',
+        'settings-license-load-failed': 'Failed to load license info',
+        'settings-license-tier': 'Tier',
+        'settings-license-tier-free': 'Free',
+        'settings-license-tier-pro': 'Pro',
+        'settings-license-tier-premium': 'Premium',
+        'settings-license-tier-enterprise': 'Enterprise',
+        'settings-license-status-label': 'Status',
+        'settings-license-status-active': 'active',
+        'settings-license-expires': 'Expires',
+        'settings-license-grace': 'Grace Period Until',
+        'settings-license-max-stores': 'Max Stores',
+        'settings-license-max-pos': 'Max POS Instances',
+        'settings-license-unlimited': 'Unlimited',
+        'settings-license-tenant-id': 'Tenant ID',
+        'settings-license-allowed-types': 'Allowed Workspace Types',
+        'settings-license-allowed-types-all': 'All',
+        'settings-license-not-activated':
+          'No license activated. Activate a license to see details here.',
+        'settings-license-check-server': 'Check Server Status',
+        'settings-license-server-tier': 'Server Tier',
+        'settings-license-server-active': 'Server Active',
+        'settings-license-server-expires': 'Server Expires',
+        'settings-license-server-results': 'License Check Results',
+        'settings-license-server-status-retrieved':
+          'Server license status retrieved.',
+        'settings-license-server-check-failed': 'Server check failed',
+        'settings-license-yes': 'Yes',
+        'settings-license-no': 'No',
+        'settings-license-ws-retail': 'Retail',
+        'settings-license-ws-restaurant': 'Restaurant',
+        'settings-license-ws-cafe': 'Café',
+        'settings-license-ws-warehouse': 'Warehouse',
+        'settings-license-ws-kds': 'KDS',
+      };
+      return map[id] || id;
+    },
+  },
+}));
+
 vi.mock('@fluent/react', () => ({
   Localized: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useLocalization: () => ({
-    l10n: {
-      getString: (id: string) => {
-        const map: Record<string, string> = {
-          'settings-loading': 'Loading…',
-          'settings-retry': 'Retry',
-          'settings-section-license': 'License',
-          'settings-license-tier': 'Tier',
-          'settings-license-status-label': 'Status',
-          'settings-license-expires': 'Expires',
-          'settings-license-grace': 'Grace Period Until',
-          'settings-license-max-stores': 'Max Stores',
-          'settings-license-max-pos': 'Max POS Instances',
-          'settings-license-tenant-id': 'Tenant ID',
-          'settings-license-allowed-types': 'Allowed Workspace Types',
-          'settings-license-allowed-types-all': 'All',
-          'settings-license-not-activated':
-            'No license activated. Activate a license to see details here.',
-          'settings-license-check-server': 'Check Server Status',
-          'settings-license-server-tier': 'Server Tier',
-          'settings-license-server-active': 'Server Active',
-          'settings-license-server-expires': 'Server Expires',
-          'settings-license-server-results': 'License Check Results',
-        };
-        return map[id] || id;
-      },
-    },
+    l10n: mockL10n,
   }),
 }));
 

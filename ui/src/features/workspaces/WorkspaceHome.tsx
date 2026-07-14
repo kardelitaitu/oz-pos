@@ -5,6 +5,8 @@ import { useFullscreen } from '@/hooks/useFullscreen';
 import { Localized, useLocalization } from '@fluent/react';
 import { Modal } from '@/components/Modal';
 import { WorkspaceIcon } from '@/components/WorkspaceIcon';
+import { RoleIcon } from '@/components/RoleIcon';
+import type { LoginSessionDto } from '@/api/staff';
 import './WorkspaceHome.css';
 
 // ── Per-workspace accent color classes ────────────────────────────
@@ -30,7 +32,7 @@ const WS_ORDER: Record<string, number> = {
 // ── Icons ─────────────────────────────────────────────────────────
 
 function getIcon(key: string) {
-  const known = ['restaurant-pos', 'store-pos', 'kds', 'inventory', 'admin'];
+  const known = ['restaurant-pos', 'store-pos', 'kds', 'inventory', 'admin', 'Loyalty', 'Marketing', 'Online Orders', 'Analytics'];
   if (!known.includes(key)) {
     console.warn(`WorkspaceHome: unknown workspace key "${key}" — using default icon`);
   }
@@ -39,9 +41,9 @@ function getIcon(key: string) {
 
 // ── Skeleton ──────────────────────────────────────────────────────
 
-function SkeletonGrid({ exiting }: { exiting?: boolean }) {
+function SkeletonGrid() {
   return (
-    <div className={`workspace-skeleton-grid${exiting ? ' workspace-skeleton-grid--exiting' : ''}`} aria-label="Loading workspaces">
+    <div className="workspace-skeleton-grid" aria-label="Loading workspaces">
       {[1, 2, 3].map((i) => (
         <div key={i} className="workspace-skeleton-card">
           <div className="workspace-skeleton-icon" />
@@ -54,14 +56,45 @@ function SkeletonGrid({ exiting }: { exiting?: boolean }) {
   );
 }
 
-// ── Time-based greeting ───────────────────────────────────────
+// ── Randomized multilingual greeting ────────────────────────────
 
-function getGreeting(hour: number): { id: string } {
-  if (hour >= 5 && hour < 12) return { id: 'workspace-home-greeting-morning' };
-  if (hour >= 12 && hour < 18) return { id: 'workspace-home-greeting-afternoon' };
-  if (hour >= 18 && hour < 22) return { id: 'workspace-home-greeting-evening' };
-  return { id: 'workspace-home-greeting-night' };
+const GREETINGS: { word: string; lang: string }[] = [
+  { word: 'Hello', lang: 'English' },
+  { word: 'Hola', lang: 'Spanish' },
+  { word: 'Bonjour', lang: 'French' },
+  { word: 'Ciao', lang: 'Italian' },
+  { word: 'Konnichiwa', lang: 'Japanese' },
+  { word: 'Annyeong', lang: 'Korean' },
+  { word: 'Ni hao', lang: 'Chinese' },
+  { word: 'Salaam', lang: 'Arabic' },
+  { word: 'Sawasdee', lang: 'Thai' },
+  { word: 'Zdravstvuyte', lang: 'Russian' },
+  { word: 'Guten Tag', lang: 'German' },
+  { word: 'Olá', lang: 'Portuguese' },
+  { word: 'Namaste', lang: 'Hindi' },
+  { word: 'Merhaba', lang: 'Turkish' },
+  { word: 'Hej', lang: 'Swedish' },
+  { word: 'Salut', lang: 'French' },
+  { word: 'Hallo', lang: 'Dutch' },
+  { word: 'Ahoj', lang: 'Czech' },
+  { word: 'Selamat datang', lang: 'Indonesian' },
+  { word: 'Sawubona', lang: 'Zulu' },
+  { word: 'Shalom', lang: 'Hebrew' },
+  { word: 'Jambo', lang: 'Swahili' },
+];
+
+function pickGreeting(): { word: string; lang: string } {
+  return GREETINGS[Math.floor(Math.random() * GREETINGS.length)]!;
 }
+
+// ── Dummy coming-soon cards (placeholder for future workspaces) ──
+
+const COMING_SOON_CARDS = [
+  { name: 'Loyalty', description: 'Coming soon' },
+  { name: 'Marketing', description: 'Coming soon' },
+  { name: 'Online Orders', description: 'Coming soon' },
+  { name: 'Analytics', description: 'Coming soon' },
+];
 
 // ── LogoutModal ───────────────────────────────────────────────────
 
@@ -113,48 +146,133 @@ function LogoutModal({
   );
 }
 
-// ── Avatar initials ────────────────────────────────────────────────
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-}
 
 // ── Role color map ────────────────────────────────────────────────
 
 function getRoleColor(role: string): string {
   switch (role.toLowerCase()) {
-    case 'owner':   return 'role-badge--owner';
-    case 'manager': return 'role-badge--manager';
-    case 'cashier': return 'role-badge--cashier';
-    case 'kitchen': return 'role-badge--kitchen';
-    default:        return 'role-badge--default';
+    case 'owner':
+    case 'role-owner':
+    case 'admin':
+    case 'role-admin':   return 'role-badge--owner';
+    case 'manager':
+    case 'role-manager': return 'role-badge--manager';
+    case 'cashier':
+    case 'role-cashier': return 'role-badge--cashier';
+    case 'kitchen':
+    case 'role-kitchen': return 'role-badge--kitchen';
+    default:             return 'role-badge--default';
   }
 }
 
-// ── Ambient particles ─────────────────────────────────────────────
+// ── Layer 1: Background ──────────────────────────────────────────
 
-function AmbientParticles() {
+function LayerBackground() {
   return (
-    <div className="workspace-home-particles" aria-hidden="true">
-      <div className="workspace-home-particle" />
-      <div className="workspace-home-particle" />
-      <div className="workspace-home-particle" />
-      <div className="workspace-home-particle" />
-      <div className="workspace-home-particle" />
-      <div className="workspace-home-particle" />
+    <div className="ws-layer-bg" aria-hidden="true">
+      <div className="ws-layer-bg-gradient" />
+      <div className="ws-layer-bg-particles">
+        <div className="ws-particle" />
+        <div className="ws-particle" />
+        <div className="ws-particle" />
+        <div className="ws-particle" />
+        <div className="ws-particle" />
+        <div className="ws-particle" />
+      </div>
     </div>
+  );
+}
+
+// ── Toolbar buttons (fullscreen, user profile, logout) ────────
+
+function LayerFloatingButtons({
+  session,
+  displayName,
+  roleName,
+  l10n,
+  toggleFullscreen,
+  handleLogoutClick,
+  error,
+  retry,
+  greeting,
+}: {
+  session: LoginSessionDto | null;
+  displayName: string;
+  roleName: string;
+  l10n: ReturnType<typeof useLocalization>['l10n'];
+  toggleFullscreen: () => void;
+  handleLogoutClick: () => void;
+  error: string | null;
+  retry: () => void;
+  greeting: { word: string; lang: string };
+}) {
+  return (
+    <>
+    {session && displayName && (
+      <span className="ws-header-greeting" title={greeting.lang}>
+        {greeting.word}, {displayName}
+      </span>
+    )}
+    <div className="ws-header-buttons">
+        <button
+          type="button"
+          className="workspace-home-fullscreen-btn"
+          onClick={toggleFullscreen}
+          aria-label={l10n.getString('workspace-home-fullscreen-aria')}
+          title="F11"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </button>
+        {session && (
+          <>
+            <button type="button" className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
+              <div className="workspace-home-user-avatar">
+                <div className="workspace-home-user-avatar-inner">
+                  <RoleIcon role={roleName} size={16} />
+                </div>
+              </div>
+              <div className="workspace-home-user-info">
+                <span className="workspace-home-user-name">{displayName}</span>
+                <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
+              </div>
+            </button>
+            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <Localized id="workspace-home-logout"><span>Logout</span></Localized>
+            </button>
+          </>
+        )}
+        {error && (
+          <button
+            type="button"
+            className="workspace-home-logout-btn"
+            onClick={retry}
+            title="Retry"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+            <Localized id="workspace-home-retry-btn">
+              <span>Retry</span>
+            </Localized>
+          </button>
+        )}
+    </div>
+    </>
   );
 }
 
 // ── Component ─────────────────────────────────────────────────────
 
-/** Workspace home screen — role-based workspace selection grid with branded greeting and responsive card layout. */
+/** Workspace home screen — 5-layer architecture with role-based workspace selection grid. */
 export default function WorkspaceHome() {
   const { l10n } = useLocalization();
   const { availableWorkspaces, loading, error, retry, setActiveWorkspace, lastWorkspace } = useWorkspace();
@@ -181,32 +299,23 @@ export default function WorkspaceHome() {
   const canAccess = useCallback(
     (key: string) =>
       roleName === 'owner' ||
+      roleName === 'role-owner' ||
+      roleName === 'admin' ||
+      roleName === 'role-admin' ||
       roleName === 'manager' ||
+      roleName === 'role-manager' ||
       cashierOnly.has(key) ||
       (roleName === 'kitchen' && kitchenOnly.has(key)),
     [roleName, cashierOnly, kitchenOnly],
   );
 
-  const greeting = getGreeting(new Date().getHours());
+  const greeting = useMemo(() => pickGreeting(), []);
 
   const displayName = session?.display_name ?? session?.role_name ?? '';
 
-  // ── Skeleton → grid cross-fade ────────────────────────────────
+  // ── Loading state (no entrance animations) ────────────────────
 
-  const [holdLoading, setHoldLoading] = useState(false);
-  const prevLoadingRef = useRef(loading);
-  useEffect(() => {
-    if (prevLoadingRef.current && !loading) {
-      // Loading just finished — keep skeleton in DOM for exit animation
-      setHoldLoading(true);
-      const timer = setTimeout(() => setHoldLoading(false), 300);
-      return () => clearTimeout(timer);
-    }
-    prevLoadingRef.current = loading;
-  }, [loading]);
-
-  const showSkeleton = loading || holdLoading;
-  const skeletonExiting = holdLoading && !loading;
+  const showSkeleton = loading;
 
   // ── Fullscreen toggle ─────────────────────────────────────────
   const { toggleFullscreen } = useFullscreen();
@@ -235,7 +344,12 @@ export default function WorkspaceHome() {
     };
   }, []);
 
-  // ── Click ripple + exit animation ───────────────────────────────
+  // ── Click ripple + immediate navigation ──────────────────────────
+  //
+  // Navigates on the same event loop tick — no 300ms exit delay.
+  // The exiting state is set briefly for the CSS animation but the
+  // component unmounts before it completes; on re-entry the state is
+  // fresh from the useState initialiser.
 
   const handleCardClick = useCallback(
     (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
@@ -269,13 +383,9 @@ export default function WorkspaceHome() {
         }
       }, 600);
 
-      // Exit animation: mark this card as exiting, then navigate after animation
+      // Navigate immediately — no exit animation delay
       setExitingWorkspace(key);
-      setTimeout(() => {
-        setActiveWorkspace(key);
-        // Reset exiting state so the component is ready for re-entry
-        setExitingWorkspace(null);
-      }, 300);
+      setActiveWorkspace(key);
     },
     [canAccess, setActiveWorkspace, error, exitingWorkspace],
   );
@@ -286,7 +396,7 @@ export default function WorkspaceHome() {
     const grid = gridRef.current;
     if (!grid) return;
 
-    const cards = grid.querySelectorAll<HTMLButtonElement>('.workspace-card');
+    const cards = grid.querySelectorAll<HTMLButtonElement>('.workspace-card:not(.workspace-card--disabled)');
     if (cards.length === 0) return;
 
     function focusCard(index: number) {
@@ -311,7 +421,7 @@ export default function WorkspaceHome() {
         if (idx < cards.length) {
           e.preventDefault();
           const target = cards[idx];
-          if (target && !target.disabled) {
+          if (target && !target.disabled && !target.classList.contains('workspace-card--disabled')) {
             // Programmatic click won't create a ripple,
             // but we still need to activate the workspace.
             // dispatchEvent is used to trigger the React onClick handler.
@@ -367,116 +477,59 @@ export default function WorkspaceHome() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sortedWorkspaces, setActiveWorkspace, canAccess, error]);
 
-  // ── RAF-throttled mousemove: glow & 3D tilt ───────────────────
-  //
-  // getBoundingClientRect forces a synchronous style recalculation, so we
-  // throttle it to once per animation frame to prevent layout thrashing.
 
-  const rafRef = useRef<number>(0);
-  const lastMoveRef = useRef<{ card: HTMLButtonElement; clientX: number; clientY: number } | null>(null);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const card = e.currentTarget;
-    if (card.classList.contains('workspace-card--disabled') || card.classList.contains('workspace-card--exiting')) return;
-
-    // Store the latest event data
-    lastMoveRef.current = { card, clientX: e.clientX, clientY: e.clientY };
-
-    // If no RAF is queued, schedule one
-    if (!rafRef.current) {
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0;
-        const data = lastMoveRef.current;
-        if (!data) return;
-        lastMoveRef.current = null;
-
-        const { card: c, clientX, clientY } = data;
-        const rect = c.getBoundingClientRect();
-
-        // Glow position
-        const x = ((clientX - rect.left) / rect.width) * 100;
-        const y = ((clientY - rect.top) / rect.height) * 100;
-        c.style.setProperty('--mouse-x', `${x}%`);
-        c.style.setProperty('--mouse-y', `${y}%`);
-
-        // 3D tilt: max ±6 degrees
-        const rotateY = ((clientX - rect.left) / rect.width - 0.5) * 12;
-        const rotateX = ((clientY - rect.top) / rect.height - 0.5) * -12;
-        c.style.setProperty('--rotate-x', `${rotateX}deg`);
-        c.style.setProperty('--rotate-y', `${rotateY}deg`);
-      });
-    }
-  }, []);
-
-  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const card = e.currentTarget;
-    // Cancel any pending RAF to avoid stale updates
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = 0;
-    }
-    lastMoveRef.current = null;
-    card.style.setProperty('--rotate-x', '0deg');
-    card.style.setProperty('--rotate-y', '0deg');
-  }, []);
-
-  // Cleanup RAF on unmount
+  // ── Clear stale focus on mount ─────────────────────────────────
+  // When returning from a workspace (Escape), the active element from
+  // the previous view may still be focused in the DOM, or the browser
+  // may restore focus to a card. A stuck :focus-visible outline draws
+  // over the hover glow and makes the card look unresponsive.
   useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    if (document.activeElement && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
   }, []);
+
+  // ── Shared floating layer props ────────────────────────────────
+
+  const floatingProps = {
+    session,
+    displayName,
+    roleName,
+    l10n,
+    toggleFullscreen,
+    handleLogoutClick,
+    error,
+    retry,
+    greeting,
+  };
 
   // ── Loading state ────────────────────────────────────────────
 
   if (showSkeleton) {
     return (
-    <div className="workspace-home">
-      <AmbientParticles />
-      <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }} role="status" aria-live="polite">
-        {loading ? 'Loading workspaces...' : error && !loading ? 'Connection error' : `${sortedWorkspaces.length} workspaces available`}
-      </span>
-      <div className="workspace-home-top-bar">
-        <button
-          type="button"
-          className="workspace-home-fullscreen-btn"
-            onClick={toggleFullscreen}
-            aria-label={l10n.getString('workspace-home-fullscreen-aria')}
-            title="F11"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-            </svg>
-          </button>
-          {session && (
-            <>
-              <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
-                <div className="workspace-home-user-avatar">{getInitials(displayName)}</div>
-                <div className="workspace-home-user-info">
-                  <span className="workspace-home-user-name">{displayName}</span>
-                  <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
-                </div>
-              </div>
-              <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-                <Localized id="workspace-home-logout"><span>Logout</span></Localized>
-              </button>
-            </>
-          )}
+      <div className="workspace-home">
+        {/* Layer 1: Background */}
+        <LayerBackground />
+
+        {/* Layer 2+3: Content container + content */}
+        <div className="ws-layer-content">
+          <div className="ws-header">
+            <LayerFloatingButtons {...floatingProps} />
+          </div>
+          <div className="ws-main">
+            <header className="workspace-home-header" />
+            <SkeletonGrid />
+          </div>
+          <div className="ws-footer" />
         </div>
-        <header className="workspace-home-header">
-          <h1 className="workspace-home-title">OZ-POS</h1>
-          <p className="workspace-home-subtitle">
-            <Localized id="workspace-home-subtitle">
-              <span>Select a workspace to start</span>
-            </Localized>
-          </p>
-        </header>
-        <SkeletonGrid exiting={skeletonExiting} />
+
+        {/* SR-only status */}
+        <span className="ws-sr-status" role="status" aria-live="polite">
+          {loading ? 'Loading workspaces...' : error && !loading ? 'Connection error' : `${sortedWorkspaces.length} workspaces available`}
+        </span>
+
+        {/* Layer 5: Overlays */}
         <LogoutModal
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
@@ -491,71 +544,52 @@ export default function WorkspaceHome() {
   if (error && availableWorkspaces.length === 0) {
     return (
       <div className="workspace-home">
-      <AmbientParticles />
-      <div className="workspace-home-top-bar">
-        <button
-          type="button"
-          className="workspace-home-fullscreen-btn"
-          onClick={toggleFullscreen}
-          aria-label={l10n.getString('workspace-home-fullscreen-aria')}
-          title="F11"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-          </svg>
-        </button>
-        {session && (
-          <>
-            <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
-              <div className="workspace-home-user-avatar">{getInitials(displayName)}</div>
-              <div className="workspace-home-user-info">
-                <span className="workspace-home-user-name">{displayName}</span>
-                <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
-              </div>
-            </div>
-            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              <Localized id="workspace-home-logout"><span>Logout</span></Localized>
-            </button>
-          </>
-        )}
-      </div>
-      <div className="workspace-error">
-          <div className="workspace-error-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+        {/* Layer 1: Background */}
+        <LayerBackground />
+
+        {/* Layer 2+3: Content container + content */}
+        <div className="ws-layer-content">
+          <div className="ws-header">
+            <LayerFloatingButtons {...floatingProps} />
           </div>
-          <p className="workspace-error-title">
-            <Localized id="workspace-home-error-title">
-              <span>Connection Error</span>
-            </Localized>
-          </p>
-          <p className="workspace-error-desc">
-            <Localized id="workspace-home-error-desc">
-              <span>Could not load your workspaces. Check your connection and try again.</span>
-            </Localized>
-          </p>
-          <button
-            type="button"
-            className="workspace-error-retry"
-            onClick={retry}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="1 4 1 10 7 10" />
-              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-            </svg>
-            <Localized id="workspace-home-retry">
-              <span>Try Again</span>
-            </Localized>
-          </button>
+          <div className="ws-main">
+            <div className="workspace-error">
+              <div className="workspace-error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <p className="workspace-error-title">
+                <Localized id="workspace-home-error-title">
+                  <span>Connection Error</span>
+                </Localized>
+              </p>
+              <p className="workspace-error-desc">
+                <Localized id="workspace-home-error-desc">
+                  <span>Could not load your workspaces. Check your connection and try again.</span>
+                </Localized>
+              </p>
+              <button
+                type="button"
+                className="workspace-error-retry"
+                onClick={retry}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                <Localized id="workspace-home-retry">
+                  <span>Try Again</span>
+                </Localized>
+              </button>
+            </div>
+          </div>
+          <div className="ws-footer" />
         </div>
+
+        {/* Layer 5: Overlays */}
         <LogoutModal
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
@@ -569,153 +603,176 @@ export default function WorkspaceHome() {
 
   return (
     <div className="workspace-home">
-      <AmbientParticles />
-      <div className="workspace-home-top-bar">
-        <button
-          type="button"
-          className="workspace-home-fullscreen-btn"
-          onClick={toggleFullscreen}
-          aria-label={l10n.getString('workspace-home-fullscreen-aria')}
-          title="F11"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-          </svg>
-        </button>
-        {session && (
-          <>
-            <div className="workspace-home-user-profile" aria-label={l10n.getString('workspace-home-user-aria', { name: displayName })}>
-              <div className="workspace-home-user-avatar">{getInitials(displayName)}</div>
-              <div className="workspace-home-user-info">
-                <span className="workspace-home-user-name">{displayName}</span>
-                <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
+      {/* Layer 1: Background */}
+      <LayerBackground />
+
+      {/* Layer 2+3: Content container + content */}
+      <div className="ws-layer-content">
+        <div className="ws-header">
+          <LayerFloatingButtons {...floatingProps} />
+        </div>
+        <div className="ws-main">
+          <header className="workspace-home-header" />
+
+          {sortedWorkspaces.length === 0 ? (
+            <div className="workspace-empty">
+              <div className="workspace-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                  <line x1="7" y1="9" x2="17" y2="9" />
+                </svg>
               </div>
+              <p className="workspace-empty-title">
+                <Localized id="workspace-home-empty">
+                  <span>No workspaces available</span>
+                </Localized>
+              </p>
+              <p className="workspace-empty-desc">
+                <Localized id="workspace-home-empty-desc">
+                  <span>You don&apos;t have access to any workspaces yet. Contact an administrator.</span>
+                </Localized>
+              </p>
             </div>
-            <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              <Localized id="workspace-home-logout"><span>Logout</span></Localized>
-            </button>
-          </>
-        )}
-        {error && (
-          <button
-            type="button"
-            className="workspace-home-logout-btn"
-            onClick={retry}
-            title="Retry"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-              <polyline points="1 4 1 10 7 10" />
-              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-            </svg>
-            <Localized id="workspace-home-retry-btn">
-              <span>Retry</span>
-            </Localized>
-          </button>
-        )}
-      </div>
-      <header className="workspace-home-header">
-        <h1 className="workspace-home-title">OZ-POS</h1>
-        <p className="workspace-home-subtitle">
-          <Localized id="workspace-home-subtitle">
-            <span>Select a workspace to start</span>
-          </Localized>
-        </p>
-        {session && displayName && (
-          <p className="workspace-home-greeting">
-            <Localized id={greeting.id} vars={{ name: displayName }}>
-              <span>Hello, {displayName}</span>
-            </Localized>
-          </p>
-        )}
-      </header>
+          ) : (
+            <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
+              {sortedWorkspaces.map((ws, idx) => {
+                const disabled = !canAccess(ws.type_key);
+                const colorClass = WS_COLORS[ws.type_key] ?? '';
+                const isActive = ws.type_key === lastWorkspace && !disabled;
+                if (disabled) {
+                  return (
+                    <div
+                      key={ws.type_key}
+                      className={`workspace-card ${colorClass} workspace-card--disabled`}
+                      aria-label={l10n.getString('workspace-card-no-access-aria', { name: ws.name })}
+                    >
+                      <div className="workspace-card-key-hint">{idx + 1}</div>
+                      <div className="workspace-card-row">
+                        <div className="workspace-card-icon">
+                          <div className="workspace-card-icon-inner">
+                            {getIcon(ws.type_key)}
+                          </div>
+                        </div>
+                        <div className="workspace-card-body">
+                          <div className="workspace-card-title">
+                            <h2 className="workspace-card-name">{ws.name}</h2>
+                          </div>
+                          <div className="workspace-card-text">
+                            <p className="workspace-card-desc">{ws.description}</p>
+                          </div>
+                          <div className="workspace-card-actions">
+                            <span className="workspace-card-badge">
+                              <Localized id="workspace-card-no-access-badge">
+                                <span>Not available</span>
+                              </Localized>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
 
-      {sortedWorkspaces.length === 0 ? (
-        <div className="workspace-empty">
-          <div className="workspace-empty-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
-              <line x1="7" y1="9" x2="17" y2="9" />
-            </svg>
-          </div>
-          <p className="workspace-empty-title">
-            <Localized id="workspace-home-empty">
-              <span>No workspaces available</span>
-            </Localized>
-          </p>
-          <p className="workspace-empty-desc">
-            <Localized id="workspace-home-empty-desc">
-              <span>You don&apos;t have access to any workspaces yet. Contact an administrator.</span>
-            </Localized>
-          </p>
-        </div>
-      ) : (
-        <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
-          {sortedWorkspaces.map((ws, idx) => {
-            const disabled = !canAccess(ws.type_key);
-            const colorClass = WS_COLORS[ws.type_key] ?? '';
-            const isActive = ws.type_key === lastWorkspace && !disabled;
-            return (
-              <button
-                key={ws.type_key}
-                type="button"
-                aria-current={isActive ? 'true' : undefined}
-                className={`workspace-card ${colorClass}${disabled ? ' workspace-card--disabled' : ''}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
-                onClick={(e) => handleCardClick(ws.type_key, e)}
-                disabled={disabled || exitingWorkspace !== null}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
-                aria-label={l10n.getString(
-                  disabled ? 'workspace-card-no-access-aria' : 'workspace-card-open-aria',
-                  { name: ws.name },
-                )}
-                title={disabled ? l10n.getString('workspace-card-no-access-title', { role: roleName }) : ws.name}
-              >
-                <div className="workspace-card-key-hint">{idx + 1}</div>
-                {isActive && (
-                  <div className="workspace-card-active-dot" aria-label="Active workspace">
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
-                      <circle cx="12" cy="12" r="6" />
-                    </svg>
+                return (
+                  <button
+                    key={ws.type_key}
+                    type="button"
+                    aria-current={isActive ? 'true' : undefined}
+                    className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
+                    onClick={(e) => handleCardClick(ws.type_key, e)}
+                    disabled={exitingWorkspace !== null}
+                    aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
+                  >
+                    <div className="workspace-card-key-hint">{idx + 1}</div>
+                    {isActive && (
+                      <div className="workspace-card-active-dot" aria-label="Active workspace">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
+                          <circle cx="12" cy="12" r="6" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="workspace-card-row">
+                      <div className="workspace-card-icon">
+                        <div className="workspace-card-icon-inner">
+                          {getIcon(ws.type_key)}
+                        </div>
+                      </div>
+                      <div className="workspace-card-body">
+                        <div className="workspace-card-title">
+                          <h2 className="workspace-card-name">{ws.name}</h2>
+                        </div>
+                        <div className="workspace-card-text">
+                          <p className="workspace-card-desc">{ws.description}</p>
+                        </div>
+                        <div className="workspace-card-actions" />
+                      </div>
+                    </div>
+
+                    {/* Overlay: keyboard shortcut hint */}
+                    <div className="workspace-card-overlay" aria-hidden="true">
+                      <span className="workspace-card-overlay-hint">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                          <rect x="2" y="4" width="20" height="16" rx="2" />
+                          <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
+                          <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
+                        </svg>
+                        <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
+                          <span>Press {idx + 1} to open</span>
+                        </Localized>
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+              {COMING_SOON_CARDS.map((cs) => (
+                <div
+                  key={cs.name}
+                  className="workspace-card workspace-card--disabled"
+                >
+                  <div className="workspace-card-row">
+                    <div className="workspace-card-icon">
+                      <div className="workspace-card-icon-inner">
+                        {getIcon(cs.name)}
+                      </div>
+                    </div>
+                    <div className="workspace-card-body">
+                      <div className="workspace-card-title">
+                        <h2 className="workspace-card-name">{cs.name}</h2>
+                      </div>
+                      <div className="workspace-card-text">
+                        <p className="workspace-card-desc">{cs.description}</p>
+                      </div>
+                      <div className="workspace-card-actions">
+                        <span className="workspace-card-badge">
+                          <Localized id="workspace-card-no-access-badge">
+                            <span>Not available</span>
+                          </Localized>
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                )}
-                <div className="workspace-card-icon">
-                  {getIcon(ws.type_key)}
-                </div>
-                <div className="workspace-card-body">
-                  <h2 className="workspace-card-name">{ws.name}</h2>
-                  <p className="workspace-card-desc">{ws.description}</p>
-                  {disabled ? (
-                    <span className="workspace-card-badge">
-                      <Localized id="workspace-card-no-access-badge">
-                        <span>Not available</span>
-                      </Localized>
-                    </span>
-                  ) : (
-                    <span className="workspace-card-keyboard-hint">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                        <rect x="2" y="4" width="20" height="16" rx="2" />
-                        <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
-                        <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
-                      </svg>
-                      <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
-                        <span>Press {idx + 1} to open</span>
-                      </Localized>
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
+                  {/* Overlay: coming soon hint */}
+                  <div className="workspace-card-overlay" aria-hidden="true">
+                    <span className="workspace-card-overlay-hint">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      Coming soon
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="ws-footer" />
+      </div>
+
+      {/* Layer 5: Overlays */}
       <LogoutModal
         open={showLogoutModal}
         onCancel={handleLogoutCancel}

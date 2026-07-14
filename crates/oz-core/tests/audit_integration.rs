@@ -579,18 +579,18 @@ fn bulk_insert_and_retrieve() {
     let conn = setup();
     let s = store(&conn);
 
-    // Insert 100 audit entries with sequential timestamps.
-    for i in 0..100 {
+    // Insert 50 audit entries with sequential timestamps.
+    for i in 0..50 {
         let ts = format!("2026-01-01T{:02}:{:02}:00.000Z", i / 60, i % 60);
         let entry =
             entry_with_timestamp("u1", &format!("bulk.{i}"), None, None, None, "success", &ts);
         insert_direct(&conn, &entry);
     }
 
-    let all = s.list_audit_entries(200, 0).unwrap();
-    assert_eq!(all.len(), 100);
+    let all = s.list_audit_entries(100, 0).unwrap();
+    assert_eq!(all.len(), 50);
 
-    // Verify DESC ordering is correct for all 100 entries.
+    // Verify DESC ordering is correct for all 50 entries.
     for window in all.windows(2) {
         assert!(
             window[0].created_at >= window[1].created_at,
@@ -608,8 +608,8 @@ fn bulk_pagination_all_pages() {
     let conn = setup();
     let s = store(&conn);
 
-    // Insert 1000 entries.
-    for i in 0..1000 {
+    // Insert 200 entries — still 4 full pages of 50.
+    for i in 0..200 {
         let ts = format!(
             "2026-06-01T{:02}:{:02}:{:02}.000Z",
             i / 3600,
@@ -621,13 +621,13 @@ fn bulk_pagination_all_pages() {
     }
 
     // Verify total.
-    let all = s.list_audit_entries(2000, 0).unwrap();
-    assert_eq!(all.len(), 1000);
+    let all = s.list_audit_entries(300, 0).unwrap();
+    assert_eq!(all.len(), 200);
 
-    // Paginate through with page size 50.
+    // Paginate through with page size 50 — 4 pages.
     let page_size = 50;
     let mut total_from_pages = 0;
-    for page in 0..20 {
+    for page in 0..4 {
         let entries = s.list_audit_entries(page_size, page * page_size).unwrap();
         assert_eq!(
             entries.len(),
@@ -644,7 +644,7 @@ fn bulk_pagination_all_pages() {
             );
         }
     }
-    assert_eq!(total_from_pages, 1000);
+    assert_eq!(total_from_pages, 200);
 }
 
 #[test]

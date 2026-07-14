@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getStockCount,
+  getCountLines,
   addCountLine,
   updateCountLine,
   removeCountLine,
@@ -10,7 +11,7 @@ import {
   type StockCountDto,
   type StockCountLineDto,
 } from '@/api/inventoryCounts';
-import { type ProductDto } from '@/api/products';
+import { type ProductDto, listProducts } from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './StockCountDetail.css';
@@ -45,7 +46,6 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       const c = await getStockCount(countId);
       setCount(c);
       if (c) {
-        const { getCountLines } = await import('@/api/inventoryCounts');
         setLines(await getCountLines(countId));
       }
     } catch {
@@ -57,7 +57,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
   useEffect(() => {
     load();
-    import('@/api/products').then(({ listProducts }) => listProducts().then(setProducts)).catch(() => {});
+    listProducts().then(setProducts).catch(() => {});
   }, [load]);
 
   const isEditable = count?.status === 'draft' || count?.status === 'in_progress';

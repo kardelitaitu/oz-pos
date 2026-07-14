@@ -5,7 +5,7 @@
 //! - **Import wizard**: pick a .ozpkg file, preview metadata, dry-run diff table, confirm
 //! - **Backup status**: last backup timestamp, one-click snapshot
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -95,6 +95,29 @@ const INITIAL_IMPORT: ImportState = {
   dryRun: null,
 };
 
+// ── Tab / icon helpers ───────────────────────────────────────────
+
+const ICON_PROPS = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+function tabIcon(tab: 'export' | 'import' | 'backup'): React.ReactNode {
+  switch (tab) {
+    case 'export':
+      return <svg {...ICON_PROPS}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
+    case 'import':
+      return <svg {...ICON_PROPS}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+    case 'backup':
+      return <svg {...ICON_PROPS}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
+  }
+}
+
+function folderIcon(): React.ReactNode {
+  return <svg {...ICON_PROPS} width={32} height={32}><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>;
+}
+
+function checkIcon(): React.ReactNode {
+  return <svg {...ICON_PROPS}><polyline points="20 6 9 17 4 12"/></svg>;
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 /** Data management screen — encrypted export wizard, import wizard with dry-run preview, and one-click backup status. */
@@ -109,6 +132,13 @@ export default function DataManagementScreen() {
   });
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'backup'>('export');
   const { addToast } = useToast();
+
+  // ── Refs to hold latest form state so callbacks don't depend on
+  //     keystroke-level state (which would defeat useCallback).
+  const exportStateRef = useRef(exportState);
+  exportStateRef.current = exportState;
+  const importStateRef = useRef(importState);
+  importStateRef.current = importState;
 
   // ── Load backup status on mount ─────────────────────────────────
 
@@ -168,19 +198,21 @@ export default function DataManagementScreen() {
   // ── Export flow ─────────────────────────────────────────────────
 
   const startExport = useCallback(() => {
-    if (exportState.selectedTypes.size === 0) {
+    const es = exportStateRef.current;
+    if (es.selectedTypes.size === 0) {
       addToast({ message: l10n.getString('data-mgmt-toast-export-select-type'), type: 'error' });
       return;
     }
     setExportState((prev) => ({ ...prev, step: 'encrypt', error: null }));
-  }, [addToast, exportState.selectedTypes, l10n]);
+  }, [addToast, l10n]);
 
   const confirmExport = useCallback(async () => {
-    if (exportState.password.length < 8) {
+    const es = exportStateRef.current;
+    if (es.password.length < 8) {
       addToast({ message: l10n.getString('data-mgmt-toast-export-password-length'), type: 'error' });
       return;
     }
-    if (exportState.password !== exportState.passwordConfirm) {
+    if (es.password !== es.passwordConfirm) {
       addToast({ message: l10n.getString('data-mgmt-toast-export-password-match'), type: 'error' });
       return;
     }
@@ -197,11 +229,11 @@ export default function DataManagementScreen() {
       setExportState((prev) => ({ ...prev, progress: 30 }));
 
       const result = await exportData({
-        types: Array.from(exportState.selectedTypes),
-        password: exportState.password,
+        types: Array.from(es.selectedTypes),
+        password: es.password,
         outputPath: filePath,
-        ...(exportState.dateFrom ? { dateFrom: exportState.dateFrom } : {}),
-        ...(exportState.dateTo ? { dateTo: exportState.dateTo } : {}),
+        ...(es.dateFrom ? { dateFrom: es.dateFrom } : {}),
+        ...(es.dateTo ? { dateTo: es.dateTo } : {}),
       });
 
       setExportState((prev) => ({
@@ -219,7 +251,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: l10n.getString('data-mgmt-toast-export-fail'), type: 'error' });
     }
-  }, [addToast, exportState.dateFrom, exportState.dateTo, exportState.password, exportState.passwordConfirm, exportState.selectedTypes, l10n]);
+  }, [addToast, l10n]);
 
   const resetExport = useCallback(() => {
     setExportState(INITIAL_EXPORT);
@@ -245,11 +277,12 @@ export default function DataManagementScreen() {
   }, [addToast, l10n]);
 
   const handleAnalyse = useCallback(async () => {
-    if (!importState.password) {
+    const is = importStateRef.current;
+    if (!is.password) {
       addToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), type: 'error' });
       return;
     }
-    if (!importState.selectedFile) {
+    if (!is.selectedFile) {
       addToast({ message: l10n.getString('data-mgmt-toast-import-no-file'), type: 'error' });
       return;
     }
@@ -257,7 +290,7 @@ export default function DataManagementScreen() {
     setImportState((prev) => ({ ...prev, progress: 10, error: null, analysing: true }));
 
     try {
-      const preview = await importPreview(importState.selectedFile, importState.password);
+      const preview = await importPreview(is.selectedFile, is.password);
       setImportState((prev) => ({
         ...prev,
         analysing: false,
@@ -288,10 +321,11 @@ export default function DataManagementScreen() {
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
       }));
     }
-  }, [addToast, importState.password, importState.selectedFile, l10n]);
+  }, [addToast, l10n]);
 
   const startImport = useCallback(async () => {
-    if (!importState.selectedFile || !importState.password) {
+    const is = importStateRef.current;
+    if (!is.selectedFile || !is.password) {
       addToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), type: 'error' });
       return;
     }
@@ -300,7 +334,7 @@ export default function DataManagementScreen() {
 
     try {
       // Execute import (preview already done in analyse step)
-      const result = await importData(importState.selectedFile, importState.password);
+      const result = await importData(is.selectedFile, is.password);
 
       setImportState((prev) => ({
         ...prev,
@@ -327,7 +361,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), type: 'error' });
     }
-  }, [addToast, importState.selectedFile, importState.password, l10n]);
+  }, [addToast, l10n]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
@@ -354,7 +388,7 @@ export default function DataManagementScreen() {
             className={`data-mgmt-tab ${activeTab === tab ? 'data-mgmt-tab--active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            <span aria-hidden="true">{tab === 'export' && '📤'}{tab === 'import' && '📥'}{tab === 'backup' && '💾'}</span>
+            <span className="data-mgmt-tab-icon" aria-hidden="true">{tabIcon(tab)}</span>
             {' '}
             <Localized id={`data-mgmt-tab-${tab}`}>
               <span>{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
@@ -394,15 +428,14 @@ export default function DataManagementScreen() {
                         checked={exportState.selectedTypes.has(dt.key)}
                         onChange={() => toggleType(dt.key)}
                       />
-                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text comes from <Localized> */}
-                      <label className="data-mgmt-type-info" htmlFor={`type-${dt.key}`}>
+                      <div className="data-mgmt-type-info">
                         <Localized id={`data-mgmt-type-${dt.key}`}>
-                          <span className="data-mgmt-type-label">{dt.label}</span>
+                          <label className="data-mgmt-type-label" htmlFor={`type-${dt.key}`}>{dt.label}</label>
                         </Localized>
                         <Localized id={`data-mgmt-type-${dt.key}-desc`}>
                           <span className="data-mgmt-type-desc">{dt.description}</span>
                         </Localized>
-                      </label>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -465,6 +498,7 @@ export default function DataManagementScreen() {
                       id="export-password"
                       className="data-mgmt-input"
                       type="password"
+                      autoComplete="off"
                       placeholder={l10n.getString('data-mgmt-encrypt-password-placeholder')}
                       value={exportState.password}
                       onChange={(e) => setExportState((prev) => ({ ...prev, password: e.target.value }))}
@@ -478,6 +512,7 @@ export default function DataManagementScreen() {
                       id="export-password-confirm"
                       className="data-mgmt-input"
                       type="password"
+                      autoComplete="off"
                       placeholder={l10n.getString('data-mgmt-encrypt-confirm-placeholder')}
                       value={exportState.passwordConfirm}
                       onChange={(e) => setExportState((prev) => ({ ...prev, passwordConfirm: e.target.value }))}
@@ -518,7 +553,7 @@ export default function DataManagementScreen() {
                   {exportState.step === 'exporting' ? (
                     <Spinner size="md" />
                   ) : (
-                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-export-complete-aria')}>✓</span>
+                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-export-complete-aria')}>{checkIcon()}</span>
                   )}
                 </div>
 
@@ -562,7 +597,7 @@ export default function DataManagementScreen() {
 
                 <div className="data-mgmt-file-picker">
                   <div className="data-mgmt-file-dropzone">
-                    <span className="data-mgmt-file-icon">📂</span>
+                    <span className="data-mgmt-file-icon">{folderIcon()}</span>
                     <Localized id="data-mgmt-import-drop-text">
                       <p>Drag & drop a .ozpkg file here, or</p>
                     </Localized>
@@ -599,6 +634,7 @@ export default function DataManagementScreen() {
                     id="import-password"
                     className="data-mgmt-input"
                     type="password"
+                    autoComplete="off"
                     placeholder={l10n.getString('data-mgmt-import-password-placeholder')}
                     value={importState.password}
                     onChange={(e) => setImportState((prev) => ({ ...prev, password: e.target.value }))}
@@ -690,7 +726,7 @@ export default function DataManagementScreen() {
                   {importState.step === 'importing' ? (
                     <Spinner size="md" />
                   ) : (
-                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-import-complete-aria')}>✓</span>
+                    <span className="data-mgmt-progress-done" aria-label={l10n.getString('data-mgmt-import-complete-aria')}>{checkIcon()}</span>
                   )}
                 </div>
 

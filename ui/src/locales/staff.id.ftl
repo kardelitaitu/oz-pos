@@ -37,6 +37,7 @@ staff-col-name = Nama
 staff-col-username = Nama Pengguna
 staff-col-role = Peran
 staff-col-status = Status
+staff-col-workspace = Ruang Kerja
 staff-col-actions =
     .aria-label = Tindakan
 staff-status-active = Aktif

@@ -274,9 +274,9 @@ func (rl *rateLimiter) persistBucket(ip string, tokens int, lastFill time.Time) 
 // request-hot-path authority, SQLite is mirrored via write-through.
 type keyFailureTracker struct {
 	mu             sync.Mutex
-	failures        map[string]*keyFailures
+	failures       map[string]*keyFailures
 	maxAttempts    int
-	cooldown        time.Duration
+	cooldown       time.Duration
 	stopCleanup    chan struct{}
 	cleanupRunning bool
 

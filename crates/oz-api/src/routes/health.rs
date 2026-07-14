@@ -52,10 +52,10 @@ mod tests {
     fn health_response_is_serializable() {
         let resp = HealthResponse {
             status: "ok",
-            version: "0.0.4",
+            version: "0.0.6",
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"status\":\"ok\""));
-        assert!(json.contains("\"version\":\"0.0.4\""));
+        assert!(json.contains("\"version\":\"0.0.6\""));
     }
 }

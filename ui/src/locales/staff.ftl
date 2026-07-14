@@ -9,6 +9,7 @@ staff-col-name = Name
 staff-col-username = Username
 staff-col-role = Role
 staff-col-status = Status
+staff-col-workspace = Workspace
 staff-col-actions =
     .aria-label = Actions
 staff-status-active = Active

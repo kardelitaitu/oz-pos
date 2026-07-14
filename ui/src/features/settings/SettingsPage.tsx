@@ -126,15 +126,7 @@ const NAV_ITEMS: SettingsNavItem[] = [
       </svg>
     ),
   },
-  {
-    key: 'license',
-    label: 'License',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      </svg>
-    ),
-  },
+
   {
     key: 'data',
     label: 'Data',
@@ -206,8 +198,8 @@ const NAV_ITEMS: SettingsNavItem[] = [
     label: 'Shifts',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        <line x1="12" y1="1" x2="12" y2="23" />
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
       </svg>
     ),
   },
@@ -216,8 +208,19 @@ const NAV_ITEMS: SettingsNavItem[] = [
     label: 'Tax Rates',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        <line x1="12" y1="1" x2="12" y2="23" />
+        <line x1="4" y1="6" x2="20" y2="6" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <line x1="4" y1="18" x2="20" y2="18" />
+        <line x1="8" y1="6" x2="8" y2="18" />
+      </svg>
+    ),
+  },
+  {
+    key: 'license',
+    label: 'License',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
       </svg>
     ),
   },
@@ -249,12 +252,39 @@ interface SettingsCategory {
   keys: string[];
 }
 
+const CATEGORY_I18N_KEYS: Record<string, string> = {
+  Business: 'settings-category-business',
+  Operations: 'settings-category-operations',
+  System: 'settings-category-system',
+  Management: 'settings-category-management',
+};
+
 const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
   { label: 'Operations', keys: ['receipt', 'sync'] },
   { label: 'System', keys: ['about', 'license', 'features', 'data'] },
   { label: 'Management', keys: ['staff', 'terminals', 'stores', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
 ];
+
+const NAV_L10N_KEYS: Record<string, string> = {
+  general: 'settings-nav-general',
+  appearance: 'settings-nav-appearance',
+  receipt: 'settings-nav-receipt',
+  sync: 'settings-nav-sync',
+  about: 'settings-nav-about',
+  features: 'settings-nav-features',
+  data: 'settings-nav-data',
+  staff: 'settings-nav-staff',
+  terminals: 'settings-nav-terminals',
+  stores: 'settings-nav-stores',
+  audit: 'settings-nav-audit',
+  offline: 'settings-nav-offline',
+  shifts: 'settings-nav-shifts',
+  tax: 'settings-nav-tax',
+  license: 'settings-nav-license',
+  exchange: 'settings-nav-exchange',
+  promotions: 'settings-nav-promotions',
+};
 
 // ── Clock helper ──────────────────────────────────────────────────
 
@@ -263,27 +293,41 @@ function useClock(): string {
     new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   );
   useEffect(() => {
-    const id = setInterval(
-      () => setClock(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
-      60_000,
-    );
-    return () => clearInterval(id);
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    // Align the first tick to the next minute boundary so the clock
+    // is accurate from the start rather than drifting by mount time.
+    const now = new Date();
+    const msUntilNextMinute =
+      (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    const timeout = setTimeout(() => {
+      const tick = () =>
+        setClock(
+          new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        );
+      tick();
+      intervalId = setInterval(tick, 60_000);
+    }, msUntilNextMinute);
+    return () => {
+      clearTimeout(timeout);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
   return clock;
 }
 
-function useDate(): string {
-  const [date, setDate] = useState(() =>
-    new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
-  );
-  useEffect(() => {
-    const id = setInterval(
-      () => setDate(new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })),
-      60_000,
-    );
-    return () => clearInterval(id);
-  }, []);
-  return date;
+/** Return today's formatted date. The date only changes at midnight and
+ *  the settings page is not expected to stay open across day boundaries,
+ *  so we compute once at mount rather than polling every 60 seconds. */
+function getToday(): string {
+  return new Date().toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -299,7 +343,7 @@ export default function SettingsPage() {
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  const { refreshBrandSettings, settings: brandSettings } = useBrand();
+  const { refreshBrandSettings } = useBrand();
   const { theme, toggleTheme } = useTheme();
 
   const [receipt, setReceipt] = useState<ReceiptSettingsDto>({
@@ -321,7 +365,6 @@ export default function SettingsPage() {
     taxId: '',
     currency: 'IDR',
     branch: '',
-    logo: '',
   });
 
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
@@ -377,7 +420,7 @@ export default function SettingsPage() {
   }, []);
 
   const clock = useClock();
-  const today = useDate();
+  const today = getToday();
 
   // Sync font-smoothing to <html> whenever it changes
   useEffect(() => {
@@ -387,74 +430,97 @@ export default function SettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    // Use allSettled so a single failing API doesn't block the entire
+    // settings page — each successful result is applied independently.
+    const results = await Promise.allSettled([
+      getReceiptSettings(),
+      getStoreSettings(),
+      listCurrencies(),
+      getDefaultCurrency(),
+      getSyncSettings(),
+      getUserPreferences(userId),
+      getBrandSettings(),
+      getVersion(),
+    ]);
+    const [rR, sR, cR, dcR, syncR, prefsR, brandR, verR] = results;
+
     try {
-      const [r, s, currenciesData, defaultCurrencyData, syncData, prefs, brand, ver] = await Promise.all([
-        getReceiptSettings(),
-        getStoreSettings(),
-        listCurrencies(),
-        getDefaultCurrency(),
-        getSyncSettings(),
-        getUserPreferences(userId),
-        getBrandSettings(),
-        getVersion(),
-      ]);
-      setReceipt(r);
-      setStore(s);
-      setDecimalSep(r.decimalSeparator);
-      setCurrencies(currenciesData);
-      setDefaultCurrencyState(defaultCurrencyData ?? 'USD');
-      setSync(syncData);
-      setSyncServerUrl(syncData.serverUrl ?? '');
-      const cs = prefs['cardsize'];
-      if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
-      const fs = prefs['fontsize'];
-      if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
-      if (prefs['font-smoothing'] !== undefined) setDisplayFontSmoothing(prefs['font-smoothing']);
-      setBrandColour(brand.primary_colour);
-      setBrandStoreName(brand.store_name);
-      setAppVersion(ver.version);
-      const palette = deriveAccentPalette(brand.primary_colour);
-      applyAccentPalette(palette);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
+      if (rR.status === 'fulfilled') { setReceipt(rR.value); setDecimalSep(rR.value.decimalSeparator); }
+      if (sR.status === 'fulfilled') setStore(sR.value);
+      if (cR.status === 'fulfilled') setCurrencies(cR.value);
+      if (dcR.status === 'fulfilled') setDefaultCurrencyState(dcR.value ?? 'USD');
+      if (syncR.status === 'fulfilled') { setSync(syncR.value); setSyncServerUrl(syncR.value.serverUrl ?? ''); }
+      if (prefsR.status === 'fulfilled') {
+        const p = prefsR.value;
+        const cs = p['cardsize'];
+        if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
+        const fs = p['fontsize'];
+        if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
+        if (p['font-smoothing'] !== undefined) setDisplayFontSmoothing(p['font-smoothing']);
+      }
+      if (brandR.status === 'fulfilled') {
+        setBrandColour(brandR.value.primary_colour);
+        setBrandStoreName(brandR.value.store_name);
+        const palette = deriveAccentPalette(brandR.value.primary_colour);
+        applyAccentPalette(palette);
+      }
+      if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
+
+      // Only surface a full-page error when every single API failed.
+      if (results.every((r) => r.status === 'rejected')) {
+        setLoadError(l10n.getString('settings-load-failed'));
+      } else if (results.some((r) => r.status === 'rejected')) {
+        // Some APIs failed — page loads partially; warn the user.
+        addToast({ message: l10n.getString('settings-load-partial'), type: 'error' });
+      }
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, l10n, addToast]);
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = async () => {
     setSaving(true);
     setSaved(false);
-    try {
-      await Promise.all([
-        setReceiptSettings(receipt, session?.user_id ?? ''),
-        setStoreSettings(store, session?.user_id ?? ''),
-        setDefaultCurrency({ code: defaultCurrency }),
-        setUserPreferences(userId, [
-          { key: 'cardsize', value: String(displayCardSize) },
-          { key: 'fontsize', value: String(displayFontSize) },
-          { key: 'font-smoothing', value: displayFontSmoothing },
-        ]),
-        updateSyncSettings({
-          serverUrl: syncServerUrl || null,
-          apiKey: syncApiKey || null,
-          enabled: sync.enabled,
-        }),
-        setBrandPrimaryColour(brandColour),
-        setBrandStoreNameApi(brandStoreName),
-      ]);
+    // Use allSettled so a single failing save doesn't silently block
+    // the others — the user gets a warning about partial failures.
+    const results = await Promise.allSettled([
+      setReceiptSettings(receipt, session?.user_id ?? ''),
+      setStoreSettings(store, session?.user_id ?? ''),
+      setDefaultCurrency({ code: defaultCurrency }),
+      setUserPreferences(userId, [
+        { key: 'cardsize', value: String(displayCardSize) },
+        { key: 'fontsize', value: String(displayFontSize) },
+        { key: 'font-smoothing', value: displayFontSmoothing },
+      ]),
+      updateSyncSettings({
+        serverUrl: syncServerUrl || null,
+        ...(syncApiKey ? { apiKey: syncApiKey } : {}),
+        enabled: sync.enabled,
+      }),
+      setBrandPrimaryColour(brandColour),
+      setBrandStoreNameApi(brandStoreName),
+    ]);
+
+    const failed = results.filter((r) => r.status === 'rejected').length;
+
+    // At least one save succeeded — show confirmation and refresh.
+    if (failed < results.length) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      setSyncApiKey('');
+      if (syncApiKey) setSyncApiKey('');
       refreshBrandSettings();
-    } catch {
-      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
-    } finally {
-      setSaving(false);
     }
-  }, [receipt, store, defaultCurrency, userId, session?.user_id, sync.enabled, syncServerUrl, syncApiKey, displayCardSize, displayFontSize, displayFontSmoothing, brandColour, brandStoreName, addToast, l10n, refreshBrandSettings]);
+
+    if (failed === results.length) {
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
+    } else if (failed > 0) {
+      addToast({ message: l10n.getString('settings-save-partial'), type: 'error' });
+    }
+
+    setSaving(false);
+  };
 
   // ── Loading / Error states ───────────────────────────────────
 
@@ -492,7 +558,7 @@ export default function SettingsPage() {
                   {l10n.getString('settings-field-store-name')}
                   <Localized id="settings-store-name-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input"
+                      className="settings-input" autoComplete="off"
                       type="text"
                       id="settings-field-store-name"
                       placeholder="OZ-POS Store"
@@ -506,7 +572,7 @@ export default function SettingsPage() {
                   {l10n.getString('settings-field-address')}
                   <Localized id="settings-address-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input"
+                      className="settings-input" autoComplete="off"
                       type="text"
                       id="settings-field-address"
                       placeholder="123 Main Street"
@@ -520,7 +586,7 @@ export default function SettingsPage() {
                   {l10n.getString('settings-field-tax-id')}
                   <Localized id="settings-tax-id-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input"
+                      className="settings-input" autoComplete="off"
                       type="text"
                       id="settings-field-tax-id"
                       placeholder="12-3456789"
@@ -761,7 +827,7 @@ export default function SettingsPage() {
                 {l10n.getString('settings-field-footer')}
                 <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
                   <input
-                    className="settings-input"
+                    className="settings-input" autoComplete="off"
                     type="text"
                     id="settings-field-receipt-footer"
                     placeholder="Thank you for shopping!"
@@ -809,7 +875,7 @@ export default function SettingsPage() {
                 {l10n.getString('settings-sync-server-url')}
                 <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
                   <input
-                    className="settings-input"
+                    className="settings-input" autoComplete="off"
                     type="url"
                     id="settings-field-server-url"
                     placeholder="https://api.example.com"
@@ -823,7 +889,7 @@ export default function SettingsPage() {
                 {l10n.getString('settings-sync-api-key')}
                 <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
                   <input
-                    className="settings-input"
+                    className="settings-input" autoComplete="off"
                     type="password"
                     id="settings-field-api-key"
                     placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
@@ -860,7 +926,7 @@ export default function SettingsPage() {
                           const result = await syncRun();
                           setSyncResult(result);
                         } catch {
-                          setSyncResult({ synced: 0, failed: 0, error: 'Sync failed' });
+                          setSyncResult({ synced: 0, failed: 0, error: l10n.getString('settings-sync-error') });
                         } finally {
                           setSyncing(false);
                         }
@@ -974,18 +1040,14 @@ export default function SettingsPage() {
       {/* ── Top bar ────────────────────────────────────── */}
       <header className="settings-topbar">
         <div className="settings-topbar-left">
-          <Tooltip content={brandSettings.store_name || 'OZ-POS'}>
-            <div className="settings-topbar-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="14" rx="2" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-                <line x1="7" y1="15" x2="9" y2="15" />
-                <line x1="15" y1="15" x2="17" y2="15" />
-              </svg>
-            </div>
-          </Tooltip>
+          <div className="settings-topbar-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </div>
           <span className="settings-topbar-name">
-            {brandSettings.store_name || 'OZ-POS'} — Settings
+            <Localized id="settings-title">Settings</Localized>
           </span>
         </div>
         <div className="settings-topbar-right">
@@ -998,7 +1060,6 @@ export default function SettingsPage() {
                 variant="primary"
                 loading={saving}
                 onClick={handleSave}
-                aria-label={saved ? 'Saved!' : 'Save settings'}
               >
                 <Localized id={saved ? 'settings-saved' : 'settings-btn-save'}>
                   <span>{saved ? 'Saved!' : 'Save'}</span>
@@ -1014,14 +1075,18 @@ export default function SettingsPage() {
         {/* ── Sidebar ────────────────────────────────── */}
         <aside
           className={`settings-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}
-          aria-label="Settings navigation"
+          aria-label={l10n.getString('settings-sidebar-nav-aria')}
         >
           <div className="settings-sidebar-header">
             <button
               type="button"
               className="settings-sidebar-toggle"
               onClick={() => setSidebarCollapsed((p) => !p)}
-              aria-label={sidebarCollapsed ? 'Expand settings sidebar' : 'Collapse settings sidebar'}
+              aria-label={
+                sidebarCollapsed
+                  ? l10n.getString('settings-sidebar-expand-aria')
+                  : l10n.getString('settings-sidebar-collapse-aria')
+              }
             >
               <svg
                 viewBox="0 0 24 24"
@@ -1051,7 +1116,9 @@ export default function SettingsPage() {
                     onClick={() => toggleCategory(cat.label)}
                     aria-expanded={isExpanded}
                   >
-                    <span className="settings-sidebar-section-label">{cat.label}</span>
+                    <span className="settings-sidebar-section-label">
+                      <Localized id={CATEGORY_I18N_KEYS[cat.label] ?? ''}>{cat.label}</Localized>
+                    </span>
                     <svg
                       className={`settings-sidebar-chevron${isExpanded ? '' : ' collapsed'}`}
                       viewBox="0 0 24 24"
@@ -1067,21 +1134,23 @@ export default function SettingsPage() {
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </button>
-                  {isExpanded && (
+                  {(isExpanded || sidebarCollapsed) && (
                     <div className="settings-sidebar-section-items">
                       {cat.keys.map((key) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
-                          <Tooltip key={key} content={item.label} showDelay={800}>
+                          <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
                             <button
                               type="button"
                               className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
                               onClick={() => setActiveSection(key)}
                               aria-current={activeSection === key ? 'page' : undefined}
-                              aria-label={item.label}
+                              aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
                             >
                               <span className="settings-nav-icon">{item.icon}</span>
-                              <span className="settings-nav-label">{item.label}</span>
+                              <span className="settings-nav-label">
+                                <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                              </span>
                             </button>
                           </Tooltip>
                         );
@@ -1109,7 +1178,11 @@ export default function SettingsPage() {
             type="button"
             className="settings-footer-theme-toggle"
             onClick={toggleTheme}
-            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            aria-label={
+              theme === 'light'
+                ? l10n.getString('settings-theme-toggle-dark-aria')
+                : l10n.getString('settings-theme-toggle-light-aria')
+            }
           >
             {theme === 'light' ? (
               /* Moon icon (click to go dark) */
@@ -1151,7 +1224,9 @@ export default function SettingsPage() {
               </svg>
             )}
           </button>
-          OZ-POS Enterprise v{appVersion}
+          <Localized id="settings-app-version" vars={{ version: appVersion }}>
+            <span>OZ-POS Enterprise v{appVersion}</span>
+          </Localized>
         </span>
         <span className="settings-footer-right">
           <Localized id="settings-license-type-value">

@@ -43,6 +43,7 @@
 .tax-config-table td {
   padding: var(--space-2) var(--space-3);
   text-align: left;
+  vertical-align: middle;
   border-bottom: 1px solid var(--color-border);
 }
 

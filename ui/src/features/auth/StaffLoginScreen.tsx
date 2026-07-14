@@ -362,6 +362,8 @@ export default function StaffLoginScreen() {
                     <input
                       ref={usernameInputRef}
                       type="text"
+                      id="staff-login-username"
+                      name="username"
                       className="staff-login-input"
                       placeholder="Username"
                       value={username}
@@ -467,7 +469,7 @@ export default function StaffLoginScreen() {
 
       {/* ── Footer: version + copyright ────────────────────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.4</span>
+        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.6</span>
         <Localized id="staff-login-copyright">
           <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
         </Localized>

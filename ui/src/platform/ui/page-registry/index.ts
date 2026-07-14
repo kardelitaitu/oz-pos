@@ -108,8 +108,17 @@ export function getEnabledPages(
  */
 function hasRequiredRole(userRole: string | undefined, required: RequiredRole): boolean {
   if (!userRole) return false;
-  if (required === 'owner') return userRole === 'owner';
-  return userRole === 'manager' || userRole === 'owner';
+  const role = userRole.toLowerCase();
+  const isSuperUser =
+    role === 'owner' ||
+    role === 'role-owner' ||
+    role === 'admin' ||
+    role === 'role-admin' ||
+    role === 'manager' ||
+    role === 'role-manager';
+
+  if (required === 'owner') return isSuperUser;
+  return isSuperUser;
 }
 
 /**

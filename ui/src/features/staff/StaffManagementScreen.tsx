@@ -19,7 +19,27 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { RoleIcon } from '@/components/RoleIcon';
+import { useToast } from '@/frontend/shared/Toast';
 import './StaffManagementScreen.css';
+
+// ── SVG icon props ────────────────────────────────────────────────
+
+const ICON_PROPS = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+function wsIcon(key: string): React.ReactNode {
+  switch (key) {
+    case 'restaurant':
+      return <svg {...ICON_PROPS}><path d="M6 2v20m12-20v5.3c0 3.3-2.7 6-6 6s-6-2.7-6-6V2"/></svg>;
+    case 'store':
+      return <svg {...ICON_PROPS}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+    case 'inventory':
+      return <svg {...ICON_PROPS}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>;
+    case 'admin':
+      return <svg {...ICON_PROPS}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9.9-4.9l1.4 1.4m12.8 1.4l1.4-1.4M1 12h2m18 0h2M4.2 4.2l1.4 1.4m12.8 12.8l1.4 1.4"/></svg>;
+    default:
+      return <svg {...ICON_PROPS}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
+  }
+}
 
 // ── Form state ──────────────────────────────────────────────────────
 
@@ -49,9 +69,12 @@ const EMPTY_FORM: FormData = {
 export default function StaffManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { addToast } = useToast();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceTypeDto[]>([]);
+  const [workspaceNameMap, setWorkspaceNameMap] = useState<Map<string, string>>(new Map());
+  const [staffWorkspaces, setStaffWorkspaces] = useState<Map<string, string[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,12 +95,39 @@ export default function StaffManagementScreen() {
       ]);
       setStaff(staffData);
       setRoles(rolesData);
+
+      // Load workspace names and assignments for the table column.
+      try {
+        const workspaces = await listAllWorkspaces(callerUserId);
+        const nameMap = new Map<string, string>();
+        for (const w of workspaces) {
+          nameMap.set(w.key, w.name);
+        }
+        setWorkspaceNameMap(nameMap);
+
+        const wsMap = new Map<string, string[]>();
+        const results = await Promise.allSettled(
+          staffData.map((m) => getUserWorkspaces(m.id)),
+        );
+        for (let i = 0; i < results.length; i++) {
+          const member = staffData[i];
+          const r = results[i];
+          if (member && r && r.status === 'fulfilled') {
+            wsMap.set(member.id, r.value);
+          } else if (member) {
+            wsMap.set(member.id, []);
+          }
+        }
+        setStaffWorkspaces(wsMap);
+      } catch {
+        // Workspace data unavailable — column will be empty.
+      }
     } catch {
       // IPC unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [callerUserId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -136,29 +186,36 @@ export default function StaffManagementScreen() {
 
   // ── Save / Update ──────────────────────────────────────────────
 
-  const handleSave = useCallback(async () => {
+  // handleSave reads form state directly on every invocation — no useCallback
+  // needed since it's only used as an onClick handler on a single button.
+  //
+  // Validation runs BEFORE setSaving(true) to avoid:
+  //   (a) calling setSaving(false) twice (once in try, once in finally)
+  //   (b) a visible loading flicker (saving → true → false instantly).
+  const handleSave = async () => {
+    const username = form.username.trim().toLowerCase();
+    const displayName = form.displayName.trim();
+
+    if (!username) {
+      setError(l10n.getString('staff-error-username-required'));
+      return;
+    }
+    if (!displayName) {
+      setError(l10n.getString('staff-error-display-name-required'));
+      return;
+    }
+    if (!form.roleId) {
+      setError(l10n.getString('staff-error-role-required'));
+      return;
+    }
+    if (!editingId && (!form.pin || form.pin.length < 4)) {
+      setError(l10n.getString('staff-error-pin-length'));
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      const username = form.username.trim().toLowerCase();
-      const displayName = form.displayName.trim();
-
-      if (!username) {
-        setError(l10n.getString('staff-error-username-required'));
-        setSaving(false);
-        return;
-      }
-      if (!displayName) {
-        setError(l10n.getString('staff-error-display-name-required'));
-        setSaving(false);
-        return;
-      }
-      if (!form.roleId) {
-        setError(l10n.getString('staff-error-role-required'));
-        setSaving(false);
-        return;
-      }
-
       if (editingId) {
         await updateStaff({
           id: editingId,
@@ -176,11 +233,6 @@ export default function StaffManagementScreen() {
           callerUserId,
         );
       } else {
-        if (!form.pin || form.pin.length < 4) {
-          setError(l10n.getString('staff-error-pin-length'));
-          setSaving(false);
-          return;
-        }
         await createStaff({
           username,
           pin: form.pin,
@@ -197,7 +249,7 @@ export default function StaffManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load, l10n, callerUserId]);
+  };
 
   // ── Deactivate / Reactivate ────────────────────────────────────
 
@@ -213,20 +265,26 @@ export default function StaffManagementScreen() {
       });
       await load();
     } catch {
-      // Error handling.
+      addToast({ message: l10n.getString('staff-error-save-failed'), type: 'error' });
     }
-  }, [load, callerUserId]);
+  }, [load, callerUserId, addToast, l10n]);
 
   // ── Role colour mapping ────────────────────────────────────────
 
   const roleVariant = (roleName: string): 'warning' | 'info' | 'default' | 'success' => {
     switch (roleName.toLowerCase()) {
-      case 'owner': return 'warning';
-      case 'manager': return 'info';
-      case 'kitchen': return 'success';
-      case 'cashier': return 'default';
-      case 'staff': return 'default';
-      default: return 'default';
+      case 'owner':
+      case 'role-owner':
+      case 'admin':
+      case 'role-admin':   return 'warning';
+      case 'manager':
+      case 'role-manager': return 'info';
+      case 'kitchen':
+      case 'role-kitchen': return 'success';
+      case 'cashier':
+      case 'role-cashier': return 'default';
+      case 'staff':        return 'default';
+      default:             return 'default';
     }
   };
 
@@ -280,6 +338,7 @@ export default function StaffManagementScreen() {
                 <Localized id="staff-col-username"><th>Username</th></Localized>
                 <Localized id="staff-col-role"><th>Role</th></Localized>
                 <Localized id="staff-col-status"><th>Status</th></Localized>
+                <Localized id="staff-col-workspace"><th>Workspace</th></Localized>
                 <Localized id="staff-col-actions" attrs={{ "aria-label": true }}>
                   <th aria-label="Actions"> </th>
                 </Localized>
@@ -316,7 +375,13 @@ export default function StaffManagementScreen() {
                       </Localized>
                     )}
                   </td>
-                  <td className="staff-mgmt-cell-actions">
+                  <td className="staff-mgmt-cell-username">
+                    {(staffWorkspaces.get(member.id) ?? [])
+                      .map((k) => workspaceNameMap.get(k) ?? k)
+                      .join(', ') || '—'}
+                  </td>
+                  <td>
+                    <div className="staff-mgmt-cell-actions">
                     <Localized id="staff-edit-aria" attrs={{ "aria-label": true }} vars={{ name: member.display_name }}>
                       <button
                         type="button"
@@ -339,6 +404,7 @@ export default function StaffManagementScreen() {
                         </Localized>
                       </button>
                     </Localized>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -497,10 +563,7 @@ export default function StaffManagementScreen() {
                             <span className="staff-mgmt-ws-checkbox-label">
                               {ws.icon && (
                                 <span className="staff-mgmt-ws-icon" aria-hidden="true">
-                                  {ws.icon === 'restaurant' && '🍽 '}
-                                  {ws.icon === 'store' && '🏪 '}
-                                  {ws.icon === 'inventory' && '📦 '}
-                                  {ws.icon === 'admin' && '⚙ '}
+                                  {wsIcon(ws.icon)}
                                 </span>
                               )}
                               {ws.name}

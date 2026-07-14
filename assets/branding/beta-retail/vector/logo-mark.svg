@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beta Retail -- Logo Mark (hexagonal shield icon) -->
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="hex-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1AAE9E"/>
+      <stop offset="100%" stop-color="#0D8C7A"/>
+    </linearGradient>
+  </defs>
+  <!-- Hexagon backdrop -->
+  <polygon points="60,6 108,34 108,86 60,114 12,86 12,34" fill="url(#hex-grad)"/>
+  <!-- B monogram -->
+  <path d="M44,32 L44,88 L66,88 C74,88 80,85 84,79 C88,73 90,66 90,60 C90,54 88,47 84,41 C80,35 74,32 66,32 Z M54,42 L64,42 C69,42 73,44 76,48 C79,52 80,56 80,60 C80,64 79,68 76,72 C73,76 69,78 64,78 L54,78 Z" fill="#FFFFFF"/>
+</svg>

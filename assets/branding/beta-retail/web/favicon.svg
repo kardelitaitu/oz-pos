@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beta Retail SVG Favicon -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="fav-bg-br" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1AAE9E"/>
+      <stop offset="100%" stop-color="#0D8C7A"/>
+    </linearGradient>
+  </defs>
+  <!-- Hexagon shape -->
+  <polygon points="50,6 90,28 90,72 50,94 10,72 10,28" fill="url(#fav-bg-br)"/>
+  <!-- B monogram -->
+  <path d="M34,32 L34,68 L50,68 C56,68 60,66 63,62 C66,58 67,53 67,50 C67,47 66,42 63,38 C60,34 56,32 50,32 Z M41,38 L48,38 C52,38 55,40 57,43 C59,46 60,48 60,50 C60,52 59,54 57,57 C55,60 52,62 48,62 L41,62 Z" fill="#FFFFFF"/>
+</svg>

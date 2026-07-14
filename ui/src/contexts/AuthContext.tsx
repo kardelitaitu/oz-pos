@@ -5,9 +5,51 @@ import {
   useState,
   useCallback,
   useMemo,
+  useEffect,
   type ReactNode,
 } from "react";
 import { staffLogin, type LoginSessionDto } from "@/api/staff";
+
+const SESSION_KEY = "oz-pos-session";
+const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/** Restore persisted session on mount (survives F5 / Vite HMR).
+ *  Clears sessions older than 24 hours to prevent stale tokens. */
+function loadSession(): LoginSessionDto | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.display_name === "string" &&
+      typeof parsed.role_name === "string" &&
+      typeof parsed._storedAt === "number"
+    ) {
+      // Discard sessions older than the max age
+      if (Date.now() - parsed._storedAt > SESSION_MAX_AGE_MS) {
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      const { _storedAt, ...session } = parsed;
+      return session as LoginSessionDto;
+    }
+  } catch { /* malformed — ignore */ }
+  return null;
+}
+
+function persistSession(session: LoginSessionDto | null) {
+  try {
+    if (session) {
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({ ...session, _storedAt: Date.now() }),
+      );
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  } catch { /* quota exceeded — ignore */ }
+}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -58,9 +100,14 @@ interface AuthProviderProps {
  * StaffLoginScreen. After login, the session is available via `useAuth()`.
  */
 export function AuthProvider({ children, onLogin }: AuthProviderProps) {
-  const [session, setSession] = useState<LoginSessionDto | null>(null);
+  const [session, setSession] = useState<LoginSessionDto | null>(() => loadSession());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Persist session changes to localStorage
+  useEffect(() => {
+    persistSession(session);
+  }, [session]);
 
   const login = useCallback(
     async (username: string, pin: string) => {
@@ -100,8 +147,19 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   }, []);
 
   const isManager =
-    session?.role_name === "manager" || session?.role_name === "owner";
-  const isOwner = session?.role_name === "owner";
+    session?.role_name === "manager" ||
+    session?.role_name === "owner" ||
+    session?.role_name === "admin" ||
+    session?.role_name === "role-manager" ||
+    session?.role_name === "role-owner" ||
+    session?.role_name === "role-admin";
+  const isOwner =
+    session?.role_name === "owner" ||
+    session?.role_name === "admin" ||
+    session?.role_name === "manager" ||
+    session?.role_name === "role-owner" ||
+    session?.role_name === "role-admin" ||
+    session?.role_name === "role-manager";
 
   const value = useMemo<AuthContextValue>(
     () => ({

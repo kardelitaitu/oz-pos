@@ -42,6 +42,13 @@ export default defineConfig({
   },
 
   test: {
+    // Use vmThreads pool for Windows stability. The forks pool crashes
+    // (Worker exited unexpectedly) on Windows with complex component
+    // renders (SettingsPage ×26) due to tinypool heap pressure. The
+    // threads pool also hangs on Node.js 24 + Windows after ~3 renders.
+    // vmThreads uses node:vm modules directly, avoiding tinypool's
+    // worker_threads issues entirely.
+    pool: 'vmThreads',
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],

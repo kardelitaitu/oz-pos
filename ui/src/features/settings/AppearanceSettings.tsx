@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import {
   getBrandSettings,
@@ -50,6 +50,12 @@ export function AppearanceSettings({
   const activeColour = embedded ? (colourProp ?? colour) : colour;
   const activeStoreName = embedded ? (storeNameProp ?? storeName) : storeName;
 
+  // Contrast text is absolute — light accent needs dark text, dark accent needs
+  // light text, regardless of theme. Centralised as CSS variables instead of
+  // duplicated inline styles.
+  const isLightBg = parseInt(activeColour.slice(1), 16) > 0x7fffff;
+  const previewBtnText = isLightBg ? '#0a0a0a' : '#ffffff';
+
   const updateColour = useCallback((c: string) => {
     if (embedded) {
       onColourChange?.(c);
@@ -77,13 +83,18 @@ export function AppearanceSettings({
     }
   }, [refreshBrandSettings]);
 
+  const colourRef = useRef(activeColour);
+  colourRef.current = activeColour;
+  const nameRef = useRef(activeStoreName);
+  nameRef.current = activeStoreName;
+
   const save = useCallback(async () => {
     setSaving(true);
-    await setBrandPrimaryColour(activeColour);
-    await setBrandStoreName(activeStoreName);
+    await setBrandPrimaryColour(colourRef.current);
+    await setBrandStoreName(nameRef.current);
     refreshBrandSettings();
     setSaving(false);
-  }, [activeColour, activeStoreName, refreshBrandSettings]);
+  }, [refreshBrandSettings]);
 
   const content = (
     <div className="settings-form">
@@ -108,6 +119,7 @@ export function AppearanceSettings({
               value={activeColour}
               onChange={(e) => updateColour(e.target.value)}
               className="appearance-colour-hex settings-input"
+              autoComplete="off"
               aria-label="Colour hex value"
             />
           </Localized>
@@ -147,6 +159,7 @@ export function AppearanceSettings({
           value={activeStoreName}
           onChange={(e) => updateStoreName(e.target.value)}
           className="settings-input"
+          autoComplete="off"
         />
       </div>
 
@@ -158,13 +171,13 @@ export function AppearanceSettings({
           id="interface-zoom"
           value={zoomLevel}
           onChange={(e) => setZoomLevel(e.target.value as ZoomLevel)}
-          className="settings-input"
+          className="settings-select"
         >
-          <option value="auto">Automatic (Scale with screen)</option>
-          <option value="100">100% (Default)</option>
-          <option value="125">125%</option>
-          <option value="150">150%</option>
-          <option value="200">200%</option>
+          <option value="auto"><Localized id="appearance-zoom-auto">Automatic (Scale with screen)</Localized></option>
+          <option value="100"><Localized id="appearance-zoom-100">100% (Default)</Localized></option>
+          <option value="125"><Localized id="appearance-zoom-125">125%</Localized></option>
+          <option value="150"><Localized id="appearance-zoom-150">150%</Localized></option>
+          <option value="200"><Localized id="appearance-zoom-200">200%</Localized></option>
         </select>
       </div>
 
@@ -174,10 +187,15 @@ export function AppearanceSettings({
         </h3>
         <div
           className="appearance-preview-box"
-          style={{ '--preview-colour': activeColour } as React.CSSProperties}
+          style={{
+            '--preview-colour': activeColour,
+            '--preview-btn-text': previewBtnText,
+            '--preview-colour-alpha-10': `${activeColour}1a`,
+            '--preview-colour-alpha-20': `${activeColour}33`,
+          } as React.CSSProperties}
         >
           <div className="appearance-preview-sample">
-            <span className="appearance-preview-text" style={{ color: activeColour }}>
+            <span className="appearance-preview-text">
               {activeStoreName ? activeStoreName : <Localized id="appearance-store-name-fallback"><span>OZ-POS</span></Localized>}
             </span>
           </div>
@@ -185,11 +203,6 @@ export function AppearanceSettings({
             <button
               type="button"
               className="appearance-preview-btn"
-              style={{
-                backgroundColor: activeColour,
-                borderColor: activeColour,
-                color: parseInt(activeColour.slice(1), 16) > 0x7fffff ? '#0a0a0a' : '#ffffff',
-              }}
               disabled
             >
               <Localized id="appearance-preview-btn-label">Primary Button</Localized>
@@ -197,22 +210,11 @@ export function AppearanceSettings({
             <button
               type="button"
               className="appearance-preview-btn-outline"
-              style={{
-                borderColor: activeColour,
-                color: activeColour,
-              }}
               disabled
             >
               <Localized id="appearance-preview-btn-outline-label">Secondary</Localized>
             </button>
-            <span
-              className="appearance-preview-badge"
-              style={{
-                backgroundColor: `${activeColour}1a`,
-                color: activeColour,
-                borderColor: `${activeColour}33`,
-              }}
-            >
+            <span className="appearance-preview-badge">
               <Localized id="appearance-preview-badge-label">Live</Localized>
             </span>
           </div>

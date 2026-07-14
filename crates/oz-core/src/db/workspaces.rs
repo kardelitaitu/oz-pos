@@ -147,7 +147,12 @@ impl Store<'_> {
         role_id: &str,
         user_id: Option<&str>,
     ) -> Result<Vec<WorkspaceRow>, CoreError> {
-        if role_id == "role-owner" {
+        if role_id == "role-owner"
+            || role_id == "role-admin"
+            || role_id == "admin"
+            || role_id == "role-manager"
+            || role_id == "manager"
+        {
             return self.list_all_workspace_types();
         }
 
@@ -349,7 +354,12 @@ impl Store<'_> {
         // TODO(ADR #4 Phase 2): Check user_store_access before returning all instances.
         // In multi-store mode, role-owner with user_store_access rows should only see
         // instances from assigned stores (see ADR #4 Security Architecture §3).
-        if role_id == "role-owner" {
+        if role_id == "role-owner"
+            || role_id == "role-admin"
+            || role_id == "admin"
+            || role_id == "role-manager"
+            || role_id == "manager"
+        {
             return self.list_store_instances(store_id, user_id);
         }
 

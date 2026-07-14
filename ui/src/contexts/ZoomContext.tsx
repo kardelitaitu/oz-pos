@@ -29,10 +29,13 @@ export function ZoomProvider({ children }: { children: ReactNode }) {
       let fontSize = 16;
       if (zoomLevel === 'auto') {
         const windowWidth = window.innerWidth;
-        // Base resolution is 1920px (standard 1080p width) = 16px base font
+        // Base resolution is 1920px = 16px base font.
+        // Scale DOWN below 1920px but never UP above it. Tauri/WebView2
+        // already respects Windows display scaling (125%, 150%, etc.) so
+        // additional width-based up-scaling would double-scale on 4K.
         const scale = windowWidth / 1920;
-        // Clamp between 14px (minimum readable) and 28px
-        fontSize = Math.max(14, Math.min(28, 16 * scale));
+        // Clamp between 14px (minimum readable at 1366x768) and 16px (base)
+        fontSize = Math.max(14, Math.min(16, 16 * scale));
       } else {
         const percentage = parseInt(zoomLevel, 10);
         fontSize = 16 * (percentage / 100);

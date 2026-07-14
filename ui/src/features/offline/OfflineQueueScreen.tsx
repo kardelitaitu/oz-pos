@@ -244,7 +244,8 @@ export default function OfflineQueueScreen() {
                       </Localized>
                     )}
                   </td>
-                  <td className="offline-queue-cell-actions">
+                  <td>
+                    <div className="offline-queue-cell-actions">
                     <button
                       type="button"
                       className="offline-queue-action-btn offline-queue-action-btn--danger"
@@ -253,6 +254,7 @@ export default function OfflineQueueScreen() {
                     >
                       <Localized id="offline-queue-delete"><span>Delete</span></Localized>
                     </button>
+                    </div>
                   </td>
                 </tr>
               ))}
