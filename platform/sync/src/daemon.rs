@@ -262,7 +262,7 @@ impl SyncDaemon {
             // Phase 4: Pull remote updates and apply them locally.
             if !cfg.server_url.is_empty() {
                 let transport = SyncTransport::new(&cfg.server_url, cfg.api_key.as_deref());
-                match transport.pull_updates(None).await {
+                match transport.pull_updates(None, None).await {
                     Ok(pull_resp) => {
                         pulled = pull_resp.items.len();
                         if !pull_resp.items.is_empty() {

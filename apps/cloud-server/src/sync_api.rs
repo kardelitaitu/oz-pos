@@ -91,8 +91,10 @@ async fn push_handler(
 
 /// `POST /api/sync/pull` — return items changed since the given timestamp.
 ///
-/// Uses a SQL-level `WHERE created_at >= ?` filter for efficiency with
-/// large datasets.
+/// Supports cursor-based pagination (P-3): the client passes an opaque
+/// `cursor` from the previous page's `next_cursor` to fetch the next page.
+/// Each page returns at most 500 items. When `next_cursor` is null, all
+/// pages have been consumed.
 async fn pull_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
@@ -102,9 +104,11 @@ async fn pull_handler(
     let conn = state.db.lock().await;
 
     // P-1 retention: if the client's anchor (`since`) is older than the
-    // oldest retained row, the requested data has been pruned. Return
-    // 410 Gone so the client can log a warning and retry next cycle.
-    if let Some(ref since) = req.since {
+    // oldest retained row, the requested data has been pruned. Skip this
+    // check when using a cursor (subsequent pages don't re-check anchor).
+    if req.cursor.is_none()
+        && let Some(ref since) = req.since
+    {
         let oldest: Option<String> = conn
             .query_row(
                 "SELECT MIN(created_at) FROM offline_queue WHERE tenant_id = ?1",
@@ -127,35 +131,83 @@ async fn pull_handler(
         }
     }
 
-    let items = if let Some(ref since) = req.since {
+    // P-3: decode cursor if present. Format: "created_at|id".
+    let (cursor_ts, cursor_id) = if let Some(ref cursor) = req.cursor {
+        let parts: Vec<&str> = cursor.splitn(2, '|').collect();
+        if parts.len() == 2 {
+            (Some(parts[0].to_owned()), Some(parts[1].to_owned()))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    // Build paginated query. Fetch one extra row (501) to detect more pages.
+    let limit = 501i64;
+    let mut items: Vec<oz_core::offline::OfflineQueueItem> = if let (Some(ts), Some(cid)) = (&cursor_ts, &cursor_id) {
         let mut stmt = conn
             .prepare(
-                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
-                 FROM offline_queue WHERE created_at >= ?1 AND tenant_id = ?2 ORDER BY created_at ASC",
+                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
+                 FROM offline_queue
+                 WHERE tenant_id = ?1 AND created_at >= ?2 AND (created_at > ?3 OR (created_at = ?3 AND id > ?4))
+                 ORDER BY created_at ASC, id ASC
+                 LIMIT ?5",
             )
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![since, tenant_id], row_to_item)
+            .query_map(
+                params![tenant_id, req.since.as_deref().unwrap_or(""), ts, cid, limit],
+                row_to_item,
+            )
+            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        rows.filter_map(|r| r.ok()).collect::<Vec<_>>()
+    } else if let Some(ref since) = req.since {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
+                 FROM offline_queue
+                 WHERE created_at >= ?1 AND tenant_id = ?2
+                 ORDER BY created_at ASC, id ASC
+                 LIMIT ?3",
+            )
+            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![since, tenant_id, limit], row_to_item)
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
         rows.filter_map(|r| r.ok()).collect::<Vec<_>>()
     } else {
         let mut stmt = conn
             .prepare(
-                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
-                 FROM offline_queue WHERE tenant_id = ?1 ORDER BY created_at ASC",
+                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
+                 FROM offline_queue
+                 WHERE tenant_id = ?1
+                 ORDER BY created_at ASC, id ASC
+                 LIMIT ?2",
             )
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![tenant_id], row_to_item)
+            .query_map(params![tenant_id, limit], row_to_item)
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
         rows.filter_map(|r| r.ok()).collect::<Vec<_>>()
     };
 
-    Ok(axum::Json(PullResponse { items }))
+    // P-3: Detect if there are more pages (501st row exists).
+    let next_cursor = if items.len() > 500 {
+        items.truncate(500);
+        let last = items.last().unwrap();
+        Some(format!("{}|{}", last.created_at, last.id))
+    } else {
+        None
+    };
+
+    Ok(axum::Json(PullResponse { items, next_cursor }))
 }
 
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.

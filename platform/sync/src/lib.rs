@@ -378,39 +378,57 @@ impl SyncEngine {
         }
 
         // Phase 2: Pull remote updates from the server.
+        // P-3: Paginated pull — loop until next_cursor is null.
         let last_sync = queue.last_synced_at(store)?;
-        let pull_result = match self.transport.pull_updates(last_sync.as_deref()).await {
-            Ok(result) => result,
-            Err(SyncError::AnchorExpired { oldest_available }) => {
-                tracing::warn!(
-                    oldest_available = oldest_available,
-                    "sync anchor expired — data has been pruned on server; retrying next cycle"
-                );
-                // Return partial result: pushed items were already
-                // committed, but pulled items are skipped. The next
-                // scheduled cycle will retry naturally.
-                return Ok(ReplicationResult {
-                    pushed: total_pushed,
-                    pulled: 0,
-                });
-            }
-            Err(e) => return Err(e),
-        };
+        let mut total_pulled = 0usize;
+        let mut cursor: Option<String> = None;
+        let mut pages = 0u32;
 
-        for remote_item in &pull_result.items {
-            queue.apply_remote(store, remote_item)?;
+        loop {
+            pages += 1;
+            let pull_result = match self
+                .transport
+                .pull_updates(last_sync.as_deref(), cursor.as_deref())
+                .await
+            {
+                Ok(result) => result,
+                Err(SyncError::AnchorExpired { oldest_available }) => {
+                    tracing::warn!(
+                        oldest_available = oldest_available,
+                        "sync anchor expired — data has been pruned on server; retrying next cycle"
+                    );
+                    return Ok(ReplicationResult {
+                        pushed: total_pushed,
+                        pulled: total_pulled,
+                    });
+                }
+                Err(e) => return Err(e),
+            };
+
+            let page_count = pull_result.items.len();
+            total_pulled += page_count;
+
+            for remote_item in &pull_result.items {
+                queue.apply_remote(store, remote_item)?;
+            }
+
+            cursor = pull_result.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
         }
 
         tracing::info!(
             pushed = total_pushed,
-            pulled = pull_result.items.len(),
+            pulled = total_pulled,
             batches = batch_count,
+            pages = pages,
             "sync cycle complete"
         );
 
         Ok(ReplicationResult {
             pushed: total_pushed,
-            pulled: pull_result.items.len(),
+            pulled: total_pulled,
         })
     }
 }

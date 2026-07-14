@@ -165,7 +165,10 @@ impl PgTransport {
             })
             .collect();
 
-        Ok(super::transport::PullResponse { items })
+        Ok(super::transport::PullResponse {
+            items,
+            next_cursor: None,
+        })
     }
 }
 

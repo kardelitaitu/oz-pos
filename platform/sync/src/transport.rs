@@ -46,6 +46,9 @@ pub struct PushResponse {
 pub struct PullRequest {
     /// ISO-8601 timestamp of the last successful sync. `None` for initial sync.
     pub since: Option<String>,
+    /// Opaque cursor for paginated pulls (P-3). `None` for first page.
+    #[serde(default)]
+    pub cursor: Option<String>,
 }
 
 /// Response from the pull endpoint.
@@ -53,6 +56,9 @@ pub struct PullRequest {
 pub struct PullResponse {
     /// Items that have changed on the server since the given timestamp.
     pub items: Vec<OfflineQueueItem>,
+    /// Opaque cursor for the next page (P-3). `None` when no more pages.
+    #[serde(default)]
+    pub next_cursor: Option<String>,
 }
 
 /// The HTTP sync transport.
@@ -119,10 +125,15 @@ impl SyncTransport {
     /// Pull updates from the server since the given timestamp.
     ///
     /// Pass `None` to pull all available data (initial sync).
-    pub async fn pull_updates(&self, since: Option<&str>) -> Result<PullResponse, SyncError> {
+    /// Pull updates from the server since the given timestamp.
+    ///
+    /// Pass `None` for `since` to pull all available data (initial sync).
+    /// Pass `cursor` for paginated subsequent pages (P-3).
+    pub async fn pull_updates(&self, since: Option<&str>, cursor: Option<&str>) -> Result<PullResponse, SyncError> {
         let url = format!("{}/api/sync/pull", self.base_url);
         let request = PullRequest {
             since: since.map(|s| s.to_owned()),
+            cursor: cursor.map(|c| c.to_owned()),
         };
 
         let resp = self
@@ -284,7 +295,10 @@ mod tests {
 
     #[test]
     fn pull_request_debug() {
-        let req = PullRequest { since: None };
+        let req = PullRequest {
+            since: None,
+            cursor: None,
+        };
         let debug = format!("{req:?}");
         assert!(debug.contains("since"));
     }
@@ -293,6 +307,7 @@ mod tests {
     fn pull_request_json_some_since() {
         let req = PullRequest {
             since: Some("2026-01-01T00:00:00Z".into()),
+            cursor: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["since"], "2026-01-01T00:00:00Z");
@@ -300,7 +315,10 @@ mod tests {
 
     #[test]
     fn pull_request_json_none_since() {
-        let req = PullRequest { since: None };
+        let req = PullRequest {
+            since: None,
+            cursor: None,
+        };
         let json = serde_json::to_value(&req).unwrap();
         assert!(json["since"].is_null());
     }
@@ -309,6 +327,7 @@ mod tests {
     fn pull_request_serde_roundtrip() {
         let req = PullRequest {
             since: Some("2026-01-01T00:00:00Z".into()),
+            cursor: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         let rt: PullRequest = serde_json::from_str(&json).unwrap();
@@ -319,14 +338,20 @@ mod tests {
 
     #[test]
     fn pull_response_debug() {
-        let resp = PullResponse { items: vec![] };
+        let resp = PullResponse {
+            items: vec![],
+            next_cursor: None,
+        };
         let debug = format!("{resp:?}");
         assert!(debug.contains("items"));
     }
 
     #[test]
     fn pull_response_json_field_names() {
-        let resp = PullResponse { items: vec![] };
+        let resp = PullResponse {
+            items: vec![],
+            next_cursor: None,
+        };
         let json = serde_json::to_value(&resp).unwrap();
         assert!(json.as_object().unwrap().contains_key("items"));
     }
@@ -336,6 +361,7 @@ mod tests {
         let item = OfflineQueueItem::new("complete_sale", "{}");
         let resp = PullResponse {
             items: vec![item.clone()],
+            next_cursor: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         let rt: PullResponse = serde_json::from_str(&json).unwrap();
@@ -360,6 +386,7 @@ mod tests {
     fn pull_request_clone() {
         let req = PullRequest {
             since: Some("2026-01-01".into()),
+            cursor: None,
         };
         let cloned = req.clone();
         assert_eq!(cloned.since, req.since);
