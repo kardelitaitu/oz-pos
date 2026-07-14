@@ -855,6 +855,100 @@ impl Store<'_> {
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
     }
+
+    /// Archive stock movements older than `older_than_days` days.
+    ///
+    /// Uses archive-rollup consolidation (ADR #6 Q4 / P-1 Ledger Retention):
+    ///
+    /// 1. Copies old rows to `stock_movements_archive` for audit compliance.
+    /// 2. Inserts a single rollup row per product — `SUM(delta)` of all
+    ///    archived rows, with `reason: 'archive-rollup'`.
+    /// 3. Deletes old rows from the live table.
+    ///
+    /// Rollup rows are excluded from future archiving via `WHERE reason != 'archive-rollup'`.
+    /// Each item_id group is processed in its own transaction so concurrent
+    /// `adjust_stock` calls are never blocked for long.
+    ///
+    /// Capped at `max_groups` item_id groups per call to bound runtime
+    /// (subsequent calls pick up remaining groups — idempotent).
+    ///
+    /// Returns the number of item groups that were archived.
+    pub fn archive_stock_movements(
+        &self,
+        older_than_days: i64,
+        max_groups: usize,
+    ) -> Result<usize, CoreError> {
+        // Compute the cutoff timestamp (now minus older_than_days).
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(older_than_days);
+        let cutoff_str = cutoff.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+        // Find item_ids that have archivable rows (excluding rollup rows).
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT item_id
+             FROM stock_movements
+             WHERE created_at < ?1
+               AND reason != 'archive-rollup'
+             LIMIT ?2",
+        )?;
+        let item_ids: Vec<String> = stmt
+            .query_map(params![cutoff_str, max_groups as i64], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if item_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let mut groups_archived = 0usize;
+
+        for item_id in &item_ids {
+            let tx = self.conn.unchecked_transaction()?;
+
+            // 1. Copy old rows to archive (skip previous rollup rows).
+            tx.execute(
+                "INSERT INTO stock_movements_archive
+                 SELECT id, item_id, delta, reason,
+                        source_terminal_id, source_user_id,
+                        store_id, created_at
+                 FROM stock_movements
+                 WHERE item_id = ?1
+                   AND created_at < ?2
+                   AND reason != 'archive-rollup'",
+                params![item_id, cutoff_str],
+            )?;
+
+            // 2. Insert a rollup row consolidating all archived deltas.
+            let rollup_id = uuid::Uuid::now_v7().to_string();
+            tx.execute(
+                "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at)
+                 SELECT ?1, ?2, COALESCE(SUM(delta), 0), 'archive-rollup', '', ?3
+                 FROM stock_movements
+                 WHERE item_id = ?2
+                   AND created_at < ?4
+                   AND reason != 'archive-rollup'",
+                params![rollup_id, item_id, now, cutoff_str],
+            )?;
+
+            // 3. Delete old rows from the live table.
+            tx.execute(
+                "DELETE FROM stock_movements
+                 WHERE item_id = ?1
+                   AND created_at < ?2
+                   AND reason != 'archive-rollup'",
+                params![item_id, cutoff_str],
+            )?;
+
+            tx.commit()?;
+            groups_archived += 1;
+        }
+
+        // Run incremental vacuum once after all groups to reclaim disk space.
+        self.conn
+            .execute_batch("PRAGMA incremental_vacuum(50)")
+            .map_err(|e| CoreError::Internal(format!("incremental_vacuum failed: {e}")))?;
+
+        Ok(groups_archived)
+    }
 }
 
 // ── Product Variants ─────────────────────────────────────────
@@ -1930,6 +2024,242 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM stock_summary", [], |r| r.get(0))
             .unwrap();
         assert_eq!(rows, 0);
+    }
+
+    // ── Archive Stock Movements (ADR #6 Q4) ─────────────────────
+
+    #[test]
+    fn archive_movements_table_exists() {
+        let conn = fresh();
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_movements_archive'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            exists, 1,
+            "stock_movements_archive table should exist after migration 072"
+        );
+    }
+
+    #[test]
+    fn archive_movements_empty_db_returns_zero() {
+        let conn = fresh();
+        let count = store(&conn)
+            .archive_stock_movements(90, 50)
+            .unwrap();
+        assert_eq!(count, 0, "no rows to archive in empty DB");
+    }
+
+    #[test]
+    fn archive_movements_no_old_rows_returns_zero() {
+        let conn = fresh();
+        seed_everything(&conn);
+        // Write a recent movement.
+        store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+
+        // All rows are recent — nothing to archive.
+        let count = store(&conn)
+            .archive_stock_movements(90, 50)
+            .unwrap();
+        assert_eq!(count, 0);
+
+        // Live table still has the adjustment row.
+        let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].delta, 5);
+    }
+
+    #[test]
+    fn archive_movements_creates_rollup_row() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+
+        // Insert old rows by manually setting created_at.
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at) VALUES
+                ('sm-old-1', 'prod-1', 30, 'restock', '', '2020-01-01T00:00:00Z'),
+                ('sm-old-2', 'prod-1', -5, 'sale',    '', '2020-02-01T00:00:00Z'),
+                ('sm-old-3', 'prod-1', 10, 'restock', '', '2020-03-01T00:00:00Z');",
+        )
+        .unwrap();
+
+        // Archive with 30-day window (all rows are "old").
+        let count = s.archive_stock_movements(30, 50).unwrap();
+        assert_eq!(count, 1, "one item group archived");
+
+        // Live table should have one rollup row.
+        let movements = s.list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1, "one rollup row in live table");
+        assert_eq!(movements[0].reason.as_deref(), Some("archive-rollup"));
+        assert_eq!(movements[0].delta, 35, "SUM(old deltas) = 30 + (-5) + 10 = 35");
+
+        // Archive table should have the 3 old rows.
+        let archived: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM stock_movements_archive WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(archived, 3, "three old rows archived");
+
+        // SUM(delta) from live table should equal SUM(delta) of original rows.
+        let from_ledger = s.get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(from_ledger, 35, "SUM(delta) preserved via rollup");
+    }
+
+    #[test]
+    fn archive_movements_preserves_recent_rows() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+
+        // Mix of old and new rows.
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at) VALUES
+                ('sm-old-1', 'prod-1', 50, 'restock', '', '2020-01-01T00:00:00Z'),
+                ('sm-old-2', 'prod-1', -10, 'sale',    '', '2020-02-01T00:00:00Z');",
+        )
+        .unwrap();
+        // New row via normal API (gets current timestamp).
+        s.adjust_stock("DRINK-001", 5).unwrap();
+
+        let count = s.archive_stock_movements(30, 50).unwrap();
+        assert_eq!(count, 1, "one item group archived");
+
+        let movements = s.list_stock_movements("prod-1", 10, 0).unwrap();
+        // Should have: 1 recent adjustment + 1 rollup = 2 rows.
+        assert_eq!(movements.len(), 2);
+
+        let rollup = movements
+            .iter()
+            .find(|m| m.reason.as_deref() == Some("archive-rollup"))
+            .unwrap();
+        assert_eq!(rollup.delta, 40, "SUM of archived deltas = 50 + (-10) = 40");
+
+        let recent = movements
+            .iter()
+            .find(|m| m.reason.as_deref() != Some("archive-rollup"))
+            .unwrap();
+        assert_eq!(recent.delta, 5, "recent delta untouched");
+
+        // SUM from ledger = rollup + recent = 40 + 5 = 45.
+        let from_ledger = s.get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(from_ledger, 45);
+    }
+
+    #[test]
+    fn archive_movements_idempotent() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at) VALUES
+                ('sm-old-1', 'prod-1', 20, 'restock', '', '2020-01-01T00:00:00Z');",
+        )
+        .unwrap();
+
+        // First archive creates the rollup.
+        let first = s.archive_stock_movements(30, 50).unwrap();
+        assert_eq!(first, 1);
+
+        // Second archive should be a no-op (rollup excluded from archiving).
+        let second = s.archive_stock_movements(30, 50).unwrap();
+        assert_eq!(second, 0, "no new groups to archive");
+
+        let movements = s.list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1, "still one rollup row");
+        assert_eq!(movements[0].delta, 20);
+    }
+
+    #[test]
+    fn archive_movements_respects_max_groups() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+
+        // Insert old rows for two products.
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at) VALUES
+                ('sm-old-a', 'prod-1', 10, 'restock', '', '2020-01-01T00:00:00Z'),
+                ('sm-old-b', 'prod-2', 20, 'restock', '', '2020-01-01T00:00:00Z');",
+        )
+        .unwrap();
+
+        // Cap at 1 group — should only archive prod-1.
+        let count = s.archive_stock_movements(30, 1).unwrap();
+        assert_eq!(count, 1, "only one group archived (capped)");
+
+        // Second call picks up remaining group.
+        let count2 = s.archive_stock_movements(30, 50).unwrap();
+        assert_eq!(count2, 1, "second group archived");
+    }
+
+    #[test]
+    fn archive_movements_does_not_archive_rollup_rows() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+
+        // Insert old rows.
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at) VALUES
+                ('sm-old-1', 'prod-1', 50, 'restock', '', '2020-01-01T00:00:00Z');",
+        )
+        .unwrap();
+
+        // Archive once.
+        s.archive_stock_movements(30, 50).unwrap();
+
+        // Verify the rollup row is not in the archive table.
+        let rollup_in_archive: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM stock_movements_archive WHERE reason = 'archive-rollup'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(rollup_in_archive, 0, "rollup rows are never archived");
+
+        // The original old row IS in the archive.
+        let old_in_archive: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM stock_movements_archive WHERE id = 'sm-old-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(old_in_archive, 1, "old row preserved in archive");
+    }
+
+    #[test]
+    fn archive_movements_zero_sum_creates_rollup_with_zero() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+
+        // Rows that cancel out: 50 + (-30) + (-20) = 0.
+        conn.execute_batch(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at) VALUES
+                ('sm-zero-1', 'prod-1', 50,  'restock', '', '2020-01-01T00:00:00Z'),
+                ('sm-zero-2', 'prod-1', -30, 'sale',    '', '2020-02-01T00:00:00Z'),
+                ('sm-zero-3', 'prod-1', -20, 'sale',    '', '2020-03-01T00:00:00Z');",
+        )
+        .unwrap();
+
+        s.archive_stock_movements(30, 50).unwrap();
+
+        let movements = s.list_stock_movements("prod-1", 10, 0).unwrap();
+        assert_eq!(movements.len(), 1);
+        assert_eq!(movements[0].delta, 0, "rollup delta = 0 for net-zero deltas");
+
+        let from_ledger = s.get_stock_from_ledger("prod-1").unwrap();
+        assert_eq!(from_ledger, 0);
     }
 
     #[test]
