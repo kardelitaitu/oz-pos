@@ -26,9 +26,9 @@ impl Store<'_> {
     ) -> Result<OfflineQueueItem, CoreError> {
         let item = OfflineQueueItem::with_tenant(action, payload, tenant_id);
         self.conn.execute(
-            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![item.id, item.action, item.payload, item.status.as_stored_str(), item.retry_count, item.last_error, item.created_at, item.synced_at, item.tenant_id],
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![item.id, item.action, item.payload, item.status.as_stored_str(), item.retry_count, item.last_error, item.created_at, item.synced_at, item.tenant_id, item.priority as i32],
         )?;
         Ok(item)
     }
@@ -36,7 +36,7 @@ impl Store<'_> {
     /// List all pending (unsynced) offline queue items, oldest first.
     pub fn list_pending_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
              FROM offline_queue WHERE status = 'pending' ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
@@ -46,7 +46,7 @@ impl Store<'_> {
     /// List all offline queue items.
     pub fn list_all_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
              FROM offline_queue ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
@@ -59,7 +59,7 @@ impl Store<'_> {
         tenant_id: &str,
     ) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
              FROM offline_queue WHERE status = 'pending' AND tenant_id = ?1 ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map(params![tenant_id], Self::row_to_offline_queue_item)?;

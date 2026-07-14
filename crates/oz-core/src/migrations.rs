@@ -287,6 +287,10 @@ pub const ALL: &[Migration] = &[
         id: "072_stock_movements_archive.sql",
         sql: include_str!("../migrations/072_stock_movements_archive.sql"),
     },
+    Migration {
+        id: "073_offline_queue_priority.sql",
+        sql: include_str!("../migrations/073_offline_queue_priority.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
