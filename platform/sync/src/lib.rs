@@ -141,6 +141,24 @@ mod tests {
     }
 
     #[test]
+    fn build_batches_sorts_by_priority() {
+        use oz_core::offline::SyncPriority;
+
+        let critical = OfflineQueueItem::with_priority("a", "{}", SyncPriority::Critical);
+        let normal = OfflineQueueItem::with_priority("b", "{}", SyncPriority::Normal);
+        let low = OfflineQueueItem::with_priority("c", "{}", SyncPriority::Low);
+        // Put them in reverse priority order to verify sorting.
+        let items = vec![low.clone(), normal.clone(), critical.clone()];
+        let batches = build_batches(&items, MAX_BATCH_BYTES);
+        // All 3 small items should fit in one batch, but Critical must be first.
+        assert_eq!(batches.len(), 1);
+        let batch = &batches[0];
+        assert_eq!(batch[0].priority, SyncPriority::Critical);
+        assert_eq!(batch[1].priority, SyncPriority::Normal);
+        assert_eq!(batch[2].priority, SyncPriority::Low);
+    }
+
+    #[test]
     fn build_batches_minimum_one_item_per_batch() {
         // An item larger than the byte limit still gets its own batch
         // (minimum 1 item per batch, no empty requests).
@@ -272,15 +290,20 @@ pub const MAX_BATCH_BYTES: usize = 64 * 1024;
 /// Split pending items into batches that each serialise to ≤ `max_bytes`
 /// bytes of JSON. Ensures at least one item per batch (no empty requests).
 ///
-/// Items are kept in arrival order; batches are produced greedily — items are
-/// added to the current batch until adding the next item would exceed the
-/// byte budget.
+/// Items are sorted by priority (P-2) before chunking: all Critical items
+/// transmit before any Normal item, which transmit before Low items.
+/// Within each priority tier, original arrival order is preserved.
 pub fn build_batches(items: &[oz_core::offline::OfflineQueueItem], max_bytes: usize) -> Vec<Vec<oz_core::offline::OfflineQueueItem>> {
+    // Sort by priority (Critical=0, Normal=1, Low=2) — stable sort
+    // preserves arrival order within each tier.
+    let mut sorted: Vec<oz_core::offline::OfflineQueueItem> = items.to_vec();
+    sorted.sort_by_key(|item| item.priority);
+
     let mut batches: Vec<Vec<oz_core::offline::OfflineQueueItem>> = Vec::new();
     let mut current: Vec<oz_core::offline::OfflineQueueItem> = Vec::new();
     let mut current_bytes = 0usize;
 
-    for item in items {
+    for item in &sorted {
         // Estimate the JSON size of this item alone.
         let item_bytes = serde_json::to_vec(item)
             .map(|v| v.len())
