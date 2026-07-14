@@ -3,7 +3,7 @@
 use rusqlite::params;
 
 use crate::error::CoreError;
-use crate::offline::{OfflineQueueItem, OfflineQueueStatus};
+use crate::offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 
 use super::Store;
 
@@ -24,7 +24,28 @@ impl Store<'_> {
         payload: &str,
         tenant_id: &str,
     ) -> Result<OfflineQueueItem, CoreError> {
-        let item = OfflineQueueItem::with_tenant(action, payload, tenant_id);
+        self.enqueue_offline_inner(action, payload, tenant_id, SyncPriority::Normal)
+    }
+
+    /// Enqueue a transaction with a specific sync priority (P-2).
+    pub fn enqueue_offline_priority(
+        &self,
+        action: &str,
+        payload: &str,
+        priority: SyncPriority,
+    ) -> Result<OfflineQueueItem, CoreError> {
+        self.enqueue_offline_inner(action, payload, "default", priority)
+    }
+
+    fn enqueue_offline_inner(
+        &self,
+        action: &str,
+        payload: &str,
+        tenant_id: &str,
+        priority: SyncPriority,
+    ) -> Result<OfflineQueueItem, CoreError> {
+        let mut item = OfflineQueueItem::with_tenant(action, payload, tenant_id);
+        item.priority = priority;
         self.conn.execute(
             "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",

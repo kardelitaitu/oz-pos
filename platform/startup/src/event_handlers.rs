@@ -10,6 +10,7 @@ use foundation::contracts::{EventHandler, ModuleResult};
 use oz_core::audit::AuditEntry;
 use oz_core::db::Store;
 use oz_core::events::{ProductCreated, SaleCompleted, StockAdjusted};
+use oz_core::offline::SyncPriority;
 use rusqlite::Connection;
 use tracing::{error, info};
 
@@ -51,20 +52,22 @@ impl EventHandler<SaleCompleted> for SaleSyncEnqueuer {
         })
         .to_string();
 
+        // P-2: Sale completions are Critical priority — they must
+        // propagate before inventory or settings changes.
         store
-            .enqueue_offline("complete_sale", &payload)
+            .enqueue_offline_priority("complete_sale", &payload, SyncPriority::Critical)
             .map_err(|e| {
                 error!(
                     sale_id = %event.sale_id,
                     error = %e,
                     "sync enqueuer: failed to enqueue completed sale"
                 );
-                anyhow::anyhow!("sync enqueuer: enqueue_offline failed: {e}")
+                anyhow::anyhow!("sync enqueuer: enqueue_offline_priority failed: {e}")
             })?;
 
         info!(
             sale_id = %event.sale_id,
-            "sync enqueuer: sale queued for sync"
+            "sync enqueuer: sale queued for sync (priority=Critical)"
         );
 
         Ok(())
