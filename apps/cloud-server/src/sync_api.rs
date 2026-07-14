@@ -20,13 +20,20 @@ use tokio::sync::Mutex;
 use oz_api::auth::{ApiTokenClaims, auth_middleware};
 use platform_sync::transport::{PullRequest, PullResponse, PushOutcome, PushResponse};
 
+use crate::metrics;
+
+/// Snapshot cache entry: (generation timestamp, serialised JSON bytes).
+type CacheEntry = (std::time::Instant, Vec<u8>);
+/// Per-tenant snapshot cache map.
+type SnapshotCache = Arc<Mutex<std::collections::HashMap<String, CacheEntry>>>;
+
 /// Shared state for sync handlers — a database connection behind `Arc<Mutex<>>`.
 #[derive(Clone)]
 pub struct SyncState {
     pub db: Arc<Mutex<Connection>>,
     /// Snapshot cache: keyed by tenant_id, stores (generated_at, JSON bytes).
     /// P-3 Step 4: in-memory cache with 5-minute TTL.
-    pub snapshot_cache: Arc<Mutex<std::collections::HashMap<String, (std::time::Instant, Vec<u8>)>>>,
+    pub snapshot_cache: SnapshotCache,
 }
 
 impl From<super::CloudServerState> for SyncState {
@@ -58,14 +65,23 @@ async fn push_handler(
     Extension(claims): Extension<ApiTokenClaims>,
     axum::Json(items): axum::Json<Vec<oz_core::offline::OfflineQueueItem>>,
 ) -> Result<axum::Json<PushResponse>, (axum::http::StatusCode, String)> {
+    let start = std::time::Instant::now();
     use oz_core::offline::OfflineQueueStatus;
 
     // Tenant isolation: use the tenant_id from the JWT claims, not the
     // incoming JSON body, to prevent tenant spoofing.
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
+    let db_start = std::time::Instant::now();
     let conn = state.db.lock().await;
+    metrics::DB_CONTENTION_SECONDS
+        .with_label_values(&["push"])
+        .observe(db_start.elapsed().as_secs_f64());
     let mut results = Vec::with_capacity(items.len());
+
+    // Estimate batch size for metrics.
+    let batch_bytes = serde_json::to_vec(&items).map(|v| v.len()).unwrap_or(0) as f64;
+    metrics::SYNC_BATCH_SIZE_BYTES.observe(batch_bytes);
 
     for item in &items {
         match conn.execute(
@@ -78,13 +94,18 @@ async fn push_handler(
                 tenant_id,
             ],
         ) {
-            Ok(_) => results.push(PushOutcome::Accepted),
+            Ok(_) => {
+                metrics::SYNC_PUSHES_TOTAL.with_label_values(&["accepted"]).inc();
+                results.push(PushOutcome::Accepted)
+            }
             Err(e) => {
                 if e.to_string().contains("UNIQUE") {
+                    metrics::SYNC_PUSHES_TOTAL.with_label_values(&["conflict"]).inc();
                     results.push(PushOutcome::Rejected {
                         reason: format!("duplicate id: {}", item.id),
                     });
                 } else {
+                    metrics::SYNC_PUSHES_TOTAL.with_label_values(&["rejected"]).inc();
                     results.push(PushOutcome::Rejected {
                         reason: format!("database error: {e}"),
                     });
@@ -93,6 +114,7 @@ async fn push_handler(
         }
     }
 
+    metrics::SYNC_PUSH_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
     Ok(axum::Json(PushResponse { results }))
 }
 
@@ -107,8 +129,13 @@ async fn pull_handler(
     Extension(claims): Extension<ApiTokenClaims>,
     axum::Json(req): axum::Json<PullRequest>,
 ) -> Result<axum::Json<PullResponse>, (axum::http::StatusCode, String)> {
+    let start = std::time::Instant::now();
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+    let db_start = std::time::Instant::now();
     let conn = state.db.lock().await;
+    metrics::DB_CONTENTION_SECONDS
+        .with_label_values(&["pull"])
+        .observe(db_start.elapsed().as_secs_f64());
 
     // P-1 retention: if the client's anchor (`since`) is older than the
     // oldest retained row, the requested data has been pruned. Skip this
@@ -127,6 +154,7 @@ async fn pull_handler(
         if let Some(ref oldest_ts) = oldest
             && since < oldest_ts
         {
+            metrics::SYNC_ANCHOR_EXPIRED_TOTAL.inc();
             return Err((
                 axum::http::StatusCode::GONE,
                 serde_json::json!({
@@ -214,6 +242,7 @@ async fn pull_handler(
         None
     };
 
+    metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
     Ok(axum::Json(PullResponse { items, next_cursor }))
 }
 
@@ -227,6 +256,7 @@ async fn snapshot_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
 ) -> axum::Json<serde_json::Value> {
+    let start = std::time::Instant::now();
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
     // Helper: build an error JSON response.
@@ -237,16 +267,19 @@ async fn snapshot_handler(
     // P-3 Step 4: check in-memory cache (5-min TTL).
     {
         let cache = state.snapshot_cache.lock().await;
-        if let Some((cached_at, cached_bytes)) = cache.get(tenant_id) {
-            if cached_at.elapsed().as_secs() < 300 {
-                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(cached_bytes) {
-                    return axum::Json(json);
-                }
-            }
+        if let Some((cached_at, cached_bytes)) = cache.get(tenant_id)
+            && cached_at.elapsed().as_secs() < 300
+            && let Ok(json) = serde_json::from_slice::<serde_json::Value>(cached_bytes)
+        {
+            return axum::Json(json);
         }
     }
 
+    let db_start = std::time::Instant::now();
     let conn = state.db.lock().await;
+    metrics::DB_CONTENTION_SECONDS
+        .with_label_values(&["snapshot"])
+        .observe(db_start.elapsed().as_secs_f64());
 
     // Query products.
     let products: Vec<serde_json::Value> = match (|| -> Result<_, String> {
@@ -347,6 +380,7 @@ async fn snapshot_handler(
         cache.insert(tenant_id.to_owned(), (std::time::Instant::now(), cached_bytes));
     }
 
+    metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
     axum::Json(snapshot)
 }
 

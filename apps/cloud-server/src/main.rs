@@ -18,6 +18,7 @@
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
 mod db;
+mod metrics;
 mod prune;
 mod sync_api;
 
@@ -118,6 +119,12 @@ struct HealthResponse {
     uptime_seconds: u64,
 }
 
+/// `GET /metrics` — Prometheus metrics endpoint (P-3 Step 7).
+/// Public, no auth required (same as /health).
+async fn metrics_handler() -> String {
+    crate::metrics::render_metrics()
+}
+
 /// `GET /health` — public health check, no auth required.
 async fn health_handler(axum::extract::State(state): axum::extract::State<CloudServerState>) -> Json<HealthResponse> {
     let uptime = state.started_at.elapsed().as_secs();
@@ -156,6 +163,7 @@ pub fn build_router(state: CloudServerState) -> Router {
 
     Router::new()
         .route("/health", axum::routing::get(health_handler))
+        .route("/metrics", axum::routing::get(metrics_handler))
         .with_state(health_state)
         .merge(api_router)
         .merge(sync_router)
@@ -213,6 +221,23 @@ mod tests {
             .header("Content-Type", "application/json")
             .body(Body::from(body.to_owned()))
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn metrics_returns_prometheus_text() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/metrics")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let text = String::from_utf8_lossy(&body);
+        assert!(text.contains("sync_pushes_total"));
+        assert!(text.contains("sync_push_duration_ms"));
+        assert!(text.contains("sync_pull_duration_ms"));
+        assert!(text.contains("sync_anchor_expired_total"));
     }
 
     #[tokio::test]
