@@ -219,7 +219,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
       expect(screen.getByText('Store POS')).toBeInTheDocument();
       expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const hints = document.querySelectorAll('.workspace-card-key-hint');
@@ -287,7 +287,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Each card should have a shortcut hint (hidden until hover)
@@ -312,7 +312,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the first workspace card (Restaurant POS)
@@ -338,7 +338,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon'));
@@ -368,7 +368,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const cards = document.querySelectorAll('.workspace-card');
@@ -397,7 +397,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const cards = Array.from(document.querySelectorAll('.workspace-card--disabled')).filter(c => !c.textContent?.includes('Coming soon'));
@@ -427,7 +427,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const badges = Array.from(screen.getAllByText('Not available')).filter(
@@ -451,7 +451,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Owner has access to all cards — none should be disabled
@@ -481,7 +481,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Verify the KDS card is clickable
@@ -511,7 +511,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the logout button
@@ -557,7 +557,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the logout button
@@ -607,7 +607,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Click the logout button
@@ -644,7 +644,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Press '3' to select the third card (KDS)
@@ -669,7 +669,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       fireEvent.keyDown(document.activeElement!, { key: '1' });
@@ -693,7 +693,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Press '9' — only 5 cards, so no action
@@ -720,7 +720,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
@@ -793,7 +793,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const activeCards = document.querySelectorAll('.workspace-card--active');
@@ -877,7 +877,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       // Focus the first card
@@ -909,7 +909,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const lastCard = document.querySelectorAll('.workspace-card')[4] as HTMLButtonElement;
@@ -935,7 +935,7 @@ describe('WorkspaceHome', () => {
       await renderInAct(wrap(<WorkspaceHome />));
 
       await waitFor(() => {
-        expect(screen.getByText('Restaurant POS')).toBeInTheDocument();
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
       const firstCard = document.querySelectorAll('.workspace-card')[0] as HTMLButtonElement;

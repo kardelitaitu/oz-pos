@@ -1,0 +1,23 @@
+# Hardware Assets — OZ-POS (default)
+
+This directory holds specialized bitmap assets for thermal receipt printers
+and invoice watermarks. These are generated from the master source icon
+(ssets/source-icon.png) via the whitelabel pipeline.
+
+## Expected files
+
+| File | Description | Spec |
+|------|-------------|------|
+| eceipt-logo-58mm.png | 1-bit monochrome bitmap for 58mm thermal printers | 384×100 px |
+| eceipt-logo-80mm.png | 1-bit monochrome bitmap for 80mm thermal printers | 576×150 px |
+| invoice-watermark.png | Subtle watermark for backend PDF invoices | 512×512 px |
+
+## Generation
+
+To generate receipt bitmaps from the master source icon:
+
+`powershell
+# Requires ImageMagick
+magick convert assets/source-icon.png -resize 384x100 -threshold 50% assets/branding/%brandId%/hardware/receipt-logo-58mm.png
+magick convert assets/source-icon.png -resize 576x150 -threshold 50% assets/branding/%brandId%/hardware/receipt-logo-80mm.png
+`
