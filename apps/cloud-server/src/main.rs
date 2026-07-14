@@ -26,6 +26,7 @@ use std::sync::Arc;
 use axum::Router;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
@@ -117,6 +118,7 @@ pub fn build_router(state: CloudServerState) -> Router {
     Router::new()
         .merge(api_router)
         .merge(sync_router)
+        .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
 }
 

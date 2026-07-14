@@ -72,6 +72,7 @@ impl SyncTransport {
         }
         let client = reqwest::Client::builder()
             .no_proxy()
+            .gzip(true)
             .default_headers(headers)
             .timeout(std::time::Duration::from_secs(30))
             .build()
