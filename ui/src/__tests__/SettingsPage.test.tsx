@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { withToastProviders } from '@/__tests__/test-utils/providers';
@@ -82,13 +82,28 @@ vi.mock('@/contexts/ZoomContext', () => ({
 }));
 
 beforeEach(() => {
+  cleanup();
   localStorage.clear();
   failCommands.clear();
   invokeMock.mockReset();
-  // Restore the default mock implementation so every test starts with
-  // working API mocks. Without this, mockReset() wipes the implementation
-  // and invoke() returns undefined — breaking Promise.allSettled in load().
   invokeMock.mockImplementation(defaultImpl);
+  document.documentElement.removeAttribute('data-theme');
+  document.documentElement.removeAttribute('data-font-smoothing');
+  document.documentElement.classList.remove('is-theme-transitioning');
+  Array.from(document.documentElement.style)
+    .filter((p) => p.startsWith('--color-accent'))
+    .forEach((p) => document.documentElement.style.removeProperty(p));
+});
+
+afterEach(() => {
+  cleanup();
+  // Clear any timers the component may have left behind (useClock,
+  // ThemeProvider, Tooltip, handleSave, etc.) that survive unmount.
+  const maxId = window.setTimeout(() => {}, 0);
+  for (let i = 0; i <= maxId; i++) {
+    window.clearTimeout(i);
+    window.clearInterval(i);
+  }
 });
 
 function TestWrapper({ children }: { children: ReactNode }) {

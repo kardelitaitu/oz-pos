@@ -42,6 +42,10 @@ export default defineConfig({
   },
 
   test: {
+    // Use threads pool (not forks) for Windows stability. The forks pool
+    // crashes (Worker exited unexpectedly) on Windows with complex
+    // component renders (SettingsPage ×26) due to tinypool heap pressure.
+    pool: 'threads',
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
