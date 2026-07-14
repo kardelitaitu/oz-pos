@@ -11,9 +11,9 @@
   "assets": {
     "vector": {
       "logoFullLight": "vector/logo-full.svg",
-      "logoFullDark": "vector/logo-full.svg",
+      "logoFullDark": "vector/logo-full-dark.svg",
       "logoMark": "vector/logo-mark.svg",
-      "logoMonochrome": "vector/logo-mark.svg"
+      "logoMonochrome": "vector/logo-monochrome.svg"
     },
     "web": {
       "faviconIco": "web/favicon.ico",

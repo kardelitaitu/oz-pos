@@ -4,6 +4,7 @@ import {
   stopScanner,
   onBarcodeScanned,
   onBarcodeError,
+  listScanners,
   type BarcodeScannedPayload,
 } from '@/api/hardware';
 import { lookupByBarcode } from '@/api/products';
@@ -91,7 +92,7 @@ export function useBarcodeScanner({
 
 async function autoDetectScanner(): Promise<string | null> {
   try {
-    const scanners = await import('@/api/hardware').then((m) => m.listScanners());
+    const scanners = await listScanners();
     return scanners[0]?.id ?? null;
   } catch {
     return null;

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beta Retail -- Monochrome Logo (single fill for e-paper, thermal, watermarks) -->
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120">
+  <g fill="#000000">
+    <polygon points="52,12 100,40 100,92 52,120 4,92 4,40"/>
+  </g>
+  <g fill="#FFFFFF">
+    <path d="M36,38 L36,94 L58,94 C66,94 72,91 76,85 C80,79 82,72 82,66 C82,60 80,53 76,47 C72,41 66,38 58,38 Z M46,48 L56,48 C61,48 65,50 68,54 C71,58 72,62 72,66 C72,70 71,74 68,78 C65,82 61,84 56,84 L46,84 Z"/>
+  </g>
+  <g fill="#000000" font-family="'Plus Jakarta Sans', 'Inter', Arial, sans-serif" font-weight="700">
+    <text x="116" y="64" font-size="52" letter-spacing="2">Beta</text>
+  </g>
+  <g fill="#000000" font-family="'Plus Jakarta Sans', 'Inter', Arial, sans-serif" font-weight="600">
+    <text x="116" y="96" font-size="28" letter-spacing="6" text-transform="uppercase">RETAIL</text>
+  </g>
+</svg>

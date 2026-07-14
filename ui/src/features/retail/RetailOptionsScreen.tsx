@@ -18,7 +18,7 @@ import {
   type CreditSettingsDto,
 } from '@/api/settings';
 import { getGatewayStatus, type GatewayStatus } from '@/api/gateway';
-import { listScanners, listDisplays, type ScannerInfo } from '@/api/hardware';
+import { listScanners, listDisplays, displayShow, type ScannerInfo } from '@/api/hardware';
 import { listTaxRates, type TaxRateDto } from '@/api/tax';
 import { getAutoLockMinutes, setAutoLockMinutes } from '@/hooks/useIdleTimer';
 import { useCloudSync } from '@/hooks/useCloudSync';
@@ -982,7 +982,6 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                         onClick={async () => {
                           if (!displayTestMsg.trim()) return;
                           try {
-                            const { displayShow } = await import('@/api/hardware');
                             await displayShow({
                               displayId: displays[0]!,
                               line1: displayTestMsg,

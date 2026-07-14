@@ -7,6 +7,7 @@
 //! When disabling, only the selected feature is turned off.
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
@@ -64,20 +65,17 @@ const GROUP_L10N_IDS: Record<string, string> = {
   'Advanced': 'feature-toggle-group-advanced',
 };
 
-// ── IPC wrappers (inline to avoid circular deps) ───────────────────
+// ── IPC wrappers ──────────────────────────────────────────────────
 
 async function listAllFeatures(): Promise<ListAllFeaturesResult> {
-  const { invoke } = await import('@tauri-apps/api/core');
   return invoke<ListAllFeaturesResult>('list_all_features');
 }
 
 async function setFeature(key: string, enabled: boolean): Promise<SetFeatureResult> {
-  const { invoke } = await import('@tauri-apps/api/core');
   return invoke<SetFeatureResult>('set_feature', { args: { key, enabled } });
 }
 
 async function setFeaturesBulk(keys: string[], enabled: boolean): Promise<ListAllFeaturesResult> {
-  const { invoke } = await import('@tauri-apps/api/core');
   return invoke<ListAllFeaturesResult>('set_features_bulk', { args: { keys, enabled } });
 }
 

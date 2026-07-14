@@ -12,16 +12,15 @@ import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { getAvailableLocales, getLocaleLabel } from '@/i18n';
 
-const SAMPLE_CURRENCIES = [
-  { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
-  { code: 'EUR', name: 'Euro', minor_exponent: 2, symbol: '\u20ac' },
-];
+const { invokeMock, defaultImpl, failCommands } = vi.hoisted(() => {
+  const SAMPLE_CURRENCIES = [
+    { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
+    { code: 'EUR', name: 'Euro', minor_exponent: 2, symbol: '\u20ac' },
+  ];
+  // Mutable set of commands that should reject — tests add to it to
+  // simulate failures without replacing the entire mock implementation.
+  const failCommands = new Set<string>();
 
-// Mutable set of commands that should reject — tests add to it to
-// simulate failures without replacing the entire mock implementation.
-const failCommands = new Set<string>();
-
-const { invokeMock, defaultImpl } = vi.hoisted(() => {
   const impl = (_cmd: string, _args?: unknown): Promise<unknown> => {
     const cmd = _cmd;
     if (failCommands.has(cmd)) {
@@ -68,7 +67,7 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
     }
     return Promise.resolve(undefined);
   };
-  return { invokeMock: vi.fn(impl), defaultImpl: impl };
+  return { invokeMock: vi.fn(impl), defaultImpl: impl, failCommands };
 });
 
 vi.mock('@tauri-apps/api/core', () => ({
