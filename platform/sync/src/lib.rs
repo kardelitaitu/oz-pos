@@ -76,7 +76,70 @@ impl From<reqwest::Error> for SyncError {
 #[allow(clippy::unnecessary_literal_unwrap)]
 mod tests {
     use super::*;
+    use oz_core::offline::OfflineQueueItem;
     use oz_core::sync_client::SyncConfig;
+
+    // ── build_batches ────────────────────────────────────────────
+
+    #[test]
+    fn build_batches_empty() {
+        let batches = build_batches(&[], MAX_BATCH_BYTES);
+        assert!(batches.is_empty());
+    }
+
+    #[test]
+    fn build_batches_single_item() {
+        let items = vec![OfflineQueueItem::new("test", "{}")];
+        let batches = build_batches(&items, MAX_BATCH_BYTES);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].len(), 1);
+    }
+
+    #[test]
+    fn build_batches_multiple_items_one_batch() {
+        let items: Vec<_> = (0..5)
+            .map(|i| OfflineQueueItem::new("test", &format!("{{\"n\":{i}}}")))
+            .collect();
+        // 5 tiny items should fit in one 64 KB batch.
+        let batches = build_batches(&items, MAX_BATCH_BYTES);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].len(), 5);
+    }
+
+    #[test]
+    fn build_batches_respects_byte_limit() {
+        // Create payloads that force splitting: each item serialises to
+        // ~33 KB (payload + JSON envelope overhead). Two items exceed the
+        // 64 KB budget, forcing a split after the first item.
+        let big_payload = "x".repeat(33 * 1024);
+        let small = "{}";
+        let items = vec![
+            OfflineQueueItem::new("a", &big_payload),
+            OfflineQueueItem::new("b", &big_payload),
+            OfflineQueueItem::new("c", small),
+        ];
+        let batches = build_batches(&items, MAX_BATCH_BYTES);
+        assert!(
+            batches.len() >= 2,
+            "large items should cause splitting, got {} batches",
+            batches.len()
+        );
+        // Each batch should have at least 1 item.
+        for batch in &batches {
+            assert!(!batch.is_empty(), "no empty batches allowed");
+        }
+    }
+
+    #[test]
+    fn build_batches_minimum_one_item_per_batch() {
+        // An item larger than the byte limit still gets its own batch
+        // (minimum 1 item per batch, no empty requests).
+        let huge = "x".repeat(128 * 1024); // 128 KB payload
+        let items = vec![OfflineQueueItem::new("huge", &huge)];
+        let batches = build_batches(&items, MAX_BATCH_BYTES);
+        assert_eq!(batches.len(), 1, "single huge item still gets a batch");
+        assert_eq!(batches[0].len(), 1);
+    }
 
     // ── SyncError ────────────────────────────────────────────────
 
@@ -193,6 +256,45 @@ pub struct SyncEngine {
     pub transport: SyncTransport,
 }
 
+/// Maximum bytes per batch (64 KB). P-1 retention spec §Batching.
+pub const MAX_BATCH_BYTES: usize = 64 * 1024;
+
+/// Split pending items into batches that each serialise to ≤ `max_bytes`
+/// bytes of JSON. Ensures at least one item per batch (no empty requests).
+///
+/// Items are kept in arrival order; batches are produced greedily — items are
+/// added to the current batch until adding the next item would exceed the
+/// byte budget.
+pub fn build_batches(items: &[oz_core::offline::OfflineQueueItem], max_bytes: usize) -> Vec<Vec<oz_core::offline::OfflineQueueItem>> {
+    let mut batches: Vec<Vec<oz_core::offline::OfflineQueueItem>> = Vec::new();
+    let mut current: Vec<oz_core::offline::OfflineQueueItem> = Vec::new();
+    let mut current_bytes = 0usize;
+
+    for item in items {
+        // Estimate the JSON size of this item alone.
+        let item_bytes = serde_json::to_vec(item)
+            .map(|v| v.len())
+            .unwrap_or(0);
+
+        // If adding this item would exceed the budget and we already have
+        // items in the current batch, finalise and start a new batch.
+        if !current.is_empty() && current_bytes + item_bytes > max_bytes {
+            batches.push(std::mem::take(&mut current));
+            current_bytes = 0;
+        }
+
+        current_bytes += item_bytes;
+        current.push(item.clone());
+    }
+
+    // Don't drop the last partial batch.
+    if !current.is_empty() {
+        batches.push(current);
+    }
+
+    batches
+}
+
 impl SyncEngine {
     /// Create a new sync engine from the given configuration.
     pub fn new(config: SyncConfig) -> Self {
@@ -202,37 +304,45 @@ impl SyncEngine {
         }
     }
 
-    /// Run a full sync cycle: push pending items, then pull remote updates.
+    /// Run a full sync cycle: push pending items in batches, then pull remote updates.
+    ///
+    /// Items are split into ≤ 64 KB batches (P-1 batching) and sent sequentially.
+    /// Each batch commits independently — a failure in batch N does not roll back
+    /// the results of batches 1..N-1.
     ///
     /// Returns a [`ReplicationResult`] with counts of pushed/pulled items.
     pub async fn run_sync_cycle(&self, store: &Store<'_>) -> SyncResult<ReplicationResult> {
         let queue = SyncQueue::new();
 
-        // Phase 1: Push pending local changes to the server.
+        // Phase 1: Push pending local changes in batches.
         let pending = queue.list_pending(store)?;
-        let push_result = if pending.is_empty() {
-            ReplicationResult::default()
-        } else {
-            let results = self.transport.push_items(&pending).await?;
-            for (item, outcome) in pending.iter().zip(results.iter()) {
-                match outcome {
-                    transport::PushOutcome::Accepted => {
-                        queue.mark_synced(store, &item.id)?;
-                    }
-                    transport::PushOutcome::Conflict(server_item) => {
-                        let resolved = conflict::resolve_lww(item, server_item);
-                        queue.apply_resolution(store, &resolved)?;
-                    }
-                    transport::PushOutcome::Rejected { reason } => {
-                        queue.mark_failed(store, &item.id, reason)?;
+        let mut total_pushed = 0usize;
+        let batch_count;
+
+        if !pending.is_empty() {
+            let batches = build_batches(&pending, MAX_BATCH_BYTES);
+            batch_count = batches.len();
+            for batch in &batches {
+                let results = self.transport.push_items(batch).await?;
+                for (item, outcome) in batch.iter().zip(results.iter()) {
+                    match outcome {
+                        transport::PushOutcome::Accepted => {
+                            queue.mark_synced(store, &item.id)?;
+                        }
+                        transport::PushOutcome::Conflict(server_item) => {
+                            let resolved = conflict::resolve_lww(item, server_item);
+                            queue.apply_resolution(store, &resolved)?;
+                        }
+                        transport::PushOutcome::Rejected { reason } => {
+                            queue.mark_failed(store, &item.id, reason)?;
+                        }
                     }
                 }
+                total_pushed += results.len();
             }
-            ReplicationResult {
-                pushed: results.len(),
-                ..Default::default()
-            }
-        };
+        } else {
+            batch_count = 0;
+        }
 
         // Phase 2: Pull remote updates from the server.
         let last_sync = queue.last_synced_at(store)?;
@@ -243,13 +353,14 @@ impl SyncEngine {
         }
 
         tracing::info!(
-            pushed = push_result.pushed,
+            pushed = total_pushed,
             pulled = pull_result.items.len(),
+            batches = batch_count,
             "sync cycle complete"
         );
 
         Ok(ReplicationResult {
-            pushed: push_result.pushed,
+            pushed: total_pushed,
             pulled: pull_result.items.len(),
         })
     }
