@@ -61,6 +61,16 @@ pub enum SyncError {
     #[error("configuration error: {0}")]
     Config(String),
 
+    /// The client's sync anchor (`since` timestamp) is older than the
+    /// oldest retained row on the server. Data in that gap has been
+    /// pruned (P-1 retention). The client should log a warning and
+    /// retry on the next scheduled cycle.
+    #[error("anchor expired: data older than {}", oldest_available.as_deref().unwrap_or("unknown"))]
+    AnchorExpired {
+        /// ISO-8601 timestamp of the oldest retained row on the server.
+        oldest_available: Option<String>,
+    },
+
     /// Database error from the underlying oz-core store.
     #[error("database error: {0}")]
     Database(#[from] oz_core::error::CoreError),
@@ -346,7 +356,23 @@ impl SyncEngine {
 
         // Phase 2: Pull remote updates from the server.
         let last_sync = queue.last_synced_at(store)?;
-        let pull_result = self.transport.pull_updates(last_sync.as_deref()).await?;
+        let pull_result = match self.transport.pull_updates(last_sync.as_deref()).await {
+            Ok(result) => result,
+            Err(SyncError::AnchorExpired { oldest_available }) => {
+                tracing::warn!(
+                    oldest_available = oldest_available,
+                    "sync anchor expired — data has been pruned on server; retrying next cycle"
+                );
+                // Return partial result: pushed items were already
+                // committed, but pulled items are skipped. The next
+                // scheduled cycle will retry naturally.
+                return Ok(ReplicationResult {
+                    pushed: total_pushed,
+                    pulled: 0,
+                });
+            }
+            Err(e) => return Err(e),
+        };
 
         for remote_item in &pull_result.items {
             queue.apply_remote(store, remote_item)?;

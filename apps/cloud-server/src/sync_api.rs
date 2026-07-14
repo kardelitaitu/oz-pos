@@ -101,6 +101,32 @@ async fn pull_handler(
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
     let conn = state.db.lock().await;
 
+    // P-1 retention: if the client's anchor (`since`) is older than the
+    // oldest retained row, the requested data has been pruned. Return
+    // 410 Gone so the client can log a warning and retry next cycle.
+    if let Some(ref since) = req.since {
+        let oldest: Option<String> = conn
+            .query_row(
+                "SELECT MIN(created_at) FROM offline_queue WHERE tenant_id = ?1",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .ok()
+            .flatten();
+        if let Some(ref oldest_ts) = oldest
+            && since < oldest_ts
+        {
+            return Err((
+                axum::http::StatusCode::GONE,
+                serde_json::json!({
+                    "error": "anchor_expired",
+                    "oldest_available": oldest_ts,
+                })
+                .to_string(),
+            ));
+        }
+    }
+
     let items = if let Some(ref since) = req.since {
         let mut stmt = conn
             .prepare(
@@ -585,6 +611,90 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // ── Anchor expiry (P-1 retention) ────────────────────────────
+
+    #[tokio::test]
+    async fn pull_returns_410_when_anchor_expired() {
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+        };
+        let app = test_router_with_state(state.clone());
+
+        // Seed an item with a known timestamp.
+        {
+            let conn = state.db.lock().await;
+            conn.execute(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+                 VALUES ('a1', 'act', '{}', 'pending', '2026-04-15T00:00:00Z', 'default')",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Pull with a `since` timestamp older than the oldest row.
+        // The anchor (2025-01-01) is before the oldest row (2026-04-15),
+        // so the server should return 410 Gone.
+        let req = authed_post(
+            "/api/sync/pull",
+            r#"{"since":"2025-01-01T00:00:00Z"}"#,
+            None,
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::GONE);
+
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["error"], "anchor_expired");
+        assert_eq!(json["oldest_available"], "2026-04-15T00:00:00Z");
+    }
+
+    #[tokio::test]
+    async fn pull_succeeds_when_anchor_is_fresh() {
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+        };
+        let app = test_router_with_state(state.clone());
+
+        {
+            let conn = state.db.lock().await;
+            conn.execute(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+                 VALUES ('a1', 'act', '{}', 'pending', '2026-04-15T00:00:00Z', 'default')",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Pull with a `since` timestamp newer than the oldest row.
+        // The anchor (2026-05-01) is after the oldest row, so normal
+        // response is expected.
+        let req = authed_post(
+            "/api/sync/pull",
+            r#"{"since":"2026-05-01T00:00:00Z"}"#,
+            None,
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let pull_resp: PullResponse = serde_json::from_slice(&body_bytes).unwrap();
+        assert!(pull_resp.items.is_empty()); // since is after the only row
+    }
+
+    #[tokio::test]
+    async fn pull_null_since_never_expired() {
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+        };
+        let app = test_router_with_state(state);
+
+        // Initial sync (since = null) should always succeed regardless
+        // of what's in the DB.
+        let req = authed_post("/api/sync/pull", r#"{"since":null}"#, None);
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]

@@ -133,6 +133,20 @@ impl SyncTransport {
             .await
             .map_err(|e| SyncError::Transport(format!("pull request failed: {e}")))?;
 
+        // P-1 retention: 410 Gone means the client's anchor has expired
+        // (data older than the `since` timestamp has been pruned).
+        if resp.status() == reqwest::StatusCode::GONE {
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .unwrap_or_default();
+            let oldest_available = body
+                .get("oldest_available")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned());
+            return Err(SyncError::AnchorExpired { oldest_available });
+        }
+
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
