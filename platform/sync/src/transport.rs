@@ -61,6 +61,21 @@ pub struct PullResponse {
     pub next_cursor: Option<String>,
 }
 
+/// Response from the snapshot endpoint (P-3 Steps 3-5).
+///
+/// Contains the server's authoritative reference data for a tenant.
+/// The client imports this wholesale when its sync anchor has expired
+/// (data pruned server-side).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncSnapshotResponse {
+    /// Product rows keyed by SKU.
+    pub products: Vec<serde_json::Value>,
+    /// Tax-rate rows keyed by ID.
+    pub tax_rates: Vec<serde_json::Value>,
+    /// User rows keyed by username.
+    pub users: Vec<serde_json::Value>,
+}
+
 /// The HTTP sync transport.
 pub struct SyncTransport {
     client: reqwest::Client,
@@ -172,6 +187,36 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(format!("pull response parse failed: {e}")))?;
 
         Ok(pull_resp)
+    }
+
+    /// Fetch the server's authoritative snapshot of reference data (P-3).
+    ///
+    /// Called when the client's sync anchor has expired — the server's
+    /// delta log has been pruned beyond the client's last sync point.
+    /// The snapshot provides a fresh baseline from which delta pulls resume.
+    pub async fn fetch_snapshot(&self) -> Result<SyncSnapshotResponse, SyncError> {
+        let url = format!("{}/api/sync/snapshot", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| SyncError::Transport(format!("snapshot request failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(SyncError::Transport(format!(
+                "snapshot returned {status}: {body}"
+            )));
+        }
+
+        let snapshot: SyncSnapshotResponse = resp
+            .json()
+            .await
+            .map_err(|e| SyncError::Transport(format!("snapshot parse failed: {e}")))?;
+
+        Ok(snapshot)
     }
 }
 

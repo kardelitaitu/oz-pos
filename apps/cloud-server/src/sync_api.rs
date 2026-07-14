@@ -24,20 +24,27 @@ use platform_sync::transport::{PullRequest, PullResponse, PushOutcome, PushRespo
 #[derive(Clone)]
 pub struct SyncState {
     pub db: Arc<Mutex<Connection>>,
+    /// Snapshot cache: keyed by tenant_id, stores (generated_at, JSON bytes).
+    /// P-3 Step 4: in-memory cache with 5-minute TTL.
+    pub snapshot_cache: Arc<Mutex<std::collections::HashMap<String, (std::time::Instant, Vec<u8>)>>>,
 }
 
 impl From<super::CloudServerState> for SyncState {
     fn from(state: super::CloudServerState) -> Self {
-        Self { db: state.db }
+        Self {
+            db: state.db,
+            snapshot_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
     }
 }
 
-/// Build the sync router with all three endpoints, protected by JWT auth.
+/// Build the sync router with all four endpoints, protected by JWT auth.
 pub fn sync_router(state: SyncState) -> Router {
     Router::new()
         .route("/api/sync/push", post(push_handler))
         .route("/api/sync/pull", post(pull_handler))
         .route("/api/sync/status", get(status_handler))
+        .route("/api/sync/snapshot", get(snapshot_handler))
         .with_state(state)
         .layer(middleware::from_fn(auth_middleware))
 }
@@ -210,6 +217,139 @@ async fn pull_handler(
     Ok(axum::Json(PullResponse { items, next_cursor }))
 }
 
+/// `GET /api/sync/snapshot` — return reference data baseline for a tenant (P-3).
+///
+/// Called by clients whose sync anchor has expired. Returns all products,
+/// tax rates, and users. Responses are cached in-memory with a 5-min TTL.
+/// NOTE: reference tables (products, tax_rates, users) are not tenant-scoped;
+/// snapshot returns all rows regardless of the requesting tenant's JWT scope.
+async fn snapshot_handler(
+    State(state): State<SyncState>,
+    Extension(claims): Extension<ApiTokenClaims>,
+) -> axum::Json<serde_json::Value> {
+    let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+
+    // Helper: build an error JSON response.
+    let error_json = |msg: &str| -> axum::Json<serde_json::Value> {
+        axum::Json(serde_json::json!({"error": msg}))
+    };
+
+    // P-3 Step 4: check in-memory cache (5-min TTL).
+    {
+        let cache = state.snapshot_cache.lock().await;
+        if let Some((cached_at, cached_bytes)) = cache.get(tenant_id) {
+            if cached_at.elapsed().as_secs() < 300 {
+                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(cached_bytes) {
+                    return axum::Json(json);
+                }
+            }
+        }
+    }
+
+    let conn = state.db.lock().await;
+
+    // Query products.
+    let products: Vec<serde_json::Value> = match (|| -> Result<_, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial
+                 FROM products"
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(stmt
+            .query_map([], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>("id")?,
+                    "sku": row.get::<_, String>("sku")?,
+                    "name": row.get::<_, String>("name")?,
+                    "price_minor": row.get::<_, i64>("price_minor")?,
+                    "currency": row.get::<_, String>("currency")?,
+                    "category_id": row.get::<_, Option<String>>("category_id")?,
+                    "barcode": row.get::<_, Option<String>>("barcode")?,
+                    "created_at": row.get::<_, String>("created_at")?,
+                    "updated_at": row.get::<_, String>("updated_at")?,
+                    "price_updated_at": row.get::<_, String>("price_updated_at")?,
+                    "track_serial": row.get::<_, bool>("track_serial")?
+                }))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect())
+    })() {
+        Ok(v) => v,
+        Err(e) => return error_json(&e),
+    };
+
+    // Query tax rates.
+    let tax_rates: Vec<serde_json::Value> = match (|| -> Result<_, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at FROM tax_rates"
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(stmt
+            .query_map([], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>("id")?,
+                    "name": row.get::<_, String>("name")?,
+                    "rate_bps": row.get::<_, i64>("rate_bps")?,
+                    "is_default": row.get::<_, bool>("is_default")?,
+                    "is_inclusive": row.get::<_, bool>("is_inclusive")?,
+                    "created_at": row.get::<_, Option<String>>("created_at")?,
+                    "updated_at": row.get::<_, Option<String>>("updated_at")?
+                }))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect())
+    })() {
+        Ok(v) => v,
+        Err(e) => return error_json(&e),
+    };
+
+    // Query users.
+    let users: Vec<serde_json::Value> = match (|| -> Result<_, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at FROM users"
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(stmt
+            .query_map([], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>("id")?,
+                    "username": row.get::<_, String>("username")?,
+                    "pin_hash": row.get::<_, String>("pin_hash")?,
+                    "display_name": row.get::<_, String>("display_name")?,
+                    "role_id": row.get::<_, String>("role_id")?,
+                    "is_active": row.get::<_, bool>("is_active")?,
+                    "created_at": row.get::<_, Option<String>>("created_at")?,
+                    "updated_at": row.get::<_, Option<String>>("updated_at")?
+                }))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect())
+    })() {
+        Ok(v) => v,
+        Err(e) => return error_json(&e),
+    };
+
+    let snapshot = serde_json::json!({
+        "products": products,
+        "tax_rates": tax_rates,
+        "users": users,
+    });
+
+    // Cache the result.
+    if let Ok(cached_bytes) = serde_json::to_vec(&snapshot) {
+        let mut cache = state.snapshot_cache.lock().await;
+        cache.insert(tenant_id.to_owned(), (std::time::Instant::now(), cached_bytes));
+    }
+
+    axum::Json(snapshot)
+}
+
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.
 async fn status_handler(
     State(state): State<SyncState>,
@@ -290,6 +430,7 @@ fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<oz_core::offline::Offlin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -333,6 +474,7 @@ mod tests {
     fn test_router() -> Router {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         sync_router(state)
     }
@@ -380,6 +522,34 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
+    #[tokio::test]
+    async fn snapshot_rejects_without_auth() {
+        let app = test_router();
+        let req = Request::builder()
+            .uri("/api/sync/snapshot")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn snapshot_returns_data_with_auth() {
+        let app = test_router();
+        let req = authed(
+            axum::http::Method::GET,
+            "/api/sync/snapshot",
+            None,
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert!(json["products"].is_array());
+        assert!(json["tax_rates"].is_array());
+        assert!(json["users"].is_array());
+    }
+
     // ── Basic push/pull with auth ────────────────────────────────────
 
     #[tokio::test]
@@ -394,6 +564,7 @@ mod tests {
     async fn push_inserts_items_with_existing_ids() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -427,6 +598,7 @@ mod tests {
     async fn push_duplicate_id_returns_rejected() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -462,6 +634,7 @@ mod tests {
     async fn pull_returns_items_for_tenant() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -493,6 +666,7 @@ mod tests {
     async fn pull_tenant_isolation() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -528,6 +702,7 @@ mod tests {
     async fn pull_filters_by_since_and_tenant() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -585,6 +760,7 @@ mod tests {
     async fn status_counts_only_current_tenant() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -626,6 +802,7 @@ mod tests {
     async fn status_counts_zero_for_empty_tenant() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -695,6 +872,7 @@ mod tests {
     async fn pull_returns_410_when_anchor_expired() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -730,6 +908,7 @@ mod tests {
     async fn pull_succeeds_when_anchor_is_fresh() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state.clone());
 
@@ -763,6 +942,7 @@ mod tests {
     async fn pull_null_since_never_expired() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = test_router_with_state(state);
 

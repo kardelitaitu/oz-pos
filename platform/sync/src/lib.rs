@@ -328,6 +328,141 @@ pub fn build_batches(items: &[oz_core::offline::OfflineQueueItem], max_bytes: us
     batches
 }
 
+/// Import a server snapshot into the local store (P-3 Step 5).
+///
+/// Upserts products (by SKU), tax rates (by ID), and users (by username)
+/// inside a single transaction. Returns the total number of rows written.
+fn import_snapshot(store: &Store<'_>, snapshot: &transport::SyncSnapshotResponse) -> SyncResult<usize> {
+    let conn = store.conn();
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| SyncError::Replication(format!("snapshot import tx: {e}")))?;
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let mut count = 0usize;
+
+    // Upsert products by SKU.
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT INTO products (id, sku, name, price_minor, currency,
+                                       category_id, barcode, created_at, updated_at,
+                                       price_updated_at, track_serial)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                         COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12)
+                 ON CONFLICT(sku) DO UPDATE SET
+                     name            = excluded.name,
+                     price_minor     = excluded.price_minor,
+                     currency        = excluded.currency,
+                     category_id     = excluded.category_id,
+                     barcode         = excluded.barcode,
+                     updated_at      = COALESCE(excluded.updated_at, ?11),
+                     price_updated_at = COALESCE(excluded.price_updated_at, ?11),
+                     track_serial    = excluded.track_serial",
+            )
+            .map_err(|e| SyncError::Replication(format!("prepare products: {e}")))?;
+
+        for p in &snapshot.products {
+            let id = p
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned())
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+            stmt.execute(rusqlite::params![
+                id,
+                p["sku"].as_str().unwrap_or(""),
+                p["name"].as_str().unwrap_or(""),
+                p["price_minor"].as_i64().unwrap_or(0),
+                p["currency"].as_str().unwrap_or("USD"),
+                p["category_id"].as_str(),
+                p["barcode"].as_str(),
+                p["created_at"].as_str(),
+                p["updated_at"].as_str(),
+                p["price_updated_at"].as_str(),
+                now,
+                p["track_serial"].as_bool().unwrap_or(false) as i64,
+            ])
+            .map_err(|e| SyncError::Replication(format!("upsert product: {e}")))?;
+            count += 1;
+        }
+    }
+
+    // Upsert tax rates by ID.
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive,
+                                        created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, COALESCE(?6, ?8), COALESCE(?7, ?8))
+                 ON CONFLICT(id) DO UPDATE SET
+                     name         = excluded.name,
+                     rate_bps     = excluded.rate_bps,
+                     is_default   = excluded.is_default,
+                     is_inclusive = excluded.is_inclusive,
+                     updated_at   = COALESCE(excluded.updated_at, ?8)",
+            )
+            .map_err(|e| SyncError::Replication(format!("prepare tax_rates: {e}")))?;
+
+        for r in &snapshot.tax_rates {
+            stmt.execute(rusqlite::params![
+                r["id"].as_str().unwrap_or(""),
+                r["name"].as_str().unwrap_or(""),
+                r["rate_bps"].as_i64().unwrap_or(0),
+                r["is_default"].as_bool().unwrap_or(false) as i64,
+                r["is_inclusive"].as_bool().unwrap_or(false) as i64,
+                r["created_at"].as_str(),
+                r["updated_at"].as_str(),
+                now,
+            ])
+            .map_err(|e| SyncError::Replication(format!("upsert tax_rate: {e}")))?;
+            count += 1;
+        }
+    }
+
+    // Upsert users by username.
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id,
+                                    is_active, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, ?9), COALESCE(?8, ?9))
+                 ON CONFLICT(username) DO UPDATE SET
+                     pin_hash     = excluded.pin_hash,
+                     display_name = excluded.display_name,
+                     role_id      = excluded.role_id,
+                     is_active    = excluded.is_active,
+                     updated_at   = COALESCE(excluded.updated_at, ?9)",
+            )
+            .map_err(|e| SyncError::Replication(format!("prepare users: {e}")))?;
+
+        for u in &snapshot.users {
+            let id = u
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned())
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+            stmt.execute(rusqlite::params![
+                id,
+                u["username"].as_str().unwrap_or(""),
+                u["pin_hash"].as_str().unwrap_or(""),
+                u["display_name"].as_str().unwrap_or(""),
+                u["role_id"].as_str().unwrap_or(""),
+                u["is_active"].as_bool().unwrap_or(true) as i64,
+                u["created_at"].as_str(),
+                u["updated_at"].as_str(),
+                now,
+            ])
+            .map_err(|e| SyncError::Replication(format!("upsert user: {e}")))?;
+            count += 1;
+        }
+    }
+
+    tx.commit()
+        .map_err(|e| SyncError::Replication(format!("snapshot import commit: {e}")))?;
+
+    Ok(count)
+}
+
 impl SyncEngine {
     /// Create a new sync engine from the given configuration.
     pub fn new(config: SyncConfig) -> Self {
@@ -412,8 +547,27 @@ impl SyncEngine {
                 Err(SyncError::AnchorExpired { oldest_available }) => {
                     tracing::warn!(
                         oldest_available = oldest_available,
-                        "sync anchor expired — data has been pruned on server; retrying next cycle"
+                        "sync anchor expired — fetching snapshot to recover"
                     );
+                    // P-3 Step 5: fetch the server's snapshot and import it.
+                    match self.transport.fetch_snapshot().await {
+                        Ok(snapshot) => {
+                            let snapshot_count = import_snapshot(store, &snapshot)?;
+                            tracing::info!(
+                                products = snapshot.products.len(),
+                                tax_rates = snapshot.tax_rates.len(),
+                                users = snapshot.users.len(),
+                                imported = snapshot_count,
+                                "snapshot imported successfully after anchor expiry"
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                "snapshot fetch failed after anchor expiry; will retry next cycle"
+                            );
+                        }
+                    }
                     return Ok(ReplicationResult {
                         pushed: total_pushed,
                         pulled: total_pulled,
