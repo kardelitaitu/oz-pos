@@ -1,11 +1,11 @@
 # P-3 — Pull pagination, snapshot endpoint, tiered heartbeat & metrics
 
-- **Status:** PENDING
+- **Status:** DONE (implemented 2026-07-15)
 - **Phase:** 3 of 3 (Sync Performance Strategy — ADR #10)
 - **Parent:** `docs/decisions/2026-07-13-sync-performance-compression-batching.md`
 - **Severity:** MEDIUM
-- **Owner:** TBD
-- **Est. effort:** 2-3 weeks
+- **Owner:** Architecture Team
+- **Est. effort:** 2-3 weeks (actual: 2 days)
 - **Depends on:** P-1, P-2
 
 ## Summary
