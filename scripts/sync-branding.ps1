@@ -313,7 +313,7 @@ if (Test-Path $webManifestPath) {
         $raw = Get-Content $webManifestPath -Raw
         $raw = $raw -replace '(?<="name":\s*)"[^"]*"', "`"$appName`""
         $raw = $raw -replace '(?<="short_name":\s*)"[^"]*"', "`"$appName`""
-        Set-Content -Path $webManifestPath -Value $raw -Encoding UTF8 -NoNewline
+        [IO.File]::WriteAllText((Resolve-Path $webManifestPath), $raw)
     }
     Write-Host "  [OK]   Updated site.webmanifest name -> '$appName'" -ForegroundColor Green
 } else {
@@ -334,7 +334,7 @@ if (Test-Path $tauriConfigPath) {
         $raw = $raw -replace '(?<="productName":\s*)"[^"]*"', "`"$appName`""
         $raw = $raw -replace '(?<="identifier":\s*)"[^"]*"', "`"$desktopId`""
         $raw = $raw -replace '(?<="title":\s*)"[^"]*"', "`"$appName`""
-        Set-Content -Path $tauriConfigPath -Value $raw -Encoding UTF8 -NoNewline
+        [IO.File]::WriteAllText((Resolve-Path $tauriConfigPath), $raw)
     }
     Write-Host "  [OK]   Patched desktop tauri.conf.json (name='$appName', id='$desktopId')" -ForegroundColor Green
 } else {
@@ -350,7 +350,7 @@ if (Test-Path $tabletConfigPath) {
         $raw = Get-Content $tabletConfigPath -Raw
         $raw = $raw -replace '(?<="productName":\s*)"[^"]*"', "`"$appName`""
         $raw = $raw -replace '(?<="identifier":\s*)"[^"]*"', "`"$tabletId`""
-        Set-Content -Path $tabletConfigPath -Value $raw -Encoding UTF8 -NoNewline
+        [IO.File]::WriteAllText((Resolve-Path $tabletConfigPath), $raw)
     }
     Write-Host "  [OK]   Patched tablet tauri.conf.json (name='$appName', id='$tabletId')" -ForegroundColor Green
 } else {
@@ -381,7 +381,7 @@ if (-not $DryRun) {
     if (-not (Test-Path $cssDir)) {
         New-Item -ItemType Directory -Force -Path $cssDir | Out-Null
     }
-    Set-Content -Path $brandCssTarget -Value $cssContent -Encoding UTF8
+    [IO.File]::WriteAllText((Resolve-Path $brandCssTarget), $cssContent)
 }
 Write-Host "  [OK]   Generated $brandCssTarget" -ForegroundColor Green
 
