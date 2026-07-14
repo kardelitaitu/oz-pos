@@ -106,7 +106,8 @@ impl DbPool {
                     retry_count INTEGER NOT NULL DEFAULT 0,
                     last_error TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    synced_at TIMESTAMPTZ
+                    synced_at TIMESTAMPTZ,
+                    priority INTEGER NOT NULL DEFAULT 1
                 );",
             )
             .await

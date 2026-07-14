@@ -26,6 +26,7 @@ use std::sync::Arc;
 use axum::Router;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
+use tower::limit::ConcurrencyLimitLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -41,7 +42,7 @@ pub struct CloudServerState {
     pub db: Arc<Mutex<Connection>>,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() {
     // ── Logging ──────────────────────────────────────────────────────
     if std::env::var("OZ_LOG_FORMAT").as_deref() == Ok("json") {
@@ -114,6 +115,12 @@ pub fn build_router(state: CloudServerState) -> Router {
 
     // Build the sync router (push/pull endpoints) from sync_api module.
     let sync_router = sync_router(SyncState::from(state));
+
+    // P-2: Per-route-group concurrency limits prevent sync bursts
+    // from starving the product/sales/health API routes.
+    // API: 10 concurrent, sync: 40 concurrent.
+    let api_router = api_router.layer(ConcurrencyLimitLayer::new(10));
+    let sync_router = sync_router.layer(ConcurrencyLimitLayer::new(40));
 
     Router::new()
         .merge(api_router)
