@@ -160,6 +160,7 @@ impl PgTransport {
                     created_at: row.get::<_, String>("created_at"),
                     synced_at: Some(row.get::<_, String>("synced_at")),
                     tenant_id: row.get("tenant_id"),
+                    priority: oz_core::offline::SyncPriority::Normal,
                 }
             })
             .collect();

@@ -206,6 +206,10 @@ fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<oz_core::offline::Offlin
         created_at: row.get("created_at")?,
         synced_at: row.get("synced_at")?,
         tenant_id: row.get("tenant_id")?,
+        priority: row
+            .get::<_, i32>("priority")
+            .map(oz_core::offline::SyncPriority::from)
+            .unwrap_or(oz_core::offline::SyncPriority::Normal),
     })
 }
 

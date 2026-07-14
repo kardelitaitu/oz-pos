@@ -121,6 +121,10 @@ impl Store<'_> {
             created_at: row.get("created_at")?,
             synced_at: row.get("synced_at")?,
             tenant_id: row.get("tenant_id")?,
+            priority: row
+                .get::<_, i32>("priority")
+                .map(crate::offline::SyncPriority::from)
+                .unwrap_or(crate::offline::SyncPriority::Normal),
         })
     }
 }

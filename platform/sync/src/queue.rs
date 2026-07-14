@@ -402,6 +402,7 @@ mod tests {
             created_at: "2025-01-01T00:00:00.000Z".into(),
             synced_at: None,
             tenant_id: "default".into(),
+            priority: oz_core::offline::SyncPriority::Normal,
         };
 
         let resolved = ResolvedItem {
@@ -434,6 +435,7 @@ mod tests {
             created_at: "2025-06-01T12:00:00.000Z".into(),
             synced_at: None,
             tenant_id: "default".into(),
+            priority: oz_core::offline::SyncPriority::Normal,
         };
 
         let resolved = ResolvedItem {

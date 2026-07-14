@@ -2,6 +2,39 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Sync priority tier for offline queue items (P-2 spec §Priority tiers).
+///
+/// Lower numeric values indicate higher priority. Items are sorted by
+/// priority before batching so Critical items always transmit before
+/// Normal items, which always transmit before Low items.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[repr(i32)]
+pub enum SyncPriority {
+    /// Sale completions, voids — must propagate before anything else.
+    Critical = 0,
+    /// Product creation, stock adjustments, inventory changes.
+    Normal = 1,
+    /// Settings changes, branding updates, low-urgency metadata.
+    Low = 2,
+}
+
+/// Default priority for new queue items.
+fn default_priority() -> SyncPriority {
+    SyncPriority::Normal
+}
+
+impl From<i32> for SyncPriority {
+    fn from(v: i32) -> Self {
+        match v {
+            0 => SyncPriority::Critical,
+            2 => SyncPriority::Low,
+            _ => SyncPriority::Normal,
+        }
+    }
+}
+
 /// A queued offline transaction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfflineQueueItem {
@@ -25,6 +58,9 @@ pub struct OfflineQueueItem {
     pub created_at: String,
     /// ISO-8601 sync timestamp.
     pub synced_at: Option<String>,
+    /// Sync priority tier (P-2). Critical items transmit before Normal/Low.
+    #[serde(default = "default_priority")]
+    pub priority: SyncPriority,
 }
 
 /// Status of an offline queue item.
@@ -78,6 +114,7 @@ impl OfflineQueueItem {
             created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             synced_at: None,
             tenant_id: String::from("default"),
+            priority: SyncPriority::Normal,
         }
     }
 
@@ -89,6 +126,17 @@ impl OfflineQueueItem {
     ) -> Self {
         let mut item = Self::new(action, payload);
         item.tenant_id = tenant_id.into();
+        item
+    }
+
+    /// Create a new queue item with a specific sync priority.
+    pub fn with_priority(
+        action: impl Into<String>,
+        payload: impl Into<String>,
+        priority: SyncPriority,
+    ) -> Self {
+        let mut item = Self::new(action, payload);
+        item.priority = priority;
         item
     }
 }
