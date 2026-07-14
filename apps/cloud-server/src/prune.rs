@@ -59,20 +59,67 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
             }
         };
 
-        // Delete old offline queue items (synced or failed, > 90 days).
-        let queue_deleted =
-            match conn.execute(
-                "DELETE FROM offline_queue
+        // Delete old offline queue items in cursor-based batches
+        // (P-1 Retention). This avoids long-running DELETE transactions
+        // on large tables and lets incremental_vacuum reclaim space
+        // between batches.
+        let mut queue_deleted: usize = 0;
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(90);
+        let cutoff_str = cutoff.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        loop {
+            // Select up to 500 old IDs in a stable order.
+            let mut stmt = match conn.prepare(
+                "SELECT id FROM offline_queue
                  WHERE status IN ('synced', 'failed')
-                   AND created_at < datetime('now', '-90 days')",
-                [],
+                   AND created_at < ?1
+                 ORDER BY id
+                 LIMIT 500",
             ) {
-                Ok(count) => count,
+                Ok(s) => s,
                 Err(e) => {
-                    error!(error = %e, "prune: offline_queue cleanup failed");
-                    0
+                    error!(error = %e, "prune: failed to prepare batch select");
+                    break;
                 }
             };
+
+            let ids: Vec<String> = match stmt
+                .query_map(rusqlite::params![cutoff_str], |row| row.get(0))
+            {
+                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                Err(e) => {
+                    error!(error = %e, "prune: failed to query batch");
+                    break;
+                }
+            };
+
+            if ids.is_empty() {
+                break;
+            }
+
+            let batch_count = ids.len();
+
+            // Delete the batch. IDs are UUIDv7 — safe for string
+            // interpolation (no single quotes). Each DELETE runs in
+            // its own implicit transaction, so a failure won't leave
+            // a dangling transaction on the shared connection.
+            let deleted = match conn.execute_batch(&format!(
+                "DELETE FROM offline_queue WHERE id IN ('{}');",
+                ids.join("','")
+            )) {
+                Ok(()) => batch_count,
+                Err(e) => {
+                    error!(error = %e, "prune: batch delete failed");
+                    break;
+                }
+            };
+
+            queue_deleted += deleted;
+
+            // Reclaim freed pages (P-1: incremental_vacuum after each batch).
+            if let Err(e) = conn.execute_batch("PRAGMA incremental_vacuum(50);") {
+                error!(error = %e, "prune: incremental_vacuum failed");
+            }
+        }
 
         (stock_archived, queue_deleted)
     })
