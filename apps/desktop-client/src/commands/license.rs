@@ -459,12 +459,12 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
             #[cfg(debug_assertions)]
             {
                 tracing::debug!("License expired in debug mode — returning Valid");
-                return Ok(LicenseStatusDto {
+                Ok(LicenseStatusDto {
                     is_active: true,
                     status: LicenseVerificationStatus::Valid,
                     payload: None,
                     message: None,
-                });
+                })
             }
             #[cfg(not(debug_assertions))]
             {
@@ -485,12 +485,12 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
         #[cfg(debug_assertions)]
         {
             tracing::debug!("No license payload found in debug mode — returning Valid");
-            return Ok(LicenseStatusDto {
+            Ok(LicenseStatusDto {
                 is_active: true,
                 status: LicenseVerificationStatus::Valid,
                 payload: None,
                 message: None,
-            });
+            })
         }
         #[cfg(not(debug_assertions))]
         {
