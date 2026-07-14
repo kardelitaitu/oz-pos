@@ -345,17 +345,34 @@ impl SyncEngine {
     ///
     /// Returns a [`ReplicationResult`] with counts of pushed/pulled items.
     pub async fn run_sync_cycle(&self, store: &Store<'_>) -> SyncResult<ReplicationResult> {
+        let cycle_start = std::time::Instant::now();
         let queue = SyncQueue::new();
 
         // Phase 1: Push pending local changes in batches.
         let pending = queue.list_pending(store)?;
+        let pending_count = pending.len();
         let mut total_pushed = 0usize;
+        let mut total_bytes_sent = 0usize;
         let batch_count;
 
         if !pending.is_empty() {
             let batches = build_batches(&pending, MAX_BATCH_BYTES);
             batch_count = batches.len();
-            for batch in &batches {
+            for (batch_idx, batch) in batches.iter().enumerate() {
+                let batch_items = batch.len();
+                let batch_bytes = serde_json::to_vec(batch)
+                    .map(|v| v.len())
+                    .unwrap_or(0);
+                total_bytes_sent += batch_bytes;
+
+                tracing::debug!(
+                    batch = batch_idx + 1,
+                    total_batches = batch_count,
+                    items = batch_items,
+                    bytes = batch_bytes,
+                    "pushing batch"
+                );
+
                 let results = self.transport.push_items(batch).await?;
                 for (item, outcome) in batch.iter().zip(results.iter()) {
                     match outcome {
@@ -407,22 +424,35 @@ impl SyncEngine {
 
             let page_count = pull_result.items.len();
             total_pulled += page_count;
+            let has_more = pull_result.next_cursor.is_some();
+
+            tracing::debug!(
+                page = pages,
+                items = page_count,
+                has_more = has_more,
+                "pulled page"
+            );
 
             for remote_item in &pull_result.items {
                 queue.apply_remote(store, remote_item)?;
             }
 
             cursor = pull_result.next_cursor;
-            if cursor.is_none() {
+            if !has_more {
                 break;
             }
         }
 
+        let elapsed_ms = cycle_start.elapsed().as_millis() as u64;
+
         tracing::info!(
+            pending = pending_count,
             pushed = total_pushed,
             pulled = total_pulled,
             batches = batch_count,
             pages = pages,
+            bytes_sent = total_bytes_sent,
+            elapsed_ms = elapsed_ms,
             "sync cycle complete"
         );
 
