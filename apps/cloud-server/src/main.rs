@@ -22,9 +22,11 @@ mod prune;
 mod sync_api;
 
 use std::sync::Arc;
+use std::time::Instant;
 
-use axum::Router;
+use axum::{Json, Router};
 use rusqlite::Connection;
+use serde::Serialize;
 use tokio::sync::Mutex;
 use tower::limit::ConcurrencyLimitLayer;
 use tower_http::compression::CompressionLayer;
@@ -40,6 +42,8 @@ use crate::sync_api::{SyncState, sync_router};
 pub struct CloudServerState {
     /// Database connection wrapped for axum's `State` extractor.
     pub db: Arc<Mutex<Connection>>,
+    /// Instant captured at startup for uptime calculation.
+    pub started_at: Instant,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -61,7 +65,10 @@ async fn main() {
     match &pool {
         db::DbPool::Sqlite(conn) => {
             info!("running with SQLite backend");
-            let state = CloudServerState { db: conn.clone() };
+            let state = CloudServerState {
+                db: conn.clone(),
+                started_at: Instant::now(),
+            };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
             let app = build_router(state);
@@ -77,6 +84,7 @@ async fn main() {
                 .expect("failed to create in-memory SQLite for API");
             let state = CloudServerState {
                 db: conn.sqlite_conn(),
+                started_at: Instant::now(),
             };
             let app = build_router(state);
             serve(app).await;
@@ -101,6 +109,27 @@ async fn serve(app: Router) {
 }
 
 /// Build the combined router: REST API + sync endpoints.
+/// Response from the health endpoint.
+#[derive(Debug, Serialize)]
+struct HealthResponse {
+    status: &'static str,
+    version: &'static str,
+    db: &'static str,
+    uptime_seconds: u64,
+}
+
+/// `GET /health` — public health check, no auth required.
+async fn health_handler(axum::extract::State(state): axum::extract::State<CloudServerState>) -> Json<HealthResponse> {
+    let uptime = state.started_at.elapsed().as_secs();
+    Json(HealthResponse {
+        status: "ok",
+        version: env!("CARGO_PKG_VERSION"),
+        db: "sqlite",
+        uptime_seconds: uptime,
+    })
+}
+
+/// Build the combined router: REST API + sync endpoints.
 pub fn build_router(state: CloudServerState) -> Router {
     let cors = CorsLayer::new()
         .allow_methods(Any)
@@ -113,6 +142,9 @@ pub fn build_router(state: CloudServerState) -> Router {
     };
     let api_router = oz_api::router(api_state);
 
+    // Clone state for the health endpoint BEFORE SyncState::from consumes the original.
+    let health_state = state.clone();
+
     // Build the sync router (push/pull endpoints) from sync_api module.
     let sync_router = sync_router(SyncState::from(state));
 
@@ -123,6 +155,8 @@ pub fn build_router(state: CloudServerState) -> Router {
     let sync_router = sync_router.layer(ConcurrencyLimitLayer::new(40));
 
     Router::new()
+        .route("/health", axum::routing::get(health_handler))
+        .with_state(health_state)
         .merge(api_router)
         .merge(sync_router)
         .layer(CompressionLayer::new().gzip(true))
@@ -150,6 +184,7 @@ mod tests {
     fn test_app() -> Router {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
         };
         build_router(state)
     }
@@ -203,6 +238,7 @@ mod tests {
     async fn sync_push_and_pull_roundtrip() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
         };
         let app = build_router(state.clone());
 
@@ -270,6 +306,7 @@ mod tests {
     async fn multi_tenant_tenant_a_push_invisible_to_tenant_b() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
         };
         let app = build_router(state.clone());
 
@@ -308,6 +345,7 @@ mod tests {
     async fn multi_tenant_bidirectional_isolation() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
         };
         let app = build_router(state.clone());
 
@@ -352,6 +390,7 @@ mod tests {
     async fn multi_tenant_status_scoped_per_tenant() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
         };
         let app = build_router(state.clone());
 
@@ -396,6 +435,7 @@ mod tests {
     async fn multi_tenant_default_tenant_isolation() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
         };
         let app = build_router(state.clone());
 
