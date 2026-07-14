@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn build_batches_multiple_items_one_batch() {
         let items: Vec<_> = (0..5)
-            .map(|i| OfflineQueueItem::new("test", &format!("{{\"n\":{i}}}")))
+            .map(|i| OfflineQueueItem::new("test", format!("{{\"n\":{i}}}")))
             .collect();
         // 5 tiny items should fit in one 64 KB batch.
         let batches = build_batches(&items, MAX_BATCH_BYTES);
