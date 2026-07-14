@@ -216,20 +216,38 @@ async fn status_handler(
     Extension(claims): Extension<ApiTokenClaims>,
 ) -> axum::Json<SyncStatusResponse> {
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
-    let pending_count = {
+    let (pending_count, total_tenants) = {
         let conn = state.db.lock().await;
-        conn.query_row(
-            "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = ?1",
-            params![tenant_id],
-            |row| row.get::<_, i64>(0),
-        )
-        .unwrap_or(0)
+        let pending = conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = ?1",
+                params![tenant_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+        let tenants = conn
+            .query_row(
+                "SELECT COUNT(DISTINCT tenant_id) FROM offline_queue",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+        (pending, tenants)
+    };
+
+    // P-3: Tiered heartbeat — server tells client how often to poll.
+    // < 1000 tenants → 120s, 1000-5000 → 300s, 5000+ → max(300, 10k/count*60).
+    let heartbeat_interval_secs = match total_tenants {
+        0..=999 => 120,
+        1000..=5000 => 300,
+        _ => (10_000 / total_tenants * 60).max(300),
     };
 
     axum::Json(SyncStatusResponse {
         status: "ok".into(),
         version: env!("CARGO_PKG_VERSION").into(),
         pending_count,
+        heartbeat_interval_secs: heartbeat_interval_secs as u64,
     })
 }
 
@@ -242,6 +260,8 @@ pub struct SyncStatusResponse {
     pub version: String,
     /// Number of items in the queue with status `pending`.
     pub pending_count: i64,
+    /// Recommended heartbeat interval in seconds (P-3 tiered heartbeat).
+    pub heartbeat_interval_secs: u64,
 }
 
 /// Convert a SQLite row to an `OfflineQueueItem`.
