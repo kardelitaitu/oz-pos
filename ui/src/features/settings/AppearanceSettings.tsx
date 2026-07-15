@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   getBrandSettings,
   setBrandPrimaryColour,
@@ -14,6 +14,27 @@ import { Button } from '@/components/Button';
 import { useAppZoom } from '@/contexts/ZoomContext';
 import type { ZoomLevel } from '@/contexts/ZoomContext';
 import './AppearanceSettings.css';
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const DEFAULT_COLOUR = '#10b981';
+
+/**
+ * Normalise a hex colour string to `#rrggbb` lowercase format.
+ * Accepts shorthand `#fff`, with or without `#`, and strips invalid characters.
+ * Returns `null` if the input is completely unparseable.
+ */
+function normaliseHex(raw: string): string | null {
+  let hex = raw.replace(/[^0-9a-fA-F]/g, '');
+  if (hex.length === 0) return null;
+  if (hex.length <= 3) {
+    // Expand shorthand: 'fff' → 'ffffff'
+    hex = hex.split('').map((c) => c + c).join('');
+  }
+  if (hex.length > 6) hex = hex.slice(0, 6);
+  if (hex.length < 6) hex = hex.padEnd(6, '0');
+  return `#${hex.toLowerCase()}`;
+}
 
 interface AppearanceSettingsProps {
   embedded?: boolean;
@@ -66,6 +87,9 @@ export function AppearanceSettings({
     applyAccentPalette(palette);
   }, [embedded, onColourChange]);
 
+  // ── Localized helper for reset button tooltip ─────────────
+  const { l10n } = useLocalization();
+
   const updateStoreName = useCallback((n: string) => {
     if (embedded) {
       onStoreNameChange?.(n);
@@ -117,11 +141,28 @@ export function AppearanceSettings({
             <input
               type="text"
               value={activeColour}
-              onChange={(e) => updateColour(e.target.value)}
+              onChange={(e) => {
+                const normalised = normaliseHex(e.target.value);
+                if (normalised) updateColour(normalised);
+              }}
               className="appearance-colour-hex settings-input"
               autoComplete="off"
               aria-label="Colour hex value"
             />
+          </Localized>
+          <Localized id="appearance-reset-colour-aria" attrs={{ 'aria-label': true }}>
+            <button
+              type="button"
+              className="appearance-colour-reset"
+              onClick={() => updateColour(DEFAULT_COLOUR)}
+              aria-label="Reset colour to default"
+              title={l10n.getString('appearance-reset-colour')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+              </svg>
+            </button>
           </Localized>
         </div>
       </div>
