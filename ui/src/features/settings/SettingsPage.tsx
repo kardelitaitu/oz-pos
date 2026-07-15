@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getReceiptSettings,
@@ -267,6 +267,20 @@ const CATEGORIES: SettingsCategory[] = [
   { label: 'Management', keys: ['staff', 'terminals', 'stores', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
 ];
 
+/** Snapshot of initial loaded values for the Revert-to-saved button. */
+interface SettingsSnapshot {
+  receipt: ReceiptSettingsDto;
+  store: StoreSettingsDto;
+  defaultCurrency: string;
+  sync: SyncSettingsDto;
+  syncServerUrl: string;
+  displayCardSize: number;
+  displayFontSize: number;
+  displayFontSmoothing: string;
+  brandColour: string;
+  brandStoreName: string;
+}
+
 const NAV_L10N_KEYS: Record<string, string> = {
   general: 'settings-nav-general',
   appearance: 'settings-nav-appearance',
@@ -473,6 +487,30 @@ export default function SettingsPage() {
   const clock = useClock();
   const today = getToday();
 
+  // ── Snapshot for Revert-to-saved ──────────────────────────
+
+  const initialSnapshotRef = useRef<SettingsSnapshot | null>(null);
+
+  const handleRevert = useCallback(() => {
+    const snap = initialSnapshotRef.current;
+    if (!snap) return;
+    setReceipt(snap.receipt);
+    setStore(snap.store);
+    setDecimalSep(snap.receipt.decimalSeparator);
+    setDefaultCurrencyState(snap.defaultCurrency);
+    setSync(snap.sync);
+    setSyncServerUrl(snap.syncServerUrl);
+    setDisplayCardSize(snap.displayCardSize);
+    setDisplayFontSize(snap.displayFontSize);
+    setDisplayFontSmoothing(snap.displayFontSmoothing);
+    setBrandColour(snap.brandColour);
+    setBrandStoreName(snap.brandStoreName);
+    setIsDirty(false);
+    setSyncResult(null);
+    setSyncApiKey('');
+    setSyncApiKeyVisible(false);
+  }, []);
+
   // Sync font-smoothing to <html> whenever it changes
   useEffect(() => {
     document.documentElement.setAttribute('data-font-smoothing', displayFontSmoothing);
@@ -495,8 +533,17 @@ export default function SettingsPage() {
     ]);
     const [rR, sR, cR, dcR, syncR, prefsR, brandR, verR] = results;
 
+    // Local variables capture the newly-loaded values for the snapshot
+    // (avoid reading React state, which would add deps and cause loops).
+    let snapReceipt: ReceiptSettingsDto | undefined;
+    let snapCardSize: number | undefined;
+    let snapFontSize: number | undefined;
+    let snapFontSmoothing: string | undefined;
+    let snapBrandColour: string | undefined;
+    let snapStoreName: string | undefined;
+
     try {
-      if (rR.status === 'fulfilled') { setReceipt(rR.value); setDecimalSep(rR.value.decimalSeparator); }
+      if (rR.status === 'fulfilled') { snapReceipt = rR.value; setReceipt(rR.value); setDecimalSep(rR.value.decimalSeparator); }
       if (sR.status === 'fulfilled') setStore(sR.value);
       if (cR.status === 'fulfilled') setCurrencies(cR.value);
       if (dcR.status === 'fulfilled') setDefaultCurrencyState(dcR.value ?? 'USD');
@@ -504,15 +551,17 @@ export default function SettingsPage() {
       if (prefsR.status === 'fulfilled') {
         const p = prefsR.value;
         const cs = p['cardsize'];
-        if (cs !== undefined) setDisplayCardSize(Math.min(4, Math.max(0, parseInt(cs, 10) || 0)));
+        if (cs !== undefined) { snapCardSize = Math.min(4, Math.max(0, parseInt(cs, 10) || 0)); setDisplayCardSize(snapCardSize); }
         const fs = p['fontsize'];
-        if (fs !== undefined) setDisplayFontSize(Math.min(4, Math.max(0, parseInt(fs, 10) || 0)));
-        if (p['font-smoothing'] !== undefined) setDisplayFontSmoothing(p['font-smoothing']);
+        if (fs !== undefined) { snapFontSize = Math.min(4, Math.max(0, parseInt(fs, 10) || 0)); setDisplayFontSize(snapFontSize); }
+        if (p['font-smoothing'] !== undefined) { snapFontSmoothing = p['font-smoothing']; setDisplayFontSmoothing(snapFontSmoothing); }
       }
       if (brandR.status === 'fulfilled') {
-        setBrandColour(brandR.value.primary_colour);
-        setBrandStoreName(brandR.value.store_name);
-        const palette = deriveAccentPalette(brandR.value.primary_colour);
+        snapBrandColour = brandR.value.primary_colour;
+        snapStoreName = brandR.value.store_name;
+        setBrandColour(snapBrandColour);
+        setBrandStoreName(snapStoreName);
+        const palette = deriveAccentPalette(snapBrandColour);
         applyAccentPalette(palette);
       }
       if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
@@ -524,6 +573,22 @@ export default function SettingsPage() {
         // Some APIs failed — page loads partially; warn the user.
         addToast({ message: l10n.getString('settings-load-partial'), type: 'error' });
       }
+      // Store snapshot of initial loaded values for revert.
+      // Use local variables captured from the try block above (not from
+      // React state) to avoid adding these values to the deps array and
+      // causing an infinite re-load loop.
+      initialSnapshotRef.current = {
+        receipt: rR.status === 'fulfilled' ? rR.value : (snapReceipt ?? receipt),
+        store: sR.status === 'fulfilled' ? sR.value : store,
+        defaultCurrency: dcR.status === 'fulfilled' ? (dcR.value ?? 'USD') : defaultCurrency,
+        sync: syncR.status === 'fulfilled' ? syncR.value : sync,
+        syncServerUrl: syncR.status === 'fulfilled' ? (syncR.value.serverUrl ?? '') : syncServerUrl,
+        displayCardSize: snapCardSize ?? displayCardSize,
+        displayFontSize: snapFontSize ?? displayFontSize,
+        displayFontSmoothing: snapFontSmoothing ?? displayFontSmoothing,
+        brandColour: snapBrandColour ?? brandColour,
+        brandStoreName: snapStoreName ?? brandStoreName,
+      };
     } finally {
       setLoading(false);
     }
@@ -1263,15 +1328,40 @@ export default function SettingsPage() {
           </span>
           <div className="settings-save-bar">
             {isDirty && !saving && !saved && <span className="settings-save-dot" aria-hidden="true" />}
+            {isDirty && !saving && !saved && (
+              <Localized id="settings-btn-revert-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="settings-btn-revert"
+                  onClick={handleRevert}
+                  aria-label="Revert changes"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                  <Localized id="settings-btn-revert">
+                    <span>Revert</span>
+                  </Localized>
+                </button>
+              </Localized>
+            )}
             <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
               <Button
                 variant="primary"
                 loading={saving}
                 onClick={handleSave}
               >
-                <Localized id={saved ? 'settings-saved' : 'settings-btn-save'}>
-                  <span>{saved ? 'Saved!' : 'Save'}</span>
-                </Localized>
+                {saved && !saving ? (
+                  <span className="settings-saved-checkmark">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <Localized id="settings-saved"><span>Saved!</span></Localized>
+                  </span>
+                ) : (
+                  <Localized id="settings-btn-save"><span>Save</span></Localized>
+                )}
               </Button>
             </Localized>
           </div>

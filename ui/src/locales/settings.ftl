@@ -251,6 +251,11 @@ settings-toggle-show-table-number = Show table number on cart and receipts
 settings-toggle-show-table-number-aria =
     .aria-label = Show table number on cart and receipts
 settings-btn-save = Save
+settings-btn-revert = Revert
+
+settings-btn-revert-aria =
+    .aria-label = Revert settings to last saved state
+
 settings-saved = Saved!
 settings-section-sync = Cloud Sync
 settings-sync-server-url = Server URL

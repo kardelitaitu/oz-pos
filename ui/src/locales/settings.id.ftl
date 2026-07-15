@@ -241,6 +241,11 @@ settings-toggle-show-table-number = Tampilkan nomor meja di keranjang dan nota
 settings-toggle-show-table-number-aria =
     .aria-label = Tampilkan nomor meja di keranjang dan nota
 settings-btn-save = Simpan
+settings-btn-revert = Kembalikan
+
+settings-btn-revert-aria =
+    .aria-label = Kembalikan pengaturan ke keadaan tersimpan terakhir
+
 settings-saved = Tersimpan!
 settings-section-sync = Sinkronisasi Cloud
 settings-sync-server-url = URL Server

@@ -530,6 +530,12 @@
   color: var(--color-accent);
 }
 
+/* Ensure tooltips appear in collapsed sidebar (hidden in expanded mode
+   via .settings-sidebar:not(.collapsed) .tooltip-content). */
+.settings-sidebar.collapsed .tooltip-content {
+  display: block !important;
+}
+
 .settings-nav-icon {
   width: 1.25rem;
   height: 1.25rem;
@@ -1022,6 +1028,67 @@
 @keyframes settings-dot-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+/* ── Revert changes button ──────────────────────────────────── */
+
+.settings-btn-revert {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: var(--space-1_5) var(--space-3);
+  margin-right: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-tertiary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    color var(--duration-100) var(--ease-out),
+    background-color var(--duration-100) var(--ease-out),
+    border-color var(--duration-100) var(--ease-out);
+}
+
+.settings-btn-revert:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.06));
+  border-color: var(--color-danger-dim, rgba(239, 68, 68, 0.25));
+}
+
+.settings-btn-revert:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
+}
+
+.settings-btn-revert svg {
+  flex-shrink: 0;
+}
+
+/* ── Saved checkmark animation ───────────────────────────────── */
+
+.settings-saved-checkmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  animation: settings-saved-pop 0.35s var(--ease-out) both;
+}
+
+.settings-saved-checkmark svg {
+  color: var(--color-success, #16a34a);
+  animation: settings-checkmark-draw 0.4s var(--ease-out) both;
+}
+
+@keyframes settings-saved-pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes settings-checkmark-draw {
+  0% { stroke-dashoffset: 24; stroke-dasharray: 24; }
+  100% { stroke-dashoffset: 0; stroke-dasharray: 24; }
 }
 
 .settings-hint {
