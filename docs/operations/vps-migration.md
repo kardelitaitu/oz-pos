@@ -27,6 +27,227 @@ Layer 3 — Manual UI (Safety net, always available)
 
 ---
 
+## Getting a Domain (Free Option: DuckDNS)
+
+Every POS terminal connects to the cloud server via a **domain name** —
+never a raw IP address. This allows DNS-based migration (Layer 1) and
+TLS/HTTPS for secure communication.
+
+If you don't have a paid domain, you can use a free dynamic DNS service
+like **[DuckDNS](https://www.duckdns.org)**. It gives you a permanent
+subdomain (e.g., `my-ozpos.duckdns.org`) that always points to your VPS,
+even if the IP address changes.
+
+### Step 1: Register on DuckDNS
+
+1. Go to [duckdns.org](https://www.duckdns.org)
+2. Sign in with GitHub, Google, or Twitter (no separate account needed)
+3. Create a subdomain — e.g., `my-ozpos` → full domain: `my-ozpos.duckdns.org`
+4. Enter your VPS IP address in the `current ip` field
+5. Click **update ip**
+
+Your free domain is now live. Test it:
+
+```bash
+curl http://my-ozpos.duckdns.org:3099/health
+# Should reach your VPS and return {"status":"ok",...}
+```
+
+### Step 2: Point POS terminals to the DuckDNS domain
+
+When configuring POS terminals set the **Server URL** to your DuckDNS
+subdomain:
+
+```
+http://my-ozpos.duckdns.org:3099
+```
+
+> ℹ️ **HTTP vs HTTPS:** DuckDNS does not provide TLS certificates. For
+> production, run a reverse proxy (nginx, Caddy) on the VPS to terminate
+> TLS with a free Let's Encrypt certificate. Without TLS, traffic between
+> terminals and the server is unencrypted.
+
+### Step 3: Keep the IP updated (VPS with dynamic IP)
+
+If your VPS provider assigns a **dynamic IP** that changes periodically,
+set up an auto-update job so the DuckDNS domain always points to the
+correct address.
+
+**Option A — Cron job (every 5 minutes):**
+
+```bash
+# Add to crontab (crontab -e)
+*/5 * * * * curl -s "https://www.duckdns.org/update?domains=my-ozpos&token=YOUR_TOKEN&ip=" > /dev/null
+```
+
+Replace `my-ozpos` with your subdomain and `YOUR_TOKEN` with the token
+shown on your DuckDNS dashboard.
+
+**Option B — Systemd timer (more reliable):**
+
+Create `/etc/systemd/system/duckdns-update.service`:
+
+```ini
+[Unit]
+Description=DuckDNS IP updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/curl -s "https://www.duckdns.org/update?domains=my-ozpos&token=YOUR_TOKEN&ip="
+```
+
+Create `/etc/systemd/system/duckdns-update.timer`:
+
+```ini
+[Unit]
+Description=DuckDNS IP update timer
+
+[Timer]
+OnCalendar=*-*-* *:0/5:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl enable duckdns-update.timer
+sudo systemctl start duckdns-update.timer
+```
+
+**Option C — DuckDNS container (Docker):**
+
+```bash
+docker run -d \
+  --name duckdns \
+  --restart unless-stopped \
+  -e SUBDOMAINS=my-ozpos \
+  -e TOKEN=YOUR_TOKEN \
+  linuxserver/duckdns
+```
+
+### Step 4: Verify the auto-update is working
+
+```bash
+# Check the DuckDNS update log
+curl "https://www.duckdns.org/update?domains=my-ozpos&token=YOUR_TOKEN&verbose=true"
+# Response: OK (IP updated) or KO (no change needed)
+```
+
+### Using DuckDNS with the Migration Scenarios
+
+| Scenario | How DuckDNS fits |
+|----------|-----------------|
+| **Scenario A** (same domain) | Update the DuckDNS IP to the new VPS. No paid domain needed — the DuckDNS subdomain is your permanent address. |
+| **Scenario B** (domain change) | Register a second DuckDNS subdomain for the new server (e.g., `my-ozpos-v2.duckdns.org`). Use Layer 2 auto-redirect to move terminals from the old subdomain to the new one. |
+
+The same 3-layer strategy applies regardless of whether you use a paid
+domain or a free DuckDNS subdomain.
+
+### Alternative Free Dynamic DNS Providers
+
+DuckDNS is recommended for simplicity, but these alternatives also work:
+
+| Provider | Subdomain format | Notes |
+|----------|-----------------|-------|
+| [DuckDNS](https://duckdns.org) | `name.duckdns.org` | Simplest setup. No account required — just OAuth login. |
+| [No-IP](https://www.noip.com) | `name.ddns.net` | Free tier requires monthly confirmation. |
+| [FreeDNS](https://freedns.afraid.org) | `name.mooo.com` | Many domain options. More complex UI. |
+| [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) | Your own domain | Free, but requires a paid domain on Cloudflare. Excellent for production. |
+
+---
+
+## Database: SQLite vs PostgreSQL
+
+The cloud server supports two database backends. The migration steps
+differ depending on which one you use.
+
+| Backend | Env var | Default | Migration step |
+|---------|---------|---------|---------------|
+| **SQLite** | `OZ_DB_PATH` | `/data/oz-pos.db` | `scp` the `.db` file to the new VPS |
+| **PostgreSQL** | `DATABASE_URL` | (none) | Point the new server at the same PG instance — no file copy needed |
+
+### SQLite (default)
+
+The simplest setup. A single file on disk stores everything. During
+migration, you must copy this file from the old VPS to the new VPS.
+
+```bash
+docker run -d \
+  --name oz-cloud-server \
+  -p 3099:3099 \
+  -v oz-data:/data \
+  -e OZ_DB_PATH=/data/oz-pos.db \
+  oz-pos-cloud:latest
+```
+
+**Pros:** Zero external dependencies. **Cons:** Must copy the file during
+migration. Single point of failure (the VPS disk).
+
+### PostgreSQL (DATABASE_URL)
+
+When `DATABASE_URL` is set and starts with `postgres://` or
+`postgresql://`, the server connects to a managed PostgreSQL instance
+using `deadpool-postgres` (pool size: 8 connections).
+
+```bash
+docker run -d \
+  --name oz-cloud-server \
+  -p 3099:3099 \
+  -e DATABASE_URL=postgres://user:pass@host:5432/ozpos \
+  -e OZ_API_SECRET=<your-secret> \
+  oz-pos-cloud:latest
+```
+
+**Connection string format:**
+
+```
+postgres://<user>:<password>@<host>:<port>/<database>
+postgresql://<user>:<password>@<host>:<port>/<database>
+```
+
+> ⚠️ **TLS is not currently supported.** The cloud server uses
+> `tokio_postgres::NoTls` — all connections are unencrypted. For
+> production use, run the database on the same VPS or within a private
+> network (VPC). If the database provider requires TLS (Neon, Supabase,
+> some RDS configurations), the server won't be able to connect.
+>
+> TLS support (`tokio_postgres::native_tls` or `rustls`) is a planned
+> future enhancement.
+
+**Managed PostgreSQL providers compatible with OZ-POS (non-TLS):**
+
+| Provider | Free tier | Connection string (example) |
+|----------|-----------|----------------------------|
+| [Neon](https://neon.tech) | Yes — 0.5 GB | Requires TLS — not supported yet |
+| [Supabase](https://supabase.com) | Yes — 500 MB | Requires TLS — not supported yet |
+| [AWS RDS](https://aws.amazon.com/rds/) | No (pay-as-you-go) | `postgres://user:pass@ozpos.xyz.us-east-1.rds.amazonaws.com:5432/ozpos` (with TLS disabled) |
+| [Railway](https://railway.app) | Yes — $5 credit | `postgres://postgres:pass@containers-us-west-xyz.railway.app:5432/ozpos` |
+| Self-hosted (same VPS) | N/A | `postgres://user:pass@localhost:5432/ozpos` |
+| Self-hosted (private network) | N/A | `postgres://user:pass@10.0.0.5:5432/ozpos` |
+
+**How migration changes with PostgreSQL:**
+
+| Step | SQLite | PostgreSQL |
+|------|--------|-----------|
+| Copy database | `scp` the `.db` file | **Not needed** — both servers point to the same PG instance |
+| Verify data | `sqlite3` query | `psql` or any PG client |
+| Downtime | Brief (file copy) | **Zero** — the database is never moved |
+| Rollback | Restore `.db` from backup | Point old server back at PG |
+
+Because the database lives outside both VPSes, PostgreSQL migrations are
+faster and safer. The old and new servers can even run simultaneously
+against the same PG instance during the transition.
+
+> ⚠️ **When using PostgreSQL, do NOT set `OZ_DB_PATH`** — it will be
+> ignored in favor of `DATABASE_URL`.
+
+---
+
 ## Scenario A: Same Domain (Layer 1 — DNS)
 
 Use when the sync server domain stays the same (e.g., `sync.ozpos.com`).
