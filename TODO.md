@@ -200,8 +200,21 @@ be removed from individual test files (incremental cleanup). Future test files g
 state automatically — no need to remember to add cleanup.
 **Baseline: 15.02s, After: 14.70s** (0.32s saving — the benefit is code quality, not speed).
 
-**Follow-up:** Individual test files still have redundant `vi.clearAllMocks()` / `localStorage.clear()`
-calls that can be removed incrementally as those files are touched for other changes.
+- [x] **K4.** Removed 25 redundant `beforeEach(() => { vi.clearAllMocks(); })` blocks from
+  individual test files (DesignSystem, FastPINOverlay, FeatureToggleScreen, GiftCardPayment,
+  GiftCardsScreen, interaction, IssueGiftCardModal, ItemModifierModal, KioskScreen,
+  LicenseSettings, PriceOverrideModal, PurchaseOrdersScreen, RefundModal, RetailOptionsScreen,
+  ShiftManagementScreen, StaffLoginScreen, StockCountForm, StockCountHistory, StockCountsScreen,
+  SuppliersScreen, useGatewayStatus, useTerminalProfile, useWorkspaceNav, VoidOrdersScreen,
+  WeightScaleWidget). All now rely on the global cleanup in test-setup.ts.
+
+**Baseline: 14.91s, After: 14.99s** (normal variation, no regressions).
+100 lines of redundant code eliminated.
+
+**Remaining cleanup:** ~30 more test files still have `vi.clearAllMocks()` in beforeEach that also
+includes other setup calls (e.g., `mockFoo.mockResolvedValue(...)`). The `vi.clearAllMocks()` line
+is redundant but cannot be removed standalone since the other calls need a parent function. These
+can be cleaned up when the files are refactored for other reasons.
 
 ### L. Fluent/i18n Test Performance ✅ (0.0.8 — 2026-07-15)
 
