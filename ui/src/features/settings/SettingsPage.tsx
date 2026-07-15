@@ -596,6 +596,12 @@ export default function SettingsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Scroll content to top when navigating between sections.
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('.settings-content');
+    if (el) el.scrollTop = 0;
+  }, [activeSection]);
+
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
@@ -628,6 +634,20 @@ export default function SettingsPage() {
       setTimeout(() => setSaved(false), 2000);
       if (syncApiKey) setSyncApiKey('');
       refreshBrandSettings();
+
+      // Update the snapshot so Revert goes to the *saved* state.
+      initialSnapshotRef.current = {
+        receipt,
+        store,
+        defaultCurrency,
+        sync,
+        syncServerUrl,
+        displayCardSize,
+        displayFontSize,
+        displayFontSmoothing,
+        brandColour,
+        brandStoreName,
+      };
     }
 
     if (failed === results.length) {

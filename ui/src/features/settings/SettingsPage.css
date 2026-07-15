@@ -773,11 +773,15 @@
 /* ── Section breadcrumb header ─────────────────────────────── */
 
 .settings-section-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-5);
-  padding-bottom: var(--space-3);
+  padding: var(--space-3) 0;
+  background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
 }
 
