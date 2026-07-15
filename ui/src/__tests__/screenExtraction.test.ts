@@ -183,6 +183,8 @@ const SCREENS: ScreenEntry[] = [
       'tax-config',
       'exchange-rate-config',
       'promo-mgmt',
+      'mobile-open',
+      'visible',
     ],
   },
   {
@@ -411,6 +413,8 @@ const SCREENS: ScreenEntry[] = [
       'card',
       'tab-list',
       'collapsed',
+      'mobile-open',
+      'visible',
     ],
   },
 ];

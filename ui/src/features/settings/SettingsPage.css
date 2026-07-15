@@ -792,12 +792,6 @@
   margin: 0;
 }
 
-.settings-section-header-subtitle {
-  font-size: var(--text-sm);
-  color: var(--color-fg-tertiary);
-  margin: 0;
-}
-
 /* ── Section content transition ───────────────────────────── */
 
 .settings-section-content {

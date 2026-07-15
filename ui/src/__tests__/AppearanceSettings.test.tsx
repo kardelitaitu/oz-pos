@@ -56,6 +56,10 @@ vi.mock('@/components/Card', () => ({
   ),
 }));
 
+vi.mock('@/frontend/shared/Toast', () => ({
+  useToast: () => ({ addToast: vi.fn() }),
+}));
+
 vi.mock('@/components/Button', () => ({
   Button: ({
     children,
@@ -146,15 +150,16 @@ describe('AppearanceSettings', () => {
   });
 
   it('updates colour picker value when user changes hex input', async () => {
-    const user = userEvent.setup();
     render(<AppearanceSettings />);
     await waitFor(() => {
       expect(screen.getByLabelText('Colour hex value')).toBeInTheDocument();
     });
 
     const hexInput = screen.getByLabelText('Colour hex value') as HTMLInputElement;
-    await user.clear(hexInput);
-    await user.type(hexInput, '#ff5500');
+    // Use fireEvent.change (not user.type) so the full hex value is
+    // processed at once — user.type types character-by-character and
+    // normaliseHex rejects the leading '#' on its own.
+    fireEvent.change(hexInput, { target: { value: '#ff5500' } });
 
     expect(hexInput.value).toBe('#ff5500');
     // Colour picker should sync.
@@ -328,10 +333,10 @@ describe('AppearanceSettings', () => {
       expect(screen.getByLabelText('Colour hex value')).toBeInTheDocument();
     });
 
-    // Change colour.
+    // Change colour via fireEvent.change (not user.type) so normaliseHex
+    // gets the complete hex value in one call.
     const hexInput = screen.getByLabelText('Colour hex value') as HTMLInputElement;
-    await user.clear(hexInput);
-    await user.type(hexInput, '#aabbcc');
+    fireEvent.change(hexInput, { target: { value: '#aabbcc' } });
 
     // Save.
     await user.click(screen.getByLabelText('Save appearance'));
@@ -397,15 +402,13 @@ describe('AppearanceSettings', () => {
   // ── Accent palette ─────────────────────────────────────────────
 
   it('applies accent palette on colour change', async () => {
-    const user = userEvent.setup();
     render(<AppearanceSettings />);
     await waitFor(() => {
       expect(screen.getByLabelText('Colour hex value')).toBeInTheDocument();
     });
 
     const hexInput = screen.getByLabelText('Colour hex value') as HTMLInputElement;
-    await user.clear(hexInput);
-    await user.type(hexInput, '#334455');
+    fireEvent.change(hexInput, { target: { value: '#334455' } });
 
     expect(mockDeriveAccentPalette).toHaveBeenCalledWith('#334455');
     expect(mockApplyAccentPalette).toHaveBeenCalled();

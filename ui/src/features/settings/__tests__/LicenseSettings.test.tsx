@@ -129,13 +129,15 @@ const SERVER_STATUS = {
 describe('LicenseSettings', () => {
   // ── 1. Loading state ──────────────────────────────────────
   describe('Loading state', () => {
-    it('shows loading indicator while getLicenseStatus is pending', () => {
+    it('shows skeleton loading while getLicenseStatus is pending', () => {
       let resolve: (value: typeof VALID_LICENSE_STATUS) => void = () => {};
       vi.mocked(getLicenseStatus).mockReturnValue(
         new Promise((r) => { resolve = r; }),
       );
-      render(<LicenseSettings />);
-      expect(screen.getByText('Loading…')).toBeInTheDocument();
+      const { container } = render(<LicenseSettings />);
+      // Skeleton rows replace the old "Loading…" text.
+      expect(container.querySelector('.settings-license-skeleton')).toBeInTheDocument();
+      expect(container.querySelector('.settings-license-skeleton-row')).toBeInTheDocument();
       resolve(VALID_LICENSE_STATUS);
     });
 
@@ -238,8 +240,11 @@ describe('LicenseSettings', () => {
       });
       const { container } = render(<LicenseSettings />);
       await waitFor(() => {
-        const el = container.querySelector('p[role="status"]');
+        const el = container.querySelector('[role="status"]');
         expect(el).toBeInTheDocument();
+        // The empty state renders a lock icon SVG + text inside a div, not a <p>.
+        expect(el!.tagName).toBe('DIV');
+        expect(el!.querySelector('.settings-license-empty-icon')).toBeInTheDocument();
       });
     });
   });
