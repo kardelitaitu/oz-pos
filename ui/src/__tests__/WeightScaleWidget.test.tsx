@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 
 // Mock useFeatures to always return enabled=true for any feature.
 vi.mock('@/hooks/useFeatures', () => ({
@@ -44,7 +44,7 @@ weight-scale-idle = —
 weight-scale-error = Scale error
 `;
 
-const wrap = (children: React.ReactNode) => withFluent(children, scaleFtl);
+
 
 describe('WeightScaleWidget', () => {
   beforeEach(() => {
@@ -52,19 +52,19 @@ describe('WeightScaleWidget', () => {
   });
 
   it('renders the weigh button and idle display when feature is enabled', () => {
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
     expect(screen.getByRole('button', { name: /read weight/i })).toBeInTheDocument();
     expect(screen.getByText('—')).toBeInTheDocument();
   });
 
   it('does not crash and renders the region aria-label', () => {
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
     expect(screen.getByRole('region', { name: 'Weight Scale' })).toBeInTheDocument();
   });
 
   it('calls readScaleWeight on weigh click', async () => {
     mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 500, stable: true });
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
     expect(mockReadScaleWeight).toHaveBeenCalledTimes(1);
@@ -72,7 +72,7 @@ describe('WeightScaleWidget', () => {
 
   it('displays weight after successful read', async () => {
     mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 500, stable: true });
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
 
@@ -83,7 +83,7 @@ describe('WeightScaleWidget', () => {
 
   it('displays kilograms for weights >= 1000g', async () => {
     mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 2500, stable: true });
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
 
@@ -94,7 +94,7 @@ describe('WeightScaleWidget', () => {
 
   it('shows stable indicator when reading is stable', async () => {
     mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 100, stable: true });
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
 
@@ -105,7 +105,7 @@ describe('WeightScaleWidget', () => {
 
   it('shows unstable indicator when reading is not stable', async () => {
     mockReadScaleWeight.mockResolvedValueOnce({ weightGrams: 432, stable: false });
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
 
@@ -117,7 +117,7 @@ describe('WeightScaleWidget', () => {
 
   it('shows error when read fails', async () => {
     mockReadScaleWeight.mockRejectedValueOnce(new Error('Device not found'));
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
 
@@ -131,7 +131,7 @@ describe('WeightScaleWidget', () => {
     mockReadScaleWeight.mockResolvedValueOnce(reading);
     const onWeightObtained = vi.fn();
 
-    render(wrap(<WeightScaleWidget onWeightObtained={onWeightObtained} />));
+    renderWithFluentSync(<WeightScaleWidget onWeightObtained={onWeightObtained} />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
 
@@ -143,7 +143,7 @@ describe('WeightScaleWidget', () => {
   it('disables button while weighing', async () => {
     // Never resolve — keeps weighing=true
     mockReadScaleWeight.mockReturnValueOnce(new Promise(() => {}));
-    render(wrap(<WeightScaleWidget />));
+    renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
 
     await userEvent.click(screen.getByRole('button', { name: /read weight/i }));
 

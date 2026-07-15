@@ -1,11 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import staffFtl from '@/locales/staff.ftl?raw';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
-
-const wrap = (children: React.ReactNode) => withFluent(children, staffFtl);
 
 const SAMPLE_ROLES = [
   { id: 'role-1', name: 'owner', description: 'Owner' },
@@ -57,14 +55,14 @@ async function waitForTable() {
 
 describe('StaffManagementScreen', () => {
   it('renders title and add button', async () => {
-    render(wrap(<StaffManagementScreen />));
+    renderWithFluentSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
     expect(screen.getByRole('heading', { name: /staff/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add staff/i })).toBeInTheDocument();
   });
 
   it('renders staff table rows', async () => {
-    render(wrap(<StaffManagementScreen />));
+    renderWithFluentSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
     expect(screen.getAllByText('Jane Smith').length).toBeGreaterThan(0);
     expect(screen.getAllByText('John Doe').length).toBeGreaterThan(0);
@@ -82,7 +80,7 @@ describe('StaffManagementScreen', () => {
       if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
       return Promise.resolve([]);
     });
-    render(wrap(<StaffManagementScreen />));
+    renderWithFluentSync(<StaffManagementScreen />, staffFtl);
     await waitFor(() => {
       expect(screen.getByText(/no staff members yet/i)).toBeInTheDocument();
     });
@@ -91,12 +89,12 @@ describe('StaffManagementScreen', () => {
 
   it('shows loading state initially', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
-    render(wrap(<StaffManagementScreen />));
+    renderWithFluentSync(<StaffManagementScreen />, staffFtl);
     expect(screen.getByText(/loading staff/i)).toBeInTheDocument();
   });
 
   it('opens add modal', async () => {
-    render(wrap(<StaffManagementScreen />));
+    renderWithFluentSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /add staff/i }));
     const dialog = screen.getByRole('dialog');
@@ -105,7 +103,7 @@ describe('StaffManagementScreen', () => {
   });
 
   it('opens edit modal pre-filled', async () => {
-    render(wrap(<StaffManagementScreen />));
+    renderWithFluentSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
     const editBtn = screen.getByRole('button', { name: /edit.*jane smith/i });
     await userEvent.click(editBtn);

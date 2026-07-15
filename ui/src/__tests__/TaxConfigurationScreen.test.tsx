@@ -1,11 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import taxFtl from '@/locales/tax.ftl?raw';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
-
-const wrap = (children: React.ReactNode) => withFluent(children, taxFtl);
 
 const SAMPLE_TAX_RATES = [
   { id: 'tax-1', name: 'Sales Tax', rate_bps: 825, is_default: true, display_rate: '8.25%', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
@@ -39,19 +37,19 @@ async function waitForTable() {
 
 describe('TaxConfigurationScreen', () => {
   it('renders title', async () => {
-    render(wrap(<TaxConfigurationScreen />));
+    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
     await waitForTable();
     expect(screen.getByRole('heading', { name: /tax configuration/i })).toBeInTheDocument();
   });
 
   it('shows loading state', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
-    render(wrap(<TaxConfigurationScreen />));
+    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
     expect(screen.getByText(/loading tax rates/i)).toBeInTheDocument();
   });
 
   it('renders tax rate rows', async () => {
-    render(wrap(<TaxConfigurationScreen />));
+    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
     await waitForTable();
     expect(screen.getByText('Sales Tax')).toBeInTheDocument();
     expect(screen.getByText('VAT')).toBeInTheDocument();
@@ -60,7 +58,7 @@ describe('TaxConfigurationScreen', () => {
   });
 
   it('shows default badge', async () => {
-    render(wrap(<TaxConfigurationScreen />));
+    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
     await waitForTable();
     expect(screen.getAllByText('Default').length).toBeGreaterThanOrEqual(1);
   });
@@ -70,14 +68,14 @@ describe('TaxConfigurationScreen', () => {
       if (cmd === 'list_tax_rates') return Promise.resolve([]);
       return Promise.resolve([]);
     });
-    render(wrap(<TaxConfigurationScreen />));
+    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
     await waitFor(() => {
       expect(screen.getByText(/no tax rates configured/i)).toBeInTheDocument();
     });
   });
 
   it('opens add modal', async () => {
-    render(wrap(<TaxConfigurationScreen />));
+    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /add tax rate/i }));
     const dialog = screen.getByRole('dialog');
