@@ -1,7 +1,7 @@
 /* ── Audit Log ─────────────────────────────────────────────── */
 
 .audit-log {
-  max-width: 1200px;
+  max-width: 75rem;
   margin: 0 auto;
   padding: var(--space-6);
   font-family: var(--font-sans);
@@ -34,7 +34,7 @@
 .audit-log-search-wrap {
   position: relative;
   flex: 1;
-  min-width: 240px;
+  min-width: 15rem;
 }
 
 .audit-log-search-icon {
@@ -42,8 +42,8 @@
   left: var(--space-3);
   top: 50%;
   transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   color: var(--color-fg-tertiary);
   pointer-events: none;
 }
@@ -62,7 +62,7 @@
 
 .audit-log-search:focus {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-dim);
+  box-shadow: inset 0 0 0 1px var(--color-accent-dim);
 }
 
 .audit-log-outcome-filters {
@@ -186,13 +186,13 @@
   font-family: var(--font-mono, monospace);
   font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
-  margin-top: 1px;
+  margin-top: 0.0625rem;
 }
 
 .audit-log-target {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0.0625rem;
 }
 
 .audit-log-target-type {
@@ -215,7 +215,7 @@
 .audit-log-badge {
   display: inline-flex;
   align-items: center;
-  padding: 1px var(--space-2);
+  padding: 0.0625rem var(--space-2);
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
@@ -240,7 +240,7 @@
 /* ── Details cell ─────────────────────────────────────────── */
 
 .audit-log-cell-details {
-  max-width: 200px;
+  max-width: 12.5rem;
 }
 
 .audit-log-details-preview {

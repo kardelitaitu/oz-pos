@@ -43,7 +43,7 @@
 .cat-mgmt-empty-desc {
   font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
-  max-width: 320px;
+  max-width: 20rem;
   line-height: var(--leading-normal);
 }
 
@@ -63,8 +63,8 @@
 
 /* Coloured circle badge that holds the icon SVG */
 .cat-mgmt-icon-badge {
-  width: 44px;
-  height: 44px;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 50%;
   flex-shrink: 0;
   display: flex;
@@ -75,8 +75,8 @@
 }
 
 .cat-mgmt-icon-badge-empty {
-  width: 12px;
-  height: 12px;
+  width: 0.75rem;
+  height: 0.75rem;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.4);
   display: block;
@@ -116,8 +116,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: var(--radius-md);
   color: var(--color-fg-tertiary);
   background: transparent;
@@ -137,16 +137,16 @@
 }
 
 .cat-mgmt-edit-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }
 
 .cat-mgmt-delete-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: var(--radius-md);
   color: var(--color-fg-tertiary);
   background: transparent;
@@ -166,8 +166,8 @@
 }
 
 .cat-mgmt-delete-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }
 
 .cat-mgmt-delete-btn:disabled {
@@ -193,7 +193,7 @@
 }
 
 .cat-mgmt-modal {
-  width: 420px;
+  width: 26.25rem;
   max-width: 92vw;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
@@ -203,7 +203,7 @@
 }
 
 @keyframes cat-slide-up {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -225,13 +225,13 @@
 .cat-mgmt-modal-close {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
   color: var(--color-fg-tertiary);
   padding: 0;
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -277,7 +277,7 @@
 
 .cat-mgmt-input:focus {
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-accent-subtle);
 }
 
 .cat-mgmt-input::placeholder {
@@ -292,7 +292,7 @@
 .cat-mgmt-hint code {
   font-family: var(--font-mono);
   background: var(--color-bg-surface);
-  padding: 1px 4px;
+  padding: 0.0625rem 0.25rem;
   border-radius: var(--radius-sm);
 }
 
@@ -304,8 +304,8 @@
 }
 
 .cat-mgmt-colour-swatch {
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
   border-radius: var(--radius-lg);
   border: 2px solid transparent;
   cursor: pointer;
@@ -320,8 +320,9 @@
 }
 
 .cat-mgmt-colour-swatch:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
+  transform: translateY(0);
 }
 
 .cat-mgmt-colour-swatch--selected {
@@ -337,8 +338,8 @@
 }
 
 .cat-mgmt-icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: var(--radius-lg);
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
@@ -361,8 +362,8 @@
 }
 
 .cat-mgmt-icon-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }
 
 .cat-mgmt-icon-btn--selected {
