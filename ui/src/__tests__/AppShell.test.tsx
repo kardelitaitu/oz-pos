@@ -590,7 +590,7 @@ describe('AppShell — KDS workspace navigation', () => {
 
       // Login screen should render (no session, dev bypass skips license check)
       await waitFor(() => {
-        expect(screen.getByText('Enter your username')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
       });
 
       // No license warning toast should appear
