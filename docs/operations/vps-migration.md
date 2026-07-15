@@ -720,8 +720,8 @@ curl https://<new-vps-ip>:3099/health
 
 **3. Transfer the database**
 
-Follow the [Data Transfer](#data-transfer-moving-the-sqlite-database)
-section above to copy the database from the old VPS to the new VPS.
+- **SQLite users:** Follow the [SQLite Data Transfer](#data-transfer-moving-the-sqlite-database) section.
+- **PostgreSQL users:** If moving PG instances, follow the [PostgreSQL Data Transfer](#data-transfer-migrating-postgresql-between-instances) section. If both VPSes point to the same PG instance, skip this step.
 
 **4. Restart the new server**
 
@@ -803,8 +803,8 @@ curl https://<new-vps-ip>:3099/health
 
 **3. Transfer the database**
 
-Follow the [Data Transfer](#data-transfer-moving-the-sqlite-database)
-section above.
+- **SQLite users:** Follow the [SQLite Data Transfer](#data-transfer-moving-the-sqlite-database) section.
+- **PostgreSQL users:** If moving PG instances, follow the [PostgreSQL Data Transfer](#data-transfer-migrating-postgresql-between-instances) section. If both VPSes point to the same PG instance, skip this step.
 
 **4. Restart the new server**
 
