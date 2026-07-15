@@ -682,7 +682,7 @@ export default function WorkspaceHome() {
                     aria-current={isActive ? 'true' : undefined}
                     className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
                     onClick={(e) => handleCardClick(ws.type_key, e)}
-                    disabled={exitingWorkspace !== null}
+                    disabled={error !== null}
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
                   >
                     <div className="workspace-card-key-hint">{idx + 1}</div>
