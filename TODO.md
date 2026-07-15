@@ -130,24 +130,19 @@ gives maintainability win (single source of truth for auth/workspace/sales/shift
 - [x] **H3.** Migrated `CartScreen.test.tsx` (3 tests) and `ProductManagementScreen.test.tsx` (14 tests)
   - Removed `import { withFluent }`, `import { render }`, `wrap` function from both
   - 17/17 tests pass in 2.55s
-- [x] **H3b.** Migrated 25 test files to `renderWithFluentSync` (4 batches)
-  - Batch 1: InventoryAdjustmentScreen, GiftCardPayment, IssueGiftCardModal, SalesDashboardScreen,
-    StaffManagementScreen, TaxConfigurationScreen, WeightScaleWidget (7 files, 53 tests)
-  - Batch 2: CustomerManagementScreen, GiftCardsScreen, LoyaltyManagementScreen, PurchaseOrdersScreen,
-    SalesHistoryScreen, ShiftManagementScreen (6 files, 95 tests)
-  - Batch 3: EodReportScreen, ExchangeRateScreen, OfflineQueueScreen, PromotionManagementScreen,
-    RefundModal, StockCountDetail, StockCountHistory (7 files, 95 tests)
-  - Batch 4: StockCountForm, StockCountsScreen, StockTransfersScreen, SuppliersScreen,
-    ThemeToggle (5 files, 64 tests)
-  - 25 of ~34 files migrated (74%). ~9 remaining (complex: AppShell, FeatureToggle, KioskScreen,
-    PosScreen, RetailPosScreen, ProductLookupScreen, VoidOrdersScreen, SettingsPage, WorkspaceHome).
+- [x] **H3b.** Migrated 30 test files to `renderWithFluentSync`/`renderWithFluent` (5 batches)
+  - Batch 1-4: 25 sync-render files (see above)
+  - Batch 5: FeatureToggleScreen, KioskScreen, ProductLookupScreen, VoidOrdersScreen,
+    WorkspaceHome (5 files, 94 tests, async renderWithFluent)
+  - 30 of ~34 files migrated (88%). ~4 remaining (complex: AppShell, PosScreen,
+    RetailPosScreen, SettingsPage).
 - [ ] **H4.** Create `renderWithProviders` — wraps with ThemeProvider, ToastProvider, LocaleContext, ZoomProvider
-- [x] **H5.** All migrated tests pass; full suite: 109 passed, 1810 tests in 14.82s
+- [x] **H5.** All migrated tests pass; full suite: 109 passed, 1810 tests in 14.43s
 
-**Result:** 2 helpers created, 25 files migrated (307 tests). Per-file savings: 3 imports + 1 function.
+**Result:** 2 helpers created, 30 files migrated (401 tests). Per-file savings: 3 imports + 1 function.
 When all ~34 files are migrated, ~102 import lines + ~34 wrap functions eliminated.
-**Before: 14.76s, After: 14.82s** (normal run-to-run variation, no regressions).
-**226 imports removed | 25 wrap functions eliminated | 0 test regressions.**
+**Before: 14.76s, After: 14.43s** (normal run-to-run variation, no regressions).
+**275 imports removed | 30 wrap/renderInAct functions eliminated | 0 test regressions.
 
 ### I. Split Large Test Files ⚠️ (blocked — 2026-07-15)
 
