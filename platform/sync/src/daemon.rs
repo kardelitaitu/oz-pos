@@ -450,7 +450,7 @@ impl Default for SyncDaemon {
 mod tests {
     use super::*;
     use crate::transport::{PullResponse, PushOutcome, PushResponse};
-    use axum::{Json, Router, routing::post};
+    use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
     use oz_core::migrations;
     use oz_core::settings::Settings;
 
@@ -624,5 +624,79 @@ mod tests {
             "zero failures should cap at 2000ms, got {}ms",
             backoff.as_millis()
         );
+    }
+
+    // ── ADR #11: Server migration integration test ──────────────
+
+    /// Spawn a mock server that always returns a migration redirect.
+    async fn spawn_redirect_server(new_url: &str) -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let redirect_url = new_url.to_owned();
+
+        async fn redirect_handler(
+            axum::extract::State(url): axum::extract::State<String>,
+        ) -> impl IntoResponse {
+            (
+                StatusCode::MISDIRECTED_REQUEST,
+                Json(serde_json::json!({
+                    "error": "server_migrated",
+                    "new_url": url,
+                })),
+            )
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(redirect_handler))
+            .route("/api/sync/pull", post(redirect_handler))
+            .with_state(redirect_url);
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    #[tokio::test]
+    async fn daemon_auto_updates_url_on_server_migration() {
+        let new_url = "https://new-server.example.com";
+        let old_url = spawn_redirect_server(new_url).await;
+        let db = setup_db();
+
+        // Configure sync to point at the redirect server.
+        let db_clone = db.clone();
+        let old = old_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_clone.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &old).unwrap();
+            store.enqueue_offline("test", r#"{}"#).unwrap();
+        })
+        .await
+        .unwrap();
+
+        let daemon = SyncDaemon::with_interval(Duration::from_millis(100));
+        daemon.start(db.clone()).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // The daemon should have detected the redirect and updated the URL.
+        let updated_url = tokio::task::spawn_blocking(move || {
+            let conn = db.blocking_lock();
+            Settings::get_sync_server_url(&conn).unwrap()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(
+            updated_url.as_deref(),
+            Some(new_url),
+            "daemon should auto-update sync_server_url after server_migrated redirect"
+        );
+
+        daemon.stop().await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 }

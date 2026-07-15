@@ -15,6 +15,8 @@
 //! |---|---|---|
 //! | `OZ_DB_PATH` | `oz-pos.db` | Path to the SQLite database file |
 //! | `OZ_API_PORT` | `3099` | HTTP server listen port |
+//! | `OZ_REDIRECT_ONLY` | — | Run in redirect-only mode (ADR #11). Requires `OZ_SYNC_REDIRECT_URL`. Skips DB, prune, metrics, API — only serves the migration redirect. |
+//! | `OZ_SYNC_REDIRECT_URL` | — | New server URL for migration redirect. When set, all `/api/sync/*` requests return `{"error":"server_migrated","new_url":"<url>"}` with HTTP 421. |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
 mod db;
@@ -55,6 +57,24 @@ async fn main() {
         oz_logging::init_json();
     } else {
         oz_logging::init();
+    }
+
+    // ── Redirect-only mode (ADR #11) ──────────────────────────────────
+    // When OZ_REDIRECT_ONLY is set, skip all infrastructure (DB, prune,
+    // metrics, API) and run a minimal server that only returns the
+    // migration redirect. This keeps the old VPS cheap during the
+    // 15-30 day migration window.
+    if std::env::var("OZ_REDIRECT_ONLY").as_deref() == Ok("true") {
+        if std::env::var("OZ_SYNC_REDIRECT_URL").is_err() {
+            tracing::error!("OZ_REDIRECT_ONLY=true requires OZ_SYNC_REDIRECT_URL to be set");
+            std::process::exit(1);
+        }
+        info!("running in redirect-only mode (ADR #11)");
+        let redirect_router = Router::new()
+            .fallback(|| async { axum::http::StatusCode::MISDIRECTED_REQUEST })
+            .layer(axum::middleware::from_fn(redirect::redirect_middleware));
+        serve(redirect_router).await;
+        return;
     }
 
     // ── Database ─────────────────────────────────────────────────────
