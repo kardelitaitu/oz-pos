@@ -82,15 +82,20 @@ for rusqlite/serde_json is offset by faster test execution (SQLite is used in ev
 No measurable runtime change in migration tests (already fast due to Section D snapshot cloning),
 but benefits heavier tests with many SQL operations.
 
-### F. Test Parallelism
+### F. Test Parallelism ✅ (0.0.8 — 2026-07-15)
 
-- [ ] **F1.** Audit `cargo test` flags — currently uses default parallel jobs. Add
-  `--test-threads=$(nproc)` to `scripts/check.ps1` for explicit parallelism.
-- [ ] **F2.** Check for any tests that share global state (`std::env::set_var`,
-  `std::fs` operations) and add `serial_test` or `Mutex` guards to prevent
-  flaky failures under high parallelism.
-- [ ] **F3.** Identify any test that calls `std::env::set_var` (previous fix in
-  `oz-cloud-server` used `tokio::sync::Mutex` — verify it works).
+- [x] **F1.** Added explicit `--test-threads $env:NUMBER_OF_PROCESSORS` (fallback 4) to all
+  `cargo test` invocations in `scripts/check.ps1`. Cargo already defaults to `num_cpus`,
+  so this is a documentation/clarity improvement — no measurable speedup.
+- [x] **F2.** No shared-state issues found across any crate. `cloud-server` already guards
+  `env::set_var` tests with `LazyLock<tokio::sync::Mutex<()>>` ENV_LOCK (db.rs line 257).
+- [x] **F3.** All `std::env::set_var` calls in production code (`desktop-client/state.rs`,
+  `desktop-client/commands/features.rs`, `tablet-client/commands/features.rs`) are scoped
+  to `OZ_TERMINAL_ID` and don't affect test isolation.
+
+**Result:** `--test-threads` now explicit in CI script. Zero `serial_test` crate dependencies
+needed — existing `ENV_LOCK` mutex guard is sufficient. No measurable speed change
+(cargo already parallelizes by default). Confirmed with `cargo test -p platform-sync --all-features --test-threads 4`: 19/19 pass in 2.38s.
 
 ---
 
