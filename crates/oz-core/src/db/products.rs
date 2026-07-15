@@ -2047,9 +2047,7 @@ mod tests {
     #[test]
     fn archive_movements_empty_db_returns_zero() {
         let conn = fresh();
-        let count = store(&conn)
-            .archive_stock_movements(90, 50)
-            .unwrap();
+        let count = store(&conn).archive_stock_movements(90, 50).unwrap();
         assert_eq!(count, 0, "no rows to archive in empty DB");
     }
 
@@ -2061,9 +2059,7 @@ mod tests {
         store(&conn).adjust_stock("DRINK-001", 5).unwrap();
 
         // All rows are recent — nothing to archive.
-        let count = store(&conn)
-            .archive_stock_movements(90, 50)
-            .unwrap();
+        let count = store(&conn).archive_stock_movements(90, 50).unwrap();
         assert_eq!(count, 0);
 
         // Live table still has the adjustment row.
@@ -2095,7 +2091,10 @@ mod tests {
         let movements = s.list_stock_movements("prod-1", 10, 0).unwrap();
         assert_eq!(movements.len(), 1, "one rollup row in live table");
         assert_eq!(movements[0].reason.as_deref(), Some("archive-rollup"));
-        assert_eq!(movements[0].delta, 35, "SUM(old deltas) = 30 + (-5) + 10 = 35");
+        assert_eq!(
+            movements[0].delta, 35,
+            "SUM(old deltas) = 30 + (-5) + 10 = 35"
+        );
 
         // Archive table should have the 3 old rows.
         let archived: i64 = conn
@@ -2256,7 +2255,10 @@ mod tests {
 
         let movements = s.list_stock_movements("prod-1", 10, 0).unwrap();
         assert_eq!(movements.len(), 1);
-        assert_eq!(movements[0].delta, 0, "rollup delta = 0 for net-zero deltas");
+        assert_eq!(
+            movements[0].delta, 0,
+            "rollup delta = 0 for net-zero deltas"
+        );
 
         let from_ledger = s.get_stock_from_ledger("prod-1").unwrap();
         assert_eq!(from_ledger, 0);

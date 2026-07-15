@@ -293,7 +293,10 @@ pub const MAX_BATCH_BYTES: usize = 64 * 1024;
 /// Items are sorted by priority (P-2) before chunking: all Critical items
 /// transmit before any Normal item, which transmit before Low items.
 /// Within each priority tier, original arrival order is preserved.
-pub fn build_batches(items: &[oz_core::offline::OfflineQueueItem], max_bytes: usize) -> Vec<Vec<oz_core::offline::OfflineQueueItem>> {
+pub fn build_batches(
+    items: &[oz_core::offline::OfflineQueueItem],
+    max_bytes: usize,
+) -> Vec<Vec<oz_core::offline::OfflineQueueItem>> {
     // Sort by priority (Critical=0, Normal=1, Low=2) — stable sort
     // preserves arrival order within each tier.
     let mut sorted: Vec<oz_core::offline::OfflineQueueItem> = items.to_vec();
@@ -305,9 +308,7 @@ pub fn build_batches(items: &[oz_core::offline::OfflineQueueItem], max_bytes: us
 
     for item in &sorted {
         // Estimate the JSON size of this item alone.
-        let item_bytes = serde_json::to_vec(item)
-            .map(|v| v.len())
-            .unwrap_or(0);
+        let item_bytes = serde_json::to_vec(item).map(|v| v.len()).unwrap_or(0);
 
         // If adding this item would exceed the budget and we already have
         // items in the current batch, finalise and start a new batch.
@@ -332,7 +333,10 @@ pub fn build_batches(items: &[oz_core::offline::OfflineQueueItem], max_bytes: us
 ///
 /// Upserts products (by SKU), tax rates (by ID), and users (by username)
 /// inside a single transaction. Returns the total number of rows written.
-fn import_snapshot(store: &Store<'_>, snapshot: &transport::SyncSnapshotResponse) -> SyncResult<usize> {
+fn import_snapshot(
+    store: &Store<'_>,
+    snapshot: &transport::SyncSnapshotResponse,
+) -> SyncResult<usize> {
     let conn = store.conn();
     let tx = conn
         .unchecked_transaction()
@@ -495,9 +499,7 @@ impl SyncEngine {
             batch_count = batches.len();
             for (batch_idx, batch) in batches.iter().enumerate() {
                 let batch_items = batch.len();
-                let batch_bytes = serde_json::to_vec(batch)
-                    .map(|v| v.len())
-                    .unwrap_or(0);
+                let batch_bytes = serde_json::to_vec(batch).map(|v| v.len()).unwrap_or(0);
                 total_bytes_sent += batch_bytes;
 
                 tracing::debug!(

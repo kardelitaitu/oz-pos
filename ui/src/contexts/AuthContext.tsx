@@ -6,6 +6,7 @@ import {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import { staffLogin, type LoginSessionDto } from "@/api/staff";
@@ -103,6 +104,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   const [session, setSession] = useState<LoginSessionDto | null>(() => loadSession());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   // Persist session changes to localStorage
   useEffect(() => {
@@ -111,6 +113,8 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
 
   const login = useCallback(
     async (username: string, pin: string) => {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
       setLoading(true);
       setError(null);
       try {
@@ -118,10 +122,12 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
         setSession(result.session);
         onLogin?.();
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Login failed";
+        const message = (err as Record<string, unknown> | null)?.['message'] as string
+          ?? (err instanceof Error ? err.message : "Login failed");
         setError(message);
       } finally {
         setLoading(false);
+        submittingRef.current = false;
       }
     },
     [onLogin],

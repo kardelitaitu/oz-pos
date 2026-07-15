@@ -104,5 +104,7 @@ fn ensure_registered() {
 pub fn render_metrics() -> String {
     ensure_registered();
     let encoder = TextEncoder::new();
-    encoder.encode_to_string(&REGISTRY.gather()).unwrap_or_default()
+    encoder
+        .encode_to_string(&REGISTRY.gather())
+        .unwrap_or_default()
 }

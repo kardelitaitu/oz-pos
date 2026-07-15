@@ -7,9 +7,7 @@ use serde::{Deserialize, Serialize};
 /// Lower numeric values indicate higher priority. Items are sorted by
 /// priority before batching so Critical items always transmit before
 /// Normal items, which always transmit before Low items.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(i32)]
 pub enum SyncPriority {
     /// Sale completions, voids — must propagate before anything else.

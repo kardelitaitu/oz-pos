@@ -144,7 +144,11 @@ impl SyncTransport {
     ///
     /// Pass `None` for `since` to pull all available data (initial sync).
     /// Pass `cursor` for paginated subsequent pages (P-3).
-    pub async fn pull_updates(&self, since: Option<&str>, cursor: Option<&str>) -> Result<PullResponse, SyncError> {
+    pub async fn pull_updates(
+        &self,
+        since: Option<&str>,
+        cursor: Option<&str>,
+    ) -> Result<PullResponse, SyncError> {
         let url = format!("{}/api/sync/pull", self.base_url);
         let request = PullRequest {
             since: since.map(|s| s.to_owned()),
@@ -162,10 +166,7 @@ impl SyncTransport {
         // P-1 retention: 410 Gone means the client's anchor has expired
         // (data older than the `since` timestamp has been pruned).
         if resp.status() == reqwest::StatusCode::GONE {
-            let body: serde_json::Value = resp
-                .json()
-                .await
-                .unwrap_or_default();
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
             let oldest_available = body
                 .get("oldest_available")
                 .and_then(|v| v.as_str())

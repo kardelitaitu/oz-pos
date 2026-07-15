@@ -291,6 +291,10 @@ pub const ALL: &[Migration] = &[
         id: "073_offline_queue_priority.sql",
         sql: include_str!("../migrations/073_offline_queue_priority.sql"),
     },
+    Migration {
+        id: "074_login_attempts.sql",
+        sql: include_str!("../migrations/074_login_attempts.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -489,6 +493,7 @@ mod tests {
             "workspace_instances",
             "user_workspace_instances",
             "role_workspace_types",
+            "login_attempts",
             "user_store_access",
         ];
 

@@ -180,7 +180,9 @@ async fn pull_handler(
 
     // Build paginated query. Fetch one extra row (501) to detect more pages.
     let limit = 501i64;
-    let mut items: Vec<oz_core::offline::OfflineQueueItem> = if let (Some(ts), Some(cid)) = (&cursor_ts, &cursor_id) {
+    let mut items: Vec<oz_core::offline::OfflineQueueItem> = if let (Some(ts), Some(cid)) =
+        (&cursor_ts, &cursor_id)
+    {
         let mut stmt = conn
             .prepare(
                 "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
@@ -193,7 +195,13 @@ async fn pull_handler(
 
         let rows = stmt
             .query_map(
-                params![tenant_id, req.since.as_deref().unwrap_or(""), ts, cid, limit],
+                params![
+                    tenant_id,
+                    req.since.as_deref().unwrap_or(""),
+                    ts,
+                    cid,
+                    limit
+                ],
                 row_to_item,
             )
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -377,7 +385,10 @@ async fn snapshot_handler(
     // Cache the result.
     if let Ok(cached_bytes) = serde_json::to_vec(&snapshot) {
         let mut cache = state.snapshot_cache.lock().await;
-        cache.insert(tenant_id.to_owned(), (std::time::Instant::now(), cached_bytes));
+        cache.insert(
+            tenant_id.to_owned(),
+            (std::time::Instant::now(), cached_bytes),
+        );
     }
 
     metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
@@ -464,12 +475,12 @@ fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<oz_core::offline::Offlin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
     use http_body_util::BodyExt;
+    use std::collections::HashMap;
     use tower::ServiceExt;
 
     fn fresh_db() -> Connection {
@@ -570,11 +581,7 @@ mod tests {
     #[tokio::test]
     async fn snapshot_returns_data_with_auth() {
         let app = test_router();
-        let req = authed(
-            axum::http::Method::GET,
-            "/api/sync/snapshot",
-            None,
-        );
+        let req = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();

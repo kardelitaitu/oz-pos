@@ -23,6 +23,21 @@ export interface StaffLoginResult {
   session: LoginSessionDto;
 }
 
+/** Arguments for checking if a username exists. */
+export interface CheckUsernameArgs {
+  username: string;
+}
+
+/** Result of a username existence check. */
+export interface CheckUsernameResult {
+  found: boolean;
+  is_active: boolean;
+}
+
+/** Check if a username exists and is active before proceeding to PIN. */
+export const checkUsername = (args: CheckUsernameArgs): Promise<CheckUsernameResult> =>
+  invoke<CheckUsernameResult>('staff_check_username', { args });
+
 /** Authenticate a staff member with username and PIN. */
 export const staffLogin = (args: StaffLoginArgs): Promise<StaffLoginResult> =>
   invoke<StaffLoginResult>('staff_login', { args });

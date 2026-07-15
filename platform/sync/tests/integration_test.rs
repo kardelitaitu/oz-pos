@@ -45,7 +45,10 @@ async fn handle_push(
 
 /// Handler: POST /api/sync/pull
 async fn handle_pull(Json(_request): Json<PullRequest>) -> Json<PullResponse> {
-    Json(PullResponse { items: vec![], next_cursor: None })
+    Json(PullResponse {
+        items: vec![],
+        next_cursor: None,
+    })
 }
 
 /// Start a test server on a random port and return a [`TestServer`] bundle.
@@ -203,7 +206,12 @@ async fn conflict_response_marks_item_and_re_enqueues() {
         )
         .route(
             "/api/sync/pull",
-            post(|| async { Json(PullResponse { items: vec![], next_cursor: None }) }),
+            post(|| async {
+                Json(PullResponse {
+                    items: vec![],
+                    next_cursor: None,
+                })
+            }),
         );
 
     let (port, handle) = spawn_custom_server(app).await;
@@ -245,7 +253,12 @@ async fn rejected_item_marked_failed() {
         )
         .route(
             "/api/sync/pull",
-            post(|| async { Json(PullResponse { items: vec![], next_cursor: None }) }),
+            post(|| async {
+                Json(PullResponse {
+                    items: vec![],
+                    next_cursor: None,
+                })
+            }),
         );
 
     let (port, handle) = spawn_custom_server(app).await;
@@ -324,7 +337,12 @@ async fn api_key_is_sent_in_headers() {
         )
         .route(
             "/api/sync/pull",
-            post(|| async { Json(PullResponse { items: vec![], next_cursor: None }) }),
+            post(|| async {
+                Json(PullResponse {
+                    items: vec![],
+                    next_cursor: None,
+                })
+            }),
         );
 
     let (port, handle) = spawn_custom_server(app).await;
@@ -939,7 +957,12 @@ async fn transient_failure_then_retry_succeeds() {
         )
         .route(
             "/api/sync/pull",
-            post(|| async { Json(PullResponse { items: vec![], next_cursor: None }) }),
+            post(|| async {
+                Json(PullResponse {
+                    items: vec![],
+                    next_cursor: None,
+                })
+            }),
         );
     let (port, handle) = spawn_custom_server(app).await;
 
@@ -1013,7 +1036,10 @@ async fn transient_failure_on_pull_retry_succeeds() {
                 if *count == 1 {
                     Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
                 } else {
-                    Ok(Json(PullResponse { items: vec![], next_cursor: None }))
+                    Ok(Json(PullResponse {
+                        items: vec![],
+                        next_cursor: None,
+                    }))
                 }
             }),
         );
@@ -1057,7 +1083,12 @@ async fn push_unauthorized_401_returns_error() {
         )
         .route(
             "/api/sync/pull",
-            post(|| async { Json(PullResponse { items: vec![], next_cursor: None }) }),
+            post(|| async {
+                Json(PullResponse {
+                    items: vec![],
+                    next_cursor: None,
+                })
+            }),
         );
     let (port, handle) = spawn_custom_server(reject_app).await;
     let store = setup_store();
@@ -1095,7 +1126,12 @@ async fn push_forbidden_403_returns_error() {
         )
         .route(
             "/api/sync/pull",
-            post(|| async { Json(PullResponse { items: vec![], next_cursor: None }) }),
+            post(|| async {
+                Json(PullResponse {
+                    items: vec![],
+                    next_cursor: None,
+                })
+            }),
         );
     let (port, handle) = spawn_custom_server(reject_app).await;
     let store = setup_store();

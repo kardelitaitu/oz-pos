@@ -31,16 +31,63 @@ pub struct StaffLoginResult {
     pub session: LoginSession,
 }
 
+/// Arguments for the `staff_check_username` command.
+#[derive(Debug, Deserialize)]
+pub struct CheckUsernameArgs {
+    /// Staff username to look up.
+    pub username: String,
+}
+
+/// Result of a username existence check.
+#[derive(Debug, Serialize)]
+pub struct CheckUsernameResult {
+    /// Whether a user with this username was found in the database.
+    pub found: bool,
+    /// Whether the found user account is active (only meaningful when `found` is true).
+    pub is_active: bool,
+}
+
+/// Check if a username exists and is active in the system.
+///
+/// Called before transitioning to the PIN step so the UI can reject
+/// unknown usernames early without collecting a PIN.
+#[command]
+pub async fn staff_check_username(
+    args: CheckUsernameArgs,
+    state: State<'_, AppState>,
+) -> Result<CheckUsernameResult, AppError> {
+    let username = args.username.trim().to_lowercase();
+    validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+
+    match store.get_user_by_username(&username)? {
+        Some(user) => Ok(CheckUsernameResult {
+            found: true,
+            is_active: user.is_active,
+        }),
+        None => Ok(CheckUsernameResult {
+            found: false,
+            is_active: false,
+        }),
+    }
+}
+
 /// Authenticate a staff member by username and PIN.
 ///
 /// Looks up the user by username, verifies the PIN against the stored
 /// argon2 hash, and returns a [`LoginSession`] on success.
+///
+/// Includes PIN brute-force rate limiting: 3 failed attempts per username
+/// within a 60-second sliding window; lockout until the window expires.
 ///
 /// # Errors
 ///
 /// Returns `Invalid` if:
 /// - The username doesn't match any active user
 /// - The PIN doesn't match the stored hash
+/// - The rate-limit lockout is active (includes retry-after info)
 #[command]
 pub async fn staff_login(
     args: StaffLoginArgs,
@@ -51,6 +98,18 @@ pub async fn staff_login(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    // Check rate limiter (persistent — survives app restarts).
+    // Records the attempt — on success (PIN correct) we clear the
+    // counter; on failure the attempt stays recorded.
+    let remaining = match store.record_login_attempt(&username, 3, 60)? {
+        Err(retry_after) => {
+            return Err(AppError::Invalid(format!(
+                "Too many attempts. Try again in {retry_after}s."
+            )));
+        }
+        Ok(r) => r,
+    };
 
     // Look up user by username.
     let user = store
@@ -67,8 +126,16 @@ pub async fn staff_login(
         .map_err(|e| AppError::Internal(format!("PIN verification failed: {e}")))?;
 
     if !valid {
-        return Err(AppError::Invalid("invalid username or PIN".into()));
+        let msg = if remaining == 1 {
+            "Wrong PIN. 1 attempt remaining.".to_string()
+        } else {
+            format!("Wrong PIN. {remaining} attempts remaining.")
+        };
+        return Err(AppError::Invalid(msg));
     }
+
+    // PIN correct — clear rate limiter for this user.
+    store.clear_login_attempts(&username)?;
 
     // Look up role for the session.
     let role = store

@@ -126,7 +126,9 @@ async fn metrics_handler() -> String {
 }
 
 /// `GET /health` — public health check, no auth required.
-async fn health_handler(axum::extract::State(state): axum::extract::State<CloudServerState>) -> Json<HealthResponse> {
+async fn health_handler(
+    axum::extract::State(state): axum::extract::State<CloudServerState>,
+) -> Json<HealthResponse> {
     let uptime = state.started_at.elapsed().as_secs();
     Json(HealthResponse {
         status: "ok",

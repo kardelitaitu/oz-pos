@@ -354,8 +354,7 @@ impl SyncDaemon {
             tracing::info!("prune daemon started interval_range_secs=60..=120");
 
             loop {
-                let sleep_dur =
-                    Duration::from_secs(rand::thread_rng().gen_range(60..=120));
+                let sleep_dur = Duration::from_secs(rand::thread_rng().gen_range(60..=120));
                 tokio::time::sleep(sleep_dur).await;
 
                 let db = db.clone();

@@ -487,7 +487,7 @@ export default function StaffManagementScreen() {
                       value={form.pin}
                       onChange={(e) => setForm({ ...form, pin: e.target.value })}
                       placeholder={isEditing ? 'Leave blank to keep current' : 'Enter PIN'}
-                      autoComplete="new-password"
+                      autoComplete="off"
                     />
                   </Localized>
                 </label>

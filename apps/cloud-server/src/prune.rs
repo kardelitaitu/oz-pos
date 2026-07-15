@@ -82,15 +82,14 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
                 }
             };
 
-            let ids: Vec<String> = match stmt
-                .query_map(rusqlite::params![cutoff_str], |row| row.get(0))
-            {
-                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-                Err(e) => {
-                    error!(error = %e, "prune: failed to query batch");
-                    break;
-                }
-            };
+            let ids: Vec<String> =
+                match stmt.query_map(rusqlite::params![cutoff_str], |row| row.get(0)) {
+                    Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                    Err(e) => {
+                        error!(error = %e, "prune: failed to query batch");
+                        break;
+                    }
+                };
 
             if ids.is_empty() {
                 break;
@@ -128,7 +127,11 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
     match result {
         Ok((stock, queue)) => {
             if stock > 0 || queue > 0 {
-                info!(stock_archived = stock, queue_deleted = queue, "prune cycle completed");
+                info!(
+                    stock_archived = stock,
+                    queue_deleted = queue,
+                    "prune cycle completed"
+                );
             }
         }
         Err(e) => {
