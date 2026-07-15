@@ -1,6 +1,6 @@
 # ADR #2: Event Bus Design
 
-**Status:** Accepted
+**Status:** Implemented (2026-07-15)
 **Date:** 2026-02-01
 **Author:** Architecture Team
 **Tags:** architecture, event-bus, decoupling
