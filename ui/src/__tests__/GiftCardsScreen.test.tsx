@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import giftCardsFtl from '@/locales/gift-cards.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -30,7 +30,7 @@ const mockFreezeGiftCard = freezeGiftCard as ReturnType<typeof vi.fn>;
 const mockUnfreezeGiftCard = unfreezeGiftCard as ReturnType<typeof vi.fn>;
 const mockTopUpGiftCard = topUpGiftCard as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, giftCardsFtl, sharedFtl);
+
 
 const sampleCards = [
   {
@@ -79,14 +79,14 @@ describe('GiftCardsScreen', () => {
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and Issue New Card button', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
     expect(screen.getByText('Gift Cards')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /issue new card/i })).toBeInTheDocument();
   });
 
   it('loads and displays gift cards in the list', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -98,13 +98,13 @@ describe('GiftCardsScreen', () => {
 
   it('shows loading state initially', async () => {
     mockListGiftCards.mockReturnValue(new Promise(() => {}));
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no cards exist', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/no gift cards found/i)).toBeInTheDocument();
     });
@@ -112,7 +112,7 @@ describe('GiftCardsScreen', () => {
 
   it('renders status badges for each card', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('active')).toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('GiftCardsScreen', () => {
 
   it('renders the search input and status filter dropdown', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     expect(screen.getByRole('textbox')).toBeInTheDocument();
     expect(screen.getByRole('combobox')).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('GiftCardsScreen', () => {
   it('expands card details when summary is clicked', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -153,7 +153,7 @@ describe('GiftCardsScreen', () => {
   it('shows transaction table in expanded detail', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -170,7 +170,7 @@ describe('GiftCardsScreen', () => {
   it('collapses detail when summary is clicked again', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -190,7 +190,7 @@ describe('GiftCardsScreen', () => {
   it('does not show transaction section for cards with no transactions', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([sampleCards[2]!]);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-003')).toBeInTheDocument();
@@ -207,7 +207,7 @@ describe('GiftCardsScreen', () => {
   it('shows Freeze button for active cards in expanded view', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -224,7 +224,7 @@ describe('GiftCardsScreen', () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockFreezeGiftCard.mockResolvedValue({});
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -246,7 +246,7 @@ describe('GiftCardsScreen', () => {
   it('shows Unfreeze button for frozen cards', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-003')).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe('GiftCardsScreen', () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockUnfreezeGiftCard.mockResolvedValue({});
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-003')).toBeInTheDocument();
@@ -285,7 +285,7 @@ describe('GiftCardsScreen', () => {
   it('does not show Freeze/Unfreeze for redeemed cards', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([sampleCards[1]!]);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-002')).toBeInTheDocument();
@@ -303,7 +303,7 @@ describe('GiftCardsScreen', () => {
   it('shows Top Up button for active cards', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -319,7 +319,7 @@ describe('GiftCardsScreen', () => {
   it('opens top-up form when Top Up is clicked', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -343,7 +343,7 @@ describe('GiftCardsScreen', () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockTopUpGiftCard.mockResolvedValue({});
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -374,7 +374,7 @@ describe('GiftCardsScreen', () => {
   it('shows error when top-up amount is invalid', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -400,7 +400,7 @@ describe('GiftCardsScreen', () => {
   it('closes top-up form when Cancel is clicked', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -429,7 +429,7 @@ describe('GiftCardsScreen', () => {
   it('opens IssueGiftCardModal when Issue New Card is clicked', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([]);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await user.click(screen.getByRole('button', { name: /issue new card/i }));
 
@@ -441,7 +441,7 @@ describe('GiftCardsScreen', () => {
   it('refreshes list when issue modal reports onIssued', async () => {
     const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([]);
-    render(wrap(<GiftCardsScreen />));
+    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
     await user.click(screen.getByRole('button', { name: /issue new card/i }));
 
