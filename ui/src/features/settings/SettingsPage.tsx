@@ -1171,9 +1171,10 @@ export default function SettingsPage() {
     }
   }
 
-  // ── Resolve current nav item for breadcrumb ─────────────────
+  // ── Resolve current nav item + category for breadcrumb ─────
 
   const currentNavItem = NAV_ITEMS.find((n) => n.key === activeSection);
+  const currentCategory = CATEGORIES.find((c) => c.keys.includes(activeSection));
 
   // ── Main render ──────────────────────────────────────────────
 
@@ -1410,7 +1411,19 @@ export default function SettingsPage() {
               <div className="settings-section-header-icon" aria-hidden="true">
                 {currentNavItem.icon}
               </div>
-              <div>
+              <div className="settings-section-header-text">
+                {currentCategory && (
+                  <button
+                    type="button"
+                    className="settings-section-header-category"
+                    onClick={() => setExpandedCategory(currentCategory.label)}
+                    aria-label={l10n.getString(CATEGORY_I18N_KEYS[currentCategory.label] ?? '')}
+                  >
+                    <Localized id={CATEGORY_I18N_KEYS[currentCategory.label] ?? ''}>
+                      {currentCategory.label}
+                    </Localized>
+                  </button>
+                )}
                 <h1 className="settings-section-header-title">
                   <Localized id={NAV_L10N_KEYS[currentNavItem.key] ?? ''}>{currentNavItem.label}</Localized>
                 </h1>
