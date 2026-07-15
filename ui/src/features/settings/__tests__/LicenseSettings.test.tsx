@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LicenseSettings from '../LicenseSettings';
@@ -40,7 +40,18 @@ const { mockL10n } = vi.hoisted(() => ({
         'settings-license-allowed-types-all': 'All',
         'settings-license-not-activated':
           'No license activated. Activate a license to see details here.',
-        'settings-license-check-server': 'Check Server Status',
+        'settings-license-server-status': 'Server Status',
+        'settings-license-live-online': 'Live',
+        'settings-license-live-offline': 'Offline',
+        'settings-license-live-inactive': 'Inactive',
+        'settings-license-live-checking': 'Checking…',
+        'settings-license-last-checked': 'Last checked: {when}',
+        'settings-license-just-now': 'just now',
+        'settings-license-seconds-ago': '{seconds}s ago',
+        'settings-license-minutes-ago': '{minutes}m ago',
+        'settings-license-refresh': 'Refresh',
+        'settings-license-refresh-aria': 'Refresh license status',
+        'settings-license-poll-offline': 'Server unreachable',
         'settings-license-server-tier': 'Server Tier',
         'settings-license-server-active': 'Server Active',
         'settings-license-server-expires': 'Server Expires',
@@ -504,52 +515,44 @@ describe('LicenseSettings', () => {
     });
   });
 
-  // ── 7. Server status check ────────────────────────────────
-  describe('Server status check', () => {
+  // ── 7. Server status check (manual refresh) ───────────────
+  describe('Manual refresh', () => {
     beforeEach(() => {
       vi.mocked(getLicenseStatus).mockResolvedValue(VALID_LICENSE_STATUS);
+      // Auto-poll succeeds on first call; individual tests override for error cases.
+      vi.mocked(checkLicenseStatus).mockReset();
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
     });
 
-    it('Check Server Status button is present and has aria-label', async () => {
+    it('Refresh button is present after first poll and has aria-label', async () => {
       render(<LicenseSettings />);
       await waitFor(() => {
         const btn = screen.getByRole('button', {
-          name: /check server status/i,
+          name: /refresh license status/i,
         });
-        expect(btn).toHaveAttribute('aria-label', 'Check Server Status');
+        expect(btn).toHaveAttribute('aria-label', 'Refresh license status');
       });
     });
 
-    it('clicking Check Server Status calls checkLicenseStatus', async () => {
-      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+    it('clicking Refresh calls checkLicenseStatus', async () => {
       render(<LicenseSettings />);
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: /check server status/i }),
+          screen.getByRole('button', { name: /refresh license status/i }),
         ).toBeInTheDocument();
       });
 
+      const initialCount = vi.mocked(checkLicenseStatus).mock.calls.length;
       await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
+        screen.getByRole('button', { name: /refresh license status/i }),
       );
-      expect(checkLicenseStatus).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(checkLicenseStatus).mock.calls.length).toBe(initialCount + 1);
     });
 
-    it('shows server results after successful check', async () => {
-      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+    it('shows server results after successful refresh', async () => {
       render(<LicenseSettings />);
       await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /check server status/i }),
-        ).toBeInTheDocument();
-      });
-
-      await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
-      );
-
-      await waitFor(() => {
-        // "Pro" appears in both the local tier badge and the server tier row
+        // Server section auto-appears after first poll
         const tierMatches = screen.getAllByText('Pro');
         expect(tierMatches.length).toBeGreaterThanOrEqual(2);
         expect(screen.getByText('Yes')).toBeInTheDocument();
@@ -563,33 +566,12 @@ describe('LicenseSettings', () => {
       });
       render(<LicenseSettings />);
       await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /check server status/i }),
-        ).toBeInTheDocument();
-      });
-
-      await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
-      );
-
-      await waitFor(() => {
         expect(screen.getByText('No')).toBeInTheDocument();
       });
     });
 
     it('server results region has role="region" with aria-label', async () => {
-      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
       const { container } = render(<LicenseSettings />);
-      await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /check server status/i }),
-        ).toBeInTheDocument();
-      });
-
-      await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
-      );
-
       await waitFor(() => {
         const region = container.querySelector(
           '.settings-license-server-section[role="region"]',
@@ -605,33 +587,21 @@ describe('LicenseSettings', () => {
       });
       render(<LicenseSettings />);
       await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /check server status/i }),
-        ).toBeInTheDocument();
-      });
-
-      await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
-      );
-
-      await waitFor(() => {
         expect(screen.getByText('Yes')).toBeInTheDocument();
       });
-      // "Server Expires" label should NOT be in the document
       expect(screen.queryByText('Server Expires')).not.toBeInTheDocument();
     });
 
-    it('shows info toast on successful check', async () => {
-      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+    it('shows info toast on successful refresh', async () => {
       render(<LicenseSettings />);
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: /check server status/i }),
+          screen.getByRole('button', { name: /refresh license status/i }),
         ).toBeInTheDocument();
       });
 
       await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
+        screen.getByRole('button', { name: /refresh license status/i }),
       );
 
       await waitFor(() => {
@@ -642,19 +612,21 @@ describe('LicenseSettings', () => {
       });
     });
 
-    it('shows error toast on failed check', async () => {
-      vi.mocked(checkLicenseStatus).mockRejectedValue(
-        new Error('Server unreachable'),
-      );
+    it('shows error toast on failed refresh', async () => {
+      // Auto-poll uses the resolved mock; the click will use the Once.
+      vi.mocked(checkLicenseStatus)
+        .mockResolvedValueOnce(SERVER_STATUS)
+        .mockRejectedValueOnce(new Error('Server unreachable'));
+
       render(<LicenseSettings />);
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: /check server status/i }),
+          screen.getByRole('button', { name: /refresh license status/i }),
         ).toBeInTheDocument();
       });
 
       await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
+        screen.getByRole('button', { name: /refresh license status/i }),
       );
 
       await waitFor(() => {
@@ -666,16 +638,20 @@ describe('LicenseSettings', () => {
     });
 
     it('shows generic error toast for non-Error rejection', async () => {
-      vi.mocked(checkLicenseStatus).mockRejectedValue('timeout');
+      // Auto-poll succeeds, then manual click fails.
+      vi.mocked(checkLicenseStatus)
+        .mockResolvedValueOnce(SERVER_STATUS)
+        .mockRejectedValueOnce('timeout');
+
       render(<LicenseSettings />);
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: /check server status/i }),
+          screen.getByRole('button', { name: /refresh license status/i }),
         ).toBeInTheDocument();
       });
 
       await userEvent.click(
-        screen.getByRole('button', { name: /check server status/i }),
+        screen.getByRole('button', { name: /refresh license status/i }),
       );
 
       await waitFor(() => {
@@ -683,6 +659,114 @@ describe('LicenseSettings', () => {
           type: 'error',
           message: 'Server check failed',
         });
+      });
+    });
+  });
+
+  // ── 8. Polling behavior ───────────────────────────────────
+  describe('Polling behavior', () => {
+    let origSetInterval: typeof globalThis.setInterval;
+
+    beforeEach(() => {
+      vi.mocked(getLicenseStatus).mockResolvedValue(VALID_LICENSE_STATUS);
+      origSetInterval = globalThis.setInterval;
+    });
+
+    afterEach(() => {
+      // Always restore real timers + setInterval to prevent leakage.
+      vi.useRealTimers();
+      globalThis.setInterval = origSetInterval;
+    });
+
+    it('shows "Checking…" before first poll completes', async () => {
+      vi.mocked(checkLicenseStatus).mockReturnValue(
+        new Promise(() => {}), // never resolves
+      );
+      render(<LicenseSettings />);
+      // waitFor: payload loads async → polling effect fires → "Checking…" renders
+      await waitFor(() => {
+        expect(screen.getByText('Checking…')).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Live" after successful poll with active status', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('Live')).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Inactive" after poll with inactive status', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue({
+        ...SERVER_STATUS,
+        active: false,
+      });
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText('Inactive')).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Offline" after MAX_POLL_FAILURES consecutive failures', async () => {
+      vi.mocked(checkLicenseStatus)
+        .mockResolvedValueOnce(SERVER_STATUS)   // auto-poll (immediate)
+        .mockRejectedValueOnce(new Error('f1')) // interval tick 1
+        .mockRejectedValueOnce(new Error('f2')) // interval tick 2
+        .mockRejectedValueOnce(new Error('f3')); // interval tick 3
+
+      // Override setInterval to fire the callback 3× synchronously.
+      globalThis.setInterval = ((fn: (...args: unknown[]) => void, _ms: number, ...args: unknown[]) => {
+        fn(...args);
+        fn(...args);
+        fn(...args);
+        return origSetInterval(fn, Number.MAX_SAFE_INTEGER, ...args);
+      }) as typeof globalThis.setInterval;
+
+      render(<LicenseSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Offline')).toBeInTheDocument();
+      });
+    });
+
+    it('shows live dot with online class after successful poll', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      const { container } = render(<LicenseSettings />);
+      await waitFor(() => {
+        const dot = container.querySelector('.settings-license-live-dot--online');
+        expect(dot).toBeInTheDocument();
+      });
+    });
+
+    it('shows live dot with offline class after failures', async () => {
+      vi.mocked(checkLicenseStatus)
+        .mockResolvedValueOnce(SERVER_STATUS)   // auto-poll (immediate)
+        .mockRejectedValueOnce(new Error('f1')) // interval tick 1
+        .mockRejectedValueOnce(new Error('f2')) // interval tick 2
+        .mockRejectedValueOnce(new Error('f3')); // interval tick 3
+
+      globalThis.setInterval = ((fn: (...args: unknown[]) => void, _ms: number, ...args: unknown[]) => {
+        fn(...args);
+        fn(...args);
+        fn(...args);
+        return origSetInterval(fn, Number.MAX_SAFE_INTEGER, ...args);
+      }) as typeof globalThis.setInterval;
+
+      const { container } = render(<LicenseSettings />);
+
+      await waitFor(() => {
+        const dot = container.querySelector('.settings-license-live-dot--offline');
+        expect(dot).toBeInTheDocument();
+      });
+    });
+
+    it('shows last-checked timestamp after poll', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      render(<LicenseSettings />);
+      await waitFor(() => {
+        expect(screen.getByText(/Last checked:/)).toBeInTheDocument();
+        expect(screen.getByText(/just now/)).toBeInTheDocument();
       });
     });
   });
