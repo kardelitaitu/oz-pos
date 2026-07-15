@@ -123,7 +123,8 @@ describe('SettingsPage', () => {
 
   it('shows loading indicator before APIs resolve', () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    // Skeleton placeholder cards are rendered during loading (replaced the old "Loading…" text)
+    expect(document.querySelector('.settings-loading-card')).toBeInTheDocument();
   });
 
   it('transitions from loading to ready after APIs resolve', async () => {
@@ -385,7 +386,9 @@ describe('SettingsPage', () => {
     });
     await userEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /cloud sync/i })).toBeInTheDocument();
+      // Section breadcrumb header + card header both render "Cloud Sync" heading;
+      // use getAllByRole since getByRole would throw on multiple matches.
+      expect(screen.getAllByRole('heading', { name: /cloud sync/i }).length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByLabelText(/server url/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/api key/i)).toBeInTheDocument();
@@ -436,8 +439,13 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('button', { name: /collapse/i })).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('button', { name: /collapse/i }));
+    // After collapse: the sidebar toggle aria-label flips to "Expand sidebar".
+    // Scope to the sidebar button only — the mobile hamburger also has
+    // an expand/collapse aria-label.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /expand/i })).toBeInTheDocument();
+      const sidebarToggle = document.querySelector('.settings-sidebar-toggle');
+      expect(sidebarToggle).toBeInTheDocument();
+      expect(sidebarToggle!.getAttribute('aria-label')?.toLowerCase()).toContain('expand');
     });
   });
 
