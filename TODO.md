@@ -154,15 +154,22 @@ When all 38+ files are migrated, ~114 import lines + ~38 wrap functions eliminat
 - [ ] **I4.** Verify all split test files have unique `describe()` names and don't
   introduce flaky state leakage.
 
-### J. Vitest Config Tuning
+### J. Vitest Config Tuning ✅ (0.0.8 — 2026-07-15)
 
-- [ ] **J1.** Add `testTimeout` to `vite.config.ts` — default is 5000ms, some
-  integration-style tests may need more (e.g. `SettingsPage.test.tsx`).
-- [ ] **J2.** Add `hookTimeout` for slow `beforeEach`/`afterEach` blocks in large files.
-- [ ] **J3.** Review `onConsoleLog` filters — ensure they aren't masking real errors.
-- [ ] **J4.** Check if `css: false` can be changed to `css: true` without breaking (the
-  `screenExtraction` tests depend on CSS class integrity checks).
-- [ ] **J5.** Measure vitest run time before/after all optimizations and record.
+- [x] **J1.** Added explicit `testTimeout: 10_000` — default is 5000ms; 10s gives CI headroom on
+  slow runners. No individual test exceeds even the 5s default (DataManagementScreen: 55 tests,
+  ~225ms each).
+- [x] **J2.** Added explicit `hookTimeout: 5_000` — matches default, documents the timeout for
+  slow `beforeEach`/`afterEach` hooks.
+- [x] **J3.** Reviewed `onConsoleLog` filters — confirmed they mirror `test-setup.ts` suppression
+  (defense-in-depth). Added comment documenting the duplication.
+- [x] **J4.** `css: false` kept — processing CSS would slow transform from 10.71s; the
+  `screenExtraction` tests verify CSS classes independently.
+- [x] **J5.** Full vitest baseline/after measured.
+
+**Result:** Config documentation and hygiene — no functional behavior change.
+**Baseline: 14.70s, After: 14.64s** (normal run-to-run variation).
+All 10 pre-existing failures unchanged.
 
 ### K. Reduce beforeEach Duplication ✅ (0.0.8 — 2026-07-15)
 
