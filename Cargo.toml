@@ -136,6 +136,7 @@ incremental = true
 codegen-units = 256
 debug = true
 overflow-checks = false
+split-debuginfo = "off"  # Skip DWARF splitting for faster linking on Windows
 
 # Cryptographic and compression crates optimized for speed in tests and dev mode
 [profile.dev.package.argon2]
@@ -150,6 +151,14 @@ opt-level = 3
 [profile.dev.package.zstd]
 opt-level = 3
 
+# Database and serialization dependencies optimized for faster test execution
+[profile.dev.package.rusqlite]
+opt-level = 3
+
+[profile.dev.package.serde_json]
+opt-level = 3
+
+# Windows: skip DWARF debug info splitting to speed up linking after tests
 # TDD profile: fastest possible compile for tight test loops
 [profile.tdd]
 inherits = "dev"
