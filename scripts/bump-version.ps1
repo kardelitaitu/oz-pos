@@ -79,9 +79,6 @@ Update-File "apps/tablet-client/tauri.conf.json" "`"version`": `"$currentVersion
 Update-File "ui/package.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
 Update-File "ui/package-lock.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
 
-Update-File "crates/oz-api/src/routes/health.rs" "version: `"$currentVersion`"," "version: `"$TargetVersion`","
-Update-File "crates/oz-api/src/routes/health.rs" "`"version`":`"$currentVersion`"" "`"version`":`"$TargetVersion`""
-
 Update-File "apps/desktop-client/src/commands/data.rs" "app_version: `"$currentVersion`".into()" "app_version: `"$TargetVersion`".into()"
 
 Update-File "apps/desktop-client/src/commands/health.rs" "version: `"$currentVersion`"," "version: `"$TargetVersion`","
