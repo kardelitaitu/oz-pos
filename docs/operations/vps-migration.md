@@ -458,11 +458,11 @@ diff /tmp/old-counts.txt /tmp/new-counts.txt
 
 Quick queries that verify key business data is readable and consistent.
 
+> 💡 Adjust table and column names to match your schema if you have
+> custom modules installed.
+
 ```bash
 sqlite3 /data/oz-pos.db <<'EOF'
--- Sales totals must be non-negative
-SELECT SUM(total_minor) FROM sales;
-
 -- Every stock_movement must reference a valid product
 SELECT COUNT(*) FROM stock_movements sm
   LEFT JOIN products p ON sm.sku = p.sku
@@ -477,6 +477,10 @@ SELECT COUNT(*) FROM offline_queue
 -- Settings table should have rows (not empty)
 SELECT COUNT(*) FROM settings;
 -- Expected: > 0 (empty = migration likely failed)
+
+-- Quick product count sanity check
+SELECT COUNT(*) FROM products;
+-- Should match your known inventory size
 EOF
 ```
 
