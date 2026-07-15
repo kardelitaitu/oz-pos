@@ -397,6 +397,7 @@ export default function SettingsPage() {
   );
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sectionKey, setSectionKey] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // ── Unsaved changes tracking ────────────────────────────────
   const [isDirty, setIsDirty] = useState(false);
@@ -530,10 +531,29 @@ export default function SettingsPage() {
     setSaving(false);
   };
 
+  // ── Sidebar search filtering ───────────────────────────────
+
+  const q = searchQuery.toLowerCase().trim();
+  const filteredCategories = !q
+    ? CATEGORIES
+    : CATEGORIES
+        .map((cat) => ({
+          ...cat,
+          keys: cat.keys.filter((key) => {
+            const item = NAV_ITEMS.find((n) => n.key === key);
+            return item && (
+              item.label.toLowerCase().includes(q) ||
+              cat.label.toLowerCase().includes(q)
+            );
+          }),
+        }))
+        .filter((cat) => cat.keys.length > 0);
+
   // ── Keyboard shortcuts ────────────────────────────────────
 
   useEffect(() => {
-    const flatKeys = CATEGORIES.flatMap((c) => c.keys);
+    // Use filtered categories so arrow nav respects the search query
+    const flatKeys = filteredCategories.flatMap((c) => c.keys);
 
     function handleKeyDown(e: KeyboardEvent) {
       // Ctrl+S / Cmd+S → save (guarded by saving flag)
@@ -572,11 +592,10 @@ export default function SettingsPage() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-    // handleSave is intentionally excluded from deps — it closes over
-    // the latest state via the component's render cycle. Re-attaching
-    // the listener on relevant state changes is sufficient.
+    // Re-attach on searchQuery changes so arrow nav always uses the
+    // current filtered list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection, mobileSidebarOpen, saving]);
+  }, [activeSection, mobileSidebarOpen, saving, searchQuery]);
 
   // ── Loading / Error states ───────────────────────────────────
 
@@ -1229,8 +1248,44 @@ export default function SettingsPage() {
             </button>
           </div>
 
+          {/* ── Sidebar search ──────────────── */}
+          {!sidebarCollapsed && (
+            <div className="settings-sidebar-search">
+              <svg className="settings-sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                className="settings-sidebar-search-input"
+                type="text"
+                placeholder={l10n.getString('settings-sidebar-search-placeholder')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label={l10n.getString('settings-sidebar-search-aria')}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="settings-sidebar-search-clear"
+                  onClick={() => setSearchQuery('')}
+                  aria-label={l10n.getString('settings-sidebar-search-clear-aria')}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+
           <nav className="settings-sidebar-nav">
-            {CATEGORIES.map((cat) => {
+            {q && filteredCategories.length === 0 ? (
+              <div className="settings-sidebar-empty-search">
+                <Localized id="settings-sidebar-no-results">No matching sections</Localized>
+              </div>
+            ) : (
+              filteredCategories.map((cat) => {
               const isExpanded = expandedCategory === cat.label;
               const hasActive = cat.keys.includes(activeSection);
               return (
@@ -1288,7 +1343,8 @@ export default function SettingsPage() {
                   )}
                 </div>
               );
-            })}
+            })
+            )}
           </nav>
 
 
