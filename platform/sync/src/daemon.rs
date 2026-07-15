@@ -422,11 +422,44 @@ impl Default for SyncDaemon {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{routing::post, Json, Router};
     use oz_core::migrations;
     use oz_core::settings::Settings;
+    use crate::transport::{PullResponse, PushOutcome, PushResponse};
 
     fn setup_db() -> DbConnection {
         Arc::new(Mutex::new(migrations::fresh_db()))
+    }
+
+    /// Spawn a minimal mock sync server on port 0 and return its URL.
+    /// Handles POST /api/sync/push (returns all accepted) and
+    /// POST /api/sync/pull (returns empty items list).
+    async fn spawn_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            Json(PullResponse {
+                items: vec![],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
     }
 
     #[tokio::test]
@@ -477,17 +510,23 @@ mod tests {
         assert!(!daemon.is_running().await);
     }
 
-    #[ignore]
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn daemon_runs_when_sync_configured() {
+        let server_url = spawn_mock_sync_server().await;
         let db = setup_db();
-        {
-            let conn = db.blocking_lock();
+        // Wrap DB setup in spawn_blocking to avoid blocking a tokio
+        // worker thread (the multi-thread runtime panics on blocking_lock).
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
             let store = Store::new(&conn);
             Settings::set_sync_enabled(&conn, true).unwrap();
-            Settings::set_sync_server_url(&conn, "http://localhost:3099").unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
             store.enqueue_offline("test", r#"{}"#).unwrap();
-        }
+        })
+        .await
+        .unwrap();
         let daemon = SyncDaemon::with_interval(Duration::from_millis(100));
         daemon.start(db).await;
         tokio::time::sleep(Duration::from_millis(500)).await;
