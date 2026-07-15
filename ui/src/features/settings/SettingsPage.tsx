@@ -1454,7 +1454,9 @@ export default function SettingsPage() {
             </header>
           )}
           <div className="settings-section-content" key={sectionKey}>
+            <div className="settings-section-content" key={activeSection}>
             {renderSection(activeSection)}
+          </div>
           </div>
         </main>
       </div>
