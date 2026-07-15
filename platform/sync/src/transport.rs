@@ -513,4 +513,73 @@ mod tests {
         let cloned = req.clone();
         assert_eq!(cloned.since, req.since);
     }
+
+    // ── ADR #11: Transport integration tests ──────────────────
+
+    /// Spawn a mock server that returns HTTP 421 + `server_migrated` JSON
+    /// on both push and pull endpoints.
+    async fn spawn_redirect_server(new_url: &str) -> String {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let redirect_url = new_url.to_owned();
+
+        async fn handler(
+            axum::extract::State(url): axum::extract::State<String>,
+        ) -> impl IntoResponse {
+            (
+                StatusCode::MISDIRECTED_REQUEST,
+                Json(serde_json::json!({
+                    "error": "server_migrated",
+                    "new_url": url,
+                })),
+            )
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handler))
+            .route("/api/sync/pull", post(handler))
+            .with_state(redirect_url);
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    #[tokio::test]
+    async fn push_items_returns_server_migrated_on_redirect() {
+        let new_url = "https://migrated.example.com";
+        let server_url = spawn_redirect_server(new_url).await;
+        let transport = SyncTransport::new(&server_url, None);
+
+        let item = OfflineQueueItem::new("test_action", r#"{"key":"val"}"#);
+        let result = transport.push_items(&[item]).await;
+
+        match result {
+            Err(SyncError::ServerMigrated { new_url: url }) => {
+                assert_eq!(url, new_url, "ServerMigrated should carry the new_url");
+            }
+            other => panic!("expected SyncError::ServerMigrated, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn pull_updates_returns_server_migrated_on_redirect() {
+        let new_url = "https://pull-migrated.example.com";
+        let server_url = spawn_redirect_server(new_url).await;
+        let transport = SyncTransport::new(&server_url, None);
+
+        let result = transport.pull_updates(None, None).await;
+
+        match result {
+            Err(SyncError::ServerMigrated { new_url: url }) => {
+                assert_eq!(url, new_url, "ServerMigrated should carry the new_url");
+            }
+            other => panic!("expected SyncError::ServerMigrated, got {:?}", other),
+        }
+    }
 }
