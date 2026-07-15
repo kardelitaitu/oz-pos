@@ -66,7 +66,9 @@ async fn spawn_test_server() -> TestServer {
     });
 
     // Brief delay so the server is ready before tests send requests.
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    // Reduced from 50ms to 10ms — test setup (store + enqueue) provides
+    // enough gap for the server to start accepting.
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     TestServer {
         port,
@@ -86,7 +88,7 @@ async fn spawn_custom_server(app: Router) -> (u16, tokio::task::JoinHandle<()>) 
     let handle = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     (port, handle)
 }
 
@@ -503,7 +505,7 @@ async fn spawn_relay_server() -> (u16, RelayServerState, tokio::task::JoinHandle
     let handle = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     (port, state, handle)
 }
 
