@@ -17,6 +17,10 @@ import { render, type RenderResult } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { withFluent } from '@/locales/test-utils';
 import type { ReactNode, ReactElement } from 'react';
+import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
+import { ZoomProvider } from '@/contexts/ZoomContext';
+import { ToastProvider } from '@/frontend/shared/Toast';
+import { BrandProvider } from '@/contexts/BrandContext';
 
 /**
  * Render a component wrapped with Fluent i18n bundles.
@@ -45,4 +49,54 @@ export function renderWithFluentSync(
   ...ftlContents: string[]
 ): RenderResult {
   return render(withFluent(ui, ...ftlContents));
+}
+
+// ── Provider-wrapped variants ─────────────────────────────────────
+//
+// For components that need ThemeProvider, ToastProvider, ZoomProvider,
+// and Fluent i18n bundles. Exposes sync and async variants matching
+// the renderWithFluent/renderWithFluentSync dual-API.
+
+const DefaultProviders = ({ children }: { children: ReactNode }) => (
+  <BrandProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <ZoomProvider>{children}</ZoomProvider>
+      </ToastProvider>
+    </ThemeProvider>
+  </BrandProvider>
+);
+
+/**
+ * Async variant — wraps with ThemeProvider, ToastProvider, ZoomProvider,
+ * and Fluent i18n. Uses `renderInAct` internally for components that
+ * trigger state updates on mount.
+ */
+export async function renderWithProviders(
+  ui: ReactElement,
+  ...ftlContents: string[]
+): Promise<RenderResult> {
+  return renderInAct(
+    withFluent(
+      <DefaultProviders>{ui}</DefaultProviders>,
+      ...ftlContents,
+    ),
+  );
+}
+
+/**
+ * Sync variant — same providers as renderWithProviders but uses plain
+ * `render()` internally. Use for components that don't trigger async
+ * state updates on mount.
+ */
+export function renderWithProvidersSync(
+  ui: ReactElement,
+  ...ftlContents: string[]
+): RenderResult {
+  return render(
+    withFluent(
+      <DefaultProviders>{ui}</DefaultProviders>,
+      ...ftlContents,
+    ),
+  );
 }

@@ -8,11 +8,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import type { ReactNode } from 'react';
-import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { ToastProvider } from '@/frontend/shared/Toast';
+import { renderWithProviders } from '@/__tests__/test-utils/render';
 import AppShell from '@/frontend/shell/AppShell';
-import { withFluent } from '@/locales/test-utils';
 
 // ── Mock sub-screens ─────────────────────────────────────────────
 
@@ -149,11 +147,7 @@ import { getLicenseStatus } from '@/api/license';
 import { getSetupStatus } from '@/api/settings';
 import { registerPage, clearPages } from '@/platform/ui/page-registry';
 
-// ── Test wrapper ─────────────────────────────────────────────
 
-function wrap(children: React.ReactNode) {
-  return withFluent(<ToastProvider>{children}</ToastProvider>);
-}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -255,7 +249,7 @@ describe('AppShell — KDS workspace navigation', () => {
         loading: false,
       });
 
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       // Flush pending microtask state updates from async useEffects
       // (e.g. getSetupStatus, getStoreSettings) that resolve after the
@@ -302,7 +296,7 @@ describe('AppShell — KDS workspace navigation', () => {
         loading: false,
       });
 
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       // Flush pending microtask state updates from async useEffects
       await act(async () => {});
@@ -348,7 +342,7 @@ describe('AppShell — KDS workspace navigation', () => {
         loading: false,
       });
 
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       // Flush pending microtask state updates from async useEffects
       await act(async () => {});
@@ -383,7 +377,7 @@ describe('AppShell — KDS workspace navigation', () => {
     });
 
     it('renders KdsScreen when terminal is in kds_kiosk lockdown', async () => {
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
@@ -404,7 +398,7 @@ describe('AppShell — KDS workspace navigation', () => {
         loading: false,
       });
 
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
@@ -421,7 +415,7 @@ describe('AppShell — KDS workspace navigation', () => {
       });
       mockKdsWorkspace();
 
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
@@ -436,7 +430,7 @@ describe('AppShell — KDS workspace navigation', () => {
   describe('store-pos workspace', () => {
     it('renders RetailPosScreen when currentRoute is not kds', async () => {
       mockStorePos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
@@ -446,7 +440,7 @@ describe('AppShell — KDS workspace navigation', () => {
 
     it('renders KdsScreen with back button when navigating to kds route', async () => {
       mockStorePos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       // Retail POS renders first
       await waitFor(() => {
@@ -467,7 +461,7 @@ describe('AppShell — KDS workspace navigation', () => {
 
     it('navigates back to products when back button is clicked from KDS', async () => {
       mockStorePos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
@@ -493,7 +487,7 @@ describe('AppShell — KDS workspace navigation', () => {
   describe('restaurant-pos workspace', () => {
     it('renders PosScreen when currentRoute is not kds', async () => {
       mockRestaurantPos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('pos-screen')).toBeInTheDocument();
@@ -503,7 +497,7 @@ describe('AppShell — KDS workspace navigation', () => {
 
     it('renders KdsScreen with back button when navigating to kds route', async () => {
       mockRestaurantPos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('pos-screen')).toBeInTheDocument();
@@ -522,7 +516,7 @@ describe('AppShell — KDS workspace navigation', () => {
 
     it('navigates back to sales when back button is clicked from KDS', async () => {
       mockRestaurantPos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('pos-screen')).toBeInTheDocument();
@@ -548,7 +542,7 @@ describe('AppShell — KDS workspace navigation', () => {
   describe('standalone kds workspace', () => {
     it('renders KdsScreen standalone without a back button', async () => {
       mockKdsWorkspace();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
@@ -589,7 +583,7 @@ describe('AppShell — KDS workspace navigation', () => {
         isOwner: false,
       });
 
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       // Dev bypass means no license IPC calls should be made
       expect(vi.mocked(getLicenseStatus)).not.toHaveBeenCalled();
@@ -608,7 +602,7 @@ describe('AppShell — KDS workspace navigation', () => {
     it('renders workspace picker for logged-in users in dev mode', async () => {
       // Uses default cashier session from parent beforeEach
 
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       // No license IPC calls
       expect(vi.mocked(getLicenseStatus)).not.toHaveBeenCalled();
@@ -630,7 +624,7 @@ describe('AppShell — KDS workspace navigation', () => {
     it('renders KDS workspace with Kitchen role', async () => {
       mockKitchenRole();
       mockKdsWorkspace();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('kds-screen')).toBeInTheDocument();
@@ -642,7 +636,7 @@ describe('AppShell — KDS workspace navigation', () => {
     it('can navigate to KDS from store-pos with Kitchen role', async () => {
       mockKitchenRole();
       mockStorePos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
@@ -659,7 +653,7 @@ describe('AppShell — KDS workspace navigation', () => {
     it('can navigate back from KDS to store-pos with Kitchen role', async () => {
       mockKitchenRole();
       mockStorePos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
@@ -680,7 +674,7 @@ describe('AppShell — KDS workspace navigation', () => {
     it('can navigate to KDS from restaurant-pos with Kitchen role', async () => {
       mockKitchenRole();
       mockRestaurantPos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('pos-screen')).toBeInTheDocument();
@@ -697,7 +691,7 @@ describe('AppShell — KDS workspace navigation', () => {
     it('can navigate back from KDS to restaurant-pos with Kitchen role', async () => {
       mockKitchenRole();
       mockRestaurantPos();
-      await renderInAct(wrap(<AppShell />));
+      await renderWithProviders(<AppShell />);
 
       await waitFor(() => {
         expect(screen.getByTestId('pos-screen')).toBeInTheDocument();
