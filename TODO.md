@@ -216,12 +216,18 @@ compilation across 27 crates, migration + drift guard). Per-crate example: platf
 from ~10.5s (lib + integration) to ~8.7s (lib only).
 **Before: ~10min (full check), After with -Fast: ~2min (fmt + clippy + lib tests only).**
 
-### N. Coverage Tooling
+### N. Coverage Tooling ✅ (0.0.8 — 2026-07-15)
 
-- [ ] **N1.** Verify `.tarpaulin.toml` config is optimized — exclude test utilities and
-  mock modules from coverage reports.
-- [ ] **N2.** Ensure `ui/vite.config.ts` coverage `v8` provider excludes `test-utils/`
-  and `__tests__/` directories correctly.
+- [x] **N1.** `.tarpaulin.toml` covers only 3 packages (`oz-core`, `oz-hal`, `oz-lua`) —
+  Linux-only fallback. `#[cfg(test)]` code is auto-excluded by tarpaulin, so no manual
+  exclusion patterns needed. Canonical coverage uses `cargo-llvm-cov --workspace` via
+  `scripts/coverage.ps1`.
+- [x] **N2.** Vitest coverage `v8` provider in `vite.config.ts` already excludes:
+  `**/__tests__/**`, `**/*.test.{ts,tsx}`, `**/test-setup.ts`,
+  `**/locales/test-utils.tsx`, `**/locales/**`. Comprehensive — no changes needed.
+
+**Result:** Both Rust and UI coverage configs are correctly configured. No code changes.
+**Audit only — no before/after timing applicable.**
 
 ---
 
