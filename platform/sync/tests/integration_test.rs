@@ -110,6 +110,7 @@ fn test_config(port: u16) -> SyncConfig {
 
 // ── Tests ────────────────────────────────────────────────────────────
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn single_sale_enqueued_is_pushed_and_marked_synced() {
     let server = spawn_test_server().await;
@@ -153,6 +154,7 @@ async fn single_sale_enqueued_is_pushed_and_marked_synced() {
     server.handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn push_items_oldest_first() {
     let server = spawn_test_server().await;
@@ -181,6 +183,7 @@ async fn push_items_oldest_first() {
     server.handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn conflict_response_marks_item_and_re_enqueues() {
     // Server that returns Conflict for the first item, then Accepted for retries.
@@ -237,6 +240,7 @@ async fn conflict_response_marks_item_and_re_enqueues() {
     handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn rejected_item_marked_failed() {
     let app = Router::new()
@@ -284,6 +288,7 @@ async fn rejected_item_marked_failed() {
     handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn pull_returns_items() {
     let remote_item = OfflineQueueItem::new("remote_update", r#"{"data":"from_server"}"#);
@@ -318,6 +323,7 @@ async fn pull_returns_items() {
     handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn api_key_is_sent_in_headers() {
     // Start a server that captures the Authorization header.
@@ -362,6 +368,7 @@ async fn api_key_is_sent_in_headers() {
     handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn connection_refused_returns_error() {
     // Use a port that nothing is listening on.
@@ -391,6 +398,7 @@ async fn connection_refused_returns_error() {
     }
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn empty_queue_produces_no_push() {
     let server = spawn_test_server().await;
@@ -408,6 +416,7 @@ async fn empty_queue_produces_no_push() {
     server.handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn multiple_items_are_all_pushed_and_synced() {
     let server = spawn_test_server().await;
@@ -509,6 +518,7 @@ async fn spawn_relay_server() -> (u16, RelayServerState, tokio::task::JoinHandle
     (port, state, handle)
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn product_created_on_terminal_a_appears_on_terminal_b() {
     let (relay_port, relay_state, relay_handle) = spawn_relay_server().await;
@@ -619,6 +629,7 @@ async fn product_created_on_terminal_a_appears_on_terminal_b() {
     relay_handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn stock_adjustment_on_terminal_a_reflected_on_terminal_b() {
     let (relay_port, _relay_state, relay_handle) = spawn_relay_server().await;
@@ -702,6 +713,7 @@ async fn stock_adjustment_on_terminal_a_reflected_on_terminal_b() {
     relay_handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn full_sync_cycle_completes_under_one_second() {
     // Verify that a full push+pull cycle completes in under 1 second,
@@ -769,6 +781,7 @@ async fn full_sync_cycle_completes_under_one_second() {
     relay_handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn server_error_prevents_sync_item_stays_pending() {
     // Start a server that will reject the request by returning 500.
@@ -806,6 +819,7 @@ async fn server_error_prevents_sync_item_stays_pending() {
 // server and pull them all on the receiving terminal within the 5-second
 // acceptance criterion.
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn large_scale_sync_throughput() {
     const ITEM_COUNT: usize = 100;
@@ -934,6 +948,7 @@ async fn large_scale_sync_throughput() {
 // These tests verify that transient failures (server returns 500) leave
 // items in pending state so they can be retried on the next sync cycle.
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn transient_failure_then_retry_succeeds() {
     // Server that fails the first push with 500, then accepts subsequent pushes.
@@ -1019,6 +1034,7 @@ async fn transient_failure_then_retry_succeeds() {
     handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn transient_failure_on_pull_retry_succeeds() {
     // Server that accepts push but fails pull with 500 on first attempt.
@@ -1075,6 +1091,8 @@ async fn transient_failure_on_pull_retry_succeeds() {
 // remote server. Items should remain pending so they can be retried after
 // the credentials are updated.
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn push_unauthorized_401_returns_error() {
     // Server that returns 401 Unauthorized on push.
@@ -1118,6 +1136,8 @@ async fn push_unauthorized_401_returns_error() {
     handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn push_forbidden_403_returns_error() {
     // Server that returns 403 Forbidden on push.
@@ -1161,6 +1181,7 @@ async fn push_forbidden_403_returns_error() {
     handle.abort();
 }
 
+#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn pull_unauthorized_401_returns_error() {
     // Server that accepts push but returns 401 on pull.

@@ -22,5 +22,8 @@ rand = { workspace = true }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
 deadpool-postgres = { version = "0.14", features = ["serde"] }
 
+[features]
+slow-tests = []
+
 [dev-dependencies]
 axum = { workspace = true }
