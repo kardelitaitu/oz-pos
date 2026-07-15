@@ -35,6 +35,7 @@ import { useBrand } from '@/contexts/BrandContext';
 import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
@@ -394,6 +395,12 @@ export default function SettingsPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     localStorage.getItem('settings-sidebar-collapsed') === 'true',
   );
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sectionKey, setSectionKey] = useState(0);
+
+  // ── Unsaved changes tracking ────────────────────────────────
+  const [isDirty, setIsDirty] = useState(false);
+  const markDirty = useCallback(() => { setIsDirty(true); }, []);
 
   useEffect(() => {
     localStorage.setItem('settings-sidebar-collapsed', String(sidebarCollapsed));
@@ -507,6 +514,7 @@ export default function SettingsPage() {
 
     // At least one save succeeded — show confirmation and refresh.
     if (failed < results.length) {
+      setIsDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       if (syncApiKey) setSyncApiKey('');
@@ -525,7 +533,41 @@ export default function SettingsPage() {
   // ── Loading / Error states ───────────────────────────────────
 
   if (loading) {
-    return <div className="settings-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Localized id="settings-loading"><p>Loading settings&hellip;</p></Localized></div>;
+    return (
+      <div className="settings-page">
+        <header className="settings-topbar">
+          <div className="settings-topbar-left">
+            <div className="settings-topbar-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </div>
+            <span className="settings-topbar-name"><Localized id="settings-title">Settings</Localized></span>
+          </div>
+        </header>
+        <div className="settings-body">
+          <div className="settings-loading">
+            <div className="settings-loading-card">
+              <Skeleton variant="block" width="40%" height="1.5rem" />
+              <Skeleton variant="text" width="100%" />
+              <Skeleton variant="text" width="100%" />
+              <Skeleton variant="text" width="60%" />
+            </div>
+            <div className="settings-loading-card">
+              <Skeleton variant="block" width="35%" height="1.5rem" />
+              <Skeleton variant="text" width="100%" />
+              <Skeleton variant="text" width="80%" />
+            </div>
+            <div className="settings-loading-card">
+              <Skeleton variant="block" width="30%" height="1.5rem" />
+              <Skeleton variant="text" width="100%" />
+              <Skeleton variant="text" width="50%" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (loadError) {
@@ -563,7 +605,7 @@ export default function SettingsPage() {
                       id="settings-field-store-name"
                       placeholder="OZ-POS Store"
                       value={store.name}
-                      onChange={(e) => setStore({ ...store, name: e.target.value })}
+                      onChange={(e) => { setStore({ ...store, name: e.target.value }); markDirty(); }}
                     />
                   </Localized>
                 </label>
@@ -577,7 +619,7 @@ export default function SettingsPage() {
                       id="settings-field-address"
                       placeholder="123 Main Street"
                       value={store.address}
-                      onChange={(e) => setStore({ ...store, address: e.target.value })}
+                      onChange={(e) => { setStore({ ...store, address: e.target.value }); markDirty(); }}
                     />
                   </Localized>
                 </label>
@@ -591,7 +633,7 @@ export default function SettingsPage() {
                       id="settings-field-tax-id"
                       placeholder="12-3456789"
                       value={store.taxId}
-                      onChange={(e) => setStore({ ...store, taxId: e.target.value })}
+                      onChange={(e) => { setStore({ ...store, taxId: e.target.value }); markDirty(); }}
                     />
                   </Localized>
                 </label>
@@ -619,7 +661,7 @@ export default function SettingsPage() {
                     className="settings-select"
                     id="settings-field-default-currency"
                     value={defaultCurrency}
-                    onChange={(e) => setDefaultCurrencyState(e.target.value)}
+                    onChange={(e) => { setDefaultCurrencyState(e.target.value); markDirty(); }}
                   >
                     {currencies.map((c) => (
                       <option key={c.code} value={c.code}>
@@ -652,7 +694,7 @@ export default function SettingsPage() {
                         type="button"
                         className="settings-size-btn"
                         disabled={displayCardSize <= 0}
-                        onClick={() => setDisplayCardSize((s) => Math.max(0, s - 1))}
+                        onClick={() => { setDisplayCardSize((s) => Math.max(0, s - 1)); markDirty(); }}
                         aria-label="Decrease card size"
                       >
                         &minus;
@@ -664,7 +706,7 @@ export default function SettingsPage() {
                         type="button"
                         className="settings-size-btn"
                         disabled={displayCardSize >= 4}
-                        onClick={() => setDisplayCardSize((s) => Math.min(4, s + 1))}
+                        onClick={() => { setDisplayCardSize((s) => Math.min(4, s + 1)); markDirty(); }}
                         aria-label="Increase card size"
                       >
                         +
@@ -683,7 +725,7 @@ export default function SettingsPage() {
                         type="button"
                         className="settings-size-btn"
                         disabled={displayFontSize <= 0}
-                        onClick={() => setDisplayFontSize((s) => Math.max(0, s - 1))}
+                        onClick={() => { setDisplayFontSize((s) => Math.max(0, s - 1)); markDirty(); }}
                         aria-label="Decrease font size"
                       >
                         &minus;
@@ -695,7 +737,7 @@ export default function SettingsPage() {
                         type="button"
                         className="settings-size-btn"
                         disabled={displayFontSize >= 4}
-                        onClick={() => setDisplayFontSize((s) => Math.min(4, s + 1))}
+                        onClick={() => { setDisplayFontSize((s) => Math.min(4, s + 1)); markDirty(); }}
                         aria-label="Increase font size"
                       >
                         +
@@ -712,7 +754,7 @@ export default function SettingsPage() {
                     className="settings-select"
                     id="settings-field-font-smoothing"
                     value={displayFontSmoothing}
-                    onChange={(e) => setDisplayFontSmoothing(e.target.value)}
+                    onChange={(e) => { setDisplayFontSmoothing(e.target.value); markDirty(); }}
                     aria-label={l10n.getString('settings-field-font-smoothing')}
                   >
                     <Localized id="settings-font-smoothing-antialiased">
@@ -735,8 +777,9 @@ export default function SettingsPage() {
                 setBrandColour(c);
                 const palette = deriveAccentPalette(c);
                 applyAccentPalette(palette);
+                markDirty();
               }}
-              onStoreNameChange={setBrandStoreName}
+              onStoreNameChange={(name) => { setBrandStoreName(name); markDirty(); }}
             />
           </>
         );
@@ -755,7 +798,7 @@ export default function SettingsPage() {
                     type="checkbox"
                     id="settings-toggle-show-currency"
                     checked={receipt.showCurrency}
-                    onChange={(e) => setReceipt({ ...receipt, showCurrency: e.target.checked })}
+                    onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
                     aria-label="Show currency symbol on amounts"
                   />
                 </Localized>
@@ -774,6 +817,7 @@ export default function SettingsPage() {
                   onChange={(e) => {
                     setReceipt({ ...receipt, decimalSeparator: e.target.value });
                     setDecimalSep(e.target.value);
+                    markDirty();
                   }}
                 >
                   <Localized id="settings-decimal-separator-dot">
@@ -795,7 +839,7 @@ export default function SettingsPage() {
                     type="checkbox"
                     id="settings-toggle-show-tax"
                     checked={receipt.showTax}
-                    onChange={(e) => setReceipt({ ...receipt, showTax: e.target.checked })}
+                    onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
                     aria-label="Show tax line on receipts"
                   />
                 </Localized>
@@ -811,7 +855,7 @@ export default function SettingsPage() {
                   className="settings-select"
                   id="settings-field-paper-width"
                   value={receipt.paperWidth}
-                  onChange={(e) => setReceipt({ ...receipt, paperWidth: e.target.value })}
+                  onChange={(e) => { setReceipt({ ...receipt, paperWidth: e.target.value }); markDirty(); }}
                 >
                   <Localized id="settings-paper-width-standard">
                     <option value="standard">80 mm (standard)</option>
@@ -832,7 +876,7 @@ export default function SettingsPage() {
                     id="settings-field-receipt-footer"
                     placeholder="Thank you for shopping!"
                     value={receipt.footer}
-                    onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })}
+                    onChange={(e) => { setReceipt({ ...receipt, footer: e.target.value }); markDirty(); }}
                   />
                 </Localized>
               </label>
@@ -844,7 +888,7 @@ export default function SettingsPage() {
                     type="checkbox"
                     id="settings-toggle-show-table-number"
                     checked={receipt.showTableNumber}
-                    onChange={(e) => setReceipt({ ...receipt, showTableNumber: e.target.checked })}
+                    onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
                     aria-label="Show table number on cart and receipts"
                   />
                 </Localized>
@@ -880,7 +924,7 @@ export default function SettingsPage() {
                     id="settings-field-server-url"
                     placeholder="https://api.example.com"
                     value={syncServerUrl}
-                    onChange={(e) => setSyncServerUrl(e.target.value)}
+                    onChange={(e) => { setSyncServerUrl(e.target.value); markDirty(); }}
                   />
                 </Localized>
               </label>
@@ -894,7 +938,7 @@ export default function SettingsPage() {
                     id="settings-field-api-key"
                     placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
                     value={syncApiKey}
-                    onChange={(e) => setSyncApiKey(e.target.value)}
+                    onChange={(e) => { setSyncApiKey(e.target.value); markDirty(); }}
                   />
                 </Localized>
               </label>
@@ -905,7 +949,7 @@ export default function SettingsPage() {
                     type="checkbox"
                     id="settings-toggle-sync-enabled"
                     checked={sync.enabled}
-                    onChange={(e) => setSync({ ...sync, enabled: e.target.checked })}
+                    onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
                     aria-label="Enable Cloud Sync"
                   />
                 </Localized>
@@ -1040,6 +1084,27 @@ export default function SettingsPage() {
       {/* ── Top bar ────────────────────────────────────── */}
       <header className="settings-topbar">
         <div className="settings-topbar-left">
+          <button
+            type="button"
+            className="settings-mobile-menu-btn"
+            onClick={() => setMobileSidebarOpen((p) => !p)}
+            aria-label={mobileSidebarOpen ? l10n.getString('settings-sidebar-collapse-aria') : l10n.getString('settings-sidebar-expand-aria')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {mobileSidebarOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </>
+              ) : (
+                <>
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </>
+              )}
+            </svg>
+          </button>
           <div className="settings-topbar-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -1055,6 +1120,7 @@ export default function SettingsPage() {
             {today} {clock}
           </span>
           <div className="settings-save-bar">
+            {isDirty && !saving && !saved && <span className="settings-save-dot" aria-hidden="true" />}
             <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
               <Button
                 variant="primary"
@@ -1072,9 +1138,16 @@ export default function SettingsPage() {
 
       {/* ── Body ──────────────────────────────────────────── */}
       <div className="settings-body">
+        {/* ── Mobile backdrop ─────────────────────── */}
+        <div
+          className={`settings-sidebar-backdrop${mobileSidebarOpen ? ' visible' : ''}`}
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-hidden="true"
+        />
+
         {/* ── Sidebar ────────────────────────────────── */}
         <aside
-          className={`settings-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}
+          className={`settings-sidebar${sidebarCollapsed ? ' collapsed' : ''}${mobileSidebarOpen ? ' mobile-open' : ''}`}
           aria-label={l10n.getString('settings-sidebar-nav-aria')}
         >
           <div className="settings-sidebar-header">
@@ -1143,7 +1216,11 @@ export default function SettingsPage() {
                             <button
                               type="button"
                               className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
-                              onClick={() => setActiveSection(key)}
+                              onClick={() => {
+                                setActiveSection(key);
+                                setMobileSidebarOpen(false);
+                                setSectionKey((k) => k + 1);
+                              }}
                               aria-current={activeSection === key ? 'page' : undefined}
                               aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
                             >
@@ -1167,7 +1244,25 @@ export default function SettingsPage() {
 
         {/* ── Main content ──────────────────────────────── */}
         <main className="settings-content">
-          {renderSection(activeSection)}
+          {/* ── Section breadcrumb header ───────── */}
+          {(() => {
+            const currentItem = NAV_ITEMS.find((n) => n.key === activeSection);
+            return currentItem ? (
+              <header className="settings-section-header">
+                <div className="settings-section-header-icon" aria-hidden="true">
+                  {currentItem.icon}
+                </div>
+                <div>
+                  <h1 className="settings-section-header-title">
+                    <Localized id={NAV_L10N_KEYS[currentItem.key] ?? ''}>{currentItem.label}</Localized>
+                  </h1>
+                </div>
+              </header>
+            ) : null;
+          })()}
+          <div className="settings-section-content" key={sectionKey}>
+            {renderSection(activeSection)}
+          </div>
         </main>
       </div>
 
