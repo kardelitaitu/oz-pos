@@ -689,6 +689,114 @@ stock_summary     ______          ______          [ ]
 
 ---
 
+## Pre-Migration Preparation
+
+Complete these checks before starting any migration scenario. Each item
+prevents a common failure mode.
+
+### 1. Back Up the Database
+
+```bash
+# On the old VPS — create a dated backup
+cp /data/oz-pos.db /data/oz-pos-backup-$(date +%Y%m%d-%H%M%S).db
+ls -lh /data/oz-pos-backup-*.db
+```
+
+For PostgreSQL:
+```bash
+pg_dump --dbname=postgres://user:pass@host:5432/ozpos \
+  --format=custom --file=/tmp/ozpos-pre-migration.dump
+```
+
+### 2. Verify SSH Access to Both VPSes
+
+```bash
+# Test SSH to new VPS from old VPS
+ssh user@<new-vps-ip> "echo OK"
+
+# Test SSH to old VPS from new VPS (for scp pull method)
+ssh user@<old-vps-ip> "echo OK"
+```
+
+If SSH is blocked by firewalls, plan to use cloud storage as an
+intermediate transfer (Method E in the Data Transfer section).
+
+### 3. Check Domain Provider Access
+
+- Log into your DNS provider (Cloudflare, Route53, DuckDNS, etc.)
+- Confirm you can edit DNS records
+- Note the current TTL values (lower to 60s during migration)
+- For DuckDNS: verify your token is accessible (`curl https://www.duckdns.org/update?domains=...&token=...`)
+
+### 4. Test the New Server Build
+
+Build and health-check the cloud server on the new VPS **before** the
+migration window:
+
+```bash
+# On the new VPS — build and start with a temporary port
+cd oz-pos
+docker build -f Dockerfile.server -t oz-pos-cloud:latest .
+docker run -d --name oz-cloud-test -p 3099:3099 oz-pos-cloud:latest
+sleep 5
+curl http://localhost:3099/health
+docker stop oz-cloud-test && docker rm oz-cloud-test
+```
+
+This catches build failures, missing dependencies, or port conflicts
+before you start the real migration.
+
+### 5. Install Required Tools on Both VPSes
+
+```bash
+# Debian/Ubuntu
+sudo apt update && sudo apt install -y sqlite3 postgresql-client
+
+# RHEL/CentOS
+sudo yum install -y sqlite postgresql
+```
+
+- `sqlite3` — for SQLite integrity checks and WAL checkpoint
+- `psql` / `pg_dump` / `pg_restore` — for PostgreSQL migration
+
+### 6. Notify Store Managers (if applicable)
+
+Send a brief heads-up before the migration window:
+
+> "The cloud sync server will be migrated on [date] at [time]. No
+downtime is expected — POS terminals will continue working normally.
+If any terminal shows 'Connection Error' during the migration, it will
+auto-recover within a few minutes."
+
+### 7. Prepare a Rollback Plan
+
+Before starting, write down:
+- Old VPS IP address: `________`
+- New VPS IP address: `________`
+- Current DNS record value: `________`
+- Database backup path: `/data/oz-pos-backup-________.db`
+- Rollback command ready:
+  ```bash
+  # Quick DNS rollback command (fill in before starting)
+  curl -X PUT "https://api.cloudflare.com/..." -d '...'
+  ```
+
+### Pre-Migration Checklist
+
+```
+□ Database backed up (dated file exists)
+□ SSH access confirmed to both VPSes
+□ Domain provider access confirmed
+□ New server builds and /health returns 200
+□ sqlite3 installed on both VPSes
+□ pg_dump/pg_restore/psql installed (if using PostgreSQL)
+□ Store managers notified
+□ Rollback plan documented
+□ Migration window scheduled (low-traffic period)
+```
+
+---
+
 ## Scenario A: Same Domain (Layer 1 — DNS)
 
 Use when the sync server domain stays the same (e.g., `sync.ozpos.com`).
