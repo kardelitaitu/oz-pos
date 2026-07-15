@@ -49,8 +49,8 @@
   color: var(--color-accent);
 }
 .sales-history-export-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }
 
 /* ── Filter bar ──────────────────────────────────────────── */
@@ -87,7 +87,7 @@
   background: var(--color-bg-primary);
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
-  min-width: 200px;
+  min-width: 12.5rem;
   outline: none;
 }
 
@@ -116,7 +116,7 @@
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
   outline: none;
-  min-width: 140px;
+  min-width: 8.75rem;
   cursor: pointer;
 }
 
@@ -260,13 +260,13 @@
 }
 
 .sales-history-sort-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
   border-radius: var(--radius-sm);
 }
 
 .sales-history-sort-arrow {
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1;
   opacity: 0.8;
 }
@@ -287,8 +287,8 @@
   color: var(--color-accent);
 }
 .sales-history-action-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }
 
 .sales-history-overlay {
@@ -306,7 +306,7 @@
   background: var(--color-bg);
   border-radius: var(--radius-lg);
   width: 90%;
-  max-width: 640px;
+  max-width: 40rem;
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
@@ -319,7 +319,7 @@
     to   { opacity: 1; }
   }
   @keyframes sales-history-modal-slide-up {
-    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
 }
@@ -355,8 +355,8 @@
   color: var(--color-fg);
 }
 .sales-history-modal-close:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }
 
 .sales-history-modal-body {
@@ -434,8 +434,8 @@
 }
 
 .sales-history-page-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }
 
 .sales-history-page-size-group {
@@ -574,7 +574,7 @@
 
 /* ── Void modal ────────────────────────────────────────── */
 .sales-history-void-modal {
-  max-width: 440px;
+  max-width: 27.5rem;
 }
 
 .sales-history-void-desc {
@@ -611,9 +611,8 @@
 }
 
 .sales-history-void-input:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 0;
+  outline: none;
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-border-focus) 20%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 

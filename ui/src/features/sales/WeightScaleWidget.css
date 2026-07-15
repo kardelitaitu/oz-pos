@@ -1,19 +1,19 @@
 .weight-scale-widget {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
 }
 
 .weight-scale-display {
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 80px;
+  gap: 0.25rem;
+  min-width: 5rem;
 }
 
 .weight-scale-value {
@@ -33,9 +33,9 @@
 .weight-scale-error {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
   color: var(--color-danger);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .weight-scale-idle {
@@ -43,12 +43,12 @@
 }
 
 .weight-scale-btn {
-  padding: 4px 12px;
+  padding: 0.25rem 0.75rem;
   background: var(--color-accent);
   color: var(--color-accent-fg);
   border: none;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -65,6 +65,6 @@
 }
 
 .weight-scale-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: none;
 }

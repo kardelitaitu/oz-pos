@@ -433,6 +433,18 @@ export default function SettingsPage() {
   const [isDirty, setIsDirty] = useState(false);
   const markDirty = useCallback(() => { setIsDirty(true); }, []);
 
+  // Warn before closing the tab / window when there are unsaved changes.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirty) {
+        e.preventDefault();
+        // Modern browsers ignore custom messages; they show a generic prompt.
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
   useEffect(() => {
     localStorage.setItem('settings-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
