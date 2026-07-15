@@ -1,7 +1,12 @@
 # scripts/check.ps1 — Windows pre-push gate. Mirrors .github/workflows/ci.yml.
 #
 # Usage:  powershell -File scripts\check.ps1
+#         powershell -File scripts\check.ps1 -Fast   (dev: unit tests + fmt + clippy only)
 #         (run from the workspace root)
+
+param(
+    [switch]$Fast = $false
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -67,37 +72,50 @@ foreach ($pkg in $Packages) {
 # Use explicit --test-threads to match CPU count. Cargo's default is already
 # num_cpus, but making it explicit documents intent and ensures consistent
 # parallelism across CI and local environments.
+#
+# In --Fast mode, only run lib tests (skip integration test compilation).
 $cpuCount = $env:NUMBER_OF_PROCESSORS
 if (-not $cpuCount) { $cpuCount = 4 }
+if ($Fast) {
+    $testArgs = @('--lib')
+    $retryArgs = "--lib"
+} else {
+    $testArgs = @()
+    $retryArgs = ""
+}
 foreach ($pkg in $Packages) {
-    Step -Name "test $pkg" -RetryCommand "cargo test -p $pkg --all-features --test-threads $cpuCount" -ScriptBlock {
-        cargo test -p $pkg --all-features --test-threads $cpuCount
+    Step -Name "test $pkg" -RetryCommand "cargo test -p $pkg --all-features $retryArgs -- --test-threads $cpuCount" -ScriptBlock {
+        cargo test -p $pkg --all-features @testArgs -- --test-threads $cpuCount
     }
 }
 
 # --- Migration (mirrors CI migration job) ---------------------------------
-Step -Name "migration smoke test" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
-Step -Name "migration idempotency" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
-Remove-Item -LiteralPath "oz-pos.db", "oz-pos.db-wal", "oz-pos.db-shm" -ErrorAction Ignore
+if (-not $Fast) {
+    Step -Name "migration smoke test" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
+    Step -Name "migration idempotency" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
+    Remove-Item -LiteralPath "oz-pos.db", "oz-pos.db-wal", "oz-pos.db-shm" -ErrorAction Ignore
+}
 
 # --- Skill drift guard (extra local guard; CI doesn't run this) -----------
-$gitBash = if (Test-Path "C:\Program Files\Git\bin\bash.exe") {
-    "C:\Program Files\Git\bin\bash.exe"
-} elseif (Get-Command "bash" -ErrorAction SilentlyContinue) {
-    (Get-Command "bash").Source
-} else {
-    $null
-}
-if ($gitBash) {
-    Step -Name "skill-drift-guard" -RetryCommand "& '$gitBash' .agents/skills/skill-drift-guard/scripts/detect.sh --report" -ScriptBlock {
-        & "C:\Program Files\Git\bin\bash.exe" .agents/skills/skill-drift-guard/scripts/detect.sh --report
+if (-not $Fast) {
+    $gitBash = if (Test-Path "C:\Program Files\Git\bin\bash.exe") {
+        "C:\Program Files\Git\bin\bash.exe"
+    } elseif (Get-Command "bash" -ErrorAction SilentlyContinue) {
+        (Get-Command "bash").Source
+    } else {
+        $null
     }
-} else {
-    Write-Host "SKIP skill-drift-guard (bash not available)"
+    if ($gitBash) {
+        Step -Name "skill-drift-guard" -RetryCommand "& '$gitBash' .agents/skills/skill-drift-guard/scripts/detect.sh --report" -ScriptBlock {
+            & "C:\Program Files\Git\bin\bash.exe" .agents/skills/skill-drift-guard/scripts/detect.sh --report
+        }
+    } else {
+        Write-Host "SKIP skill-drift-guard (bash not available)"
+    }
 }
 
 # --- UI (mirrors CI ui job - auto-detected) -------------------------------
-if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
+if (-not $Fast -and (Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
     Push-Location ui
     Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" -ScriptBlock { npm ci --no-audit --no-fund }
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
@@ -105,15 +123,23 @@ if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/packag
     Step -Name "ui test" -RetryCommand "cd ui; npm run test" -ScriptBlock { npm run test }
     Step -Name "ui build" -RetryCommand "cd ui; npm run build" -ScriptBlock { npm run build }
     Pop-Location
+} elseif ($Fast) {
+    Write-Host "SKIP UI checks (--Fast mode)"
 } else {
     Write-Host "SKIP UI checks (npm not available or ui/package-lock.json missing)"
 }
 
 # --- Generate stats.json (for shields.io badges) --------------------------
-Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.ps1" -ScriptBlock {
-    & powershell -File scripts\stats.ps1
+if (-not $Fast) {
+    Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.ps1" -ScriptBlock {
+        & powershell -File scripts\stats.ps1
+    }
 }
 
 # --- Done -----------------------------------------------------------------
 $totalElapsed = (Get-Date) - $totalStart
-Write-Host ("all checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
+if ($Fast) {
+    Write-Host ("fast checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
+} else {
+    Write-Host ("all checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
+}
