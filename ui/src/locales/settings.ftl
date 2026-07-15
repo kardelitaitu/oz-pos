@@ -352,6 +352,12 @@ appearance-preview = Preview
 appearance-preview-btn-label = Primary Button
 appearance-preview-btn-outline-label = Secondary
 appearance-preview-badge-label = Live
+appearance-reset-all-aria =
+    .aria-label = Reset all to defaults
+appearance-reset-all = Reset all to defaults
+appearance-reset-all-confirm = Reset all appearance settings to their defaults? This cannot be undone.
+appearance-reset-all-success = Appearance settings reset to defaults
+appearance-reset-all-failed = Failed to reset appearance settings
 appearance-save-aria =
     .aria-label = Save appearance
 

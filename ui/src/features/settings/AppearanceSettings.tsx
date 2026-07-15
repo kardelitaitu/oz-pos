@@ -13,6 +13,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { useAppZoom } from '@/contexts/ZoomContext';
 import type { ZoomLevel } from '@/contexts/ZoomContext';
+import { useToast } from '@/frontend/shared/Toast';
 import './AppearanceSettings.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -57,7 +58,9 @@ export function AppearanceSettings({
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [storeName, setStoreName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const { zoomLevel, setZoomLevel } = useAppZoom();
+  const { addToast } = useToast();
 
   useEffect(() => {
     if (embedded) return;
@@ -119,6 +122,33 @@ export function AppearanceSettings({
     refreshBrandSettings();
     setSaving(false);
   }, [refreshBrandSettings]);
+
+  const handleResetAll = useCallback(async () => {
+    if (!window.confirm(l10n.getString('appearance-reset-all-confirm'))) return;
+    setResetting(true);
+    try {
+      // Reset in-memory state immediately so the UI updates.
+      setColour(DEFAULT_COLOUR);
+      setLogoPath(null);
+      setStoreName('');
+
+      // Persist changes via backend.
+      await setBrandPrimaryColour(DEFAULT_COLOUR);
+      await setBrandStoreName('');
+      await setBrandLogoPath('');
+
+      // Refresh brand context and apply palette.
+      refreshBrandSettings();
+      const palette = deriveAccentPalette(DEFAULT_COLOUR);
+      applyAccentPalette(palette);
+
+      addToast({ message: l10n.getString('appearance-reset-all-success'), type: 'success' });
+    } catch {
+      addToast({ message: l10n.getString('appearance-reset-all-failed'), type: 'error' });
+    } finally {
+      setResetting(false);
+    }
+  }, [refreshBrandSettings, addToast, l10n]);
 
   const content = (
     <div className="settings-form">
@@ -221,6 +251,26 @@ export function AppearanceSettings({
           <option value="200"><Localized id="appearance-zoom-200">200%</Localized></option>
         </select>
       </div>
+
+      {!embedded && (
+        <div className="appearance-reset-actions">
+          <Localized id="appearance-reset-all-aria" attrs={{ 'aria-label': true }}>
+            <button
+              type="button"
+              className="appearance-reset-all-btn"
+              onClick={handleResetAll}
+              disabled={resetting}
+              aria-label="Reset all appearance settings"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+              </svg>
+              <Localized id="appearance-reset-all">Reset all to defaults</Localized>
+            </button>
+          </Localized>
+        </div>
+      )}
 
       <div className="appearance-preview">
         <h3 className="appearance-preview-heading">
