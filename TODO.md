@@ -130,19 +130,21 @@ gives maintainability win (single source of truth for auth/workspace/sales/shift
 - [x] **H3.** Migrated `CartScreen.test.tsx` (3 tests) and `ProductManagementScreen.test.tsx` (14 tests)
   - Removed `import { withFluent }`, `import { render }`, `wrap` function from both
   - 17/17 tests pass in 2.55s
-- [x] **H3b.** Migrated 13 test files to `renderWithFluentSync` (2 batches of 7 + 6)
+- [x] **H3b.** Migrated 20 test files to `renderWithFluentSync` (3 batches)
   - Batch 1: InventoryAdjustmentScreen, GiftCardPayment, IssueGiftCardModal, SalesDashboardScreen,
     StaffManagementScreen, TaxConfigurationScreen, WeightScaleWidget (7 files, 53 tests)
   - Batch 2: CustomerManagementScreen, GiftCardsScreen, LoyaltyManagementScreen, PurchaseOrdersScreen,
     SalesHistoryScreen, ShiftManagementScreen (6 files, 95 tests)
-  - 13 of ~34 files migrated (38%). ~21 remaining.
+  - Batch 3: EodReportScreen, ExchangeRateScreen, OfflineQueueScreen, PromotionManagementScreen,
+    RefundModal, StockCountDetail, StockCountHistory (7 files, 95 tests)
+  - 20 of ~34 files migrated (59%). ~14 remaining.
 - [ ] **H4.** Create `renderWithProviders` — wraps with ThemeProvider, ToastProvider, LocaleContext, ZoomProvider
-- [x] **H5.** All migrated tests pass; full suite: 109 passed, 1810 tests in 14.46s
+- [x] **H5.** All migrated tests pass; full suite: 109 passed, 1810 tests in 14.20s
 
-**Result:** 2 helpers created, 13 files migrated (148 tests). Per-file savings: 3 imports + 1 function.
+**Result:** 2 helpers created, 20 files migrated (243 tests). Per-file savings: 3 imports + 1 function.
 When all ~34 files are migrated, ~102 import lines + ~34 wrap functions eliminated.
-**Before: 14.76s, After: 14.66s** (no measurable speed change — code quality win).
-**113 imports removed | 13 wrap functions eliminated | 0 test regressions.**
+**Before: 14.76s, After: 14.20s** (run-to-run variation, code quality win).
+**181 imports removed | 20 wrap functions eliminated | 0 test regressions.**
 
 ### I. Split Large Test Files ⚠️ (blocked — 2026-07-15)
 
