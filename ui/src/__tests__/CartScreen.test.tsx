@@ -1,16 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
 import CartScreen from '@/features/sales/CartScreen';
 import type { CartLine, Money, Sku, LineId } from '@/types/domain';
 
-const wrap = (children: React.ReactNode) => withFluent(children, salesFtl);
-
 describe('CartScreen', () => {
   it('renders the empty state', () => {
-    render(wrap(<CartScreen />));
+        renderWithFluentSync(<CartScreen />, salesFtl);
     expect(screen.getByRole('heading', { name: /cart/i })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(/empty/i);
   });
@@ -24,7 +22,7 @@ describe('CartScreen', () => {
       qty: 2,
       unit_price: usd,
     };
-    render(wrap(<CartScreen lines={[line]} total={usd} />));
+        renderWithFluentSync(<CartScreen lines={[line]} total={usd} />, salesFtl);
     expect(screen.getByText(/COFFEE/)).toBeInTheDocument();
     // formatMoney uses id-ID locale by default → $ 3,50
     expect(screen.getAllByText(/\$ 3,50/)).toHaveLength(2);
@@ -32,7 +30,7 @@ describe('CartScreen', () => {
 
   it('invokes the onAddSample callback', async () => {
     const handler = vi.fn();
-    render(wrap(<CartScreen onAddSample={handler} />));
+        renderWithFluentSync(<CartScreen onAddSample={handler} />, salesFtl);
     await userEvent.click(screen.getByRole('button'));
     expect(handler).toHaveBeenCalledTimes(1);
   });

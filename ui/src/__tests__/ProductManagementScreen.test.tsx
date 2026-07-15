@@ -1,11 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import productsFtl from '@/locales/products.ftl?raw';
 import ProductManagementScreen from '@/features/products/ProductManagementScreen';
-
-const wrap = (children: React.ReactNode) => withFluent(children, productsFtl);
 
 const SAMPLE_PRODUCTS = [
   {
@@ -84,14 +82,14 @@ async function waitForTable() {
 
 describe('ProductManagementScreen', () => {
   it('renders title and add button', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     expect(screen.getByRole('heading', { name: /products/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add product/i })).toBeInTheDocument();
   });
 
   it('renders product rows from IPC data', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
     expect(screen.getByText('Plain Bagel')).toBeInTheDocument();
@@ -99,7 +97,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('renders column headers', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     expect(screen.getByText('SKU')).toBeInTheDocument();
     expect(screen.getByText('Name')).toBeInTheDocument();
@@ -109,7 +107,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('shows stock status', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     const inStock = screen.getAllByText(/in stock/i);
     expect(inStock.length).toBe(2);
@@ -117,14 +115,14 @@ describe('ProductManagementScreen', () => {
   });
 
   it('shows formatted prices', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     expect(screen.getByText('$ 4,50')).toBeInTheDocument();
     expect(screen.getByText('$ 2,50')).toBeInTheDocument();
   });
 
   it('shows barcode or dash', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     expect(screen.getByText('4901234567890')).toBeInTheDocument();
     const dashes = screen.getAllByText('\u2014');
@@ -132,7 +130,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('opens add modal when clicking Add Product', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /add product/i }));
     const dialog = screen.getByRole('dialog');
@@ -141,7 +139,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('opens edit modal prefilled with product data', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     const editBtn = screen.getByRole('button', { name: /edit caffè latte/i });
     await userEvent.click(editBtn);
@@ -153,7 +151,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('disables SKU field when editing', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /edit caffè latte/i }));
     const skuInput = screen.getByDisplayValue('LATTE');
@@ -161,7 +159,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('calls createProduct on save in add modal', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /add product/i }));
     await userEvent.type(screen.getByPlaceholderText('e.g. LATTE'), 'NEWSKU');
@@ -174,7 +172,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('calls updateProduct on save in edit modal', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /edit caffè latte/i }));
     const nameInput = screen.getByDisplayValue('Caffè Latte');
@@ -187,7 +185,7 @@ describe('ProductManagementScreen', () => {
   });
 
   it('calls deleteProduct on delete button click', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /delete caffè latte/i }));
     await waitFor(() => {
@@ -202,14 +200,14 @@ describe('ProductManagementScreen', () => {
       if (cmd === 'list_products') return Promise.resolve([]);
       return Promise.resolve([]);
     });
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);;
     await waitFor(() => {
       expect(screen.getByText(/no products yet/i)).toBeInTheDocument();
     });
   });
 
   it('disables save when SKU or name is empty', async () => {
-    render(wrap(<ProductManagementScreen />));
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /add product/i }));
     const createBtn = screen.getByRole('button', { name: /create/i });
