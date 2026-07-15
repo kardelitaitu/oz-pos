@@ -1508,7 +1508,21 @@ export default function SettingsPage() {
 
             {q && filteredCategories.length === 0 ? (
               <div className="settings-sidebar-empty-search">
-                <Localized id="settings-sidebar-no-results">No matching sections</Localized>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="1.75rem" height="1.75rem" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  <line x1="8" y1="11" x2="14" y2="11" />
+                </svg>
+                <Localized id="settings-sidebar-no-results">
+                  <span className="settings-sidebar-empty-title">No matching sections</span>
+                </Localized>
+                <button
+                  type="button"
+                  className="settings-sidebar-empty-clear"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <Localized id="settings-sidebar-clear-results">Clear search</Localized>
+                </button>
               </div>
             ) : (
               filteredCategories.map((cat) => {
@@ -1522,8 +1536,15 @@ export default function SettingsPage() {
                     onClick={() => toggleCategory(cat.label)}
                     aria-expanded={isExpanded}
                   >
-                    <span className="settings-sidebar-section-label">
-                      <Localized id={CATEGORY_I18N_KEYS[cat.label] ?? ''}>{cat.label}</Localized>
+                    <span className="settings-sidebar-section-label-wrap">
+                      <span className="settings-sidebar-section-label">
+                        <Localized id={CATEGORY_I18N_KEYS[cat.label] ?? ''}>{cat.label}</Localized>
+                      </span>
+                      {!sidebarCollapsed && (
+                        <span className="settings-sidebar-count" title={`${cat.keys.length} items`}>
+                          {cat.keys.length}
+                        </span>
+                      )}
                     </span>
                     <svg
                       className={`settings-sidebar-chevron${isExpanded ? '' : ' collapsed'}`}

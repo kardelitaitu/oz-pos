@@ -207,6 +207,7 @@ settings-sidebar-expand-aria = Expand settings sidebar
 settings-sidebar-collapse-aria = Collapse settings sidebar
 settings-sidebar-collapse-all-aria = Collapse all categories
 settings-sidebar-search-placeholder = Search settings…
+settings-sidebar-clear-results = Clear search
 settings-sidebar-search-clear-aria =
     .aria-label = Clear search
 settings-sidebar-no-results = No matching sections

@@ -312,7 +312,9 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /increase card size/i })).toBeInTheDocument();
     });
-    expect(screen.getByText('2')).toBeInTheDocument();
+    // The card-size stepper value '2' also appears in the new category count
+    // badges (e.g., Business shows "2"), so use getAllByText to disambiguate.
+    expect(screen.getAllByText('2')[0]).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /increase card size/i }));
     expect(screen.getByText('3')).toBeInTheDocument();
   });
