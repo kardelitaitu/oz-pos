@@ -136,13 +136,21 @@ gives maintainability win (single source of truth for auth/workspace/sales/shift
     WorkspaceHome (5 files, 94 tests, async renderWithFluent)
   - 30 of ~34 files migrated (88%). ~4 remaining (complex: AppShell, PosScreen,
     RetailPosScreen, SettingsPage).
-- [ ] **H4.** Create `renderWithProviders` — wraps with ThemeProvider, ToastProvider, LocaleContext, ZoomProvider
-- [x] **H5.** All migrated tests pass; full suite: 109 passed, 1810 tests in 14.43s
+- [x] **H4.** Created `renderWithProviders` (async) + `renderWithProvidersSync` (sync) in
+  `ui/src/__tests__/test-utils/render.tsx`. Provider chain: BrandProvider → ThemeProvider →
+  ToastProvider → ZoomProvider → Fluent. ThemeProvider requires useBrand(), so BrandProvider
+  must be an ancestor.
+  - Migrated AppShell (19/20, 1 pre-existing failure): `await renderInAct(wrap(...))` →
+    `await renderWithProviders(<AppShell />)`
+  - Migrated SettingsPage (26/26): `render(wrap(...))` →
+    `renderWithProvidersSync(<TestWrapper>...</TestWrapper>, settingsFtl, sharedFtl)`
+  - TestWrapper simplified: removed ThemeProvider/ToastProvider/Fluent (provided by helper)
+- [x] **H5.** All migrated tests pass; full suite: 109 passed, 1810 tests
 
-**Result:** 2 helpers created, 30 files migrated (401 tests). Per-file savings: 3 imports + 1 function.
-When all ~34 files are migrated, ~102 import lines + ~34 wrap functions eliminated.
-**Before: 14.76s, After: 14.43s** (normal run-to-run variation, no regressions).
-**275 imports removed | 30 wrap/renderInAct functions eliminated | 0 test regressions.
+**Result:** 4 helpers created (renderWithFluent, renderWithFluentSync, renderWithProviders,
+renderWithProvidersSync), 32 files migrated (~460 tests). Per-file savings: 3 imports + 1 function.
+**275 imports removed | 32 wrap/renderInAct functions eliminated | 0 test regressions.
+**Remaining:** PosScreen, RetailPosScreen (most complex — function wrap + renderInAct + vi.mock-heavy).
 
 ### I. Split Large Test Files ⚠️ (blocked — 2026-07-15)
 
