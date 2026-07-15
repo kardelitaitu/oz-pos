@@ -248,6 +248,159 @@ against the same PG instance during the transition.
 
 ---
 
+## Data Transfer: Moving the SQLite Database
+
+> PostgreSQL users can skip this section — with `DATABASE_URL`, both
+> servers connect to the same managed instance and no file transfer is
+> needed. See the PostgreSQL section above.
+
+These steps cover downloading the database from the old VPS and uploading
+it to the new VPS. Choose the method that works for your setup.
+
+### Step 1: Prepare the Old VPS
+
+**Stop the cloud server** on the old VPS first — SQLite does not tolerate
+copying a live database file from a running process.
+
+```bash
+# On the old VPS
+docker stop oz-cloud-server
+```
+
+**Flush WAL to the main database file.** OZ-POS enables SQLite WAL mode
+(`journal_mode=WAL`), which means recent writes may be in separate `-wal`
+and `-shm` files. Run a checkpoint to merge them into the `.db` file:
+
+```bash
+# On the old VPS
+sqlite3 /data/oz-pos.db "PRAGMA wal_checkpoint(TRUNCATE);"
+# Expected output: 0|0|0 (all pages checkpointed, WAL truncated)
+```
+
+After this, you only need to copy the `.db` file — the `-wal` and `-shm`
+files (if they exist) can be ignored.
+
+**Locate the database file.** The default path is `/data/oz-pos.db`. If you
+used a custom `OZ_DB_PATH`, check your `docker run` command or env file.
+
+```bash
+# Confirm the file exists and note its size
+ls -lh /data/oz-pos.db
+# Example: -rw-r--r-- 1 ozpos ozpos 142M Jul 15 10:30 /data/oz-pos.db
+```
+
+### Step 2: Transfer the Database
+
+Choose one of the methods below.
+
+**Method A — Direct SCP (simplest, VPSes can reach each other):**
+
+```bash
+# On the old VPS: push the database to the new VPS
+scp /data/oz-pos.db user@<new-vps-ip>:/data/oz-pos.db
+```
+
+**Method B — Pull via SCP from the new VPS:**
+
+```bash
+# On the new VPS: pull the database from the old VPS
+scp user@<old-vps-ip>:/data/oz-pos.db /data/oz-pos.db
+```
+
+**Method C — Rsync (faster for large databases, supports resume):**
+
+```bash
+# On the old VPS — rsync with progress and compression
+rsync -avz --progress /data/oz-pos.db user@<new-vps-ip>:/data/oz-pos.db
+```
+
+**Method D — Compressed tar over SSH (largest databases, slow connections):**
+
+```bash
+# On the old VPS: tar + gzip the database and pipe it directly to the new VPS
+tar czf - /data/oz-pos.db | ssh user@<new-vps-ip> "tar xzf - -C /"
+```
+
+This compresses the file in transit — useful for databases over 500 MB or
+slow network links.
+
+**Method E — Cloud storage as intermediate (VPSes can't reach each other):**
+
+If the old and new VPSes are on isolated networks (no direct SSH), use an
+S3 bucket, Google Drive, or Dropbox as a temporary transfer point.
+
+```bash
+# On the old VPS: upload to S3
+aws s3 cp /data/oz-pos.db s3://my-bucket/oz-pos-backup.db
+
+# On the new VPS: download from S3
+aws s3 cp s3://my-bucket/oz-pos-backup.db /data/oz-pos.db
+```
+
+Or with `rclone` (supports Google Drive, Dropbox, S3, and 40+ providers):
+
+```bash
+# On the old VPS
+rclone copy /data/oz-pos.db gdrive:/backups/
+
+# On the new VPS
+rclone copy gdrive:/backups/oz-pos.db /data/
+```
+
+### Step 3: Verify on the New VPS
+
+After the transfer completes, verify the database is intact.
+
+```bash
+# On the new VPS — check file size matches
+ls -lh /data/oz-pos.db
+
+# Verify SQLite integrity
+sqlite3 /data/oz-pos.db "PRAGMA integrity_check;"
+# Expected: ok
+
+# Check row counts match the old server
+sqlite3 /data/oz-pos.db "SELECT COUNT(*) FROM offline_queue;"
+sqlite3 /data/oz-pos.db "SELECT COUNT(*) FROM settings;"
+sqlite3 /data/oz-pos.db "SELECT COUNT(*) FROM products;"
+
+# Verify the schema is complete
+sqlite3 /data/oz-pos.db ".tables"
+```
+
+**Set correct permissions** so the container user can read/write:
+
+```bash
+chown 1000:1000 /data/oz-pos.db   # if UID 1000 is the ozpos user
+chmod 644 /data/oz-pos.db
+```
+
+### Step 4: Restart the Old Server (if needed)
+
+If the old server needs to keep running (Scenario B — redirect-only mode),
+restart it. For Scenario A (same domain), you can leave it stopped.
+
+```bash
+# Scenario B: restart old server in redirect-only mode
+# Scenario A: leave it stopped — you'll shut it down permanently after migration
+```
+
+> ⚠️ **Do NOT restart the old server in normal mode** after copying the
+> database to the new VPS. Data written to the old server after the copy
+> will be lost unless you repeat the transfer.
+
+### Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|---------|
+| `PRAGMA integrity_check` returns errors | Copy was interrupted or file was in use | Re-checkpoint WAL and re-copy |
+| File size is 0 on new VPS | Transfer failed silently | Retry with `rsync -avz --progress` to see progress |
+| "Permission denied" on new VPS | Container user (ozpos, UID 1000) can't read the file | `chown 1000:1000 /data/oz-pos.db` |
+| `scp` connection refused | Firewall blocking port 22 | Use Method E (cloud storage) or open firewall temporarily |
+| Database has `-wal` file > 0 bytes | WAL wasn't checkpointed | Run `PRAGMA wal_checkpoint(TRUNCATE);` before copying |
+
+---
+
 ## Scenario A: Same Domain (Layer 1 — DNS)
 
 Use when the sync server domain stays the same (e.g., `sync.ozpos.com`).
@@ -277,23 +430,18 @@ curl https://<new-vps-ip>:3099/health
 # Expected: {"status":"ok","version":"0.0.9","uptime_seconds":12,...}
 ```
 
-**3. Copy the database from the old server**
+**3. Transfer the database**
+
+Follow the [Data Transfer](#data-transfer-moving-the-sqlite-database)
+section above to copy the database from the old VPS to the new VPS.
+
+**4. Restart the new server**
+
+After the database file is in place, restart the server so it picks up
+the transferred database:
 
 ```bash
-# On the old server, copy the SQLite DB to the new server.
-# If you used a custom OZ_DB_PATH, use that path instead.
-scp /data/oz-pos.db user@<new-vps-ip>:/data/oz-pos.db
-```
-
-If using a managed PostgreSQL backend (`DATABASE_URL`), point the new server
-to the same database instance — no file copy needed.
-
-**4. Confirm the database is intact on the new server**
-
-```bash
-# On the new server
-sqlite3 /data/oz-pos.db "SELECT COUNT(*) FROM offline_queue;"
-# Should match the count from the old server
+docker restart oz-cloud-server
 ```
 
 ### On the Old Server
@@ -365,17 +513,20 @@ curl https://<new-vps-ip>:3099/health
 # {"status":"ok","version":"0.0.9",...}
 ```
 
-**3. Copy the database from the old server**
+**3. Transfer the database**
+
+Follow the [Data Transfer](#data-transfer-moving-the-sqlite-database)
+section above.
+
+**4. Restart the new server**
 
 ```bash
-# Copy the SQLite DB. If the old server used a custom OZ_DB_PATH,
-# use that path instead of /data/oz-pos.db.
-scp user@<old-vps-ip>:/data/oz-pos.db /data/oz-pos.db
+docker restart oz-cloud-server
 ```
 
 ### On the Old Server
 
-**4. Switch to redirect-only mode**
+**5. Switch to redirect-only mode**
 
 Stop the old server running in normal mode and restart it in redirect-only
 mode. This starts a minimal service (~5 MB RAM) that only returns the
@@ -404,7 +555,7 @@ docker run -d \
 > ./oz-cloud-server
 > ```
 
-**5. Verify the redirect is working**
+**6. Verify the redirect is working**
 
 ```bash
 # Test push endpoint
@@ -425,7 +576,7 @@ curl -v https://sync.ozpos.com/api/sync/snapshot
 # Expected: Same HTTP 421 response
 ```
 
-**6. What happens on each POS terminal (automatic)**
+**7. What happens on each POS terminal (automatic)**
 
 When a terminal connects to the old server during its next sync cycle:
 
@@ -439,7 +590,7 @@ When a terminal connects to the old server during its next sync cycle:
 This works for all three sync paths: push, pull, and snapshot (anchor-expiry
 recovery). Every transport method detects the redirect.
 
-**7. Monitor migration progress**
+**8. Monitor migration progress**
 
 ```bash
 # On the old server — count how many terminals have migrated
@@ -450,14 +601,14 @@ tail -f /var/log/oz-cloud-server.log | grep "server migrated"
 tail -f /var/log/oz-cloud-server.log | grep "POST /api/sync"
 ```
 
-**8. Keep the old server running**
+**9. Keep the old server running**
 
 Keep it in redirect-only mode for **15–30 days** to catch terminals that
 were powered off or offline during the migration window. The redirect-only
 mode is extremely lightweight — no database, no sync processing, just the
 HTTP 421 response.
 
-**9. Shut down the old server**
+**10. Shut down the old server**
 
 ```bash
 # After the migration window (15-30 days) with zero remaining traffic
