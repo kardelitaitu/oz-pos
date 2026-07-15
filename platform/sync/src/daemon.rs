@@ -699,4 +699,45 @@ mod tests {
         daemon.stop().await;
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
+
+    #[tokio::test]
+    async fn daemon_pull_phase_detects_server_migration() {
+        // No pending items — push is skipped, only pull runs.
+        // The pull hits the redirect server and should still auto-update
+        // the URL. This exercises the pull-phase ServerMigrated handler.
+        let new_url = "https://pull-migrated.example.com";
+        let old_url = spawn_redirect_server(new_url).await;
+        let db = setup_db();
+
+        let db_clone = db.clone();
+        let old = old_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_clone.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &old).unwrap();
+            // No enqueue_offline — push phase is skipped.
+        })
+        .await
+        .unwrap();
+
+        let daemon = SyncDaemon::with_interval(Duration::from_millis(100));
+        daemon.start(db.clone()).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let updated_url = tokio::task::spawn_blocking(move || {
+            let conn = db.blocking_lock();
+            Settings::get_sync_server_url(&conn).unwrap()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(
+            updated_url.as_deref(),
+            Some(new_url),
+            "pull-phase only: daemon should still auto-update sync_server_url"
+        );
+
+        daemon.stop().await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
 }

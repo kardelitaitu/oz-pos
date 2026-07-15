@@ -228,6 +228,27 @@ mod tests {
     }
 
     #[test]
+    fn sync_error_server_migrated_display() {
+        let err = SyncError::ServerMigrated {
+            new_url: "https://new.example.com".into(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "server migrated to https://new.example.com"
+        );
+    }
+
+    #[test]
+    fn sync_error_server_migrated_debug() {
+        let err = SyncError::ServerMigrated {
+            new_url: "https://new.example.com".into(),
+        };
+        let debug = format!("{err:?}");
+        assert!(debug.contains("ServerMigrated"));
+        assert!(debug.contains("https://new.example.com"));
+    }
+
+    #[test]
     fn sync_error_debug() {
         let err = SyncError::Transport("e".into());
         assert!(!format!("{err:?}").is_empty());

@@ -297,6 +297,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_server_migrated_empty_string() {
+        assert_eq!(super::parse_server_migrated(""), None);
+    }
+
+    #[test]
+    fn parse_server_migrated_null_new_url() {
+        // new_url is present but null — should return None.
+        assert_eq!(
+            super::parse_server_migrated(r#"{"error":"server_migrated","new_url":null}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_server_migrated_extra_fields_ok() {
+        // Extra fields should not interfere with detection.
+        let body = r#"{"error":"server_migrated","new_url":"https://x.com","extra":true}"#;
+        assert_eq!(
+            super::parse_server_migrated(body),
+            Some("https://x.com".into())
+        );
+    }
+
     // ── PushOutcome serde + Debug ────────────────────────────────────
 
     #[test]
