@@ -225,10 +225,10 @@ state automatically — no need to remember to add cleanup.
 **Baseline: 14.91s, After: 14.99s** (normal variation, no regressions).
 100 lines of redundant code eliminated.
 
-**Remaining cleanup:** ~30 more test files still have `vi.clearAllMocks()` in beforeEach that also
-includes other setup calls (e.g., `mockFoo.mockResolvedValue(...)`). The `vi.clearAllMocks()` line
-is redundant but cannot be removed standalone since the other calls need a parent function. These
-can be cleaned up when the files are refactored for other reasons.
+**Remaining cleanup (localStorage.clear):** K8 removed 4 leftover `localStorage.clear()` calls
+from AuthContext, useCloudSync, and useIdleTimer. ThemeProvider.resetEnvironment() was kept
+as-is because it's a cohesive utility (also resets DOM attrs). No `vi.clearAllMocks()` calls
+remain in any test file — the K5/K4 cleanup was thorough and this TODO note was stale.
 
 ### L. Fluent/i18n Test Performance ✅ (0.0.8 — 2026-07-15)
 
