@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
 import terminalsFtl from '@/locales/terminals.ftl?raw';
 import type { TerminalDto } from '@/api/terminals';
@@ -58,7 +59,9 @@ const l10n = new ReactLocalization([bundle]);
 function renderScreen() {
   return render(
     <LocalizationProvider l10n={l10n}>
-      <TerminalManagementScreen />
+      <ToastProvider>
+        <TerminalManagementScreen />
+      </ToastProvider>
     </LocalizationProvider>,
   );
 }
