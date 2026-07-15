@@ -48,7 +48,7 @@
   justify-content: center;
   gap: var(--space-2);
   width: 100%;
-  min-height: 56px;
+  min-height: 3.5rem;
   padding: var(--space-3) var(--space-4);
   font-family: var(--font-sans);
   font-size: var(--text-xl);
@@ -88,8 +88,8 @@
 }
 
 .pos-cart-pay-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
 }
 
 .pos-cart-pay-btn--disabled {
@@ -123,8 +123,8 @@
 }
 
 .pos-cart-open-bill-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
 }
 
 /* ── Clear cart button ─────────────────────────────── */
@@ -152,8 +152,8 @@
 }
 
 .pos-cart-clear-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
