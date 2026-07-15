@@ -450,7 +450,7 @@ impl Default for SyncDaemon {
 mod tests {
     use super::*;
     use crate::transport::{PullResponse, PushOutcome, PushResponse};
-    use axum::{Json, Router, response::IntoResponse, routing::post};
+    use axum::{Json, Router, routing::post};
     use oz_core::migrations;
     use oz_core::settings::Settings;
 

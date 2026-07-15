@@ -50,12 +50,12 @@ mod tests {
     use axum::{Router, body::Body, http::Request, middleware, routing::get};
     use http_body_util::BodyExt;
     use std::env;
-    use std::sync::Mutex;
     use tower::ServiceExt;
 
     /// Serialise env var tests — `std::env::set_var` / `remove_var` are
-    /// process-global and tokio tests run concurrently.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    /// process-global and tokio tests run concurrently. Uses tokio::sync::Mutex
+    /// so the guard is `Send` and can be held safely across `.await` points.
+    static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     async fn dummy_handler() -> &'static str {
         "ok"
@@ -71,7 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn redirect_when_env_var_set() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().await;
         unsafe { env::set_var("OZ_SYNC_REDIRECT_URL", "https://new-server.example.com") };
 
         let app = test_app();
@@ -92,8 +92,7 @@ mod tests {
 
     #[tokio::test]
     async fn pass_through_when_env_var_not_set() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        // Ensure the env var is definitely not set.
+        let _guard = ENV_LOCK.lock().await;
         unsafe { env::remove_var("OZ_SYNC_REDIRECT_URL") };
 
         let app = test_app();
@@ -110,7 +109,7 @@ mod tests {
 
     #[tokio::test]
     async fn non_sync_routes_pass_through() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().await;
         unsafe { env::set_var("OZ_SYNC_REDIRECT_URL", "https://new.example.com") };
 
         let app = test_app();
@@ -126,7 +125,7 @@ mod tests {
 
     #[tokio::test]
     async fn redirect_includes_new_url_for_pull() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().await;
         unsafe { env::set_var("OZ_SYNC_REDIRECT_URL", "https://migrated.example.com") };
 
         let app = test_app();
