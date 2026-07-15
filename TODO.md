@@ -28,13 +28,17 @@
 less unnecessary waiting, which helps when running integration tests repeatedly during
 development.
 
-### B. Fix Ignored Tests
+### B. Fix Ignored Tests ✅ (0.0.8 — 2026-07-15)
 
-- [ ] **B1.** `daemon_runs_when_sync_configured` — replace hardcoded `localhost:3099` with a mock
-  HTTP relay (spawn a local `axum::Router` on `port 0`, wire it to the daemon config).
-- [ ] **B2.** Remove `#[ignore]` attribute once the test passes reliably.
-- [ ] **B3.** Audit for any other `#[ignore]` tests across all crates and either fix or document
-  why they remain ignored.
+- [x] **B1.** Added `spawn_mock_sync_server()` helper — binds axum on port 0 with POST `/api/sync/push`
+  (returns `vec![PushOutcome::Accepted; items.len()]`) and POST `/api/sync/pull` (returns empty items).
+- [x] **B2.** Removed `#[ignore]` from `daemon_runs_when_sync_configured`. Wrapped DB setup in
+  `tokio::task::spawn_blocking` to avoid blocking a tokio worker thread on the multi-thread runtime.
+- [x] **B3.** Audited all crates — zero other `#[ignore]` tests exist.
+
+**Result:** 19/19 daemon tests pass (was 18 + 1 ignored). Clippy clean.
+**Baseline: 0.97s (18+1), After: 0.99s (19+0).** No measurable change — the mock server
+startup time replaces the connection-refused delay.
 
 ### C. Slow-Test Markers
 
