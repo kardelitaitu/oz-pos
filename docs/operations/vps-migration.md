@@ -1092,6 +1092,59 @@ This is the safety net — it always works regardless of Layers 1 and 2.
 
 ---
 
+## Troubleshooting Common Issues
+
+### During Deployment
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `docker build` fails | Missing Dockerfile or stale cache | Run `docker build --no-cache -f Dockerfile.server .` |
+| `docker run` exits immediately | Missing `OZ_API_SECRET` | Add `-e OZ_API_SECRET=<your-secret>` |
+| Port 3099 already in use | Another service on that port | `docker run -p 3090:3099` or `lsof -i :3099` to find the process |
+| `/health` returns connection refused | Container not running or wrong port | `docker ps`, check `docker logs oz-cloud-server` |
+
+### During Data Transfer
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `PRAGMA integrity_check` returns errors | Copy was interrupted or file was in use | Re-checkpoint WAL and re-copy |
+| File size is 0 on new VPS | Transfer failed silently | Retry with `rsync -avz --progress` |
+| "Permission denied" on new VPS | Container user can't read the file | `chown 1000:1000 /data/oz-pos.db` |
+| `scp` connection refused | Firewall blocking port 22 | Use cloud storage method or open firewall temporarily |
+| `-wal` file > 0 bytes after checkpoint | Server was still writing during checkpoint | `docker stop` first, then checkpoint |
+| `pg_restore` fails with "already exists" | Target DB has existing tables | Use `--clean --if-exists` or restore to a fresh DB |
+| Row counts don't match after PG restore | Dump was taken while writes were active | Stop the old server before `pg_dump` |
+
+### During DNS Migration (Scenario A)
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `dig` still returns old IP | DNS cache (TTL hasn't expired) | Wait for TTL (reduce to 60s before migration) |
+| Some terminals connect, others don't | Staggered DNS propagation | Wait 1-6 hours for full propagation |
+| New server gets no traffic after DNS update | DNS provider cached old record | Check DNS propagation at [whatsmydns.net](https://www.whatsmydns.net) |
+| Intermittent "Connection Error" on terminals | DNS flip-flop during propagation | Temporarily run both servers (old in redirect mode) |
+
+### During Auto-Redirect (Scenario B)
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `curl` to old server returns 200, not 421 | Forgot to set `OZ_REDIRECT_ONLY=true` | Check env vars, restart container |
+| Redirect returns 421 but wrong URL | `OZ_SYNC_REDIRECT_URL` misconfigured | Verify the env var, restart |
+| Terminals not migrating after hours | Terminals are offline or have long sync intervals | Check `tail -f` logs on old server; wait up to 30 days |
+| Old server OOM or crash in redirect mode | Very unlikely (~5 MB RAM usage) | Check `docker stats oz-cloud-redirect` |
+| New server shows "database opened" but no data | DB wasn't transferred correctly | Re-run Data Transfer verification steps |
+
+### After Migration
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `docker logs` shows "panic" after restart | Corrupted database | Restore from pre-migration backup |
+| Health endpoint works but sync fails | Wrong `OZ_API_SECRET` on new server | Match the old server's secret |
+| Old server still getting traffic after 48h | Some terminals have cached old IP | Wait longer (DNS TTL + sync interval) or use Layer 3 |
+| Performance degradation | New VPS has fewer resources | Check `docker stats`, compare to old VPS specs |
+
+---
+
 ## Verification Checklist
 
 Use this checklist during every migration to confirm each step completed:
