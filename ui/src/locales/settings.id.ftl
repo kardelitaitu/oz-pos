@@ -432,6 +432,10 @@ feature-toggle-toggle-aria = Alihkan { $name }
 feature-toggle-dismiss-aria =
     .aria-label = Tutup notifikasi
 
+# ── Data Management ──
+data-mgmt-password-show-aria = Tampilkan kata sandi
+data-mgmt-password-hide-aria = Sembunyikan kata sandi
+
 # ── Sales History ──
 category-colour-picker-aria =
     .aria-label = Pemilih warna

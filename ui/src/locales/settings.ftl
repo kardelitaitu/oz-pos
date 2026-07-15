@@ -510,6 +510,10 @@ feature-toggle-group-aria = { $group } features
 feature-toggle-toggle-aria = Toggle { $name }
 feature-toggle-dismiss-aria = Dismiss notification
 
+# ── Data Management ──
+data-mgmt-password-show-aria = Show password
+data-mgmt-password-hide-aria = Hide password
+
 # ── Settings screen ──
 settings-general-tab = General
 settings-receipt-tab = Receipt
