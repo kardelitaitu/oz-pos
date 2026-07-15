@@ -530,6 +530,54 @@ export default function SettingsPage() {
     setSaving(false);
   };
 
+  // ── Keyboard shortcuts ────────────────────────────────────
+
+  useEffect(() => {
+    const flatKeys = CATEGORIES.flatMap((c) => c.keys);
+
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+S / Cmd+S → save (guarded by saving flag)
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (!saving) handleSave();
+        return;
+      }
+
+      // Escape → close mobile sidebar
+      if (e.key === 'Escape' && mobileSidebarOpen) {
+        e.preventDefault();
+        setMobileSidebarOpen(false);
+        return;
+      }
+
+      // Arrow keys navigate sections (skip when focused on inputs)
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const idx = flatKeys.indexOf(activeSection);
+        if (idx === -1) return;
+        const next = e.key === 'ArrowDown'
+          ? (idx + 1) % flatKeys.length
+          : (idx - 1 + flatKeys.length) % flatKeys.length;
+        const nextKey = flatKeys[next];
+        if (!nextKey) return;
+        setActiveSection(nextKey);
+        setSectionKey((k) => k + 1);
+        const cat = CATEGORIES.find((c) => c.keys.includes(nextKey));
+        if (cat?.label) setExpandedCategory(cat.label);
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+    // handleSave is intentionally excluded from deps — it closes over
+    // the latest state via the component's render cycle. Re-attaching
+    // the listener on relevant state changes is sufficient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, mobileSidebarOpen, saving]);
+
   // ── Loading / Error states ───────────────────────────────────
 
   if (loading) {
@@ -1077,6 +1125,10 @@ export default function SettingsPage() {
     }
   }
 
+  // ── Resolve current nav item for breadcrumb ─────────────────
+
+  const currentNavItem = NAV_ITEMS.find((n) => n.key === activeSection);
+
   // ── Main render ──────────────────────────────────────────────
 
   return (
@@ -1245,21 +1297,18 @@ export default function SettingsPage() {
         {/* ── Main content ──────────────────────────────── */}
         <main className="settings-content">
           {/* ── Section breadcrumb header ───────── */}
-          {(() => {
-            const currentItem = NAV_ITEMS.find((n) => n.key === activeSection);
-            return currentItem ? (
-              <header className="settings-section-header">
-                <div className="settings-section-header-icon" aria-hidden="true">
-                  {currentItem.icon}
-                </div>
-                <div>
-                  <h1 className="settings-section-header-title">
-                    <Localized id={NAV_L10N_KEYS[currentItem.key] ?? ''}>{currentItem.label}</Localized>
-                  </h1>
-                </div>
-              </header>
-            ) : null;
-          })()}
+          {currentNavItem && (
+            <header className="settings-section-header">
+              <div className="settings-section-header-icon" aria-hidden="true">
+                {currentNavItem.icon}
+              </div>
+              <div>
+                <h1 className="settings-section-header-title">
+                  <Localized id={NAV_L10N_KEYS[currentNavItem.key] ?? ''}>{currentNavItem.label}</Localized>
+                </h1>
+              </div>
+            </header>
+          )}
           <div className="settings-section-content" key={sectionKey}>
             {renderSection(activeSection)}
           </div>
