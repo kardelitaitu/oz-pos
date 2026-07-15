@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import currencyFtl from '@/locales/currency.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
@@ -39,11 +39,8 @@ function makeCurrency(code: string, name: string) {
   return { code, name, minor_exponent: 2, symbol: code };
 }
 
-const wrap = (children: React.ReactNode) =>
-  withFluent(children, currencyFtl, sharedFtl);
-
 function renderScreen() {
-  return render(wrap(<ExchangeRateScreen />));
+  return renderWithFluentSync(<ExchangeRateScreen />, currencyFtl, sharedFtl);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

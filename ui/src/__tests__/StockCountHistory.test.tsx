@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -18,7 +18,7 @@ const mockListCounts = listStockCounts as ReturnType<typeof vi.fn>;
 const mockListAdjustments = listStockAdjustments as ReturnType<typeof vi.fn>;
 const mockGetLines = getCountLines as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl, sharedFtl);
+
 
 const sampleCounts = [
   { id: 'sc-1', count_number: 'SC-001', status: 'completed' as const, count_type: 'full' as const,
@@ -45,14 +45,14 @@ describe('StockCountHistory', () => {
   it('shows loading state initially', async () => {
     mockListCounts.mockReturnValue(new Promise(() => {}));
     mockListAdjustments.mockReturnValue(new Promise(() => {}));
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no completed/cancelled counts exist', async () => {
     mockListCounts.mockResolvedValue([]);
     mockListAdjustments.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
     await waitFor(() => {
       // FTL sc-hist-empty = "No completed counts to display."
       expect(screen.getByText(/no completed counts/i)).toBeInTheDocument();
@@ -63,7 +63,7 @@ describe('StockCountHistory', () => {
   it('renders history title', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
     await waitFor(() => {
       // FTL sc-hist-title = "Count History"
       expect(screen.getByText(/count history/i)).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe('StockCountHistory', () => {
   it('loads and displays count list items', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe('StockCountHistory', () => {
     ];
     mockListCounts.mockResolvedValue(allCounts);
     mockListAdjustments.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -107,7 +107,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -125,7 +125,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue(sampleLines);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -148,7 +148,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue(sampleAdjustments);
     mockGetLines.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -169,7 +169,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -187,7 +187,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -205,7 +205,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockRejectedValue(new Error('Network error'));
-    render(wrap(<StockCountHistory />));
+    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();

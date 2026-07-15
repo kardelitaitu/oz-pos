@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -35,7 +35,7 @@ const mockUpdateStatus = updateStockCountStatus as ReturnType<typeof vi.fn>;
 const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
 const mockGetLines = getCountLines as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockCountingFtl, sharedFtl);
+
 
 const sampleCount = {
   id: 'sc-1', count_number: 'SC-001', status: 'draft' as const,
@@ -60,13 +60,13 @@ describe('StockCountDetail', () => {
   // ── Loading / not found ──────────────────────────────────────
   it('shows loading state initially', async () => {
     mockGetStockCount.mockReturnValue(new Promise(() => {}));
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
   it('shows not found when count is null', async () => {
     mockGetStockCount.mockResolvedValue(null);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/count not found/i)).toBeInTheDocument();
     });
@@ -75,7 +75,7 @@ describe('StockCountDetail', () => {
   // ── Basic rendering ──────────────────────────────────────────
   it('renders count number and meta info', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe('StockCountDetail', () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
     mockGetStockCount.mockResolvedValue(sampleCount);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={onBack} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={onBack} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -102,7 +102,7 @@ describe('StockCountDetail', () => {
   // ── Lines table ──────────────────────────────────────────────
   it('shows empty lines message when no lines exist', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe('StockCountDetail', () => {
   it('renders lines table with expected, counted, diff columns', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue(sampleLines);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('StockCountDetail', () => {
   it('shows positive diff with + prefix', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue([sampleLines[2]!]);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('StockCountDetail', () => {
   it('shows negative diff without +', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue([sampleLines[1]!]);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe('StockCountDetail', () => {
   it('shows total row with sums', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue(sampleLines);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -177,7 +177,7 @@ describe('StockCountDetail', () => {
   // ── Actions ──────────────────────────────────────────────────
   it('shows Start Counting button for draft counts', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe('StockCountDetail', () => {
     const user = userEvent.setup();
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockUpdateStatus.mockResolvedValue(undefined);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -204,7 +204,7 @@ describe('StockCountDetail', () => {
   it('shows Complete Count button when editable and has lines', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue(sampleLines);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -219,7 +219,7 @@ describe('StockCountDetail', () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue(sampleLines);
     mockComplete.mockResolvedValue([{ id: 'adj-1' }, { id: 'adj-2' }]);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -240,7 +240,7 @@ describe('StockCountDetail', () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue(sampleLines);
     mockComplete.mockRejectedValue(new Error('Network failure'));
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -259,7 +259,7 @@ describe('StockCountDetail', () => {
   it('shows remove × button on each line when editable', async () => {
     mockGetStockCount.mockResolvedValue(sampleCount);
     mockGetLines.mockResolvedValue(sampleLines);
-    render(wrap(<StockCountDetail countId="sc-1" onBack={vi.fn()} />));
+    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import promotionsFtl from '@/locales/promotions.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
@@ -48,11 +48,8 @@ function makePromo(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const wrap = (children: React.ReactNode) =>
-  withFluent(children, promotionsFtl, sharedFtl);
-
 function renderScreen() {
-  return render(wrap(<PromotionManagementScreen />));
+  return renderWithFluentSync(<PromotionManagementScreen />, promotionsFtl, sharedFtl);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

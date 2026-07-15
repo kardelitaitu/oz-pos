@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import offlineFtl from '@/locales/offline.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
@@ -35,11 +35,8 @@ function makeQueueItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const wrap = (children: React.ReactNode) =>
-  withFluent(children, offlineFtl, sharedFtl);
-
 function renderScreen() {
-  return render(wrap(<OfflineQueueScreen />));
+  return renderWithFluentSync(<OfflineQueueScreen />, offlineFtl, sharedFtl);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
