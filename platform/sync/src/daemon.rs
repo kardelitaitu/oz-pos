@@ -422,10 +422,10 @@ impl Default for SyncDaemon {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{routing::post, Json, Router};
+    use crate::transport::{PullResponse, PushOutcome, PushResponse};
+    use axum::{Json, Router, routing::post};
     use oz_core::migrations;
     use oz_core::settings::Settings;
-    use crate::transport::{PullResponse, PushOutcome, PushResponse};
 
     fn setup_db() -> DbConnection {
         Arc::new(Mutex::new(migrations::fresh_db()))

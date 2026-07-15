@@ -15,17 +15,6 @@ import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import type { LineId, Sku } from '@/types/domain';
-import {
-  createAuthContextMock,
-  createWorkspaceContextMock,
-} from '@/__tests__/test-utils/mocks/contexts';
-import {
-  createSalesApiMock,
-  createSettingsApiMock,
-  createShiftsApiMock,
-  createHardwareApiMock,
-  createProductsApiMock,
-} from '@/__tests__/test-utils/mocks/api';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 
@@ -115,19 +104,31 @@ vi.mock('@/api/products', () => ({
   deleteCategory: vi.fn(),
 }));
 
-vi.mock('@/api/shifts', () => createShiftsApiMock({
-  getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
-}));
+vi.mock('@/api/shifts', async () => {
+  const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createShiftsApiMock({
+    getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
+  });
+});
 
-vi.mock('@/api/settings', () => createSettingsApiMock({
-  getStoreSettings: vi.fn(() =>
-    Promise.resolve({ name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: '', currency: 'IDR', branch: 'Cabang A', logo: '' }),
-  ),
-}));
+vi.mock('@/api/settings', async () => {
+  const { createSettingsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSettingsApiMock({
+    getStoreSettings: vi.fn(() =>
+      Promise.resolve({ name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: '', currency: 'IDR', branch: 'Cabang A', logo: '' }),
+    ),
+  });
+});
 
-vi.mock('@/api/hardware', () => createHardwareApiMock());
+vi.mock('@/api/hardware', async () => {
+  const { createHardwareApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createHardwareApiMock();
+});
 
-vi.mock('@/api/sales', () => createSalesApiMock());
+vi.mock('@/api/sales', async () => {
+  const { createSalesApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSalesApiMock();
+});
 
 vi.mock('@/api/kds', () => ({
   createKdsOrderFromSale: vi.fn((_userId: string, _saleId: string) => Promise.resolve()),
@@ -158,11 +159,17 @@ vi.mock('@/api/customers', () => ({
   deleteCustomer: vi.fn(),
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: createAuthContextMock(),
-}));
+vi.mock('@/contexts/AuthContext', async () => {
+  const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return {
+    useAuth: createAuthContextMock(),
+  };
+});
 
-vi.mock('@/contexts/WorkspaceContext', createWorkspaceContextMock);
+vi.mock('@/contexts/WorkspaceContext', async () => {
+  const { createWorkspaceContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return createWorkspaceContextMock();
+});
 
 const catFtl = `
   category-cat-food = Makanan

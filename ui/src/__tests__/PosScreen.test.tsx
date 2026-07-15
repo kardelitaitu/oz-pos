@@ -20,15 +20,6 @@ import PosScreen from '@/features/sales/PosScreen';
 import * as productsApi from '@/api/products';
 import * as bundlesApi from '@/api/bundles';
 import type { BarcodeScannedPayload } from '@/api/hardware';
-import {
-  createAuthContextMock,
-  createWorkspaceContextMock,
-} from '@/__tests__/test-utils/mocks/contexts';
-import {
-  createSalesApiMock,
-  createSettingsApiMock,
-  createShiftsApiMock,
-} from '@/__tests__/test-utils/mocks/api';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 // vi.mock is hoisted, so any mutable state must be declared via
@@ -169,13 +160,22 @@ vi.mock('@/api/bundles', () => ({
   deleteBundle: vi.fn(),
 }));
 
-vi.mock('@/api/shifts', () => createShiftsApiMock());
+vi.mock('@/api/shifts', async () => {
+  const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createShiftsApiMock();
+});
 
-vi.mock('@/api/settings', () => createSettingsApiMock());
+vi.mock('@/api/settings', async () => {
+  const { createSettingsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSettingsApiMock();
+});
 
 // Mock sales API to prevent unhandled promise rejections from
 // loadHeldCarts being called on mount.
-vi.mock('@/api/sales', () => createSalesApiMock());
+vi.mock('@/api/sales', async () => {
+  const { createSalesApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSalesApiMock();
+});
 
 // Mock interaction utils so jsdom's non-Promise play() doesn't
 // trigger a TypeError inside triggerInteraction (the catch {}
@@ -185,11 +185,17 @@ vi.mock('@/utils/interaction', () => ({
   triggerInteraction: vi.fn(),
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: createAuthContextMock({ displayName: undefined }),
-}));
+vi.mock('@/contexts/AuthContext', async () => {
+  const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return {
+    useAuth: createAuthContextMock({ displayName: undefined }),
+  };
+});
 
-vi.mock('@/contexts/WorkspaceContext', createWorkspaceContextMock);
+vi.mock('@/contexts/WorkspaceContext', async () => {
+  const { createWorkspaceContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return createWorkspaceContextMock();
+});
 
 // Sub-screen stubs for the Settings 4-tab-routing pattern.
 // Kept minimal so the parent-only assertions stay focused.

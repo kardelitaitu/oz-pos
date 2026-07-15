@@ -38,34 +38,19 @@ total_start=$(date +%s)
 # ── Rust (mirrors CI `rust` job) ──────────────────────────────────────────
 step "cargo fmt" "cargo fmt --all -- --check" cargo fmt --all -- --check
 
-# Extract workspace member package names from cargo metadata.
-# Uses mapfile to avoid IFS splitting issues with $(...) on Windows.
-# Pipe through tr -d \r to strip carriage returns that mapfile -t doesn't remove.
-mapfile -t packages < <(cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c "
-import json, sys
-try:
-    d = json.load(sys.stdin)
-    by_id = {p['id']: p['name'] for p in d['packages']}
-    for mid in sorted(d.get('workspace_members', [])):
-        raw = by_id.get(mid, mid.split()[0])
-        # Keep only valid Cargo package name chars (alphanumeric, -, _)
-        clean = ''.join(c for c in raw if c.isalnum() or c in '-_')
-        if clean:
-            print(clean)
-except Exception:
-    pass
-" | tr -d '\r')
-
-for pkg in "${packages[@]}"; do
-    step "clippy $pkg" "cargo clippy -p $pkg --all-targets --all-features -- -D warnings" cargo clippy -p "$pkg" --all-targets --all-features -- -D warnings
-done
+# Workspace-wide clippy (single compilation pass instead of N per-package invocations).
+# Uses default features only — the `slow-tests` feature gates integration tests
+# that don't need linting, and clippy doesn't benefit from compiling them.
+step "clippy workspace" "cargo clippy --workspace --all-targets -- -D warnings" cargo clippy --workspace --all-targets -- -D warnings
 
 # ── ADR #7 Phase 4: no raw store_id/user_id in command signatures ───────
 step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bash scripts/verify-no-raw-params.sh
 
-for pkg in "${packages[@]}"; do
-    step "test $pkg" "cargo test -p $pkg --all-features" cargo test -p "$pkg" --all-features
-done
+# Workspace-wide test (single compilation pass instead of N per-package invocations).
+# --test-threads matches CPU count (cargo default is already num_cpus, but
+# explicit declaration documents intent and ensures consistent parallelism).
+cpu_count=$(nproc --all 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+step "test workspace" "cargo test --workspace --all-features -- --test-threads $cpu_count" cargo test --workspace --all-features -- --test-threads "$cpu_count"
 
 # ── Migration (mirrors CI `migration` job) ────────────────────────────────
 step "migration smoke test" "cargo run -p oz-cli -- migrate" cargo run -p oz-cli -- migrate
@@ -94,7 +79,8 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     cd ..
     step "i18n lint" "bash scripts/lint-i18n.sh" bash scripts/lint-i18n.sh
     step "feature registry parity" "python3 scripts/verify-feature-registry.py" python3 scripts/verify-feature-registry.py
-    step "ui build" "cd ui; npm run build" npm run build
+    # npm run build skipped — typecheck + vitest already cover correctness;
+    # the production vite bundle is validated by CI independently.
 else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
 fi

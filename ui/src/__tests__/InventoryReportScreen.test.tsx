@@ -242,16 +242,11 @@ describe('InventoryReportScreen', () => {
 
   it('renders Export CSV button and triggers CSV download on click', async () => {
     mockGetLowStockAlerts.mockResolvedValue([buildSampleAlert()]);
-    // jsdom doesn't provide URL.createObjectURL; define it before spying
-    if (!URL.createObjectURL) {
-      Object.defineProperty(URL, 'createObjectURL', {
-        value: vi.fn().mockReturnValue('blob:test'),
-        writable: true,
-      });
-    }
-    if (!URL.revokeObjectURL) {
-      Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), writable: true });
-    }
+    // jsdom may or may not provide these — always stub them
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:test');
+    URL.revokeObjectURL = vi.fn();
     const clickSpy = vi.fn();
     const origCreateElement = document.createElement.bind(document);
     const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
@@ -275,6 +270,8 @@ describe('InventoryReportScreen', () => {
     });
 
     createElementSpy.mockRestore();
+    URL.createObjectURL = origCreateObjectURL;
+    URL.revokeObjectURL = origRevokeObjectURL;
   });
 
   // ── ARIA ───────────────────────────────────────────────────────────

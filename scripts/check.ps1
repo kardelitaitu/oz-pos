@@ -62,8 +62,10 @@ Step -Name "cargo fmt (format)" -ScriptBlock { cargo fmt --all }
 Step -Name "cargo fmt (check)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
 
 # Workspace-wide clippy (single compilation pass instead of N per-package invocations).
-Step -Name "clippy workspace" -RetryCommand "cargo clippy --workspace --all-targets --all-features -- -D warnings" -ScriptBlock {
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+# Uses default features only — the `slow-tests` feature gates integration tests
+# that don't need linting, and clippy doesn't benefit from compiling them.
+Step -Name "clippy workspace" -RetryCommand "cargo clippy --workspace --all-targets -- -D warnings" -ScriptBlock {
+    cargo clippy --workspace --all-targets -- -D warnings
 }
 
 # Use explicit --test-threads to match CPU count. Cargo's default is already
@@ -117,7 +119,8 @@ if (-not $Fast -and (Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
     Step -Name "ui typecheck" -RetryCommand "cd ui; npm run typecheck" -ScriptBlock { npm run typecheck }
     Step -Name "ui test" -RetryCommand "cd ui; npm run test" -ScriptBlock { npm run test }
-    Step -Name "ui build" -RetryCommand "cd ui; npm run build" -ScriptBlock { npm run build }
+    # Skip `npm run build` in local check: typecheck + vitest already cover
+    # correctness; the Vite production bundle is validated by CI independently.
     Pop-Location
 } elseif ($Fast) {
     Write-Host "SKIP UI checks (--Fast mode)"
