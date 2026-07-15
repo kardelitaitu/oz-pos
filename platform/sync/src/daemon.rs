@@ -450,7 +450,7 @@ impl Default for SyncDaemon {
 mod tests {
     use super::*;
     use crate::transport::{PullResponse, PushOutcome, PushResponse};
-    use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+    use axum::{Json, Router, response::IntoResponse, routing::post};
     use oz_core::migrations;
     use oz_core::settings::Settings;
 
@@ -626,38 +626,9 @@ mod tests {
         );
     }
 
-    // ── ADR #11: Server migration integration test ──────────────
+    // ── ADR #11: Server migration integration tests ──────────
 
-    /// Spawn a mock server that always returns a migration redirect.
-    async fn spawn_redirect_server(new_url: &str) -> String {
-        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let redirect_url = new_url.to_owned();
-
-        async fn redirect_handler(
-            axum::extract::State(url): axum::extract::State<String>,
-        ) -> impl IntoResponse {
-            (
-                StatusCode::MISDIRECTED_REQUEST,
-                Json(serde_json::json!({
-                    "error": "server_migrated",
-                    "new_url": url,
-                })),
-            )
-        }
-
-        let app = Router::new()
-            .route("/api/sync/push", post(redirect_handler))
-            .route("/api/sync/pull", post(redirect_handler))
-            .with_state(redirect_url);
-
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        format!("http://localhost:{port}")
-    }
+    use crate::test_helpers::spawn_redirect_server;
 
     #[tokio::test]
     async fn daemon_auto_updates_url_on_server_migration() {

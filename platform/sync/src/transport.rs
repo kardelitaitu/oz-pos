@@ -522,45 +522,7 @@ mod tests {
 
     // ── ADR #11: Transport integration tests ──────────────────
 
-    /// Spawn a mock server that returns HTTP 421 + `server_migrated` JSON
-    /// on both push and pull endpoints.
-    async fn spawn_redirect_server(new_url: &str) -> String {
-        use axum::{
-            Json, Router,
-            http::StatusCode,
-            response::IntoResponse,
-            routing::{get, post},
-        };
-
-        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let redirect_url = new_url.to_owned();
-
-        async fn handler(
-            axum::extract::State(url): axum::extract::State<String>,
-        ) -> impl IntoResponse {
-            (
-                StatusCode::MISDIRECTED_REQUEST,
-                Json(serde_json::json!({
-                    "error": "server_migrated",
-                    "new_url": url,
-                })),
-            )
-        }
-
-        let app = Router::new()
-            .route("/api/sync/push", post(handler))
-            .route("/api/sync/pull", post(handler))
-            .route("/api/sync/snapshot", get(handler))
-            .with_state(redirect_url);
-
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        format!("http://localhost:{port}")
-    }
+    use crate::test_helpers::spawn_redirect_server;
 
     #[tokio::test]
     async fn push_items_returns_server_migrated_on_redirect() {
