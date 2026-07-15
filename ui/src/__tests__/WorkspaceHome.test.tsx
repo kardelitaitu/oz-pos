@@ -7,8 +7,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderInAct } from '@/test-utils/renderInAct';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluent } from '@/__tests__/test-utils/render';
 import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
 
 // ── Hoisted mocks ──────────────────────────────────────────────
@@ -40,11 +39,7 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => mockWorkspaceValue(),
 }));
 
-// ── Test wrapper ───────────────────────────────────────────────
 
-function wrap(children: React.ReactNode) {
-  return withFluent(children);
-}
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -119,7 +114,7 @@ describe('WorkspaceHome', () => {
   resolvedStoreId: 'default',
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       const skeletonGrid = document.querySelector('.workspace-skeleton-grid');
       expect(skeletonGrid).toBeInTheDocument();
@@ -144,7 +139,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getByText('Connection Error')).toBeInTheDocument();
@@ -166,7 +161,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getByText('Connection Error')).toBeInTheDocument();
@@ -192,7 +187,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getByText('No workspaces available')).toBeInTheDocument();
@@ -216,7 +211,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -239,7 +234,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         // Name appears in both the user profile and the greeting
@@ -260,7 +255,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -284,7 +279,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -309,7 +304,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -335,7 +330,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -365,7 +360,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -394,7 +389,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -424,7 +419,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -448,7 +443,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -478,7 +473,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -508,7 +503,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -554,7 +549,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -604,7 +599,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -641,7 +636,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -666,7 +661,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -690,7 +685,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -717,7 +712,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -744,7 +739,7 @@ describe('WorkspaceHome', () => {
   resolvedStoreId: 'default',
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
       expect(btn).toBeInTheDocument();
@@ -763,7 +758,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getByText('Connection Error')).toBeInTheDocument();
@@ -790,7 +785,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -814,7 +809,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: 'kds',
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
@@ -844,7 +839,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: 'admin',
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getByText('Admin')).toBeInTheDocument();
@@ -874,7 +869,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -906,7 +901,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
@@ -932,7 +927,7 @@ describe('WorkspaceHome', () => {
         lastWorkspace: null,
       });
 
-      await renderInAct(wrap(<WorkspaceHome />));
+      await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);

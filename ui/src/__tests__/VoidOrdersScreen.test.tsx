@@ -1,8 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
-import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluent } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -25,7 +24,7 @@ const mockListSales = listSales as ReturnType<typeof vi.fn>;
 const mockGetSale = getSale as ReturnType<typeof vi.fn>;
 const mockVoidSale = voidSale as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, salesFtl, sharedFtl);
+
 
 const sampleSales = [
   {
@@ -66,19 +65,19 @@ describe('VoidOrdersScreen', () => {
 
   it('renders the list view with title', async () => {
     mockListSales.mockResolvedValue([]);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     expect(screen.getByText('Orders')).toBeInTheDocument();
   });
 
   it('renders loading state initially', async () => {
     mockListSales.mockReturnValue(new Promise(() => {}));
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     expect(screen.getByText(/loading orders/i)).toBeInTheDocument();
   });
 
   it('renders empty state when no orders', async () => {
     mockListSales.mockResolvedValue([]);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/No orders recorded yet/i)).toBeInTheDocument();
     });
@@ -86,7 +85,7 @@ describe('VoidOrdersScreen', () => {
 
   it('renders orders in the list', async () => {
     mockListSales.mockResolvedValue(sampleSales);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -96,7 +95,7 @@ describe('VoidOrdersScreen', () => {
 
   it('renders the status filter chips', async () => {
     mockListSales.mockResolvedValue(sampleSales);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('All')).toBeInTheDocument();
     });
@@ -108,7 +107,7 @@ describe('VoidOrdersScreen', () => {
 
   it('filters orders by status', async () => {
     mockListSales.mockResolvedValue(sampleSales);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -123,7 +122,7 @@ describe('VoidOrdersScreen', () => {
   it('opens detail view when View is clicked', async () => {
     mockListSales.mockResolvedValue(sampleSales);
     mockGetSale.mockResolvedValue(sampleDetail);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -140,7 +139,7 @@ describe('VoidOrdersScreen', () => {
   it('shows void section for Active orders in detail view', async () => {
     mockListSales.mockResolvedValue(sampleSales);
     mockGetSale.mockResolvedValue(sampleDetail);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -156,7 +155,7 @@ describe('VoidOrdersScreen', () => {
   it('renders the void reason select', async () => {
     mockListSales.mockResolvedValue(sampleSales);
     mockGetSale.mockResolvedValue(sampleDetail);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -172,7 +171,7 @@ describe('VoidOrdersScreen', () => {
   it('disables Confirm Void button until a reason is selected', async () => {
     mockListSales.mockResolvedValue(sampleSales);
     mockGetSale.mockResolvedValue(sampleDetail);
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -192,7 +191,7 @@ describe('VoidOrdersScreen', () => {
     mockVoidSale.mockResolvedValue({});
     const user = userEvent.setup();
 
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -226,7 +225,7 @@ describe('VoidOrdersScreen', () => {
     mockVoidSale.mockRejectedValue(new Error('Network error'));
     const user = userEvent.setup();
 
-    await renderInAct(wrap(<VoidOrdersScreen />));
+    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });

@@ -6,9 +6,8 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
-import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluent } from '@/__tests__/test-utils/render';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import { ToastProvider } from '@/frontend/shared/Toast';
@@ -30,15 +29,7 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
-// ── Test wrapper ──────────────────────────────────────────────────
 
-function wrap(children: React.ReactNode) {
-  return withFluent(
-    <ToastProvider>{children}</ToastProvider>,
-    settingsFtl,
-    sharedFtl,
-  );
-}
 
 // ── Sample data ───────────────────────────────────────────────────
 
@@ -64,7 +55,7 @@ describe('FeatureToggleScreen', () => {
   it('renders loading spinner while fetching features', async () => {
     mockInvoke.mockReturnValue(new Promise(() => {}));
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     expect(screen.getByText(/loading features/i)).toBeInTheDocument();
   });
@@ -74,7 +65,7 @@ describe('FeatureToggleScreen', () => {
   it('renders error with retry button when load fails', async () => {
     mockInvoke.mockRejectedValue(new Error('IPC error'));
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('IPC error')).toBeInTheDocument();
@@ -86,7 +77,7 @@ describe('FeatureToggleScreen', () => {
     mockInvoke.mockRejectedValueOnce(new Error('IPC error'));
     mockInvoke.mockResolvedValueOnce(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
@@ -104,7 +95,7 @@ describe('FeatureToggleScreen', () => {
   it('renders empty state when no features exist', async () => {
     mockInvoke.mockResolvedValue({ features: [] });
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText(/No features found/i)).toBeInTheDocument();
@@ -116,7 +107,7 @@ describe('FeatureToggleScreen', () => {
   it('renders the title and subtitle with feature count', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Feature Toggles')).toBeInTheDocument();
@@ -128,7 +119,7 @@ describe('FeatureToggleScreen', () => {
   it('renders all feature groups with correct headers', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -144,7 +135,7 @@ describe('FeatureToggleScreen', () => {
   it('renders feature names and descriptions', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -156,7 +147,7 @@ describe('FeatureToggleScreen', () => {
   it('renders group-level enabled/total count in each heading', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -174,7 +165,7 @@ describe('FeatureToggleScreen', () => {
   it('renders Enable All / Disable All bulk buttons per group', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -192,7 +183,7 @@ describe('FeatureToggleScreen', () => {
   it('renders a search input', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -204,7 +195,7 @@ describe('FeatureToggleScreen', () => {
   it('filters features when searching', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -222,7 +213,7 @@ describe('FeatureToggleScreen', () => {
   it('shows search-no-results message when query has no matches', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -239,7 +230,7 @@ describe('FeatureToggleScreen', () => {
   it('shows clear button when search has a value', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -265,7 +256,7 @@ describe('FeatureToggleScreen', () => {
       .mockResolvedValueOnce(sampleFeaturesResult)
       .mockResolvedValueOnce({ success: true, features: toggledFeatures, auto_enabled: [] });
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Card Payment')).toBeInTheDocument();
@@ -300,7 +291,7 @@ describe('FeatureToggleScreen', () => {
         auto_enabled: ['cash_payment'],
       });
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Card Payment')).toBeInTheDocument();
@@ -326,7 +317,7 @@ describe('FeatureToggleScreen', () => {
       .mockResolvedValueOnce(sampleFeaturesResult)
       .mockResolvedValueOnce({ features: allHardwareEnabled });
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Barcode Scanner')).toBeInTheDocument();
@@ -355,7 +346,7 @@ describe('FeatureToggleScreen', () => {
       .mockResolvedValueOnce(sampleFeaturesResult)
       .mockResolvedValueOnce({ features: allCoreDisabled });
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -381,7 +372,7 @@ describe('FeatureToggleScreen', () => {
   it('shows dependency info for features with dependencies', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Card Payment')).toBeInTheDocument();
@@ -394,7 +385,7 @@ describe('FeatureToggleScreen', () => {
   it('does not show dependency info for features without dependencies', async () => {
     mockInvoke.mockResolvedValue(sampleFeaturesResult);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
@@ -414,7 +405,7 @@ describe('FeatureToggleScreen', () => {
       .mockResolvedValueOnce(sampleFeaturesResult)
       .mockReturnValueOnce(togglePromise);
 
-    await renderInAct(wrap(<FeatureToggleScreen />));
+    await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
