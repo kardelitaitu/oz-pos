@@ -33,9 +33,9 @@
 
 .license-activation-logo {
   width: 100%;
-  max-width: 280px;
+  max-width: 17.5rem;
   object-fit: contain;
-  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0.625rem 1.875rem rgba(0, 0, 0, 0.5));
 }
 
 .license-activation-card {
@@ -43,7 +43,7 @@
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  border-radius: 24px;
+  border-radius: 1.5rem;
   padding: 3rem;
   width: 100%;
   max-width: 31.25rem;
@@ -91,13 +91,13 @@
   box-sizing: border-box;
   background: var(--color-bg-input);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 0.75rem;
   padding: 1rem 3rem 1rem 1rem;
   color: var(--color-fg);
   font-size: 1rem;
   transition: all 0.2s ease;
   font-family: var(--font-mono);
-  letter-spacing: 1px;
+  letter-spacing: 0.0625rem;
 }
 
 .license-input-wrapper {
@@ -109,10 +109,10 @@
 
 .license-input-clear {
   position: absolute;
-  right: 12px;
+  right: 0.75rem;
   background: none;
   border: none;
-  padding: 4px;
+  padding: 0.25rem;
   cursor: pointer;
   color: var(--color-fg-disabled);
   display: flex;
@@ -126,14 +126,14 @@
 }
 
 .license-input-clear svg {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
 }
 
 .license-input:focus {
   outline: none;
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 4px var(--color-accent-alpha);
+  box-shadow: 0 0 0 0.25rem var(--color-accent-alpha);
 }
 
 .license-input:-webkit-autofill,
@@ -155,7 +155,7 @@
   background: var(--primary-500);
   color: #ffffff;
   border: none;
-  border-radius: 12px;
+  border-radius: 0.75rem;
   font-size: 1.125rem;
   font-weight: 600;
   cursor: pointer;
@@ -169,8 +169,8 @@
 
 .license-submit-btn:hover:not(:disabled) {
   background: var(--primary-600);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  transform: translateY(-0.125rem);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
 }
 
 .license-submit-btn:active:not(:disabled) {
@@ -185,7 +185,7 @@
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(1.25rem);
   }
   to {
     opacity: 1;
@@ -228,17 +228,17 @@
   background: var(--color-bg-overlay);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 8px;
+  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 0.5rem;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
   color: var(--color-fg);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  min-width: 140px;
+  min-width: 8.75rem;
   transform-origin: top left;
   animation: context-menu-enter 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -254,7 +254,7 @@
 @keyframes context-menu-enter {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(-5px);
+    transform: scale(0.95) translateY(-0.3125rem);
   }
   to {
     opacity: 1;

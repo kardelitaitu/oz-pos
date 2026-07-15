@@ -126,7 +126,7 @@
 .offline-queue-cell-error {
   font-size: var(--text-xs);
   color: var(--color-fg-secondary);
-  max-width: 240px;
+  max-width: 15rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
