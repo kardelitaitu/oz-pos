@@ -892,7 +892,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               <h3 className="retail-options-heading">{l10n.getString('settings-system-heading')}</h3>
               <div className="retail-options-field">
                 <label htmlFor="system-app-version">{l10n.getString('settings-app-version-label')}</label>
-                <input id="system-app-version" value="0.0.8" disabled className="retail-options-input-disabled" />
+                <input id="system-app-version" value="0.0.9" disabled className="retail-options-input-disabled" />
               </div>
               <div className="retail-options-field">
                 <label htmlFor="system-cashier">{l10n.getString('settings-cashier-label')}</label>
