@@ -105,7 +105,8 @@ Describe 'tauri.conf.json productName patching' {
         $raw   = '{ "productName": "OZ-POS" }'
         $appName = "Acme's POS"
         $result = $raw -replace $productNamePattern, "`"$appName`""
-        $result | Should -Match '"productName": "Acme'
+        $expected = '{ "productName": "Acme' + "'" + 's POS" }'
+        $result | Should -Be $expected
     }
 
     It 'handles extra whitespace after colon' {

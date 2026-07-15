@@ -58,7 +58,9 @@ function Step {
 }
 
 # --- Rust (mirrors CI rust job) -------------------------------------------
-Step -Name "cargo fmt (format)" -ScriptBlock { cargo fmt --all }
+# --check only: the pre-commit hook already handles auto-formatting via
+# `cargo fmt --all`. Running --check here fails-closed so contributors
+# see which files need formatting before push.
 Step -Name "cargo fmt (check)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
 
 # Workspace-wide clippy (single compilation pass instead of N per-package invocations).

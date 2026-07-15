@@ -55,8 +55,9 @@ function IsExcluded($path) {
     return $false
 }
 
-# Scan directory recursively
-Get-ChildItem -Path $projectRoot -File -Recurse | Get-Unique | ForEach-Object {
+# Scan directory recursively. No Get-Unique needed — Get-ChildItem -File
+# never returns duplicates for distinct file paths on disk.
+Get-ChildItem -Path $projectRoot -File -Recurse | ForEach-Object {
     $file = $_
     $ext = $file.Extension.ToLower()
     

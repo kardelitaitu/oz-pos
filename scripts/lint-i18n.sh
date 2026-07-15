@@ -58,12 +58,20 @@ fi
 # emit Fluent `Attempt to override` warnings once per duplicate key
 # per locale. Running targeted keeps the lint under 2 seconds —
 # important for pre-commit ergonomics.
-(cd ui && npx vitest run src/__tests__/i18nBundle.test.tsx 2>&1) > "$OUT" || true
+VITEST_EXIT=0
+(cd ui && npx vitest run src/__tests__/i18nBundle.test.tsx 2>&1) > "$OUT" || VITEST_EXIT=$?
 
 untranslated=$(grep -E '\[i18n\]' "$OUT" || true)
 duplicates=$(grep -E 'Attempt to override an existing message' "$OUT" || true)
 
 if [ -z "$untranslated$duplicates" ]; then
+    # If vitest itself failed (OOM, config error, etc.) but produced no
+    # i18n warnings, still fail — the test infrastructure is broken.
+    if [ "$VITEST_EXIT" -ne 0 ]; then
+        echo "i18n lint: vitest infrastructure failure (exit $VITEST_EXIT) — no i18n issues detected but the test runner crashed." >&2
+        cat "$OUT" >&2
+        exit 1
+    fi
     echo "i18n lint: no issues detected."
     exit 0
 fi
