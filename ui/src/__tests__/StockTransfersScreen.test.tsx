@@ -94,7 +94,6 @@ const sampleDetailInTransit = {
 
 describe('StockTransfersScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListProducts.mockResolvedValue([]);
     mockListTerminals.mockResolvedValue([]);
   });

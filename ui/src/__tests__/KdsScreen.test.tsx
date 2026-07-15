@@ -79,7 +79,6 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
 
 describe('KdsScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockGetKdsQueue.mockResolvedValue([]);
   });
 

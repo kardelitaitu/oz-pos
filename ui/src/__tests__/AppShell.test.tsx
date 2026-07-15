@@ -207,7 +207,6 @@ function mockKitchenRole() {
 
 describe('AppShell — KDS workspace navigation', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     // Reset auth mock to default (cashier) before each test
     mockAuthSession.mockReset();
     mockAuthSession.mockReturnValue({

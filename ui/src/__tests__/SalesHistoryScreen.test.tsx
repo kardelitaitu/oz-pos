@@ -82,7 +82,6 @@ const sampleDetail = {
 
 describe('SalesHistoryScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListStaff.mockResolvedValue(sampleStaff);
   });
 

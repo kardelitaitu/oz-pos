@@ -72,7 +72,6 @@ function capturedToasts(addToast: ReturnType<typeof vi.fn>): ToastInput[] {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
   localStorage.clear();
 
   // Default mock returns — all async calls resolve successfully.

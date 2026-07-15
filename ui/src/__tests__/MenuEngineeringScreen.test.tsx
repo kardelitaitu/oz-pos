@@ -81,7 +81,6 @@ function renderWithLocales(ui: React.ReactElement) {
 
 describe('MenuEngineeringScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.mocked(reportsApi.getMenuEngineering).mockResolvedValue(mockResult);
   });
 

@@ -74,7 +74,6 @@ vi.mock('@/frontend/shell/ThemeToggle', () => ({
 
 describe('LicenseActivationScreen - Exhaustive Suite', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.mocked(getVersion).mockResolvedValue({ version: '1.0.0', name: 'oz-pos', rustVersion: '1.70', target: 'windows' });
     vi.mocked(getLocalIp).mockResolvedValue('192.168.1.100');
     vi.mocked(getMachineId).mockResolvedValue('test-machine-id');

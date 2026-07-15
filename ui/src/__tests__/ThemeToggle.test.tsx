@@ -19,7 +19,6 @@ function renderScreen() {
 
 describe('ThemeToggle', () => {
   beforeEach(() => {
-    localStorage.clear();
     const html = document.documentElement;
     html.removeAttribute('data-theme');
     html.classList.remove('is-theme-transitioning');

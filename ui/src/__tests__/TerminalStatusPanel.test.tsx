@@ -35,7 +35,6 @@ function makeTerminal(overrides: Partial<TerminalDto> = {}): TerminalDto {
 
 describe('TerminalStatusPanel', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListTerminals.mockResolvedValue([]);
   });
 

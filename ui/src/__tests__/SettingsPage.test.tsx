@@ -81,7 +81,6 @@ vi.mock('@/contexts/ZoomContext', () => ({
 
 beforeEach(() => {
   cleanup();
-  localStorage.clear();
   failCommands.clear();
   invokeMock.mockReset();
   invokeMock.mockImplementation(defaultImpl);

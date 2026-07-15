@@ -91,7 +91,6 @@ function mockCashierUser() {
 
 describe('WorkspaceHome', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockDefaultUser();
   });
 

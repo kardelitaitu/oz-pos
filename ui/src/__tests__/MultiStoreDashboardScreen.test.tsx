@@ -93,7 +93,6 @@ const sampleTerminals: TerminalDto[] = [
 
 describe('MultiStoreDashboardScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListStores.mockResolvedValue(sampleStores);
     mockListTerminals.mockResolvedValue(sampleTerminals);
   });

@@ -5,7 +5,6 @@ import { useIdleTimer, getAutoLockMinutes, setAutoLockMinutes } from '@/hooks/us
 describe('useIdleTimer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    localStorage.clear();
   });
 
   afterEach(() => {

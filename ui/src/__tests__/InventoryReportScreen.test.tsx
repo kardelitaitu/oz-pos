@@ -98,7 +98,6 @@ function renderScreen() {
 // ── tests ──────────────────────────────────────────────────────────────
 describe('InventoryReportScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     // Default: never resolves (loading state)
     mockGetLowStockAlerts.mockImplementation(() => new Promise(() => {}));
     mockPrintSalesReceipt.mockResolvedValue(undefined);

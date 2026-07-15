@@ -71,7 +71,6 @@ function makeStore(overrides: Partial<StoreProfile> = {}): StoreProfile {
 
 describe('StoreSwitcher', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListStores.mockResolvedValue([]);
     mockSetPrimaryStore.mockResolvedValue(makeStore());
     mockSwitchStore.mockImplementation(() => {});

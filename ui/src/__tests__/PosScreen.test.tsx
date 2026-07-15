@@ -207,7 +207,6 @@ vi.mock('@/features/settings/DataManagementScreen', () => ({
 
 describe('PosScreen – bundle scanning toast', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedBarcode.reset();
   });
 

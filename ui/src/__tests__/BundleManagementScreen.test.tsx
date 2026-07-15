@@ -78,7 +78,6 @@ function pendingPromise() {
 
 describe('BundleManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListBundles.mockResolvedValue([]);
   });
 

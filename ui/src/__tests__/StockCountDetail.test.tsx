@@ -52,7 +52,6 @@ const sampleLines = [
 
 describe('StockCountDetail', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListProducts.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
   });

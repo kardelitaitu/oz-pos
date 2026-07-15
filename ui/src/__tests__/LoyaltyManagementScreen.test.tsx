@@ -59,7 +59,6 @@ const sampleCustomers = [
 
 describe('LoyaltyManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListAccounts.mockResolvedValue(sampleAccounts);
     mockListTiers.mockResolvedValue(sampleTiers);
     mockListCustomers.mockResolvedValue(sampleCustomers);

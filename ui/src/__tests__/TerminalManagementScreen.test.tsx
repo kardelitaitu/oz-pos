@@ -77,7 +77,6 @@ function makeTerminal(overrides: Partial<TerminalDto> = {}): TerminalDto {
 
 describe('TerminalManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListTerminals.mockResolvedValue([]);
     mockListTerminalOverrides.mockResolvedValue([]);
     mockRegisterTerminal.mockResolvedValue({ id: 'new-t' });

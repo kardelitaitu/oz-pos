@@ -40,7 +40,6 @@ const unstableReading: WeightReading = { weightGrams: 320, stable: false };
 
 describe('ScaleIndicator', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockReadScaleWeight.mockResolvedValue(null);
   });
 

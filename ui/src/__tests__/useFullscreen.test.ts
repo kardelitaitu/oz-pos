@@ -35,7 +35,6 @@ describe('useFullscreen', () => {
   let requestSpy: any;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     setBrowserMode();
 
     // jsdom may lack fullscreenElement, exitFullscreen, requestFullscreen — define them first.

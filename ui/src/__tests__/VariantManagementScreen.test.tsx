@@ -92,7 +92,6 @@ const defaultProps = {
 
 describe('VariantManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListVariants.mockResolvedValue(sampleVariants);
     mockCreateVariant.mockResolvedValue(undefined);
     mockUpdateVariant.mockResolvedValue(undefined);

@@ -36,11 +36,6 @@ async function toggleFeature(label: string) {
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe('SetupWizard', () => {
-  beforeEach(() => {
-    // Reset local state for clean tests.
-    localStorage.clear();
-  });
-
   // ── Step 1: Preset selection ────────────────────────────────────
 
   it('renders the preset selection step on mount', () => {

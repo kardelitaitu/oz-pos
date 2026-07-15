@@ -35,7 +35,6 @@ const sampleCustomers = [
 
 describe('CustomerManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListCustomers.mockResolvedValue(sampleCustomers);
   });
 

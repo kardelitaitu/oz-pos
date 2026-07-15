@@ -47,7 +47,6 @@ async function renderProvider() {
 
 describe('AuthContext', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     localStorage.clear();
   });
 

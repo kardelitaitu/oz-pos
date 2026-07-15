@@ -16,10 +16,6 @@ describe('STORAGE_KEYS', () => {
 });
 
 describe('getDecimalSep', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
   it('returns dot by default when nothing is stored', () => {
     expect(getDecimalSep()).toBe('dot');
   });
@@ -41,10 +37,6 @@ describe('getDecimalSep', () => {
 });
 
 describe('setDecimalSep', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
   it('stores valid values', () => {
     setDecimalSep('comma');
     expect(localStorage.getItem(STORAGE_KEYS.DECIMAL_SEP)).toBe('comma');

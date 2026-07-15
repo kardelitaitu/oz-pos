@@ -23,7 +23,6 @@ const sampleSuppliers = [
 
 describe('PurchaseOrderForm', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
   });
 

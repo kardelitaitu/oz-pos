@@ -189,6 +189,10 @@ All 10 pre-existing failures unchanged.
 
 ### K. Reduce beforeEach Duplication ✅ (0.0.8 — 2026-07-15)
 
+- [ ] **K5.** Fix remaining 2 pre-existing test failures:
+  - AppShell.test.tsx: "Enter your username" text not found (locale/Fluent key mismatch)
+  - SalesReportScreen.test.tsx: spy not called after end date change (async timing)
+
 - [x] **K1.** Audited all test files — `vi.clearAllMocks()` in 60+ files, `localStorage.clear()` in 10 files.
 - [x] **K2.** Added global `beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); })` to
   `ui/src/test-setup.ts`. The `setupFiles` config runs this before every test file's own `beforeEach`.

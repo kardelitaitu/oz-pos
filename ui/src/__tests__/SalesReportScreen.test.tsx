@@ -176,7 +176,6 @@ function resolveDefaultData() {
 
 describe('SalesReportScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     // Default: never resolves (loading state)
     mockGetDailyRevenue.mockImplementation(() => new Promise(() => {}));
     mockGetTopProducts.mockImplementation(() => new Promise(() => {}));
