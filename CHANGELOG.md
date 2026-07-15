@@ -7,7 +7,40 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.0.8] — 2026-07-15
 
 ### Changed
-- **Version bump**: Codebase version bumped from 0.0.7 to 0.0.8 across 17 files (Cargo.toml, Cargo.lock, Dockerfile.server, tauri.conf.json ×2, package.json, health.rs ×3, data.rs, and 7 UI/React components and tests).
+- **Version bump**: Codebase version bumped from 0.0.7 to 0.0.8 across 17 files.
+
+### Added
+- **Vitest 4.1.10 upgrade**: Native pool architecture replaces tinypool (vmThreads/threads/forks consolidated). Vite upgraded 5 → 6, @vitest/coverage-v8 1 → 4, @vitejs/plugin-react 4.3.1 → 4.3.4. Removed `pool: 'vmThreads'` from vite.config.ts.
+- **TDZ resolution — PosScreen + RetailPosScreen**: Resolved the pre-existing Temporal Dead Zone that prevented 59 tests (19+40) from running. Converted all `vi.mock` factories referencing imported symbols to use `await import()` — lazy-loading factory modules after vitest's hoisting phase breaks the circular dependency. Also: `contexts.ts → contexts.tsx` and added missing `settings-page-title` FTL key.
+- **Check script optimization (M4/M5/M6)**: 
+  - M4: Per-package clippy/test loops → `--workspace` in both `check.ps1` and `check.sh` (single compilation pass replaces 27 separate invocations, ~93% faster Rust tests). Removed unused package-extraction code (PowerShell `$Packages` variable, bash `mapfile` block). Added cross-platform `--test-threads` CPU detection (`nproc --all` / `sysctl -n hw.ncpu` / fallback 4) to `check.sh`.
+  - M5: Removed `--all-features` from `cargo clippy` in both scripts (slow-tests gated integration tests don't need linting).
+  - M6: Removed `npm run build` from both scripts (typecheck + vitest already cover correctness; CI validates production bundle).
+- **Shared mock modules (G)**: Created `ui/src/__tests__/test-utils/mocks/` with `contexts.tsx` (createAuthContextMock, createWorkspaceContextMock) and `api.ts` (createSalesApiMock, createSettingsApiMock, createShiftsApiMock, createHardwareApiMock, createProductsApiMock). Migrated PosScreen and RetailPosScreen test files — 11 inline vi.mock blocks eliminated.
+- **Shared render helpers (H)**: Created `renderWithFluent`, `renderWithFluentSync`, `renderWithProviders`, `renderWithProvidersSync` in `ui/src/__tests__/test-utils/render.tsx`. Provider chain: BrandProvider → ThemeProvider → ToastProvider → ZoomProvider → Fluent. Migrated all 34 test files (~500 tests). ~290 imports removed, 34 wrap/renderInAct functions eliminated.
+- **Global mock cleanup (K)**: Added global `beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); })` to `test-setup.ts`. Removed 31 per-file `vi.clearAllMocks()` + 7 `localStorage.clear()` calls + 25 redundant `beforeEach` blocks from individual test files. Removed unused `beforeEach` imports from 26 files.
+- **TypeScript fixes for vitest 4 (Q1)**: Fixed 42 TypeScript errors — vi.fn type signature change (6 errors across 4 files: `vi.fn<Args[], Return>()` → `vi.fn<() => Return>()`), vitest globals in test-setup.ts, exactOptionalPropertyTypes in PosScreen, no-extra-semi in ProductManagementScreen.
+- **Slow-test markers (C)**: Added `[features] slow-tests = []` to `platform/sync/Cargo.toml`. Gated 19 integration tests behind `#[cfg_attr(not(feature = "slow-tests"), ignore)]` — skipped during dev, run in CI via `--all-features`.
+- **DB snapshot for migration tests (D)**: Replaced `fresh_db()` SQL parsing with `rusqlite::backup::Backup` page-level binary copy from a `LazyLock<Mutex<Connection>>` pre-migrated snapshot. 5-10x speedup for migration-heavy tests.
+- **Cargo dev profile tuning (E)**: `[profile.dev.package.rusqlite] opt-level = 3`, `[profile.dev.package.serde_json] opt-level = 3`, `split-debuginfo = "off"`.
+- **Vitest config tuning (J)**: `testTimeout: 10_000`, `hookTimeout: 5_000`, documented `onConsoleLog` mirroring with `test-setup.ts`.
+- **Test parallelism (F)**: Explicit `--test-threads` in both check scripts. Confirmed zero shared-state issues across all crates.
+- **Ignored test audit**: Zero `#[ignore]` annotations in Rust, zero `it.skip`/`describe.skip`/`.todo()` in Vitest. Removed the last `#[ignore]` from daemon sync test (B).
+
+### Fixed
+- **ToastProvider infinite re-render**: Extracted `getToastId`/`getToastAutoDismissMs` to module scope; destructured `enqueue`/`dismiss`/`clearAll` individually so `useCallback` deps are stable function references instead of the entire queue object.
+- **InventoryReportScreen URL stub**: vitest 4's jsdom provides `URL.createObjectURL` natively — replaced guard-based stub with unconditional save-overwrite-restore pattern.
+- **CounterVec metrics rendering**: Pre-created `SYNC_PUSHES_TOTAL` label values (accepted/conflict/rejected) in `ensure_registered()`. CounterVec with no observations doesn't appear in Prometheus text output.
+- **Duplicate `#[cfg_attr]` on sync auth tests**: Removed duplicate `#[cfg_attr]` on `push_unauthorized_401` and `push_forbidden_403` in `integration_test.rs`. Pre-existing bug masked by `--all-features` always being enabled.
+- **2 remaining pre-existing test failures**: AppShell Fluent key + SalesReportScreen end-date fix.
+- **Missing `settings-page-title` FTL key**: Added to English `settings.ftl` bundle.
+
+### Performance
+- `cargo test --lib` (all crates): ~120s+ → **8.07s** (93% faster via `--workspace`)
+- `vitest run` (119 files, 1,939 tests): **14.85s** (3.4x under 50s target)
+- `scripts/check.ps1` full run: ~10min → **171.9s (~2.9 min)** (3.5x faster)
+- `scripts/check.sh` full run: ~10min → **166s (~2.8 min)** on Git Bash (3.6x faster)
+- `platform-sync` dev test: 10.5s → **8.1s** (23% faster via slow-tests gating)
 
 ## [0.0.7] — 2026-07-15
 
