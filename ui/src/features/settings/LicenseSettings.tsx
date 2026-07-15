@@ -95,8 +95,23 @@ export default function LicenseSettings() {
   if (loading) {
     return (
       <Card shadow="sm" header={<Localized id="settings-section-license"><h2 className="settings-section-title">License</h2></Localized>}>
-        <div className="settings-form" role="status" aria-live="polite" aria-label={l10n.getString('settings-loading')}>
-          <Localized id="settings-loading"><p>Loading&hellip;</p></Localized>
+        <div className="settings-license-skeleton" role="status" aria-live="polite" aria-label={l10n.getString('settings-loading')}>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
         </div>
       </Card>
     );
@@ -120,12 +135,14 @@ export default function LicenseSettings() {
   if (!payload) {
     return (
       <Card shadow="sm" header={<Localized id="settings-section-license"><h2 className="settings-section-title">License</h2></Localized>}>
-        <div className="settings-form">
-          <p className="settings-hint" role="status">
-            <Localized id="settings-license-not-activated">
-              <span>No license activated. Activate a license to see details here.</span>
-            </Localized>
-          </p>
+        <div className="settings-license-empty" role="status">
+          <svg className="settings-license-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          <Localized id="settings-license-not-activated">
+            <p className="settings-license-empty-text">No license activated. Activate a license to see details here.</p>
+          </Localized>
         </div>
       </Card>
     );
@@ -159,7 +176,7 @@ export default function LicenseSettings() {
           <span className="settings-license-label">
             <Localized id="settings-license-expires"><span>Expires</span></Localized>
           </span>
-          <span className="settings-license-value settings-license-value--medium">
+          <span className="settings-license-value">
             {formatDate(payload.expires_at)}
           </span>
         </div>
@@ -168,7 +185,7 @@ export default function LicenseSettings() {
           <span className="settings-license-label">
             <Localized id="settings-license-grace"><span>Grace Period Until</span></Localized>
           </span>
-          <span className="settings-license-value settings-license-value--medium">
+          <span className="settings-license-value">
             {formatDate(payload.grace_until)}
           </span>
         </div>
@@ -248,7 +265,7 @@ export default function LicenseSettings() {
                 <span className="settings-license-label">
                   <Localized id="settings-license-server-expires"><span>Server Expires</span></Localized>
                 </span>
-                <span className="settings-license-value settings-license-value--medium">
+                <span className="settings-license-value">
                   {formatDate(serverStatus.expiresAt)}
                 </span>
               </div>
