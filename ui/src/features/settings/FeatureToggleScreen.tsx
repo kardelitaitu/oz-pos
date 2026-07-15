@@ -16,6 +16,9 @@ import { useToast } from '@/frontend/shared/Toast';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import './FeatureToggleScreen.css';
 
+/** Duration (ms) for both the row flash and checkmark overlay to persist after a toggle. */
+const FLASH_DURATION = 1_400;
+
 // ── Types ──────────────────────────────────────────────────────────
 
 interface FeatureInfo {
@@ -124,6 +127,41 @@ export default function FeatureToggleScreen() {
   const [togglingBatch, setTogglingBatch] = useState<string | null>(null);
   const { addToast } = useToast();
 
+  // Track recently-toggled features for row flash + checkmark animation.
+  // Map<featureKey, 'enabled' | 'disabled'>
+  const [flashRows, setFlashRows] = useState<Map<string, 'enabled' | 'disabled'>>(new Map());
+  // Auto-cleanup ref for flash timeouts.
+  const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  /** Trigger row flash + checkmark on a feature key with a given result type. */
+  const triggerFlash = useCallback((key: string, kind: 'enabled' | 'disabled') => {
+    setFlashRows((prev) => {
+      const next = new Map(prev);
+      next.set(key, kind);
+      return next;
+    });
+    // Clear any existing timeout for this key.
+    const existing = flashTimeoutsRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const tid = setTimeout(() => {
+      setFlashRows((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      flashTimeoutsRef.current.delete(key);
+    }, FLASH_DURATION);
+    flashTimeoutsRef.current.set(key, tid);
+  }, []);
+
+  // Cleanup flash timeouts on unmount.
+  useEffect(() => {
+    return () => {
+      flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
+      flashTimeoutsRef.current.clear();
+    };
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -145,6 +183,7 @@ export default function FeatureToggleScreen() {
     try {
       const result = await setFeature(key, newValue);
       setFeatures(result.features);
+      triggerFlash(key, newValue ? 'enabled' : 'disabled');
 
       if (newValue && result.auto_enabled.length > 0) {
         addToast({
@@ -163,7 +202,7 @@ export default function FeatureToggleScreen() {
         type: 'error',
       });
     }
-  }, [l10n, addToast]);
+  }, [l10n, addToast, triggerFlash]);
 
   // ── Active feature set for preview ───────────────────────────
 
@@ -214,6 +253,8 @@ export default function FeatureToggleScreen() {
       // set_features_bulk — avoids N individual IPC round-trips.
       const result = await setFeaturesBulk(keys, enable);
       setFeatures(result.features);
+      // Trigger flash on each toggled feature.
+      keys.forEach((k) => triggerFlash(k, enable ? 'enabled' : 'disabled'));
       addToast({
         message: l10n.getString(
           enable ? 'feature-toggle-bulk-enabled' : 'feature-toggle-bulk-disabled',
@@ -229,7 +270,7 @@ export default function FeatureToggleScreen() {
     } finally {
       setTogglingBatch(null);
     }
-  }, [l10n, addToast]);
+  }, [l10n, addToast, triggerFlash]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -324,7 +365,7 @@ export default function FeatureToggleScreen() {
             <h2 className="feature-toggle-group-title">
               <span className="feature-toggle-group-icon" aria-hidden="true">{getGroupIcon(group)}</span>
               <Localized id={GROUP_L10N_IDS[group] ?? ''}>{group}</Localized>
-              <span className="feature-toggle-group-count">
+              <span className="feature-toggle-group-count" key={`${group}-${groupFeatures.filter((f) => f.enabled).length}`}>
                 {groupFeatures.filter((f) => f.enabled).length}/{groupFeatures.length}
               </span>
             </h2>
@@ -356,11 +397,16 @@ export default function FeatureToggleScreen() {
                 const depNames = feat.dependencies
                   .map((dk) => features.find((f) => f.key === dk)?.name ?? dk)
                   .join(', ');
+                const flashKind = flashRows.get(feat.key);
 
                 return (
-                  <div key={feat.key} className="feature-toggle-item">
+                  <div
+                    key={feat.key}
+                    className={`feature-toggle-item${flashKind ? ` feature-toggle-item--flash-${flashKind}` : ''}`}
+                  >
                     <div className="feature-toggle-item-info">
-                      <span className="feature-toggle-item-name">{feat.name}</span>                        <span id={`desc-${feat.key}`} className="feature-toggle-item-desc">{feat.description}</span>
+                      <span className="feature-toggle-item-name">{feat.name}</span>
+                      <span id={`desc-${feat.key}`} className="feature-toggle-item-desc">{feat.description}</span>
                       {feat.dependencies.length > 0 && (
                         <span className="feature-toggle-item-deps">
                           {l10n.getString('feature-toggle-requires', { deps: depNames })}
@@ -376,6 +422,24 @@ export default function FeatureToggleScreen() {
                         aria-describedby={`desc-${feat.key}`}
                       />
                       <span className="feature-toggle-slider" />
+                      {/* Success checkmark overlay — appears briefly after toggle */}
+                      {flashKind && (
+                        <span
+                          className={`feature-toggle-checkmark feature-toggle-checkmark--${flashKind}`}
+                          aria-hidden="true"
+                        >
+                          {flashKind === 'enabled' ? (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          )}
+                        </span>
+                      )}
                     </label>
                   </div>
                 );
