@@ -61,12 +61,9 @@ function Step {
 Step -Name "cargo fmt (format)" -ScriptBlock { cargo fmt --all }
 Step -Name "cargo fmt (check)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
 
-$Packages = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).packages.name
-
-foreach ($pkg in $Packages) {
-    Step -Name "clippy $pkg" -RetryCommand "cargo clippy -p $pkg --all-targets --all-features -- -D warnings" -ScriptBlock {
-        cargo clippy -p $pkg --all-targets --all-features -- -D warnings
-    }
+# Workspace-wide clippy (single compilation pass instead of N per-package invocations).
+Step -Name "clippy workspace" -RetryCommand "cargo clippy --workspace --all-targets --all-features -- -D warnings" -ScriptBlock {
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 }
 
 # Use explicit --test-threads to match CPU count. Cargo's default is already
@@ -83,10 +80,9 @@ if ($Fast) {
     $testArgs = @()
     $retryArgs = ""
 }
-foreach ($pkg in $Packages) {
-    Step -Name "test $pkg" -RetryCommand "cargo test -p $pkg --all-features $retryArgs -- --test-threads $cpuCount" -ScriptBlock {
-        cargo test -p $pkg --all-features @testArgs -- --test-threads $cpuCount
-    }
+# Workspace-wide test (single compilation pass instead of N per-package invocations).
+Step -Name "test workspace" -RetryCommand "cargo test --workspace --all-features $retryArgs -- --test-threads $cpuCount" -ScriptBlock {
+    cargo test --workspace --all-features @testArgs -- --test-threads $cpuCount
 }
 
 # --- Migration (mirrors CI migration job) ---------------------------------
