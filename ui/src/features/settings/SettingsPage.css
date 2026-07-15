@@ -227,6 +227,40 @@
   outline: none;
 }
 
+/* ── Sidebar collapse-all ───────────────────────── */
+
+.settings-sidebar-collapse-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  margin-right: var(--space-1);
+  transition:
+    background-color var(--duration-100) var(--ease-out),
+    color var(--duration-100) var(--ease-out);
+}
+
+.settings-sidebar-collapse-all:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
+.settings-sidebar-collapse-all:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
+}
+
+.settings-sidebar.collapsed .settings-sidebar-collapse-all {
+  display: none;
+}
+
 /* ── Sidebar search ──────────────────────────────────── */
 
 .settings-sidebar-search {

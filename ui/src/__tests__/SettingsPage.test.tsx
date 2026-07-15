@@ -436,9 +436,9 @@ describe('SettingsPage', () => {
   it('toggles collapse and expand via sidebar toggle button', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /collapse/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /collapse settings sidebar/i })).toBeInTheDocument();
     });
-    await userEvent.click(screen.getByRole('button', { name: /collapse/i }));
+    await userEvent.click(screen.getByRole('button', { name: /collapse settings sidebar/i }));
     // After collapse: the sidebar toggle aria-label flips to "Expand sidebar".
     // Scope to the sidebar button only — the mobile hamburger also has
     // an expand/collapse aria-label.
@@ -452,12 +452,12 @@ describe('SettingsPage', () => {
   it('persists sidebar collapsed state to localStorage', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /collapse/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /collapse settings sidebar/i })).toBeInTheDocument();
     });
     // Initial state is false and the effect immediately writes 'false' to
     // localStorage — verify it's not 'true' before we toggle.
     expect(localStorage.getItem('settings-sidebar-collapsed')).not.toBe('true');
-    await userEvent.click(screen.getByRole('button', { name: /collapse/i }));
+    await userEvent.click(screen.getByRole('button', { name: /collapse settings sidebar/i }));
     await waitFor(() => {
       expect(localStorage.getItem('settings-sidebar-collapsed')).toBe('true');
     });

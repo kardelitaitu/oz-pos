@@ -1264,6 +1264,17 @@ export default function SettingsPage() {
           <div className="settings-sidebar-header">
             <button
               type="button"
+              className="settings-sidebar-collapse-all"
+              onClick={() => setExpandedCategory(null)}
+              aria-label={l10n.getString('settings-sidebar-collapse-all-aria')}
+              title={l10n.getString('settings-sidebar-collapse-all-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="14" height="14">
+                <polyline points="6 15 12 9 18 15" />
+              </svg>
+            </button>
+            <button
+              type="button"
               className="settings-sidebar-toggle"
               onClick={() => setSidebarCollapsed((p) => !p)}
               aria-label={
