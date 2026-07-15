@@ -20,6 +20,7 @@
 mod db;
 mod metrics;
 mod prune;
+mod redirect;
 mod sync_api;
 
 use std::sync::Arc;
@@ -169,6 +170,7 @@ pub fn build_router(state: CloudServerState) -> Router {
         .with_state(health_state)
         .merge(api_router)
         .merge(sync_router)
+        .layer(axum::middleware::from_fn(redirect::redirect_middleware))
         .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
 }

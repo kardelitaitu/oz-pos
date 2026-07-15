@@ -1,7 +1,8 @@
 # ADR #11: Zero-Downtime VPS Migration Strategy
 
-**Status:** Proposed
+**Status:** Implemented (2026-07-15)
 **Date:** 2026-07-13
+**Updated:** 2026-07-15 (Layer 2 server redirect + client auto-update shipped)
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** vps, migration, dns, routing, fallback, server-redirection, client-config
 

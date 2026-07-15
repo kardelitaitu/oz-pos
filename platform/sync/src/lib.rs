@@ -71,6 +71,15 @@ pub enum SyncError {
         oldest_available: Option<String>,
     },
 
+    /// The sync server has been permanently migrated to a new URL
+    /// (ADR #11). The client should update its local `sync_server_url`
+    /// setting and reconnect on the next cycle.
+    #[error("server migrated to {new_url}")]
+    ServerMigrated {
+        /// The new server URL to connect to.
+        new_url: String,
+    },
+
     /// Database error from the underlying oz-core store.
     #[error("database error: {0}")]
     Database(#[from] oz_core::error::CoreError),

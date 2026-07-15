@@ -124,6 +124,12 @@ impl SyncTransport {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+
+            // ADR #11: Detect server migration redirect.
+            if let Some(new_url) = parse_server_migrated(&body) {
+                return Err(SyncError::ServerMigrated { new_url });
+            }
+
             return Err(SyncError::Transport(format!(
                 "push returned {status}: {body}"
             )));
@@ -177,6 +183,12 @@ impl SyncTransport {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+
+            // ADR #11: Detect server migration redirect.
+            if let Some(new_url) = parse_server_migrated(&body) {
+                return Err(SyncError::ServerMigrated { new_url });
+            }
+
             return Err(SyncError::Transport(format!(
                 "pull returned {status}: {body}"
             )));
@@ -221,6 +233,19 @@ impl SyncTransport {
     }
 }
 
+/// Parse a `server_migrated` redirect from a JSON response body (ADR #11).
+///
+/// Returns `Some(new_url)` if the body contains `{"error":"server_migrated","new_url":"..."}`,
+/// or `None` otherwise.
+fn parse_server_migrated(body: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    if v.get("error")?.as_str()? == "server_migrated" {
+        v.get("new_url")?.as_str().map(|s| s.to_owned())
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,6 +268,33 @@ mod tests {
         // We verify it doesn't crash and the transport works.
         let transport = SyncTransport::new("http://localhost:3099", Some("sk-test"));
         assert_eq!(transport.base_url, "http://localhost:3099");
+    }
+
+    // ── parse_server_migrated (ADR #11) ─────────────────────────────
+
+    #[test]
+    fn parse_server_migrated_detects_redirect() {
+        let body = r#"{"error":"server_migrated","new_url":"https://new.example.com"}"#;
+        assert_eq!(
+            super::parse_server_migrated(body),
+            Some("https://new.example.com".into())
+        );
+    }
+
+    #[test]
+    fn parse_server_migrated_ignores_other_errors() {
+        assert_eq!(super::parse_server_migrated(r#"{"error":"timeout"}"#), None);
+        assert_eq!(super::parse_server_migrated(r#"{"status":"ok"}"#), None);
+        assert_eq!(super::parse_server_migrated("not json"), None);
+    }
+
+    #[test]
+    fn parse_server_migrated_requires_new_url() {
+        // Missing new_url field — should return None.
+        assert_eq!(
+            super::parse_server_migrated(r#"{"error":"server_migrated"}"#),
+            None
+        );
     }
 
     // ── PushOutcome serde + Debug ────────────────────────────────────

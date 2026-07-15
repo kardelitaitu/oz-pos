@@ -15,8 +15,10 @@ use rand::Rng;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
+use oz_core::settings::Settings;
 use oz_core::sync_client::SyncConfig;
 
+use crate::SyncError;
 use crate::queue::SyncQueue;
 use crate::transport::{PushOutcome, SyncTransport};
 
@@ -252,6 +254,19 @@ impl SyncDaemon {
                     }
                     Err(e) => {
                         pushed = 0;
+                        // ADR #11: If the server migrated, update the local
+                        // URL so the next cycle connects to the new server.
+                        if let SyncError::ServerMigrated { new_url } = &e {
+                            let db = db.clone();
+                            let url = new_url.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                let conn = db.blocking_lock();
+                                let store = Store::new(&conn);
+                                let _ = Settings::set_sync_server_url(store.conn(), &url);
+                            })
+                            .await;
+                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                        }
                         sync_error = Some(e.to_string());
                     }
                 }
@@ -304,6 +319,18 @@ impl SyncDaemon {
                     }
                     Err(e) => {
                         pulled = 0;
+                        // ADR #11: Handle server migration redirect.
+                        if let SyncError::ServerMigrated { new_url } = &e {
+                            let db = db.clone();
+                            let url = new_url.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                let conn = db.blocking_lock();
+                                let store = Store::new(&conn);
+                                let _ = Settings::set_sync_server_url(store.conn(), &url);
+                            })
+                            .await;
+                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                        }
                         if sync_error.is_none() {
                             sync_error = Some(format!("pull phase: {e}"));
                         }
