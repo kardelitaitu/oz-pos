@@ -18,7 +18,7 @@
   border: 2px solid var(--color-border);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  padding: 2px;
+  padding: 0.125rem;
   background: none;
 }
 
@@ -81,7 +81,7 @@
   border: 2px dashed var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
-  min-height: 160px;
+  min-height: 10rem;
 }
 
 .appearance-preview-sample {
@@ -124,7 +124,7 @@
 }
 
 .appearance-preview-btn:hover {
-  box-shadow: 0 0 0 3px var(--color-accent-dim);
+  box-shadow: 0 0 0 0.1875rem var(--color-accent-dim);
 }
 
 .appearance-preview-btn-outline {

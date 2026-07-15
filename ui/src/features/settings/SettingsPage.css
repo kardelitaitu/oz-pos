@@ -169,8 +169,8 @@
 }
 
 .settings-sidebar-toggle:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
 }
 
 /* ── Accordion sections ──────────────────────────────────── */
@@ -206,8 +206,8 @@
 }
 
 .settings-sidebar-section-header:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
 }
 
 .settings-sidebar-section-header--active {
@@ -241,7 +241,7 @@
 .settings-sidebar-section-items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
   padding: var(--space-1) 0 0 var(--space-1);
   overflow: hidden;
   animation: settings-section-expand 0.2s var(--ease-out) both;
@@ -252,11 +252,11 @@
   from {
     opacity: 0;
     max-height: 0;
-    transform: translateY(-4px);
+    transform: translateY(-0.25rem);
   }
   to {
     opacity: 1;
-    max-height: 500px;
+    max-height: 31.25rem;
     transform: translateY(0);
   }
 }
@@ -267,7 +267,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
   padding: var(--space-2);
   overflow-y: auto;
 }
@@ -297,8 +297,8 @@
 }
 
 .settings-nav-item:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
 }
 
 .settings-nav-item--active {
@@ -410,8 +410,8 @@
 }
 
 .settings-footer-theme-toggle:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: none;
 }
 
 /* ── Embedded full-page component screens ─────────────────────
