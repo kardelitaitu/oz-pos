@@ -219,6 +219,12 @@ impl SyncTransport {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+
+            // ADR #11: Detect server migration redirect.
+            if let Some(new_url) = parse_server_migrated(&body) {
+                return Err(SyncError::ServerMigrated { new_url });
+            }
+
             return Err(SyncError::Transport(format!(
                 "snapshot returned {status}: {body}"
             )));
@@ -519,7 +525,12 @@ mod tests {
     /// Spawn a mock server that returns HTTP 421 + `server_migrated` JSON
     /// on both push and pull endpoints.
     async fn spawn_redirect_server(new_url: &str) -> String {
-        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+        use axum::{
+            Json, Router,
+            http::StatusCode,
+            response::IntoResponse,
+            routing::{get, post},
+        };
 
         let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -540,6 +551,7 @@ mod tests {
         let app = Router::new()
             .route("/api/sync/push", post(handler))
             .route("/api/sync/pull", post(handler))
+            .route("/api/sync/snapshot", get(handler))
             .with_state(redirect_url);
 
         tokio::spawn(async move {
@@ -581,5 +593,63 @@ mod tests {
             }
             other => panic!("expected SyncError::ServerMigrated, got {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn fetch_snapshot_returns_server_migrated_on_redirect() {
+        let new_url = "https://snapshot-migrated.example.com";
+        let server_url = spawn_redirect_server(new_url).await;
+        let transport = SyncTransport::new(&server_url, None);
+
+        let result = transport.fetch_snapshot().await;
+
+        match result {
+            Err(SyncError::ServerMigrated { new_url: url }) => {
+                assert_eq!(url, new_url, "ServerMigrated should carry the new_url");
+            }
+            other => panic!("expected SyncError::ServerMigrated, got {:?}", other),
+        }
+    }
+
+    // ── SyncSnapshotResponse tests ──────────────────────────────
+
+    #[test]
+    fn sync_snapshot_response_debug() {
+        let resp = SyncSnapshotResponse {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let debug = format!("{resp:?}");
+        assert!(debug.contains("products"));
+        assert!(debug.contains("tax_rates"));
+        assert!(debug.contains("users"));
+    }
+
+    #[test]
+    fn sync_snapshot_response_serde_roundtrip() {
+        let resp = SyncSnapshotResponse {
+            products: vec![serde_json::json!({"sku": "ITEM-1"})],
+            tax_rates: vec![serde_json::json!({"id": 1, "rate": 10})],
+            users: vec![serde_json::json!({"username": "admin"})],
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let rt: SyncSnapshotResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(rt.products.len(), 1);
+        assert_eq!(rt.tax_rates.len(), 1);
+        assert_eq!(rt.users.len(), 1);
+    }
+
+    #[test]
+    fn sync_snapshot_response_clone() {
+        let resp = SyncSnapshotResponse {
+            products: vec![serde_json::json!({"sku": "ITEM-1"})],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let cloned = resp.clone();
+        let json1 = serde_json::to_string(&resp).unwrap();
+        let json2 = serde_json::to_string(&cloned).unwrap();
+        assert_eq!(json1, json2);
     }
 }
