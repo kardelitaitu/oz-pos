@@ -258,6 +258,8 @@ settings-footer-placeholder = Terima kasih telah berbelanja!
 settings-server-url-placeholder = https://api.example.com
 settings-api-key-placeholder = Masukkan kunci API
 settings-api-key-masked = ••••••••
+settings-api-key-show-aria = Tampilkan kunci API
+settings-api-key-hide-aria = Sembunyikan kunci API
 settings-btn-save-aria =
     .aria-label = { $state ->
         [saved] Tersimpan!

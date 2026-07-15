@@ -268,6 +268,8 @@ settings-footer-placeholder = Thank you for shopping!
 settings-server-url-placeholder = https://api.example.com
 settings-api-key-placeholder = Enter API key
 settings-api-key-masked = ••••••••
+settings-api-key-show-aria = Show API key
+settings-api-key-hide-aria = Hide API key
 settings-btn-save-aria =
     .aria-label = { $state ->
         [saved] Saved!

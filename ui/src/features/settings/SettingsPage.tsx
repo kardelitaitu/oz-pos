@@ -378,6 +378,7 @@ export default function SettingsPage() {
   });
   const [syncServerUrl, setSyncServerUrl] = useState('');
   const [syncApiKey, setSyncApiKey] = useState('');
+  const [syncApiKeyVisible, setSyncApiKeyVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
 
@@ -898,16 +899,18 @@ export default function SettingsPage() {
           >
             <div className="settings-form">
               {/* Show currency */}
-              <label className="settings-toggle" htmlFor="settings-toggle-show-currency">
-                <Localized id="settings-toggle-show-currency-aria" attrs={{ 'aria-label': true }}>
-                  <input
-                    type="checkbox"
-                    id="settings-toggle-show-currency"
-                    checked={receipt.showCurrency}
-                    onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
-                    aria-label="Show currency symbol on amounts"
-                  />
-                </Localized>
+              <label className="settings-toggle">
+                <span className="settings-toggle-switch">
+                  <Localized id="settings-toggle-show-currency-aria" attrs={{ 'aria-label': true }}>
+                    <input
+                      type="checkbox"
+                      checked={receipt.showCurrency}
+                      onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
+                      aria-label="Show currency symbol on amounts"
+                    />
+                  </Localized>
+                  <span className="settings-toggle-slider" />
+                </span>
                 <Localized id="settings-toggle-show-currency">
                   <span>Show currency symbol on amounts</span>
                 </Localized>
@@ -939,16 +942,18 @@ export default function SettingsPage() {
               </label>
 
               {/* Show tax */}
-              <label className="settings-toggle" htmlFor="settings-toggle-show-tax">
-                <Localized id="settings-toggle-show-tax-aria" attrs={{ 'aria-label': true }}>
-                  <input
-                    type="checkbox"
-                    id="settings-toggle-show-tax"
-                    checked={receipt.showTax}
-                    onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
-                    aria-label="Show tax line on receipts"
-                  />
-                </Localized>
+              <label className="settings-toggle">
+                <span className="settings-toggle-switch">
+                  <Localized id="settings-toggle-show-tax-aria" attrs={{ 'aria-label': true }}>
+                    <input
+                      type="checkbox"
+                      checked={receipt.showTax}
+                      onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
+                      aria-label="Show tax line on receipts"
+                    />
+                  </Localized>
+                  <span className="settings-toggle-slider" />
+                </span>
                 <Localized id="settings-toggle-show-tax">
                   <span>Show tax line on receipts</span>
                 </Localized>
@@ -988,16 +993,18 @@ export default function SettingsPage() {
               </label>
 
               {/* Show table number */}
-              <label className="settings-toggle" htmlFor="settings-toggle-show-table-number">
-                <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
-                  <input
-                    type="checkbox"
-                    id="settings-toggle-show-table-number"
-                    checked={receipt.showTableNumber}
-                    onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
-                    aria-label="Show table number on cart and receipts"
-                  />
-                </Localized>
+              <label className="settings-toggle">
+                <span className="settings-toggle-switch">
+                  <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
+                    <input
+                      type="checkbox"
+                      checked={receipt.showTableNumber}
+                      onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
+                      aria-label="Show table number on cart and receipts"
+                    />
+                  </Localized>
+                  <span className="settings-toggle-slider" />
+                </span>
                 <Localized id="settings-toggle-show-table-number">
                   <span>Show table number on cart and receipts</span>
                 </Localized>
@@ -1037,28 +1044,52 @@ export default function SettingsPage() {
 
               <label className="settings-field" htmlFor="settings-field-api-key">
                 {l10n.getString('settings-sync-api-key')}
-                <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
-                  <input
-                    className="settings-input" autoComplete="off"
-                    type="password"
-                    id="settings-field-api-key"
-                    placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
-                    value={syncApiKey}
-                    onChange={(e) => { setSyncApiKey(e.target.value); markDirty(); }}
-                  />
-                </Localized>
+                <div className="settings-input-wrap">
+                  <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
+                    <input
+                      className="settings-input" autoComplete="off"
+                      type={syncApiKeyVisible ? 'text' : 'password'}
+                      id="settings-field-api-key"
+                      placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
+                      value={syncApiKey}
+                      onChange={(e) => { setSyncApiKey(e.target.value); markDirty(); }}
+                    />
+                  </Localized>
+                  <button
+                    type="button"
+                    className="settings-input-toggle"
+                    onClick={() => setSyncApiKeyVisible((v) => !v)}
+                    aria-label={l10n.getString(syncApiKeyVisible ? 'settings-api-key-hide-aria' : 'settings-api-key-show-aria')}
+                    tabIndex={-1}
+                  >
+                    {syncApiKeyVisible ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </label>
 
-              <label className="settings-toggle" htmlFor="settings-toggle-sync-enabled">
-                <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
-                  <input
-                    type="checkbox"
-                    id="settings-toggle-sync-enabled"
-                    checked={sync.enabled}
-                    onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
-                    aria-label="Enable Cloud Sync"
-                  />
-                </Localized>
+              <label className="settings-toggle">
+                <span className="settings-toggle-switch">
+                  <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
+                    <input
+                      type="checkbox"
+                      checked={sync.enabled}
+                      onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
+                      aria-label="Enable Cloud Sync"
+                    />
+                  </Localized>
+                  <span className="settings-toggle-slider" />
+                </span>
                 <Localized id="settings-sync-enabled">
                   <span>Enable Cloud Sync</span>
                 </Localized>
@@ -1131,7 +1162,7 @@ export default function SettingsPage() {
               <div className="settings-license-row">
                 <Localized id="settings-copyright-notice"><span className="settings-license-label">Copyright Notice</span></Localized>
                 <Localized id="settings-copyright-notice-value">
-                  <span className="settings-license-value settings-license-value--medium">&copy; 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
+                  <span className="settings-license-value">&copy; 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
                 </Localized>
               </div>
               <div className="settings-license-row settings-license-row--last">

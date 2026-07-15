@@ -391,7 +391,7 @@ describe('SettingsPage', () => {
       expect(screen.getAllByRole('heading', { name: /cloud sync/i }).length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByLabelText(/server url/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/api key/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^api key$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/enable cloud sync/i)).toBeInTheDocument();
   });
 
