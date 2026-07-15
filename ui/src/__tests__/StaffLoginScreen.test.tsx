@@ -1,14 +1,19 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import type { ReactElement, ReactNode } from 'react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
 
 const mockLogin = vi.fn();
 const mockLogout = vi.fn();
 const mockClearError = vi.fn();
+
+vi.mock('@/api/staff', () => ({
+  checkUsername: vi.fn(() => Promise.resolve({ found: true, is_active: true })),
+}));
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -54,7 +59,7 @@ staff-login-back = \u2190 Back
 staff-login-submit = Login
 `));
   const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
+  return <LocalizationProvider l10n={l10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
 }
 
 function renderScreen() {
@@ -62,10 +67,6 @@ function renderScreen() {
 }
 
 describe('StaffLoginScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('focuses username input when the screen background is clicked', async () => {
     const user = userEvent.setup();
     renderScreen();

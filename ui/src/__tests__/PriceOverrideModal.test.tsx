@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PriceOverrideModalProps } from '@/features/sales/PriceOverrideModal';
@@ -25,10 +25,6 @@ function renderModal(props: Partial<PriceOverrideModalProps> = {}) {
 }
 
 describe('PriceOverrideModal', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Closed state ─────────────────────────────────────────────
 
   it('renders nothing when open is false', () => {

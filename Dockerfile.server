@@ -96,9 +96,9 @@ RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
     && echo "// dummy" > modules/currency/src/lib.rs \
     && echo "// dummy" > apps/cloud-server/src/main.rs \
     && echo "// dummy" > apps/desktop-client/src/main.rs \
-    && printf '[package]\nname = "oz-pos-app"\nversion = "0.0.7"\nedition = "2021"\n' > apps/desktop-client/Cargo.toml \
+    && printf '[package]\nname = "oz-pos-app"\nversion = "0.0.8"\nedition = "2021"\n' > apps/desktop-client/Cargo.toml \
     && echo "// dummy" > apps/tablet-client/src/main.rs \
-    && printf '[package]\nname = "oz-pos-tablet"\nversion = "0.0.7"\nedition = "2021"\n' > apps/tablet-client/Cargo.toml \
+    && printf '[package]\nname = "oz-pos-tablet"\nversion = "0.0.8"\nedition = "2021"\n' > apps/tablet-client/Cargo.toml \
     && cargo build --package oz-cloud-server --release 2>/dev/null || true
 
 # Now copy the actual source and rebuild (only changed source files

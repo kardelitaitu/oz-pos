@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, within, waitFor } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { withFluent, withFluentLocale } from '@/locales/test-utils';
+import { renderWithFluent } from '@/__tests__/test-utils/render';
+import { withFluentLocale } from '@/locales/test-utils';
 import productsFtl from '@/locales/products.ftl?raw';
 import productsId from '@/locales/products.id.ftl?raw';
 import sharedId from '@/locales/shared.id.ftl?raw';
@@ -13,20 +14,19 @@ import * as bundlesApi from '@/api/bundles';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import type { Product } from '@/types/domain';
 
-const wrap = (children: React.ReactNode) =>
-  withFluent(<ToastProvider>{children}</ToastProvider>, productsFtl);
+
 
 // ── Tests ────────────────────────────────────────────────────────
 
 describe('ProductLookupScreen', () => {
   it('renders the search bar and barcode input', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     expect(screen.getByRole('searchbox', { name: /search for products/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/enter or scan a barcode/i)).toBeInTheDocument();
   });
 
   it('renders category filter chips after loading', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitFor(() => {
       expect(screen.getByRole('radiogroup', { name: /filter by category/i })).toBeInTheDocument();
     });
@@ -43,7 +43,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('renders all products in the grid by default', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     const list = await screen.findByRole('list', { name: /product search results/i });
     // 18 sample products
     const items = within(list).getAllByRole('listitem');
@@ -56,7 +56,7 @@ describe('ProductLookupScreen', () => {
   }
 
   it('filters products by search query (name)', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search for products/i });
     await userEvent.type(search, 'Latte');
@@ -69,7 +69,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('filters products by search query (SKU)', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search for products/i });
     await userEvent.type(search, 'ESPR');
@@ -80,7 +80,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('filters products by search query (barcode)', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search for products/i });
     // Search for barcode "4901234567904" (Orange Juice)
@@ -92,7 +92,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('shows empty state when no products match', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     const search = screen.getByRole('searchbox', { name: /search for products/i });
     await userEvent.type(search, 'zzzznotfound');
@@ -100,7 +100,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('filters by category using chip button', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     const foodChip = screen.getByRole('radio', { name: /^Food$/ });
     await userEvent.click(foodChip);
@@ -115,7 +115,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('switching to "All Categories" shows all products', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     // First filter to Food
     await userEvent.click(screen.getByRole('radio', { name: /^Food$/ }));
@@ -128,7 +128,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('renders product card with name, price, SKU, and stock indicator', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     // Check a specific product is rendered
     expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('marks out-of-stock products with disabled style and disabled button', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     // Brownie is out of stock
     const brownie = screen.getByText('Fudge Brownie');
@@ -159,7 +159,7 @@ describe('ProductLookupScreen', () => {
 
   it('calls onAddProduct when clicking the add button', async () => {
     const handler = vi.fn();
-    await renderInAct(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
     const addBtn = screen.getByRole('button', { name: /Caffè Latte/i });
@@ -173,7 +173,7 @@ describe('ProductLookupScreen', () => {
 
   it('calls onAddProduct on Enter key for in-stock product card', async () => {
     const handler = vi.fn();
-    await renderInAct(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
     const cardBtn = screen.getByRole('button', { name: /Caffè Latte/i });
@@ -185,7 +185,7 @@ describe('ProductLookupScreen', () => {
 
   it('handles barcode scan via Enter key in barcode input', async () => {
     const handler = vi.fn();
-    await renderInAct(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
@@ -198,7 +198,7 @@ describe('ProductLookupScreen', () => {
 
   it('handles barcode scan via Scan button', async () => {
     const handler = vi.fn();
-    await renderInAct(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
@@ -214,7 +214,7 @@ describe('ProductLookupScreen', () => {
 
   it('does not call onAddProduct for unknown barcode', async () => {
     const handler = vi.fn();
-    await renderInAct(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
@@ -226,7 +226,7 @@ describe('ProductLookupScreen', () => {
 
   it('clears barcode input after scan', async () => {
     const handler = vi.fn();
-    await renderInAct(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
@@ -236,7 +236,7 @@ describe('ProductLookupScreen', () => {
   });
 
   it('renders product category badges', async () => {
-    await renderInAct(wrap(<ProductLookupScreen />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     const badges = screen.getAllByText(/^Cold Drinks$|^Hot Drinks$|^Food$|^Snacks$/);
     expect(badges.length).toBeGreaterThanOrEqual(17);
@@ -244,7 +244,7 @@ describe('ProductLookupScreen', () => {
 
   it('silently swallows when lookupBundleBySku rejects with a ScannerError in the barcode scan catch block', async () => {
     const handler = vi.fn();
-    await renderInAct(wrap(<ProductLookupScreen onAddProduct={handler} />));
+    await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
     // Spy on lookupBundleBySku and make it reject with a ScannerError.

@@ -2,6 +2,16 @@
 // polyfills the components need.
 
 import '@testing-library/jest-dom/vitest';
+import { beforeEach, vi } from 'vitest';
+
+// ── Global beforeEach: clean mocks and localStorage ─────────────
+// Every test starts with a clean slate. Individual test files that
+// need additional setup (e.g. mockImplementation overrides) add
+// their own beforeEach after this global one runs.
+beforeEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
+});
 
 // matchMedia is not implemented in jsdom; Fluent uses it for
 // responsive layouts. Stub it.

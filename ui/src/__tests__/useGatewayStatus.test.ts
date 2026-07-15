@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useGatewayStatus } from '@/hooks/useGatewayStatus';
 
@@ -11,10 +11,6 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 describe('useGatewayStatus', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('returns default offline state initially', () => {
     const { result } = renderHook(() => useGatewayStatus());
     expect(result.current.configured).toBe(false);

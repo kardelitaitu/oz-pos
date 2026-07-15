@@ -5,12 +5,10 @@ import { useIdleTimer, getAutoLockMinutes, setAutoLockMinutes } from '@/hooks/us
 describe('useIdleTimer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    localStorage.clear();
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    localStorage.clear();
   });
 
   it('fires onIdle after default timeout (5 minutes)', () => {
@@ -160,10 +158,6 @@ describe('useIdleTimer', () => {
 });
 
 describe('getAutoLockMinutes / setAutoLockMinutes', () => {
-  afterEach(() => {
-    localStorage.clear();
-  });
-
   it('returns default 5 when localStorage is empty', () => {
     expect(getAutoLockMinutes()).toBe(5);
   });

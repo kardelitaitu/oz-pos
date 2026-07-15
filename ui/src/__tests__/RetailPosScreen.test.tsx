@@ -6,12 +6,9 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act } from 'react';
-import type { ReactNode } from 'react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { ToastProvider } from '@/frontend/shared/Toast';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithProviders } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
 
 import productsFtl from '@/locales/products.ftl?raw';
@@ -107,88 +104,31 @@ vi.mock('@/api/products', () => ({
   deleteCategory: vi.fn(),
 }));
 
-vi.mock('@/api/shifts', () => ({
-  getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
-  openShift: vi.fn(() =>
-    Promise.resolve({
-      id: 'shift-1', userId: 'user-1', terminalId: null,
-      openedAt: '2026-07-05T08:00:00Z', closedAt: null,
-      openingBalanceMinor: 100000, closingBalanceMinor: null,
-      expectedCashMinor: null, cashDifferenceMinor: null,
-      totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0,
-      totalOtherMinor: 0, totalVoidsMinor: 0, totalRefundsMinor: 0,
-      totalPayoutsMinor: 0, notes: '', status: 'open',
-      createdAt: '2026-07-05T08:00:00Z', updatedAt: '2026-07-05T08:00:00Z',
-    }),
-  ),
-  closeShift: vi.fn(),
-  listShifts: vi.fn(() => Promise.resolve([])),
-  getShift: vi.fn(() => Promise.resolve(null)),
-  createCashPayout: vi.fn(),
-  getShiftReport: vi.fn(),
-}));
+vi.mock('@/api/shifts', async () => {
+  const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createShiftsApiMock({
+    getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
+  });
+});
 
-vi.mock('@/api/settings', () => ({
-  getStoreSettings: vi.fn(() =>
-    Promise.resolve({ name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: '', currency: 'IDR', branch: 'Cabang A', logo: '' }),
-  ),
-  getReceiptSettings: vi.fn(() => Promise.resolve({ showCurrency: true, decimalSeparator: 'dot', showTax: true, footer: '', paperWidth: 'standard', showTableNumber: false, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 })),
-  setReceiptSettings: vi.fn(),
-  setStoreSettings: vi.fn(),
-  getCreditSettings: vi.fn(() => Promise.resolve({ enabled: true, reminderIntervalHours: 24, maxLimitMinor: 500000 })),
-  setCreditSettings: vi.fn(),
-  listCreditSales: vi.fn(() => Promise.resolve([])),
-  settleCredit: vi.fn(),
-  getHardwareSettings: vi.fn(() => Promise.resolve({ printerConnection: 'auto', printerDevicePath: '', printerPaperSize: '80', scannerDeviceId: '', scannerInputMode: 'auto' })),
-  setHardwareSettings: vi.fn(),
-  completeSetup: vi.fn(),
-  dismissSetupWizard: vi.fn(),
-  getSetupStatus: vi.fn(),
-  getEnabledFeatures: vi.fn(),
-  getUserPreferences: vi.fn(),
-  setUserPreferences: vi.fn(),
-}));
+vi.mock('@/api/settings', async () => {
+  const { createSettingsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSettingsApiMock({
+    getStoreSettings: vi.fn(() =>
+      Promise.resolve({ name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: '', currency: 'IDR', branch: 'Cabang A', logo: '' }),
+    ),
+  });
+});
 
-vi.mock('@/api/hardware', () => ({
-  listScanners: vi.fn(() => Promise.resolve([])),
-  listDisplays: vi.fn(() => Promise.resolve([])),
-  displayShow: vi.fn(() => Promise.resolve()),
-  displayClear: vi.fn(() => Promise.resolve()),
-  openCashDrawer: vi.fn(),
-  printReceipt: vi.fn(),
-  startScanner: vi.fn(),
-  stopScanner: vi.fn(),
-  onBarcodeScanned: vi.fn(),
-  onBarcodeError: vi.fn(),
-}));
+vi.mock('@/api/hardware', async () => {
+  const { createHardwareApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createHardwareApiMock();
+});
 
-vi.mock('@/api/sales', () => ({
-  holdCart: vi.fn(() => Promise.resolve({ id: 'held-1' })),
-  listHeldCarts: vi.fn(() => Promise.resolve([])),
-  getHeldCart: vi.fn(() => Promise.resolve(null)),
-  deleteHeldCart: vi.fn(() => Promise.resolve()),
-  startSale: vi.fn(() => Promise.resolve({ cartId: 'cart-1' })),
-  addLine: vi.fn(() => Promise.resolve({ lineId: 'line-added-1', lineTotal: null })),
-  setCartDiscount: vi.fn(() => Promise.resolve()),
-  completeSale: vi.fn(() => Promise.resolve({ saleId: 'sale-1', total: { minor_units: 3500, currency: 'IDR' }, lineCount: 1 })),
-  getSale: vi.fn(() => Promise.resolve({
-    id: 'sale-1', total: { minor_units: 3500, currency: 'IDR' },
-    subtotal: { minor_units: 3500, currency: 'IDR' },
-    taxTotal: { minor_units: 0, currency: 'IDR' },
-    lineCount: 1, status: 'completed', paymentMethod: 'CASH',
-    tenderedMinor: 5000, userId: 'user-1', createdAt: '2026-07-06T10:00:00Z',
-    lines: [{ id: 'line-1', sku: 'SKU-001', name: 'Indomie Goreng', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' }, total_minor: 3500, tax_amount: null, tax_rate_id: null }],
-  })),
-  printSalesReceipt: vi.fn(() => Promise.resolve({ printed: true })),
-  listSales: vi.fn(() => Promise.resolve([])),
-  voidSale: vi.fn(),
-  processRefund: vi.fn(() => Promise.resolve({ refundId: 'refund-1', totalMinor: 0 })),
-  listRefunds: vi.fn(() => Promise.resolve([])),
-  exportDailySummary: vi.fn(() => Promise.resolve([])),
-  exportSalesByHour: vi.fn(() => Promise.resolve([])),
-  exportEodReport: vi.fn(() => Promise.resolve(null)),
-  getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
-}));
+vi.mock('@/api/sales', async () => {
+  const { createSalesApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSalesApiMock();
+});
 
 vi.mock('@/api/kds', () => ({
   createKdsOrderFromSale: vi.fn((_userId: string, _saleId: string) => Promise.resolve()),
@@ -219,35 +159,22 @@ vi.mock('@/api/customers', () => ({
   deleteCustomer: vi.fn(),
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    session: { user_id: 'user-1', username: 'testuser', role_name: 'cashier', token: 'mock-token', role_id: 'role-1', display_name: 'Kasir Test' },
-    loading: false, error: null, login: vi.fn(), logout: vi.fn(), clearError: vi.fn(),
-    isManager: false, isOwner: false,
-  }),
-}));
+vi.mock('@/contexts/AuthContext', async () => {
+  const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return {
+    useAuth: createAuthContextMock(),
+  };
+});
 
-vi.mock('@/contexts/WorkspaceContext', () => ({
-  useWorkspace: () => ({
-    activeWorkspace: 'store-pos',
-    setActiveWorkspace: vi.fn(),
-    availableWorkspaces: [],
-    workspaceScreens: [],
-    loading: false,
-  }),
-  WorkspaceProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-
-// ── Test wrapper ──────────────────────────────────────────────────
+vi.mock('@/contexts/WorkspaceContext', async () => {
+  const { createWorkspaceContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return createWorkspaceContextMock();
+});
 
 const catFtl = `
   category-cat-food = Makanan
   category-cat-drink = Minuman
 `;
-
-function wrap(children: React.ReactNode) {
-  return withFluent(<ToastProvider>{children}</ToastProvider>, salesFtl, productsFtl, tablesFtl, catFtl);
-}
 
 // ── Tests ─────────────────────────────────────────────────────────
 
@@ -287,7 +214,7 @@ describe('RetailPosScreen', () => {
   // ── Rendering ──────────────────────────────────────────────────
 
   it('renders the store header with name, branch, and clock', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('TOKO TEST')).toBeInTheDocument();
@@ -298,7 +225,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('shows empty cart state initially', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText(/Cart is empty/)).toBeInTheDocument();
@@ -306,7 +233,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('renders the function bar with all shortcut buttons', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -320,7 +247,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('displays "No shift" badge when no active shift', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText(/No shift/)).toBeInTheDocument();
@@ -335,7 +262,7 @@ describe('RetailPosScreen', () => {
   }
 
   it('loads and displays products', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -349,7 +276,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('shows low-stock badge for products with stock_qty <= 5', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await showAllProducts();
 
@@ -359,7 +286,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('renders category filter buttons', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText(/All Categories/i)).toBeInTheDocument();
@@ -369,7 +296,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('filters products by category', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -384,7 +311,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('clears category filter when clicking "All"', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -401,7 +328,7 @@ describe('RetailPosScreen', () => {
   // ── Search ─────────────────────────────────────────────────────
 
   it('searches products by name', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await showAllProducts();
 
@@ -413,7 +340,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('searches products by SKU', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await showAllProducts();
 
@@ -426,7 +353,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('clears search when clicking the clear button', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await showAllProducts();
 
@@ -441,7 +368,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('shows empty state when no products match search', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await showAllProducts();
 
@@ -454,7 +381,7 @@ describe('RetailPosScreen', () => {
   // ── Add to cart via product tap ─────────────────────────────────
 
   it('opens quantity picker on long-press of a product button', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const productBtns = await screen.findAllByRole('button', { name: /indomie goreng/i });
     const productBtn = productBtns[0]!;
@@ -470,7 +397,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('shows correct price in quantity picker', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await showAllProducts();
 
@@ -514,7 +441,7 @@ describe('RetailPosScreen', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -563,7 +490,7 @@ describe('RetailPosScreen', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -599,7 +526,7 @@ describe('RetailPosScreen', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
@@ -626,7 +553,7 @@ describe('RetailPosScreen', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
@@ -637,7 +564,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('shows warning toast when SKU is not found', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
@@ -659,7 +586,7 @@ describe('RetailPosScreen', () => {
       product_type: 'retail',
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
@@ -673,7 +600,7 @@ describe('RetailPosScreen', () => {
   // ── Barcode scanning ──────────────────────────────────────────
 
   it('registers the barcode scanner on mount', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -695,7 +622,7 @@ describe('RetailPosScreen', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -711,7 +638,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('calls lookupByBarcode when scanned code not in local products', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -728,7 +655,7 @@ describe('RetailPosScreen', () => {
   // ── Shift management ──────────────────────────────────────────
 
   it('opens shift modal when F9 is pressed and no shift is active', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText(/No shift/)).toBeInTheDocument();
@@ -742,7 +669,7 @@ describe('RetailPosScreen', () => {
   it('opens a shift when opening balance is submitted', async () => {
     const { openShift } = await import('@/api/shifts');
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText(/No shift/)).toBeInTheDocument();
@@ -774,7 +701,7 @@ describe('RetailPosScreen', () => {
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const payBtns = await screen.findAllByRole('button', { name: /F1.*Pay/i });
     await userEvent.click(payBtns[0]!);
@@ -803,7 +730,7 @@ describe('RetailPosScreen', () => {
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
     await userEvent.click(diskonBtn);
@@ -829,7 +756,7 @@ describe('RetailPosScreen', () => {
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
     await userEvent.click(diskonBtn);
@@ -872,7 +799,7 @@ describe('RetailPosScreen', () => {
       createdAt: '2026-07-05T08:00:00Z', updatedAt: '2026-07-05T08:00:00Z',
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const payBtn = await screen.findByRole('button', { name: /^pay$/i });
     await userEvent.click(payBtn);
@@ -885,7 +812,7 @@ describe('RetailPosScreen', () => {
   // ── Keyboard shortcuts ─────────────────────────────────────────
 
   it('shows shortcuts overlay on ? key', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -899,7 +826,7 @@ describe('RetailPosScreen', () => {
   // ── Hold / Resume ─────────────────────────────────────────────
 
   it('shows hold warning when no cart items', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const holdBtn = await screen.findByRole('button', { name: /F4.*Hold/i });
     expect(holdBtn).toBeDisabled();
@@ -923,7 +850,7 @@ describe('RetailPosScreen', () => {
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const clearBtn = await screen.findByRole('button', { name: /^clear$/i });
     await userEvent.click(clearBtn);
@@ -949,7 +876,7 @@ describe('RetailPosScreen', () => {
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const clearBtn = await screen.findByRole('button', { name: /^clear$/i });
     await userEvent.click(clearBtn);
@@ -978,7 +905,7 @@ describe('RetailPosScreen', () => {
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const creditBtn = await screen.findByText(/Credit Reminders/);
     expect(creditBtn).toBeInTheDocument();
@@ -1018,7 +945,7 @@ describe('RetailPosScreen', () => {
 
     const salesApi = await import('@/api/sales');
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const payBtn = await screen.findByRole('button', { name: /^pay$/i });
     await userEvent.click(payBtn);
@@ -1055,7 +982,7 @@ describe('RetailPosScreen', () => {
   it('renders the Tables button when TABLE_MANAGEMENT feature is enabled', async () => {
     // By default getEnabledFeatures rejects → useFeatures enables ALL features,
     // so the Tables button should be visible.
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1070,7 +997,7 @@ describe('RetailPosScreen', () => {
       features: ['simple-retail', 'cash-payment'],
     });
 
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1080,7 +1007,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('opens TableManagementScreen when the Tables button is clicked', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1095,7 +1022,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('dismisses TableManagementScreen when the back button is clicked', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1121,7 +1048,7 @@ describe('RetailPosScreen', () => {
 
   it('F12 navigates to KDS workspace via onNavigate', async () => {
     const onNavigate = vi.fn();
-    await renderInAct(wrap(<RetailPosScreen onNavigate={onNavigate} />));
+    await renderWithProviders(<RetailPosScreen onNavigate={onNavigate} />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1133,7 +1060,7 @@ describe('RetailPosScreen', () => {
 
   it('F12 button in function bar calls onNavigate with kds', async () => {
     const onNavigate = vi.fn();
-    await renderInAct(wrap(<RetailPosScreen onNavigate={onNavigate} />));
+    await renderWithProviders(<RetailPosScreen onNavigate={onNavigate} />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1144,7 +1071,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('does not crash when F12 is pressed and onNavigate is undefined', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1159,7 +1086,7 @@ describe('RetailPosScreen', () => {
   // ── F6 Sales History shortcut ─────────────────────────────────
 
   it('opens SalesHistoryScreen when F6 is pressed', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1174,7 +1101,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('opens SalesHistoryScreen when the F6 button is clicked', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1188,7 +1115,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('dismisses SalesHistoryScreen when the back button is clicked', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1210,7 +1137,7 @@ describe('RetailPosScreen', () => {
   // ── F8 Stock Inquiry shortcut ─────────────────────────────────
 
   it('opens ProductLookupScreen when F8 is pressed', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1225,7 +1152,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('opens ProductLookupScreen when the F8 button is clicked', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();
@@ -1239,7 +1166,7 @@ describe('RetailPosScreen', () => {
   });
 
   it('dismisses ProductLookupScreen when the back button is clicked', async () => {
-    await renderInAct(wrap(<RetailPosScreen />));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     await waitFor(() => {
       expect(screen.getByText('F1')).toBeInTheDocument();

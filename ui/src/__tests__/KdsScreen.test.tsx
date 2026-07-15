@@ -16,7 +16,7 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, m
     display: '2m 0s',
   })),
   mockPlayAlert: vi.fn(),
-  mockUseWorkspaceScope: vi.fn<[], { storeId: string; instanceId: string; typeKey: string } | null>(() => null),
+  mockUseWorkspaceScope: vi.fn<() => { storeId: string; instanceId: string; typeKey: string } | null>(() => null),
 }));
 
 vi.mock('@/api/kds', () => ({
@@ -79,7 +79,6 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
 
 describe('KdsScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockGetKdsQueue.mockResolvedValue([]);
   });
 

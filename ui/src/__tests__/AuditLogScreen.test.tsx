@@ -46,7 +46,6 @@ function makeEntry(overrides: Partial<AuditEntryDto> = {}): AuditEntryDto {
 
 describe('AuditLogScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListAuditLog.mockResolvedValue([]);
   });
 

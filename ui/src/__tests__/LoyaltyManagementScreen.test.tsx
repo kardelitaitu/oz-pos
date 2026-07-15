@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import loyaltyFtl from '@/locales/loyalty.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -24,7 +24,7 @@ const mockListTiers = listLoyaltyTiers as ReturnType<typeof vi.fn>;
 const mockUpdateTier = updateLoyaltyTier as ReturnType<typeof vi.fn>;
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, loyaltyFtl, sharedFtl);
+
 
 const sampleTiers = [
   { id: 'tier-bronze', name: 'Bronze', min_points: 0, points_per_unit: 10, earn_multiplier: 1.0, colour: '#cd7f32', sort_order: 1, created_at: '2025-01-01T00:00:00.000Z' },
@@ -59,7 +59,6 @@ const sampleCustomers = [
 
 describe('LoyaltyManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListAccounts.mockResolvedValue(sampleAccounts);
     mockListTiers.mockResolvedValue(sampleTiers);
     mockListCustomers.mockResolvedValue(sampleCustomers);
@@ -68,14 +67,14 @@ describe('LoyaltyManagementScreen', () => {
   // ── Rendering ─────────────────────────────────────────────────
 
   it('renders the title', async () => {
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Loyalty')).toBeInTheDocument();
     });
   });
 
   it('renders Accounts and Tiers tab buttons', async () => {
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Accounts')).toBeInTheDocument();
     });
@@ -86,14 +85,14 @@ describe('LoyaltyManagementScreen', () => {
     mockListAccounts.mockReturnValue(new Promise(() => {}));
     mockListTiers.mockReturnValue(new Promise(() => {}));
     mockListCustomers.mockReturnValue(new Promise(() => {}));
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
   // ── Accounts tab (default) ────────────────────────────────────
 
   it('displays accounts table with customer names', async () => {
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -101,14 +100,14 @@ describe('LoyaltyManagementScreen', () => {
   });
 
   it('displays tier badges for accounts with tier', async () => {
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Bronze')).toBeInTheDocument();
     });
   });
 
   it('displays dash for accounts without tier', async () => {
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       const badges = document.querySelectorAll('.loyalty-tier-badge');
       const noneBadge = Array.from(badges).find(el => el.textContent === '—');
@@ -117,7 +116,7 @@ describe('LoyaltyManagementScreen', () => {
   });
 
   it('displays points and lifetime_points', async () => {
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('150')).toBeInTheDocument();
       expect(screen.getByText('500')).toBeInTheDocument();
@@ -126,7 +125,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('shows empty state when no accounts', async () => {
     mockListAccounts.mockResolvedValue([]);
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('No loyalty accounts yet')).toBeInTheDocument();
     });
@@ -136,7 +135,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('expands account row to show transactions', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -154,7 +153,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('collapses expanded row when clicked again', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -173,7 +172,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('shows no transactions message for account without transactions', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Bob')).toBeInTheDocument();
     });
@@ -190,7 +189,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('switches to Tiers tab and shows tier cards', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Tiers')).toBeInTheDocument();
     });
@@ -206,7 +205,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('shows tier details in card view', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Tiers')).toBeInTheDocument();
     });
@@ -223,7 +222,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('opens edit form when Edit button is clicked on a tier', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Tiers')).toBeInTheDocument();
     });
@@ -246,7 +245,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('cancels tier edit and returns to card view', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Tiers')).toBeInTheDocument();
     });
@@ -277,7 +276,7 @@ describe('LoyaltyManagementScreen', () => {
       name: 'Bronze+',
       points_per_unit: 15,
     });
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Tiers')).toBeInTheDocument();
     });
@@ -302,7 +301,7 @@ describe('LoyaltyManagementScreen', () => {
 
   it('shows validation error when tier form has empty name', async () => {
     const user = userEvent.setup();
-    render(wrap(<LoyaltyManagementScreen />));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Tiers')).toBeInTheDocument();
     });

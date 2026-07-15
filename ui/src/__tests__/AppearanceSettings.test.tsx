@@ -93,7 +93,6 @@ const defaultBrandResponse = {
 
 describe('AppearanceSettings', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockGetBrandSettings.mockResolvedValue(defaultBrandResponse);
     mockSetBrandPrimaryColour.mockResolvedValue(undefined);
     mockSetBrandLogoPath.mockResolvedValue(undefined);

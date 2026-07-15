@@ -38,7 +38,6 @@ async function renderProvider() {
 
 describe('BrandContext', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockGetBrandSettings.mockResolvedValue({
       primary_colour: '#4f46e5',
       logo_path: '/logo.png',

@@ -1,7 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import giftCardsFtl from '@/locales/gift-cards.ftl?raw';
 
 // Mock the API module.
@@ -13,7 +13,7 @@ vi.mock('@/api/giftCards', () => ({
 import GiftCardPayment from '@/features/gift-cards/GiftCardPayment';
 import { getGiftCardBalance, redeemGiftCard } from '@/api/giftCards';
 
-const wrap = (children: React.ReactNode) => withFluent(children, giftCardsFtl);
+
 
 const defaultProps = {
   totalMinor: 100000,
@@ -26,12 +26,8 @@ const defaultProps = {
 };
 
 describe('GiftCardPayment', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('renders the payment form', () => {
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     expect(screen.getByText('Gift Card')).toBeInTheDocument();
     expect(screen.getByLabelText('Gift card number')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /check/i })).toBeInTheDocument();
@@ -39,14 +35,14 @@ describe('GiftCardPayment', () => {
   });
 
   it('shows total due amount', () => {
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     // IDR has 2 fraction digits with the default formatting: IDR 1,000.00
     expect(screen.getByText(/IDR/)).toBeInTheDocument();
   });
 
   it('does not call API when card number is empty', async () => {
     const mockBalance = getGiftCardBalance as ReturnType<typeof vi.fn>;
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     await userEvent.click(screen.getByRole('button', { name: /check/i }));
     expect(mockBalance).not.toHaveBeenCalled();
   });
@@ -59,7 +55,7 @@ describe('GiftCardPayment', () => {
       status: 'active',
     });
 
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     const input = screen.getByLabelText('Gift card number');
     await userEvent.type(input, 'GC-TEST');
 
@@ -76,7 +72,7 @@ describe('GiftCardPayment', () => {
     const mockBalance = getGiftCardBalance as ReturnType<typeof vi.fn>;
     mockBalance.mockResolvedValueOnce(null);
 
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     const input = screen.getByLabelText('Gift card number');
     await userEvent.type(input, 'GC-BAD');
     await userEvent.click(screen.getByRole('button', { name: /check/i }));
@@ -94,7 +90,7 @@ describe('GiftCardPayment', () => {
       status: 'frozen',
     });
 
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     const input = screen.getByLabelText('Gift card number');
     await userEvent.type(input, 'GC-FROZEN');
     await userEvent.click(screen.getByRole('button', { name: /check/i }));
@@ -112,7 +108,7 @@ describe('GiftCardPayment', () => {
       status: 'active',
     });
 
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     await userEvent.type(screen.getByLabelText('Gift card number'), 'GC-TEST');
     await userEvent.click(screen.getByRole('button', { name: /check/i }));
 
@@ -138,15 +134,14 @@ describe('GiftCardPayment', () => {
     const onApplied = vi.fn();
     const onComplete = vi.fn();
 
-    render(
-      wrap(
-        <GiftCardPayment
-          {...defaultProps}
-          totalMinor={30000}
-          onApplied={onApplied}
-          onComplete={onComplete}
-        />,
-      ),
+    renderWithFluentSync(
+      <GiftCardPayment
+        {...defaultProps}
+        totalMinor={30000}
+        onApplied={onApplied}
+        onComplete={onComplete}
+      />,
+      giftCardsFtl,
     );
 
     await userEvent.type(screen.getByLabelText('Gift card number'), 'GC-TEST');
@@ -167,13 +162,13 @@ describe('GiftCardPayment', () => {
 
   it('calls onCancel when cancel is clicked', async () => {
     const onCancel = vi.fn();
-    render(wrap(<GiftCardPayment {...defaultProps} onCancel={onCancel} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} onCancel={onCancel} />, giftCardsFtl);
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('disables the Check button when input is empty', () => {
-    render(wrap(<GiftCardPayment {...defaultProps} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     expect(screen.getByRole('button', { name: /check/i })).toBeDisabled();
   });
 
@@ -189,7 +184,7 @@ describe('GiftCardPayment', () => {
     mockRedeem.mockRejectedValueOnce(new Error('Redemption failed'));
 
     const onError = vi.fn();
-    render(wrap(<GiftCardPayment {...defaultProps} onError={onError} />));
+    renderWithFluentSync(<GiftCardPayment {...defaultProps} onError={onError} />, giftCardsFtl);
 
     await userEvent.type(screen.getByLabelText('Gift card number'), 'GC-TEST');
     await userEvent.click(screen.getByRole('button', { name: /check/i }));

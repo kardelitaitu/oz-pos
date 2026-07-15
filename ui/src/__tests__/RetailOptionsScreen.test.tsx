@@ -3,7 +3,7 @@
 // Covers: tab navigation, settings loading/saving, receipt preview,
 // scanner list, keyboard shortcuts (Escape), credit toggle.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -81,10 +81,6 @@ function wrap(onClose?: () => void) {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('RetailOptionsScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Loading & Rendering ────────────────────────────────────────
 
   it('shows loading state while fetching settings', async () => {
@@ -174,7 +170,7 @@ describe('RetailOptionsScreen', () => {
     await userEvent.click(screen.getByText('System'));
 
     expect(screen.getByText(/App version/)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('0.0.7')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('0.0.8')).toBeInTheDocument();
     expect(screen.getByDisplayValue(/Budi Manager/)).toBeInTheDocument();
   });
 

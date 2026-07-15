@@ -6,7 +6,7 @@ import type { ProductVariantDto } from '@/api/products';
 
 // ── Mocks ────────────────────────────────────────────────────────
 
-const mockListVariants = vi.fn<[], Promise<ProductVariantDto[]>>();
+const mockListVariants = vi.fn<() => Promise<ProductVariantDto[]>>();
 const mockCreateVariant = vi.fn();
 const mockUpdateVariant = vi.fn();
 const mockDeleteVariant = vi.fn();
@@ -92,7 +92,6 @@ const defaultProps = {
 
 describe('VariantManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListVariants.mockResolvedValue(sampleVariants);
     mockCreateVariant.mockResolvedValue(undefined);
     mockUpdateVariant.mockResolvedValue(undefined);

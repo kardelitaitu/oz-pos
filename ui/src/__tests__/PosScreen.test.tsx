@@ -7,17 +7,13 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act } from 'react';
-import type { ReactNode } from 'react';
-import { renderInAct } from '@/test-utils/renderInAct';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ToastProvider } from '@/frontend/shared/Toast';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithProviders } from '@/__tests__/test-utils/render';
 import { ScannerError } from '@/api/hardware';
 import type * as HardwareModule from '@/api/hardware';
 import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
-
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import PosScreen from '@/features/sales/PosScreen';
@@ -164,66 +160,22 @@ vi.mock('@/api/bundles', () => ({
   deleteBundle: vi.fn(),
 }));
 
-vi.mock('@/api/shifts', () => ({
-  getActiveShift: vi.fn(() => Promise.resolve({
-    id: 'shift-1',
-    userId: 'user-1',
-    terminalId: null,
-    openedAt: new Date().toISOString(),
-    closedAt: null,
-    openingBalanceMinor: 0,
-    closingBalanceMinor: null,
-    expectedCashMinor: null,
-    cashDifferenceMinor: null,
-    totalSalesMinor: 0,
-    totalCashMinor: 0,
-    totalCardMinor: 0,
-    totalOtherMinor: 0,
-    totalVoidsMinor: 0,
-    totalRefundsMinor: 0,
-    totalPayoutsMinor: 0,
-    notes: '',
-    status: 'open',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  })),
-  openShift: vi.fn(),
-  closeShift: vi.fn(),
-}));
+vi.mock('@/api/shifts', async () => {
+  const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createShiftsApiMock();
+});
 
-vi.mock('@/api/settings', () => ({
-  getReceiptSettings: vi.fn(() => Promise.resolve({
-    showCurrency: true, decimalSeparator: 'dot', showTax: true,
-    footer: '', paperWidth: 'standard', showTableNumber: false,
-    marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
-  })),
-  getStoreSettings: vi.fn(() => Promise.resolve({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' })),
-  listCreditSales: vi.fn(() => Promise.resolve([])),
-  settleCredit: vi.fn(),
-}));
+vi.mock('@/api/settings', async () => {
+  const { createSettingsApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSettingsApiMock();
+});
 
 // Mock sales API to prevent unhandled promise rejections from
 // loadHeldCarts being called on mount.
-vi.mock('@/api/sales', () => ({
-  holdCart: vi.fn(),
-  listHeldCarts: vi.fn(() => Promise.resolve([])),
-  getHeldCart: vi.fn(),
-  deleteHeldCart: vi.fn(),
-  startSale: vi.fn(),
-  addLine: vi.fn(),
-  completeSale: vi.fn(),
-  setCartDiscount: vi.fn(),
-  listSales: vi.fn(() => Promise.resolve([])),
-  getSale: vi.fn(),
-  voidSale: vi.fn(),
-  processRefund: vi.fn(),
-  listRefunds: vi.fn(() => Promise.resolve([])),
-  exportDailySummary: vi.fn(() => Promise.resolve([])),
-  exportSalesByHour: vi.fn(() => Promise.resolve([])),
-  exportEodReport: vi.fn(),
-  printSalesReceipt: vi.fn(),
-  onReceiptPrinted: vi.fn(),
-}));
+vi.mock('@/api/sales', async () => {
+  const { createSalesApiMock } = await import('@/__tests__/test-utils/mocks/api');
+  return createSalesApiMock();
+});
 
 // Mock interaction utils so jsdom's non-Promise play() doesn't
 // trigger a TypeError inside triggerInteraction (the catch {}
@@ -233,35 +185,17 @@ vi.mock('@/utils/interaction', () => ({
   triggerInteraction: vi.fn(),
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    session: {
-      user_id: 'user-1',
-      username: 'testuser',
-      role_name: 'cashier',
-      token: 'mock-token',
-      role_id: 'role-1',
-    },
-    loading: false,
-    error: null,
-    login: vi.fn(),
-    logout: vi.fn(),
-    clearError: vi.fn(),
-    isManager: false,
-    isOwner: false,
-  }),
-}));
+vi.mock('@/contexts/AuthContext', async () => {
+  const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return {
+    useAuth: createAuthContextMock({}),
+  };
+});
 
-vi.mock('@/contexts/WorkspaceContext', () => ({
-  useWorkspace: () => ({
-    activeWorkspace: 'store-pos',
-    setActiveWorkspace: vi.fn(),
-    availableWorkspaces: [],
-    workspaceScreens: [],
-    loading: false,
-  }),
-  WorkspaceProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
+vi.mock('@/contexts/WorkspaceContext', async () => {
+  const { createWorkspaceContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
+  return createWorkspaceContextMock();
+});
 
 // Sub-screen stubs for the Settings 4-tab-routing pattern.
 // Kept minimal so the parent-only assertions stay focused.
@@ -275,22 +209,15 @@ vi.mock('@/features/settings/DataManagementScreen', () => ({
   default: () => <div data-testid="mock-data">Data Management Stub</div>,
 }));
 
-// ── Test wrapper ──────────────────────────────────────────────────
-
-function wrap(children: React.ReactNode) {
-  return withFluent(<ToastProvider>{children}</ToastProvider>, salesFtl, productsFtl, inventoryFtl, settingsFtl);
-}
-
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('PosScreen – bundle scanning toast', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedBarcode.reset();
   });
 
   it('shows a success toast when a bundle barcode is scanned', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     // Wait for component to mount, register the barcode callback, and
     // load an active shift (the onProductFound callback checks for it).
@@ -310,7 +237,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('shows a warning toast when an unknown barcode is scanned', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -327,7 +254,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('includes the expanded items in the cart when a bundle is scanned', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -350,7 +277,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('silently swallows when lookupByBarcode rejects (catch block)', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -380,7 +307,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('silently swallows when lookupByBarcode rejects with a ScannerError (typed error)', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -413,7 +340,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('silently swallows when lookupBundleBySku rejects (catch block)', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -445,7 +372,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('silently swallows when lookupBundleBySku rejects with a ScannerError (typed error)', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -480,7 +407,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('silently swallows when expandBundleItems rejects inside the callback (catch block)', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -513,7 +440,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('silently swallows when expandBundleItems rejects with a ScannerError via lookupProductBySku (typed error)', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -549,7 +476,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('adds product directly when lookupByBarcode returns a DTO (no bundle path)', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -599,7 +526,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('gives product barcode priority when the same code matches both a product and a bundle', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -647,7 +574,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('shows a warning toast when a bundle is found but inactive', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     // Wait for the barcode scanner callback to be registered and an
     // active shift to be loaded.
@@ -675,7 +602,7 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('shows an error toast when the barcode scanner emits a hardware error', async () => {
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -700,7 +627,7 @@ describe('PosScreen – bundle scanning toast', () => {
       // Scanner offline — no callback captured.
     });
 
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     // PosScreen should render without crashing — cart shows empty state.
     await waitFor(() => {
@@ -727,7 +654,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
   it('opens the Settings sub-screen and renders the Appearance tab by default', async () => {
     const user = userEvent.setup();
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -752,7 +679,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
   it('routes the Features tab to FeatureToggleScreen', async () => {
     const user = userEvent.setup();
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -775,7 +702,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
   it('routes the Data tab to DataManagementScreen', async () => {
     const user = userEvent.setup();
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -797,7 +724,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
   it('routes the Sync tab to the Cloud Sync placeholder', async () => {
     const user = userEvent.setup();
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
@@ -826,7 +753,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
   it('returns to the main PosScreen when the Settings back button is clicked', async () => {
     const user = userEvent.setup();
-    await renderInAct(wrap(<PosScreen />));
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();

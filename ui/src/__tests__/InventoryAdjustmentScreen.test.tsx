@@ -1,11 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 import InventoryAdjustmentScreen from '@/features/inventory/InventoryAdjustmentScreen';
-
-const wrap = (children: React.ReactNode) => withFluent(children, inventoryFtl);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const SAMPLE_PRODUCTS: any[] = [
@@ -34,7 +32,7 @@ beforeEach(() => {
 
 describe('InventoryAdjustmentScreen', () => {
   it('renders title and step 1', async () => {
-    render(wrap(<InventoryAdjustmentScreen />));
+    renderWithFluentSync(<InventoryAdjustmentScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByText(/inventory adjustment/i)).toBeInTheDocument();
     });
@@ -42,7 +40,7 @@ describe('InventoryAdjustmentScreen', () => {
   });
 
   it('shows search input', async () => {
-    render(wrap(<InventoryAdjustmentScreen />));
+    renderWithFluentSync(<InventoryAdjustmentScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByRole('searchbox')).toBeInTheDocument();
     });
@@ -50,14 +48,14 @@ describe('InventoryAdjustmentScreen', () => {
   });
 
   it('shows hint text when no query', async () => {
-    render(wrap(<InventoryAdjustmentScreen />));
+    renderWithFluentSync(<InventoryAdjustmentScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByText(/type to search for a product/i)).toBeInTheDocument();
     });
   });
 
   it('filters products by search', async () => {
-    render(wrap(<InventoryAdjustmentScreen />));
+    renderWithFluentSync(<InventoryAdjustmentScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByRole('searchbox')).toBeInTheDocument();
     });
@@ -69,7 +67,7 @@ describe('InventoryAdjustmentScreen', () => {
   });
 
   it('selects a product', async () => {
-    render(wrap(<InventoryAdjustmentScreen />));
+    renderWithFluentSync(<InventoryAdjustmentScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByRole('searchbox')).toBeInTheDocument();
     });
@@ -85,7 +83,7 @@ describe('InventoryAdjustmentScreen', () => {
   });
 
   it('shows step 2 after product selected', async () => {
-    render(wrap(<InventoryAdjustmentScreen />));
+    renderWithFluentSync(<InventoryAdjustmentScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByRole('searchbox')).toBeInTheDocument();
     });

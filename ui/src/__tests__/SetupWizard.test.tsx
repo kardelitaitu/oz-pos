@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
@@ -36,11 +36,6 @@ async function toggleFeature(label: string) {
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe('SetupWizard', () => {
-  beforeEach(() => {
-    // Reset local state for clean tests.
-    localStorage.clear();
-  });
-
   // ── Step 1: Preset selection ────────────────────────────────────
 
   it('renders the preset selection step on mount', () => {

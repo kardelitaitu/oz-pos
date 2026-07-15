@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -41,7 +41,7 @@ const mockGetSale = getSale as ReturnType<typeof vi.fn>;
 const mockListRefunds = listRefunds as ReturnType<typeof vi.fn>;
 const mockListStaff = listStaff as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, salesFtl, sharedFtl);
+
 
 const sampleSales = [
   {
@@ -82,7 +82,6 @@ const sampleDetail = {
 
 describe('SalesHistoryScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListStaff.mockResolvedValue(sampleStaff);
   });
 
@@ -90,7 +89,7 @@ describe('SalesHistoryScreen', () => {
 
   it('renders the title', async () => {
     mockListSales.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Sales History')).toBeInTheDocument();
     });
@@ -98,13 +97,13 @@ describe('SalesHistoryScreen', () => {
 
   it('shows loading state', async () => {
     mockListSales.mockReturnValue(new Promise(() => {}));
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     expect(screen.getByText(/loading sales/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no sales exist', async () => {
     mockListSales.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('No sales recorded yet')).toBeInTheDocument();
     });
@@ -114,7 +113,7 @@ describe('SalesHistoryScreen', () => {
 
   it('displays sales in the table with cashier names', async () => {
     mockListSales.mockResolvedValue(sampleSales);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       // Cashier names appear in table cells AND the cashier filter dropdown.
       expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
@@ -127,7 +126,7 @@ describe('SalesHistoryScreen', () => {
 
   it('shows status filter chips', async () => {
     mockListSales.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('All')).toBeInTheDocument();
     });
@@ -140,7 +139,7 @@ describe('SalesHistoryScreen', () => {
   it('filters sales by status when a filter chip is clicked', async () => {
     const user = userEvent.setup();
     mockListSales.mockResolvedValue(sampleSales);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
 
     await waitFor(() => {
       // First sale's truncated ID should appear in the table.
@@ -162,7 +161,7 @@ describe('SalesHistoryScreen', () => {
 
   it('shows search input and cashier dropdown', async () => {
     mockListSales.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
@@ -172,7 +171,7 @@ describe('SalesHistoryScreen', () => {
 
   it('shows export CSV button', async () => {
     mockListSales.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Export CSV')).toBeInTheDocument();
     });
@@ -185,7 +184,7 @@ describe('SalesHistoryScreen', () => {
     mockListSales.mockResolvedValue(sampleSales);
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
 
     await waitFor(() => {
       const viewBtns = screen.getAllByText('View');
@@ -205,7 +204,7 @@ describe('SalesHistoryScreen', () => {
     mockListSales.mockResolvedValue([sampleSales[0]!]);
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getAllByText('View').length).toBeGreaterThan(0);
@@ -224,7 +223,7 @@ describe('SalesHistoryScreen', () => {
     mockListSales.mockResolvedValue([sampleSales[0]!]);
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getAllByText('View').length).toBeGreaterThan(0);
@@ -245,7 +244,7 @@ describe('SalesHistoryScreen', () => {
     mockListSales.mockResolvedValue([sampleSales[0]!]);
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
-    render(wrap(<SalesHistoryScreen />));
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getAllByText('View').length).toBeGreaterThan(0);

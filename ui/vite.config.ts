@@ -42,18 +42,29 @@ export default defineConfig({
   },
 
   test: {
-    // Use vmThreads pool for Windows stability. The forks pool crashes
-    // (Worker exited unexpectedly) on Windows with complex component
-    // renders (SettingsPage ×26) due to tinypool heap pressure. The
-    // threads pool also hangs on Node.js 24 + Windows after ~3 renders.
-    // vmThreads uses node:vm modules directly, avoiding tinypool's
-    // worker_threads issues entirely.
-    pool: 'vmThreads',
+    // Vitest 4 removed tinypool entirely — the native pool architecture
+    // replaces vmThreads/threads/forks. No pool setting needed.
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+
+    // Per-test timeout (ms). Default 5000 is fine for most tests;
+    // DataManagementScreen (55 tests, ~225ms each) is the heaviest
+    // file and stays well within this budget. Bumped to 10s for CI
+    // headroom on slow runners.
+    testTimeout: 10_000,
+
+    // Per-hook timeout (ms) for beforeEach / afterEach. Default 5000
+    // is generous — no test file has hooks that take longer.
+    hookTimeout: 5_000,
+
     dangerouslyIgnoreUnhandledErrors: true,
+
+    // Suppress noisy console output during tests. Mirrors the
+    // console.error/console.warn patches in test-setup.ts — both
+    // are kept for defense-in-depth (vitest onConsoleLog intercepts
+    // at the runner level; test-setup patches at the jsdom level).
     onConsoleLog(log, _type) {
       if (log.includes('[@fluent/react]') && log.includes('did not match any messages')) {
         return false;

@@ -58,6 +58,13 @@ function generateId(): string {
   return `toast-${toastCounter}-${Date.now()}`;
 }
 
+// ── Stable identity helpers (extracted to module scope so
+// useAnimatedToastQueue receives === stable function refs;
+// inline arrow props would recreate on every render and
+// destabilise the enqueue/dismiss/clearAll callbacks.)
+const getToastId = (t: Toast) => t.id;
+const getToastAutoDismissMs = (t: Toast) => t.duration ?? 4000;
+
 // ── Provider ────────────────────────────────────────────────────────
 
 /**
@@ -76,37 +83,38 @@ function generateId(): string {
  * survive, matching the undo-pill's race-safety contract.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const queue = useAnimatedToastQueue<Toast>({
-    getId: (t) => t.id,
-    getAutoDismissMs: (t) => t.duration ?? 4000,
-  });
+  const { enqueue, dismiss: queueDismiss, clearAll: queueClearAll, items, exitingIds } =
+    useAnimatedToastQueue<Toast>({
+      getId: getToastId,
+      getAutoDismissMs: getToastAutoDismissMs,
+    });
 
   const addToast = useCallback(
     (t: Omit<Toast, 'id'> & { id?: string }) => {
       const id = t.id ?? generateId();
-      queue.enqueue({ ...t, id });
+      enqueue({ ...t, id });
       return id;
     },
-    [queue],
+    [enqueue],
   );
 
   const removeToast = useCallback(
     (id: string) => {
-      queue.dismiss(id);
+      queueDismiss(id);
     },
-    [queue],
+    [queueDismiss],
   );
 
   const clearToasts = useCallback(() => {
-    queue.clearAll();
-  }, [queue]);
+    queueClearAll();
+  }, [queueClearAll]);
 
   return (
     <ToastContext.Provider value={{ addToast, removeToast, clearToasts }}>
       {children}
       <ToastContainer
-        items={queue.items}
-        exitingIds={queue.exitingIds}
+        items={items}
+        exitingIds={exitingIds}
         onDismiss={removeToast}
       />
     </ToastContext.Provider>

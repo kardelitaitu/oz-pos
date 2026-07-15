@@ -1,9 +1,8 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { screen, waitFor } from '@testing-library/react';
-import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluent } from '@/__tests__/test-utils/render';
 import kioskFtl from '@/locales/kiosk.ftl?raw';
 
 vi.mock('@/api/products', () => ({
@@ -29,19 +28,13 @@ const sampleCategories = [
   { id: 'cat-drink', name: 'Minuman', colour: '#3498db' },
 ];
 
-function wrap(children: React.ReactNode) {
-  return withFluent(children, kioskFtl);
-}
+
 
 describe('KioskScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('loads and displays products', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -54,7 +47,7 @@ describe('KioskScreen', () => {
   it('renders category filter buttons', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('All')).toBeInTheDocument();
@@ -66,7 +59,7 @@ describe('KioskScreen', () => {
   it('filters products by category', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -83,7 +76,7 @@ describe('KioskScreen', () => {
   it('shows all products when All category is selected', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -100,7 +93,7 @@ describe('KioskScreen', () => {
   it('adds product to cart when clicked', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -116,7 +109,7 @@ describe('KioskScreen', () => {
   it('shows cart items after adding products', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -136,7 +129,7 @@ describe('KioskScreen', () => {
     vi.useFakeTimers();
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await act(async () => {
       vi.advanceTimersByTime(61000);
@@ -150,7 +143,7 @@ describe('KioskScreen', () => {
     vi.useFakeTimers();
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await act(async () => {
       vi.advanceTimersByTime(61000);
@@ -170,7 +163,7 @@ describe('KioskScreen', () => {
   it('increments quantity when same product is added again', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -189,7 +182,7 @@ describe('KioskScreen', () => {
   it('opens checkout screen when Checkout is clicked', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
@@ -207,7 +200,7 @@ describe('KioskScreen', () => {
   it('shows low stock badge for products with stock <= 5', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText(/3 left/)).toBeInTheDocument();
@@ -217,7 +210,7 @@ describe('KioskScreen', () => {
   it('shows back button in checkout', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);
-    await renderInAct(wrap(<KioskScreen />));
+    await renderWithFluent(<KioskScreen />, kioskFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();

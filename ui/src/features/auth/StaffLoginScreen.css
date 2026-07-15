@@ -490,34 +490,6 @@
   height: clamp(14px, 2.5vw, 18px);
 }
 
-/* ── Back link ───────────────────────────────────────────────────── */
-
-.staff-login-back-btn {
-  background: none;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  color: var(--color-fg-secondary);
-  font-size: clamp(var(--text-xs), 2vw, var(--text-sm));
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-
-  padding: var(--space-1_5) var(--space-3);
-
-  transition:
-    color var(--duration-150) var(--ease-out),
-    background var(--duration-150) var(--ease-out);
-}
-
-.staff-login-back-btn:hover:not(:disabled) {
-  color: var(--color-fg);
-  background: var(--color-bg-hover);
-}
-
-.staff-login-back-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 /* ── Step indicator ──────────────────────────────────────────────── */
 
 .staff-login-steps {

@@ -178,6 +178,7 @@ ws-preview-name-admin = Admin
 
 # Settings Page
 settings-title = Settings
+settings-page-title = Settings
 settings-category-business = Business
 
 # ── Sidebar navigation labels ──

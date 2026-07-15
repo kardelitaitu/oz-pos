@@ -1,18 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { BrandProvider } from '@/contexts/BrandContext';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
 
-// ── Wrapper ──────────────────────────────────────────────────────────
-
-function wrap(children: React.ReactNode) {
-  return withFluent(
+function renderScreen() {
+  return renderWithFluentSync(
     <BrandProvider>
-      <ThemeProvider>{children}</ThemeProvider>
+      <ThemeProvider><ThemeToggle /></ThemeProvider>
     </BrandProvider>,
   );
 }
@@ -21,7 +19,6 @@ function wrap(children: React.ReactNode) {
 
 describe('ThemeToggle', () => {
   beforeEach(() => {
-    localStorage.clear();
     const html = document.documentElement;
     html.removeAttribute('data-theme');
     html.classList.remove('is-theme-transitioning');
@@ -45,13 +42,13 @@ describe('ThemeToggle', () => {
   // ── Rendering ──────────────────────────────────────────────────
 
   it('renders a button with theme-toggle testid', () => {
-    render(wrap(<ThemeToggle />));
+    renderScreen();
     expect(screen.getByTestId('theme-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('theme-toggle').tagName).toBe('BUTTON');
   });
 
   it('renders a paint palette icon', () => {
-    render(wrap(<ThemeToggle />));
+    renderScreen();
     const button = screen.getByTestId('theme-toggle');
     const svgs = button.querySelectorAll('svg');
     expect(svgs.length).toBe(1);
@@ -63,7 +60,7 @@ describe('ThemeToggle', () => {
   // ── Accessibility ──────────────────────────────────────────────
 
   it('has an aria-label that reflects current theme', () => {
-    render(wrap(<ThemeToggle />));
+    renderScreen();
     const button = screen.getByTestId('theme-toggle');
     // Asserts on the user-visible substring (and SR-announced string),
     // not on Fluent's internal bidi-isolating marks U+2068/U+2069.
@@ -76,7 +73,7 @@ describe('ThemeToggle', () => {
   });
 
   it('aria-label updates after toggling theme', async () => {
-    render(wrap(<ThemeToggle />));
+    renderScreen();
     const button = screen.getByTestId('theme-toggle');
     expect(button).toHaveAttribute(
       'aria-label',
@@ -94,7 +91,7 @@ describe('ThemeToggle', () => {
   // ── Interaction ────────────────────────────────────────────────
 
   it('clicking toggles the theme from default to light', async () => {
-    render(wrap(<ThemeToggle />));
+    renderScreen();
     const button = screen.getByTestId('theme-toggle');
 
     await userEvent.click(button);
@@ -104,7 +101,7 @@ describe('ThemeToggle', () => {
   });
 
   it('clicking twice toggles to dark', async () => {
-    render(wrap(<ThemeToggle />));
+    renderScreen();
     const button = screen.getByTestId('theme-toggle');
 
     await userEvent.click(button); // default → light

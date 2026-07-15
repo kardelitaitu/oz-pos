@@ -57,7 +57,6 @@ function makeTable(overrides: Partial<Table> = {}): Table {
 
 describe('TableManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListTables.mockResolvedValue([]);
     mockUpdateTableStatus.mockResolvedValue({});
     mockReleaseTable.mockResolvedValue({});

@@ -25,7 +25,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
-  const [appVersion, setAppVersion] = useState<string>('0.0.7');
+  const [appVersion, setAppVersion] = useState<string>('0.0.8');
   const [ipAddress, setIpAddress] = useState<string>('Detecting...');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   const { addToast } = useToast();

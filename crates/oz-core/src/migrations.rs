@@ -305,45 +305,60 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
 
 /// Create a fresh in-memory database with all migrations already applied.
 ///
-/// Concatenates all migration SQLs into a single batch the first time
-/// and caches the generated SQL in a `OnceLock<String>`. Subsequent calls
-/// just run `execute_batch` on the cached string — no per-test migration
-/// overhead.
+/// Uses a [`std::sync::LazyLock`]ed pre-migrated snapshot connection.
+/// The first call runs all 74 migrations once; subsequent calls clone the
+/// snapshot via SQLite's page-level [`rusqlite::backup::Backup`] API —
+/// orders of magnitude faster than re-running `execute_batch` per test.
 ///
 /// # Panics
 ///
 /// Panics if the database cannot be created.
 #[doc(hidden)]
 pub fn fresh_db() -> rusqlite::Connection {
-    use std::sync::OnceLock;
+    use std::sync::{LazyLock, Mutex};
 
-    fn cached_sql() -> &'static str {
-        static SQL: OnceLock<String> = OnceLock::new();
-        SQL.get_or_init(|| {
-            let mut buf = String::with_capacity(48_000);
-            buf.push_str("PRAGMA foreign_keys = ON;\n");
-            buf.push_str(
-                "CREATE TABLE IF NOT EXISTS schema_migrations (\n\
-                 id         TEXT PRIMARY KEY,\n\
-                 applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n\
-                 );\n",
-            );
-            for mig in ALL {
-                buf.push_str("BEGIN;\n");
-                buf.push_str(mig.sql);
-                buf.push('\n');
-                buf.push_str("INSERT INTO schema_migrations (id) VALUES ('");
-                buf.push_str(mig.id);
-                buf.push_str("');\n");
-                buf.push_str("COMMIT;\n");
-            }
-            buf
-        })
-    }
+    /// Pre-migrated snapshot — built once, cloned for every test.
+    static SNAPSHOT: LazyLock<Mutex<rusqlite::Connection>> = LazyLock::new(|| {
+        use std::sync::OnceLock;
 
-    let conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.execute_batch(cached_sql()).unwrap();
-    conn
+        fn cached_sql() -> &'static str {
+            static SQL: OnceLock<String> = OnceLock::new();
+            SQL.get_or_init(|| {
+                let mut buf = String::with_capacity(48_000);
+                buf.push_str("PRAGMA foreign_keys = ON;\n");
+                buf.push_str(
+                    "CREATE TABLE IF NOT EXISTS schema_migrations (\n\
+                     id         TEXT PRIMARY KEY,\n\
+                     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n\
+                     );\n",
+                );
+                for mig in ALL {
+                    buf.push_str("BEGIN;\n");
+                    buf.push_str(mig.sql);
+                    buf.push('\n');
+                    buf.push_str("INSERT INTO schema_migrations (id) VALUES ('");
+                    buf.push_str(mig.id);
+                    buf.push_str("');\n");
+                    buf.push_str("COMMIT;\n");
+                }
+                buf
+            })
+        }
+
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(cached_sql()).unwrap();
+        Mutex::new(conn)
+    });
+
+    let mut fresh = rusqlite::Connection::open_in_memory().unwrap();
+    {
+        let snapshot = SNAPSHOT.lock().unwrap();
+        let backup = rusqlite::backup::Backup::new(&snapshot, &mut fresh).unwrap();
+        backup
+            .run_to_completion(100, std::time::Duration::from_millis(0), None)
+            .unwrap();
+    } // drop Backup (releases &mut fresh borrow), then drop MutexGuard
+    fresh
 }
 
 #[cfg(test)]

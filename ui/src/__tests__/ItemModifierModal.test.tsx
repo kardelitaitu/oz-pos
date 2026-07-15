@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
@@ -71,10 +71,6 @@ function renderModal(props: Partial<ItemModifierModalProps> = {}) {
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('ItemModifierModal', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Render / open state ─────────────────────────────────────────
 
   it('renders nothing when open is false', () => {

@@ -1,12 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import { withFluent } from '@/locales/test-utils';
+import { screen, waitFor } from '@testing-library/react';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
 import SalesDashboardScreen from '@/features/sales/SalesDashboardScreen';
 import { registerSalesWidgets } from '@/features/sales/widgets';
 import { clearWidgets } from '@/platform/ui/widget-registry';
-
-const wrap = (children: React.ReactNode) => withFluent(children, salesFtl);
 
 const SAMPLE_SUMMARY = [
   { sale_id: 'sale-1', total_minor: 1250, currency: 'USD', line_count: 2, status: 'completed', created_at: '2026-06-28T10:00:00Z' },
@@ -51,14 +49,14 @@ beforeEach(() => {
 
 describe('SalesDashboardScreen', () => {
   it('renders title', async () => {
-    render(wrap(<SalesDashboardScreen />));
+    renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /sales dashboard/i })).toBeInTheDocument();
     });
   });
 
   it('shows KPI cards', async () => {
-    render(wrap(<SalesDashboardScreen />));
+    renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /daily total/i })).toBeInTheDocument();
     });
@@ -68,12 +66,12 @@ describe('SalesDashboardScreen', () => {
 
   it('shows loading state initially', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
-    render(wrap(<SalesDashboardScreen />));
+    renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
     expect(screen.getAllByText(/loading/i).length).toBeGreaterThan(0);
   });
 
   it('displays hourly data', async () => {
-    render(wrap(<SalesDashboardScreen />));
+    renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
     await waitFor(() => {
       expect(screen.getByText(/sales by hour/i)).toBeInTheDocument();
     });
@@ -88,14 +86,14 @@ describe('SalesDashboardScreen', () => {
       if (cmd === 'export_sales_by_hour') return Promise.resolve([]);
       return Promise.resolve([]);
     });
-    render(wrap(<SalesDashboardScreen />));
+    renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
     await waitFor(() => {
       expect(screen.getByText(/no data for today/i)).toBeInTheDocument();
     });
   });
 
   it('formats currency correctly', async () => {
-    render(wrap(<SalesDashboardScreen />));
+    renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /daily total/i })).toBeInTheDocument();
     });

@@ -50,7 +50,6 @@ function makeCategory(overrides: Partial<CategoryDto> = {}): CategoryDto {
 
 describe('CategoryManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListCategories.mockResolvedValue([]);
     mockCreateCategory.mockResolvedValue({ id: 'new-cat' });
     mockUpdateCategory.mockResolvedValue({ id: 'cat-1' });

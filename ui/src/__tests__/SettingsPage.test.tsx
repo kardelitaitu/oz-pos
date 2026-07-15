@@ -1,14 +1,13 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { withToastProviders } from '@/__tests__/test-utils/providers';
+import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { BrandProvider } from '@/contexts/BrandContext';
-import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { getAvailableLocales, getLocaleLabel } from '@/i18n';
 
@@ -82,7 +81,6 @@ vi.mock('@/contexts/ZoomContext', () => ({
 
 beforeEach(() => {
   cleanup();
-  localStorage.clear();
   failCommands.clear();
   invokeMock.mockReset();
   invokeMock.mockImplementation(defaultImpl);
@@ -104,7 +102,7 @@ afterEach(() => {
 });
 
 function TestWrapper({ children }: { children: ReactNode }) {
-  return withToastProviders(
+  return (
     <LocaleContext.Provider
       value={{
         locale: 'en',
@@ -114,28 +112,22 @@ function TestWrapper({ children }: { children: ReactNode }) {
       }}
     >
       <BrandProvider>
-        <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </ThemeProvider>
+        <AuthProvider>{children}</AuthProvider>
       </BrandProvider>
-    </LocaleContext.Provider>,
-    settingsFtl,
-    sharedFtl,
+    </LocaleContext.Provider>
   );
 }
-
-const wrap = (children: ReactNode) => <TestWrapper>{children}</TestWrapper>;
 
 describe('SettingsPage', () => {
   // ── Loading ──────────────────────────────────────────────────
 
   it('shows loading indicator before APIs resolve', () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
   it('transitions from loading to ready after APIs resolve', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
     });
@@ -146,7 +138,7 @@ describe('SettingsPage', () => {
 
   it('renders error with retry button when all APIs fail', async () => {
     invokeMock.mockRejectedValue(new Error('IPC error'));
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
     });
@@ -155,7 +147,7 @@ describe('SettingsPage', () => {
 
   it('recovers when retry is clicked after full failure', async () => {
     invokeMock.mockRejectedValue(new Error('IPC error'));
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
     });
@@ -170,7 +162,7 @@ describe('SettingsPage', () => {
 
   it('shows partial-load toast when some APIs fail', async () => {
     failCommands.add('get_sync_settings');
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
     });
@@ -182,7 +174,7 @@ describe('SettingsPage', () => {
   // ── Store section ────────────────────────────────────────────
 
   it('renders Store section with name, address, tax ID, and language fields', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
     });
@@ -192,7 +184,7 @@ describe('SettingsPage', () => {
   });
 
   it('updates store name input', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
     });
@@ -203,7 +195,7 @@ describe('SettingsPage', () => {
   });
 
   it('updates store address input', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('textbox', { name: 'Address' })).toBeInTheDocument();
     });
@@ -216,7 +208,7 @@ describe('SettingsPage', () => {
   // ── Save resilience ──────────────────────────────────────────
 
   it('calls set_receipt_settings and set_store_settings on save', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
@@ -228,7 +220,7 @@ describe('SettingsPage', () => {
   });
 
   it('shows "Saved!" after successful save', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
@@ -246,7 +238,7 @@ describe('SettingsPage', () => {
     failCommands.add('update_sync_settings');
     failCommands.add('set_brand_primary_colour');
     failCommands.add('set_brand_store_name');
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
@@ -258,7 +250,7 @@ describe('SettingsPage', () => {
 
   it('shows save-partial toast when some saves fail', async () => {
     failCommands.add('set_receipt_settings');
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
@@ -274,7 +266,7 @@ describe('SettingsPage', () => {
   // ── Currency section ─────────────────────────────────────────
 
   it('renders Currency section with default currency select', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /currency/i })).toBeInTheDocument();
     });
@@ -284,7 +276,7 @@ describe('SettingsPage', () => {
   });
 
   it('changes default currency via select', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByLabelText(/default currency/i)).toBeInTheDocument();
     });
@@ -296,7 +288,7 @@ describe('SettingsPage', () => {
   // ── Display section ──────────────────────────────────────────
 
   it('renders Display section with size and font controls', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /appearance/i })).toBeInTheDocument();
     });
@@ -311,7 +303,7 @@ describe('SettingsPage', () => {
   });
 
   it('increments card size value', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /appearance/i })).toBeInTheDocument();
     });
@@ -327,7 +319,7 @@ describe('SettingsPage', () => {
   // ── Receipt section ──────────────────────────────────────────
 
   it('navigates to Receipt section and populates form from API', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
     });
@@ -343,7 +335,7 @@ describe('SettingsPage', () => {
   });
 
   it('toggles show-currency and show-tax checkboxes', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
     });
@@ -360,7 +352,7 @@ describe('SettingsPage', () => {
   });
 
   it('changes decimal separator and updates receipt footer', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
     });
@@ -383,7 +375,7 @@ describe('SettingsPage', () => {
   // ── Cloud Sync section ───────────────────────────────────────
 
   it('renders Cloud Sync section with form fields', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
     });
@@ -401,7 +393,7 @@ describe('SettingsPage', () => {
   });
 
   it('shows not-configured hint when sync is unconfigured', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
     });
@@ -418,7 +410,7 @@ describe('SettingsPage', () => {
   // ── About section ────────────────────────────────────────────
 
   it('renders About section with version and license info', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
     });
@@ -439,7 +431,7 @@ describe('SettingsPage', () => {
   // ── Sidebar ──────────────────────────────────────────────────
 
   it('toggles collapse and expand via sidebar toggle button', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /collapse/i })).toBeInTheDocument();
     });
@@ -450,7 +442,7 @@ describe('SettingsPage', () => {
   });
 
   it('persists sidebar collapsed state to localStorage', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /collapse/i })).toBeInTheDocument();
     });
@@ -464,7 +456,7 @@ describe('SettingsPage', () => {
   });
 
   it('toggles category accordion', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
     });
@@ -479,7 +471,7 @@ describe('SettingsPage', () => {
   // ── Footer ───────────────────────────────────────────────────
 
   it('renders theme toggle button and app version in footer', async () => {
-    render(wrap(<SettingsPage />));
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
     });

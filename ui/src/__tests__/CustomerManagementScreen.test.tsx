@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import customersFtl from '@/locales/customers.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -25,7 +25,7 @@ const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 const mockCreateCustomer = createCustomer as ReturnType<typeof vi.fn>;
 const mockUpdateCustomer = updateCustomer as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, customersFtl, sharedFtl);
+
 
 const sampleCustomers = [
   { id: 'cust-1', name: 'Alice', email: 'alice@example.com', phone: '+1-555-0101', notes: 'Regular' },
@@ -35,14 +35,13 @@ const sampleCustomers = [
 
 describe('CustomerManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockListCustomers.mockResolvedValue(sampleCustomers);
   });
 
   // ── Rendering ─────────────────────────────────────────────────
 
   it('renders the title and Add Customer button', async () => {
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Customers')).toBeInTheDocument();
     });
@@ -51,13 +50,13 @@ describe('CustomerManagementScreen', () => {
 
   it('shows loading state', async () => {
     mockListCustomers.mockReturnValue(new Promise(() => {}));
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     expect(screen.getByText('Loading customers…')).toBeInTheDocument();
   });
 
   it('shows empty state when no customers exist', async () => {
     mockListCustomers.mockResolvedValue([]);
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('No customers yet.')).toBeInTheDocument();
     });
@@ -67,7 +66,7 @@ describe('CustomerManagementScreen', () => {
   // ── Table rendering ──────────────────────────────────────────
 
   it('displays customers in the table', async () => {
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -76,7 +75,7 @@ describe('CustomerManagementScreen', () => {
   });
 
   it('displays email and phone columns', async () => {
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('alice@example.com')).toBeInTheDocument();
       expect(screen.getByText('+1-555-0101')).toBeInTheDocument();
@@ -84,7 +83,7 @@ describe('CustomerManagementScreen', () => {
   });
 
   it('displays dash for null email and phone', async () => {
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Bob')).toBeInTheDocument();
     });
@@ -94,7 +93,7 @@ describe('CustomerManagementScreen', () => {
   });
 
   it('shows Edit and Delete buttons per row', async () => {
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getAllByText('Edit').length).toBeGreaterThanOrEqual(3);
     });
@@ -105,7 +104,7 @@ describe('CustomerManagementScreen', () => {
 
   it('filters customers by search query', async () => {
     const user = userEvent.setup();
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -121,7 +120,7 @@ describe('CustomerManagementScreen', () => {
 
   it('shows no-match state for search with no results', async () => {
     const user = userEvent.setup();
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -139,7 +138,7 @@ describe('CustomerManagementScreen', () => {
 
   it('opens the add customer modal when Add Customer is clicked', async () => {
     const user = userEvent.setup();
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
     });
@@ -157,7 +156,7 @@ describe('CustomerManagementScreen', () => {
     mockCreateCustomer.mockResolvedValue({});
     mockListCustomers.mockResolvedValueOnce(sampleCustomers);
     mockListCustomers.mockResolvedValueOnce([...sampleCustomers, { id: 'cust-4', name: 'Dave', email: null, phone: null, notes: '' }]);
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
@@ -178,7 +177,7 @@ describe('CustomerManagementScreen', () => {
 
   it('disables Create button when name is empty', async () => {
     const user = userEvent.setup();
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
     });
@@ -195,7 +194,7 @@ describe('CustomerManagementScreen', () => {
 
   it('closes the modal when Cancel is clicked', async () => {
     const user = userEvent.setup();
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
     });
@@ -216,7 +215,7 @@ describe('CustomerManagementScreen', () => {
 
   it('opens edit modal pre-filled with customer data', async () => {
     const user = userEvent.setup();
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getAllByText('Edit').length).toBeGreaterThanOrEqual(1);
     });
@@ -235,7 +234,7 @@ describe('CustomerManagementScreen', () => {
     const user = userEvent.setup();
     mockUpdateCustomer.mockResolvedValue({});
     mockListCustomers.mockResolvedValue(sampleCustomers);
-    render(wrap(<CustomerManagementScreen />));
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getAllByText('Edit').length).toBeGreaterThanOrEqual(1);

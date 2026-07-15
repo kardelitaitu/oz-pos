@@ -74,7 +74,6 @@ vi.mock('@/frontend/shell/ThemeToggle', () => ({
 
 describe('LicenseActivationScreen - Exhaustive Suite', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.mocked(getVersion).mockResolvedValue({ version: '1.0.0', name: 'oz-pos', rustVersion: '1.70', target: 'windows' });
     vi.mocked(getLocalIp).mockResolvedValue('192.168.1.100');
     vi.mocked(getMachineId).mockResolvedValue('test-machine-id');
@@ -102,7 +101,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     it('4. getVersion rejects gracefully without crashing the app', async () => {
       vi.mocked(getVersion).mockRejectedValue(new Error('Version Fail'));
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      await waitFor(() => expect(screen.getByText('Version 0.0.7')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Version 0.0.8')).toBeInTheDocument());
     });
 
     it('5. Component unmounting during getVersion fetch prevents state updates', () => {

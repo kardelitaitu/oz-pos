@@ -139,7 +139,6 @@ function expectAriaSelected(element: HTMLElement, value: boolean) {
 
 describe('DataManagementScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockGetBackupStatus.mockResolvedValue(defaultBackupStatus);
     mockCreateBackup.mockResolvedValue(defaultBackupResult);
     mockExportData.mockResolvedValue(defaultExportResult);
