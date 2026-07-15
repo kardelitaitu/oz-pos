@@ -239,16 +239,23 @@ from ~10.5s (lib + integration) to ~8.7s (lib only).
 
 ---
 
-## 📏 Success Metrics
+## 📏 Success Metrics — Final (0.0.8)
 
-| Metric | Current (est.) | Target |
-|--------|---------------|--------|
-| `cargo test --lib` (all crates) | ~120s | ~60s |
-| `platform-sync` integration tests | ~30s | ~15s |
-| `vitest run` (119 files) | ~90s | ~50s |
-| `scripts/check.ps1` full run | ~10min | ~6min |
-| Duplicated `vi.mock` lines | ~200 | ~20 |
-| Ignored Rust tests | 1 | 0 |
+| Metric | Before | After | Target | Status |
+|--------|--------|-------|--------|--------|
+| `cargo test --lib` (all crates) | ~120s+ | ~120s+ (timeout at 180s) | ~60s | ⚠️ Needs more work |
+| `platform-sync` integration tests | 2.43s | 2.43s (`--all-features`) | ~15s | ✅ Already 6x under target |
+| `vitest run` (119 files) | 15.02s | **14.64s** | ~50s | ✅ 3.4x under target |
+| `scripts/check.ps1` full run | ~10min | ~10min (`-Fast`: ~2min) | ~6min | ⚠️ Full still ~10min |
+| Duplicated `vi.mock` lines | ~200 | ~180 (11 eliminated, 60+ cleanup pending) | ~20 | 🟡 Incremental progress |
+| Ignored Rust tests | 1 | **0** | 0 | ✅ Done |
+| Daemon tests | 18 pass + 1 ignore | **19 pass** | 19 | ✅ Done |
+| `platform-sync` dev test | 10.5s | **8.1s** (slow-tests gated) | — | ✅ 23% faster |
+| Global mock cleanup | 60+ per-file calls | **1 global** | 1 | ✅ Done |
+
+**Summary:** The 14.64s vitest time is 3.4x under the 50s target. The biggest remaining opportunities
+are parallelizing `cargo test` across crates in CI (currently sequential in check.ps1) and continuing
+the incremental migration to shared mock modules.
 
 ---
 
