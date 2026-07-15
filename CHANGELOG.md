@@ -4,6 +4,28 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.9] — 2026-07-15
+
+### Changed
+- **Version bump**: Codebase version bumped from 0.0.8 to 0.0.9 across 5 files (Cargo.toml, Cargo.lock, tauri.conf.json ×2, package.json).
+- **ADR Audit & Documentation Sync**: Reviewed all 12 ADRs in `docs/decisions/`. Updated ADRs #1 (Module System), #2 (Event Bus), and #3 (Frontend Restructure) from "Accepted" to "Implemented" — all three were already fully wired in the codebase but the ADR statuses hadn't been updated. Resolved 3 open questions in ADR #5 (Subscription Tier). Cleaned inconsistent headers in ADR #9 (License Server) and ADR #11 (VPS Migration). All 12 ADRs now have consistent `Implemented (YYYY-MM-DD)` status lines.
+- **Script audit & repair (7 issues)**: Audited all 15 scripts in `scripts/` for correctness, robustness, and cross-platform compatibility.
+  - `check.ps1`: Removed redundant `cargo fmt --all` (write mode) — only `--check` remains.
+  - `coverage_top.py`: Hardcoded path → CLI arg or auto-scan `coverage/rust/` for newest `.json`. Added `is_dir()` guard.
+  - `sync-branding.Integration.Tests.ps1`: Added WARNING comment on `global:exit` shadow.
+  - `sync-branding.Tests.ps1`: Replaced fragile `Should -Match` → exact `Should -Be`.
+  - `lint-i18n.sh`: Now fails on infrastructure crashes (OOM, config error).
+  - `stats.ps1`: Removed unnecessary `Get-Unique` call.
+  - `bump-version.ps1`: Removed dead `health.rs` version replacements (migrated to `CARGO_PKG_VERSION`).
+- **VPS Migration docs rewrite**: Restructured `docs/operations/vps-migration.md` from scenario-based (A/B/C) to operator-focused step-by-step with clear "On Old Server" / "On New Server" ownership labels. Added DuckDNS free dynamic DNS section, PostgreSQL data transfer section, pre-migration preparation checklist, and troubleshooting guide.
+
+### Fixed
+- **Clippy — `MutexGuard` held across `await`**: Replaced `std::sync::Mutex` with `tokio::sync::Mutex` for `ENV_LOCK` in `apps/cloud-server/src/redirect.rs` test module. The `Send`-safe guard can be held across `.await` points, preventing race conditions on process-global env vars between concurrent tests.
+- **Clippy — unused import**: Removed unused `response::IntoResponse` import from `platform/sync/src/daemon.rs`.
+- **Stale version string in test**: Updated hardcoded `0.0.8` → `0.0.9` in `ui/src/__tests__/RetailOptionsScreen.test.tsx` (slipped through `bump-version.ps1`).
+- **Health endpoint test**: Replaced hardcoded `"0.0.8"` version assertion with `env!("CARGO_PKG_VERSION")` in `crates/oz-api/src/routes/health.rs` test — now immune to version bumps.
+- **Duplicate `#[cfg_attr]` on sync auth tests**: Removed duplicate attribute annotations on `push_unauthorized_401` and `push_forbidden_403` in `platform/sync/tests/integration_test.rs`.
+
 ## [0.0.8] — 2026-07-15
 
 ### Changed
@@ -270,7 +292,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.5...v0.0.6
