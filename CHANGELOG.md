@@ -18,6 +18,39 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   - `stats.ps1`: Removed unnecessary `Get-Unique` call.
   - `bump-version.ps1`: Removed dead `health.rs` version replacements (migrated to `CARGO_PKG_VERSION`).
 - **VPS Migration docs rewrite**: Restructured `docs/operations/vps-migration.md` from scenario-based (A/B/C) to operator-focused step-by-step with clear "On Old Server" / "On New Server" ownership labels. Added DuckDNS free dynamic DNS section, PostgreSQL data transfer section, pre-migration preparation checklist, and troubleshooting guide.
+- **Settings page sidebar UX overhaul**: 12 UX improvements across the settings page.
+  - **Sidebar search bar**: Real-time filtering of all 17 nav items + 4 categories. Arrow key navigation respects the current search filter.
+  - **Recently used sections**: Last 3 visited sections shown at top of sidebar, persisted to localStorage, auto-deduplicated.
+  - **Collapse-all categories button**: Chevron-up icon in sidebar header collapses all 4 accordion categories at once.
+  - **Breadcrumb category path**: Section header now shows clickable category label (e.g., "Business › General"), clicking expands that category in the sidebar.
+  - **Keyboard shortcuts**: Ctrl+S/Cmd+S saves, Escape closes mobile sidebar, ↑/↓ navigates all sections.
+  - **`beforeunload` guard**: Warns when closing tab with unsaved settings changes.
+  - **Unsaved changes dot indicator**: Animated accent dot on Save button when settings are dirty.
+  - **Mobile responsive sidebar overlay**: Fixed-position overlay with backdrop for small screens.
+  - **Content fade-in animation**: All 17 sections (inline + external) now have a consistent `opacity + translateY` fade-in via `@keyframes settings-section-fade-in`.
+- **AppearanceSettings polish**:
+  - Hex colour validation (`normaliseHex()`): Accepts `#fff`, `ffffff`, strips invalid chars, expands shorthand, pads to 6 chars.
+  - Individual colour reset button (undo icon) to restore `#10b981` default.
+  - **"Reset all to defaults" button**: Danger-styled button in the form section that resets colour + logo + store name simultaneously, persists via all three backend APIs, refreshes brand context, applies default palette. Uses `window.confirm()` with localized message + success/error toasts.
+  - Preview hover fix: Both primary and outline preview buttons now use `--preview-colour-alpha-20` instead of `--color-accent-dim`.
+  - Preview box transitions: Border-color fades on colour change (300ms), preview box border tints to match colour on hover.
+- **FeatureToggleScreen polish**:
+  - Fluid layout: Removed `max-width: 43.75rem` — content fills the settings panel.
+  - Toggle pulse animation: `@keyframes toggle-pulse` (opacity 0.5→0.75, 1.2s) on disabled toggle slider during IPC.
+  - Group count redesigned as pill/chip badge: `border-radius: var(--radius-full)`, semibold weight, `bg-surface` + border.
+- **DataManagementScreen polish**:
+  - Fluid layout: Removed `max-width: 43.75rem`.
+  - Animated tab underline: Static `border-bottom` replaced with `::after` pseudo-element that slides from center (width: 0 → 80%) on active tab.
+  - Password visibility toggle: Eye/eye-off SVG buttons on both export password and import password fields, separate state per field. Confirm password field uses `.data-mgmt-input--no-toggle` to avoid visual gap.
+  - Dry-run results redesigned: Plain text → card-style pill badges with border, `bg-elevated`, accent color count numbers, and `.data-mgmt-dry-run-label` class.
+  - Tab panel fade-in: `@keyframes data-mgmt-fade-in` (opacity + translateY, 200ms) on tab switch via `key` props.
+  - Dropzone cursor fix: Removed misleading `cursor: pointer` (clicking the dropzone does nothing — Browse button is the action).
+- **LicenseSettings polish**:
+  - Skeleton loading: Replaced "Loading…" text with 4 animated skeleton rows using `@keyframes license-skeleton-pulse` with staggered delays and `role="status"` + `aria-live="polite"`.
+  - Empty state icon: Added padlock SVG icon centered above the "no license" message.
+  - Server results fade-in: `@keyframes license-fade-in` (opacity + translateY, 200ms) on `.settings-license-server-section`.
+  - Tier badge hover: Added `transition` on opacity + box-shadow; hover shows 85% opacity + inset `currentColor` border.
+  - CSS cleanup: Removed redundant `.settings-license-value--medium` class, converted hardcoded hex → `rgb()` values.
 
 ### Fixed
 - **Clippy — `MutexGuard` held across `await`**: Replaced `std::sync::Mutex` with `tokio::sync::Mutex` for `ENV_LOCK` in `apps/cloud-server/src/redirect.rs` test module. The `Send`-safe guard can be held across `.await` points, preventing race conditions on process-global env vars between concurrent tests.
@@ -25,6 +58,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **Stale version string in test**: Updated hardcoded `0.0.8` → `0.0.9` in `ui/src/__tests__/RetailOptionsScreen.test.tsx` (slipped through `bump-version.ps1`).
 - **Health endpoint test**: Replaced hardcoded `"0.0.8"` version assertion with `env!("CARGO_PKG_VERSION")` in `crates/oz-api/src/routes/health.rs` test — now immune to version bumps.
 - **Duplicate `#[cfg_attr]` on sync auth tests**: Removed duplicate attribute annotations on `push_unauthorized_401` and `push_forbidden_403` in `platform/sync/tests/integration_test.rs`.
+- **AppearanceSettings tests (28 failures)**: Added `useToast` mock. Changed 3 hex-input tests from `user.type` to `fireEvent.change` because `normaliseHex()` rejects leading `#` on character-by-character typing.
+- **LicenseSettings tests (2 failures)**: Updated loading test to check for `.settings-license-skeleton` CSS class instead of "Loading…" text. Updated empty-state test to match new `div[role="status"]` structure with lock icon.
+- **screenExtraction test (2 failures)**: Removed dead `.settings-section-header-subtitle` CSS class (removed from TSX during breadcrumb refactoring). Added `mobile-open` and `visible` as `externalClasses` — these are template-literal constructed classes that the static extraction utility can't parse.
+- **Dead CSS class**: Removed `.settings-section-header-subtitle` from SettingsPage.css (was defined but never referenced in TSX after breadcrumb refactoring).
 
 ## [0.0.8] — 2026-07-15
 
