@@ -1,14 +1,14 @@
 .sc-screen {
-  max-width: 800px;
+  max-width: 50rem;
   margin: 0 auto;
-  padding: 24px;
+  padding: 1.5rem;
 }
 
 .sc-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 1.25rem;
 }
 
 .sc-title {
@@ -19,13 +19,13 @@
 
 .sc-filters {
   display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
   flex-wrap: wrap;
 }
 
 .sc-filter-btn {
-  padding: 6px 14px;
+  padding: 0.375rem 0.875rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-elevated);
@@ -45,24 +45,24 @@
 .sc-empty {
   text-align: center;
   color: var(--color-fg-tertiary);
-  padding: 40px 0;
+  padding: 2.5rem 0;
 }
 
 .sc-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .sc-card {
-  padding: 16px;
+  padding: 1rem;
 }
 
 .sc-card-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 0.625rem;
+  margin-bottom: 0.375rem;
 }
 
 .sc-card-number {
@@ -72,8 +72,8 @@
 
 .sc-badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
   font-size: 0.75rem;
   font-weight: 500;
 }
@@ -85,7 +85,7 @@
 
 .sc-card-meta {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   margin-bottom: 4px;
@@ -94,7 +94,7 @@
 .sc-card-notes {
   font-size: var(--text-sm);
   color: var(--color-fg-secondary);
-  margin: 4px 0;
+  margin: 0.25rem 0;
 }
 
 .sc-card-type {
@@ -109,7 +109,7 @@
 }
 
 .sc-card-actions {
-  margin-top: 10px;
+  margin-top: 0.625rem;
 }
 
 .sc-card-action {

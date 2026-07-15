@@ -1,7 +1,7 @@
 .sc-form-screen {
-  max-width: 600px;
+  max-width: 37.5rem;
   margin: 0 auto;
-  padding: 24px;
+  padding: 1.5rem;
 }
 
 /* Shared with parent screen */
@@ -12,34 +12,34 @@
 }
 
 .sc-form-header {
-  margin-bottom: 20px;
+  margin-bottom: 1.25rem;
 }
 
 .sc-form-card {
-  padding: 24px;
+  padding: 1.5rem;
 }
 
 .sc-form-field {
-  margin-bottom: 20px;
+  margin-bottom: 1.25rem;
 }
 
 .sc-form-label {
   display: block;
   font-weight: 500;
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
   font-size: 0.9rem;
 }
 
 .sc-type-options {
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
 }
 
 .sc-type-btn {
   flex: 1;
-  padding: 10px 16px;
+  padding: 0.625rem 1rem;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: var(--color-bg-elevated);
   cursor: pointer;
   font-size: 0.9rem;
@@ -55,9 +55,9 @@
 
 .sc-form-textarea {
   width: 100%;
-  padding: 10px;
+  padding: 0.625rem;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   font-family: inherit;
   font-size: 0.9rem;
   resize: vertical;
@@ -67,13 +67,13 @@
   background: #fee2e2;
   color: #991b1b;
   padding: 10px;
-  border-radius: 6px;
-  margin-bottom: 16px;
+  border-radius: 0.375rem;
+  margin-bottom: 1rem;
   font-size: 0.9rem;
 }
 
 .sc-form-actions {
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
   justify-content: flex-end;
 }
