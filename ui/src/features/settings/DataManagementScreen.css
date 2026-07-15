@@ -1,6 +1,6 @@
 .data-mgmt {
   padding: var(--space-6);
-  max-width: 700px;
+  max-width: 43.75rem;
 }
 
 .data-mgmt-header {
@@ -51,8 +51,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   vertical-align: middle;
 }
 
@@ -112,16 +112,16 @@
 }
 
 .data-mgmt-type-checkbox input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 0.125rem;
   accent-color: var(--color-accent);
 }
 
 .data-mgmt-type-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
 }
 
 .data-mgmt-type-label {
@@ -178,7 +178,7 @@
 .data-mgmt-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .data-mgmt-form {
@@ -238,9 +238,9 @@
 .data-mgmt-done-text code {
   font-family: var(--font-mono, monospace);
   font-size: var(--text-xs);
-  padding: 1px 4px;
+  padding: 0.0625rem 0.25rem;
   background: var(--color-bg-surface);
-  border-radius: 3px;
+  border-radius: 0.1875rem;
 }
 
 /* ── File picker ─────────────────────────────────────────────────── */
@@ -334,7 +334,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 0.125rem;
   font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
 }
