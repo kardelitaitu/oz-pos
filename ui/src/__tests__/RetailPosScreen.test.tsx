@@ -6,7 +6,6 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act } from 'react';
-import type { ReactNode } from 'react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
@@ -18,6 +17,17 @@ import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import type { LineId, Sku } from '@/types/domain';
+import {
+  createAuthContextMock,
+  createWorkspaceContextMock,
+} from '@/__tests__/test-utils/mocks/contexts';
+import {
+  createSalesApiMock,
+  createSettingsApiMock,
+  createShiftsApiMock,
+  createHardwareApiMock,
+  createProductsApiMock,
+} from '@/__tests__/test-utils/mocks/api';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 
@@ -107,88 +117,19 @@ vi.mock('@/api/products', () => ({
   deleteCategory: vi.fn(),
 }));
 
-vi.mock('@/api/shifts', () => ({
+vi.mock('@/api/shifts', () => createShiftsApiMock({
   getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
-  openShift: vi.fn(() =>
-    Promise.resolve({
-      id: 'shift-1', userId: 'user-1', terminalId: null,
-      openedAt: '2026-07-05T08:00:00Z', closedAt: null,
-      openingBalanceMinor: 100000, closingBalanceMinor: null,
-      expectedCashMinor: null, cashDifferenceMinor: null,
-      totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0,
-      totalOtherMinor: 0, totalVoidsMinor: 0, totalRefundsMinor: 0,
-      totalPayoutsMinor: 0, notes: '', status: 'open',
-      createdAt: '2026-07-05T08:00:00Z', updatedAt: '2026-07-05T08:00:00Z',
-    }),
-  ),
-  closeShift: vi.fn(),
-  listShifts: vi.fn(() => Promise.resolve([])),
-  getShift: vi.fn(() => Promise.resolve(null)),
-  createCashPayout: vi.fn(),
-  getShiftReport: vi.fn(),
 }));
 
-vi.mock('@/api/settings', () => ({
+vi.mock('@/api/settings', () => createSettingsApiMock({
   getStoreSettings: vi.fn(() =>
     Promise.resolve({ name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: '', currency: 'IDR', branch: 'Cabang A', logo: '' }),
   ),
-  getReceiptSettings: vi.fn(() => Promise.resolve({ showCurrency: true, decimalSeparator: 'dot', showTax: true, footer: '', paperWidth: 'standard', showTableNumber: false, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 })),
-  setReceiptSettings: vi.fn(),
-  setStoreSettings: vi.fn(),
-  getCreditSettings: vi.fn(() => Promise.resolve({ enabled: true, reminderIntervalHours: 24, maxLimitMinor: 500000 })),
-  setCreditSettings: vi.fn(),
-  listCreditSales: vi.fn(() => Promise.resolve([])),
-  settleCredit: vi.fn(),
-  getHardwareSettings: vi.fn(() => Promise.resolve({ printerConnection: 'auto', printerDevicePath: '', printerPaperSize: '80', scannerDeviceId: '', scannerInputMode: 'auto' })),
-  setHardwareSettings: vi.fn(),
-  completeSetup: vi.fn(),
-  dismissSetupWizard: vi.fn(),
-  getSetupStatus: vi.fn(),
-  getEnabledFeatures: vi.fn(),
-  getUserPreferences: vi.fn(),
-  setUserPreferences: vi.fn(),
 }));
 
-vi.mock('@/api/hardware', () => ({
-  listScanners: vi.fn(() => Promise.resolve([])),
-  listDisplays: vi.fn(() => Promise.resolve([])),
-  displayShow: vi.fn(() => Promise.resolve()),
-  displayClear: vi.fn(() => Promise.resolve()),
-  openCashDrawer: vi.fn(),
-  printReceipt: vi.fn(),
-  startScanner: vi.fn(),
-  stopScanner: vi.fn(),
-  onBarcodeScanned: vi.fn(),
-  onBarcodeError: vi.fn(),
-}));
+vi.mock('@/api/hardware', () => createHardwareApiMock());
 
-vi.mock('@/api/sales', () => ({
-  holdCart: vi.fn(() => Promise.resolve({ id: 'held-1' })),
-  listHeldCarts: vi.fn(() => Promise.resolve([])),
-  getHeldCart: vi.fn(() => Promise.resolve(null)),
-  deleteHeldCart: vi.fn(() => Promise.resolve()),
-  startSale: vi.fn(() => Promise.resolve({ cartId: 'cart-1' })),
-  addLine: vi.fn(() => Promise.resolve({ lineId: 'line-added-1', lineTotal: null })),
-  setCartDiscount: vi.fn(() => Promise.resolve()),
-  completeSale: vi.fn(() => Promise.resolve({ saleId: 'sale-1', total: { minor_units: 3500, currency: 'IDR' }, lineCount: 1 })),
-  getSale: vi.fn(() => Promise.resolve({
-    id: 'sale-1', total: { minor_units: 3500, currency: 'IDR' },
-    subtotal: { minor_units: 3500, currency: 'IDR' },
-    taxTotal: { minor_units: 0, currency: 'IDR' },
-    lineCount: 1, status: 'completed', paymentMethod: 'CASH',
-    tenderedMinor: 5000, userId: 'user-1', createdAt: '2026-07-06T10:00:00Z',
-    lines: [{ id: 'line-1', sku: 'SKU-001', name: 'Indomie Goreng', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' }, total_minor: 3500, tax_amount: null, tax_rate_id: null }],
-  })),
-  printSalesReceipt: vi.fn(() => Promise.resolve({ printed: true })),
-  listSales: vi.fn(() => Promise.resolve([])),
-  voidSale: vi.fn(),
-  processRefund: vi.fn(() => Promise.resolve({ refundId: 'refund-1', totalMinor: 0 })),
-  listRefunds: vi.fn(() => Promise.resolve([])),
-  exportDailySummary: vi.fn(() => Promise.resolve([])),
-  exportSalesByHour: vi.fn(() => Promise.resolve([])),
-  exportEodReport: vi.fn(() => Promise.resolve(null)),
-  getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
-}));
+vi.mock('@/api/sales', () => createSalesApiMock());
 
 vi.mock('@/api/kds', () => ({
   createKdsOrderFromSale: vi.fn((_userId: string, _saleId: string) => Promise.resolve()),
@@ -220,23 +161,10 @@ vi.mock('@/api/customers', () => ({
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    session: { user_id: 'user-1', username: 'testuser', role_name: 'cashier', token: 'mock-token', role_id: 'role-1', display_name: 'Kasir Test' },
-    loading: false, error: null, login: vi.fn(), logout: vi.fn(), clearError: vi.fn(),
-    isManager: false, isOwner: false,
-  }),
+  useAuth: createAuthContextMock(),
 }));
 
-vi.mock('@/contexts/WorkspaceContext', () => ({
-  useWorkspace: () => ({
-    activeWorkspace: 'store-pos',
-    setActiveWorkspace: vi.fn(),
-    availableWorkspaces: [],
-    workspaceScreens: [],
-    loading: false,
-  }),
-  WorkspaceProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
+vi.mock('@/contexts/WorkspaceContext', createWorkspaceContextMock);
 
 // ── Test wrapper ──────────────────────────────────────────────────
 

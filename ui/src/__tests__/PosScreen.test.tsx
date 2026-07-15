@@ -7,7 +7,6 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act } from 'react';
-import type { ReactNode } from 'react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -17,13 +16,21 @@ import { ScannerError } from '@/api/hardware';
 import type * as HardwareModule from '@/api/hardware';
 import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
-
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import PosScreen from '@/features/sales/PosScreen';
 import * as productsApi from '@/api/products';
 import * as bundlesApi from '@/api/bundles';
 import type { BarcodeScannedPayload } from '@/api/hardware';
+import {
+  createAuthContextMock,
+  createWorkspaceContextMock,
+} from '@/__tests__/test-utils/mocks/contexts';
+import {
+  createSalesApiMock,
+  createSettingsApiMock,
+  createShiftsApiMock,
+} from '@/__tests__/test-utils/mocks/api';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 // vi.mock is hoisted, so any mutable state must be declared via
@@ -164,66 +171,13 @@ vi.mock('@/api/bundles', () => ({
   deleteBundle: vi.fn(),
 }));
 
-vi.mock('@/api/shifts', () => ({
-  getActiveShift: vi.fn(() => Promise.resolve({
-    id: 'shift-1',
-    userId: 'user-1',
-    terminalId: null,
-    openedAt: new Date().toISOString(),
-    closedAt: null,
-    openingBalanceMinor: 0,
-    closingBalanceMinor: null,
-    expectedCashMinor: null,
-    cashDifferenceMinor: null,
-    totalSalesMinor: 0,
-    totalCashMinor: 0,
-    totalCardMinor: 0,
-    totalOtherMinor: 0,
-    totalVoidsMinor: 0,
-    totalRefundsMinor: 0,
-    totalPayoutsMinor: 0,
-    notes: '',
-    status: 'open',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  })),
-  openShift: vi.fn(),
-  closeShift: vi.fn(),
-}));
+vi.mock('@/api/shifts', () => createShiftsApiMock());
 
-vi.mock('@/api/settings', () => ({
-  getReceiptSettings: vi.fn(() => Promise.resolve({
-    showCurrency: true, decimalSeparator: 'dot', showTax: true,
-    footer: '', paperWidth: 'standard', showTableNumber: false,
-    marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
-  })),
-  getStoreSettings: vi.fn(() => Promise.resolve({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' })),
-  listCreditSales: vi.fn(() => Promise.resolve([])),
-  settleCredit: vi.fn(),
-}));
+vi.mock('@/api/settings', () => createSettingsApiMock());
 
 // Mock sales API to prevent unhandled promise rejections from
 // loadHeldCarts being called on mount.
-vi.mock('@/api/sales', () => ({
-  holdCart: vi.fn(),
-  listHeldCarts: vi.fn(() => Promise.resolve([])),
-  getHeldCart: vi.fn(),
-  deleteHeldCart: vi.fn(),
-  startSale: vi.fn(),
-  addLine: vi.fn(),
-  completeSale: vi.fn(),
-  setCartDiscount: vi.fn(),
-  listSales: vi.fn(() => Promise.resolve([])),
-  getSale: vi.fn(),
-  voidSale: vi.fn(),
-  processRefund: vi.fn(),
-  listRefunds: vi.fn(() => Promise.resolve([])),
-  exportDailySummary: vi.fn(() => Promise.resolve([])),
-  exportSalesByHour: vi.fn(() => Promise.resolve([])),
-  exportEodReport: vi.fn(),
-  printSalesReceipt: vi.fn(),
-  onReceiptPrinted: vi.fn(),
-}));
+vi.mock('@/api/sales', () => createSalesApiMock());
 
 // Mock interaction utils so jsdom's non-Promise play() doesn't
 // trigger a TypeError inside triggerInteraction (the catch {}
@@ -234,34 +188,10 @@ vi.mock('@/utils/interaction', () => ({
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    session: {
-      user_id: 'user-1',
-      username: 'testuser',
-      role_name: 'cashier',
-      token: 'mock-token',
-      role_id: 'role-1',
-    },
-    loading: false,
-    error: null,
-    login: vi.fn(),
-    logout: vi.fn(),
-    clearError: vi.fn(),
-    isManager: false,
-    isOwner: false,
-  }),
+  useAuth: createAuthContextMock({ displayName: undefined }),
 }));
 
-vi.mock('@/contexts/WorkspaceContext', () => ({
-  useWorkspace: () => ({
-    activeWorkspace: 'store-pos',
-    setActiveWorkspace: vi.fn(),
-    availableWorkspaces: [],
-    workspaceScreens: [],
-    loading: false,
-  }),
-  WorkspaceProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
+vi.mock('@/contexts/WorkspaceContext', createWorkspaceContextMock);
 
 // Sub-screen stubs for the Settings 4-tab-routing pattern.
 // Kept minimal so the parent-only assertions stay focused.
