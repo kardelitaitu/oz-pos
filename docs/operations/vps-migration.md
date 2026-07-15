@@ -412,10 +412,6 @@ SELECT 'users',           COUNT(*) FROM users
 UNION ALL
 SELECT 'tax_rates',       COUNT(*) FROM tax_rates
 UNION ALL
-SELECT 'sales',           COUNT(*) FROM sales
-UNION ALL
-SELECT 'sale_items',      COUNT(*) FROM sale_items
-UNION ALL
 SELECT 'stock_movements', COUNT(*) FROM stock_movements
 UNION ALL
 SELECT 'stock_summary',   COUNT(*) FROM stock_summary;
@@ -437,10 +433,6 @@ UNION ALL
 SELECT 'users',           COUNT(*) FROM users
 UNION ALL
 SELECT 'tax_rates',       COUNT(*) FROM tax_rates
-UNION ALL
-SELECT 'sales',           COUNT(*) FROM sales
-UNION ALL
-SELECT 'sale_items',      COUNT(*) FROM sale_items
 UNION ALL
 SELECT 'stock_movements', COUNT(*) FROM stock_movements
 UNION ALL
@@ -531,6 +523,169 @@ restart it. For Scenario A (same domain), you can leave it stopped.
 | "Permission denied" on new VPS | Container user (ozpos, UID 1000) can't read the file | `chown 1000:1000 /data/oz-pos.db` |
 | `scp` connection refused | Firewall blocking port 22 | Use Method E (cloud storage) or open firewall temporarily |
 | Database has `-wal` file > 0 bytes | WAL wasn't checkpointed | Run `PRAGMA wal_checkpoint(TRUNCATE);` before copying |
+
+---
+
+## Data Transfer: Migrating PostgreSQL Between Instances
+
+> SQLite users: see the [SQLite Data Transfer](#data-transfer-moving-the-sqlite-database) section above.
+
+If you use `DATABASE_URL` and need to move the database to a **different**
+PostgreSQL instance (e.g., switching from self-hosted to AWS RDS, or
+migrating between providers), follow this section.
+
+If both old and new VPSes connect to the **same** PG instance, no data
+migration is needed — skip this section and just point the new server at
+the same `DATABASE_URL`.
+
+### Step 1: Stop Writes on the Old VPS
+
+Stop the old cloud server to prevent new data from being written during
+the migration.
+
+```bash
+# On the old VPS
+docker stop oz-cloud-server
+```
+
+### Step 2: Dump the Old Database
+
+Use `pg_dump` to export the entire database from the old PG instance.
+Install `postgresql-client` if not present (`apt install postgresql-client`).
+
+```bash
+# Export from the old PG instance (custom format, compressed, with schema + data)
+pg_dump \
+  --dbname=postgres://user:pass@old-pg-host:5432/ozpos \
+  --format=custom \
+  --compress=9 \
+  --file=/tmp/ozpos-migration.dump
+
+# Note the file size
+ls -lh /tmp/ozpos-migration.dump
+```
+
+**Alternative: Plain SQL dump** (easier to inspect, less efficient for large DBs):
+
+```bash
+pg_dump \
+  --dbname=postgres://user:pass@old-pg-host:5432/ozpos \
+  --format=plain \
+  --no-owner \
+  --no-acl \
+  --file=/tmp/ozpos-migration.sql
+```
+
+### Step 3: Transfer the Dump File
+
+Same transfer methods as SQLite — choose one:
+
+```bash
+# Direct SCP (push from old VPS to new VPS)
+scp /tmp/ozpos-migration.dump user@<new-vps-ip>:/tmp/
+
+# Or pull from the new VPS
+# On the new VPS:
+scp user@<old-vps-ip>:/tmp/ozpos-migration.dump /tmp/
+
+# Or via cloud storage (if VPSes can't reach each other)
+aws s3 cp /tmp/ozpos-migration.dump s3://my-bucket/  # from old
+aws s3 cp s3://my-bucket/ozpos-migration.dump /tmp/  # to new
+```
+
+### Step 4: Restore to the New Database
+
+Create an empty database on the new PG instance, then restore.
+
+```bash
+# On the new VPS — create the database (if not already created)
+psql postgres://user:pass@new-pg-host:5432/postgres \
+  -c "CREATE DATABASE ozpos;"
+
+# Restore from the dump file (custom format)
+pg_restore \
+  --dbname=postgres://user:pass@new-pg-host:5432/ozpos \
+  --clean \
+  --if-exists \
+  --no-owner \
+  --no-acl \
+  --jobs=4 \
+  /tmp/ozpos-migration.dump
+
+# For plain SQL format, use psql instead:
+# psql postgres://user:pass@new-pg-host:5432/ozpos < /tmp/ozpos-migration.sql
+```
+
+> ⚠️ **`--clean --if-exists`** drops existing tables before restoring.
+> Only use this on a fresh/empty target database. For production,
+> restore into a new empty database first, verify, then switch.
+
+### Step 5: Verify on the New Database
+
+```bash
+# Row counts on old PG (before dump)
+psql postgres://user:pass@old-pg-host:5432/ozpos <<'EOF'
+SELECT 'products'        AS tbl, COUNT(*) FROM products
+UNION ALL SELECT 'settings', COUNT(*) FROM settings
+UNION ALL SELECT 'offline_queue', COUNT(*) FROM offline_queue
+UNION ALL SELECT 'users', COUNT(*) FROM users
+UNION ALL SELECT 'tax_rates', COUNT(*) FROM tax_rates
+UNION ALL SELECT 'stock_movements', COUNT(*) FROM stock_movements
+UNION ALL SELECT 'stock_summary', COUNT(*) FROM stock_summary;
+EOF
+
+# Same query on new PG — counts must match exactly
+psql postgres://user:pass@new-pg-host:5432/ozpos <<'EOF'
+SELECT 'products'        AS tbl, COUNT(*) FROM products
+UNION ALL SELECT 'settings', COUNT(*) FROM settings
+UNION ALL SELECT 'offline_queue', COUNT(*) FROM offline_queue
+UNION ALL SELECT 'users', COUNT(*) FROM users
+UNION ALL SELECT 'tax_rates', COUNT(*) FROM tax_rates
+UNION ALL SELECT 'stock_movements', COUNT(*) FROM stock_movements
+UNION ALL SELECT 'stock_summary', COUNT(*) FROM stock_summary;
+EOF
+```
+
+### Step 6: Point the New Server at the New Database
+
+Update the `DATABASE_URL` on the new VPS to point at the new PG instance:
+
+```bash
+# Stop, update env, restart
+docker stop oz-cloud-server
+docker rm oz-cloud-server
+
+docker run -d \
+  --name oz-cloud-server \
+  -p 3099:3099 \
+  -e DATABASE_URL=postgres://user:pass@new-pg-host:5432/ozpos \
+  -e OZ_API_SECRET=<your-secret> \
+  oz-pos-cloud:latest
+```
+
+### Step 7: Verify the Server Starts Correctly
+
+```bash
+curl http://localhost:3099/health
+docker logs oz-cloud-server 2>&1 | tail -20
+# Look for: "PostgreSQL database connected and tables initialised"
+```
+
+### Row Count Comparison Table
+
+Before finalizing, record row counts from both instances:
+
+```
+Table             Old PG          New PG          Match?
+─────────────────────────────────────────────────────────
+products          ______          ______          [ ]
+settings          ______          ______          [ ]
+offline_queue     ______          ______          [ ]
+users             ______          ______          [ ]
+tax_rates         ______          ______          [ ]
+stock_movements   ______          ______          [ ]
+stock_summary     ______          ______          [ ]
+```
 
 ---
 
