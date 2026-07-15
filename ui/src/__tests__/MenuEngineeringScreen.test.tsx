@@ -9,13 +9,26 @@ import type { MenuEngineeringResult } from '@/api/reports';
 
 // ── Mocks ─────────────────────────────────────────────────
 
-vi.mock('@/api/reports', async (importOriginal) => {
-  const actual = await importOriginal<typeof reportsApi>();
-  return {
-    ...actual,
-    getMenuEngineering: vi.fn(),
-  };
-});
+// Mock recharts entirely to prevent its internal dependency on
+// @reduxjs/toolkit (pure ESM) from crashing the vmThreads pool.
+// The component's chart section still renders; recharts output
+// is never directly asserted by any test.
+vi.mock('recharts', () => ({
+  ScatterChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Scatter: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  CartesianGrid: () => null,
+  Tooltip: () => null,
+  Legend: () => null,
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ReferenceLine: () => null,
+  ReferenceArea: () => null,
+}));
+
+vi.mock('@/api/reports', () => ({
+  getMenuEngineering: vi.fn(),
+}));
 
 const mockResult: MenuEngineeringResult = {
   median_volume: 50,
@@ -382,10 +395,10 @@ describe('MenuEngineeringScreen', () => {
     vi.mocked(reportsApi.getMenuEngineering).mockClear();
 
     const endInput = screen.getByLabelText('End date') as HTMLInputElement;
-    fireEvent.change(endInput, { target: { value: '2026-07-15' } });
+    fireEvent.change(endInput, { target: { value: '2026-07-20' } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-07-15');
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-07-20');
     });
   });
 
