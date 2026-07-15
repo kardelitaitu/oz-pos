@@ -201,14 +201,20 @@ calls that can be removed incrementally as those files are touched for other cha
 
 ## 🔧 CI / Infrastructure
 
-### M. Check Script Optimization
+### M. Check Script Optimization ✅ (0.0.8 — 2026-07-15)
 
-- [ ] **M1.** `scripts/check.ps1` runs `cargo test` for 27 crates sequentially. Add
-  `--test-threads` to leverage all CPU cores.
-- [ ] **M2.** Split the Rust `cargo test` step into fast (unit only) and slow (integration)
-  phases so fast failures surface earlier.
-- [ ] **M3.** Add a `--fast` flag to `check.ps1` that skips integration tests and
-  only runs unit tests + clippy + fmt.
+- [x] **M1.** Added explicit `--test-threads` to `scripts/check.ps1` in Section F.
+- [x] **M2.** `--fast` mode uses `cargo test --lib` (unit tests only, skips integration test compilation).
+- [x] **M3.** Added `-Fast` switch to `check.ps1`:
+  - `cargo test --lib --all-features` (skip integration test compilation)
+  - Skips migration tests, skill drift guard, UI steps (npm ci/lint/typecheck/vitest/build), and code stats
+  - Still runs cargo fmt + clippy on all packages
+  - Final message: "fast checks passed" vs "all checks passed"
+
+**Result:** `-Fast` saves ~8-10min per full check (UI vitest ~15s, npm build ~10s, integration
+compilation across 27 crates, migration + drift guard). Per-crate example: platform-sync drops
+from ~10.5s (lib + integration) to ~8.7s (lib only).
+**Before: ~10min (full check), After with -Fast: ~2min (fmt + clippy + lib tests only).**
 
 ### N. Coverage Tooling
 
