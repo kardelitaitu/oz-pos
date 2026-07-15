@@ -1092,7 +1092,6 @@ async fn transient_failure_on_pull_retry_succeeds() {
 // the credentials are updated.
 
 #[cfg_attr(not(feature = "slow-tests"), ignore)]
-#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn push_unauthorized_401_returns_error() {
     // Server that returns 401 Unauthorized on push.
@@ -1136,7 +1135,6 @@ async fn push_unauthorized_401_returns_error() {
     handle.abort();
 }
 
-#[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
 async fn push_forbidden_403_returns_error() {
