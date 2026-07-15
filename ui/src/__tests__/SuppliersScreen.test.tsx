@@ -42,10 +42,6 @@ const sampleSuppliers = [
 ];
 
 describe('SuppliersScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and Add Supplier button', async () => {
     mockListSuppliers.mockResolvedValue([]);

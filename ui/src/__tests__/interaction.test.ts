@@ -19,10 +19,6 @@ vi.mock('@/utils/interaction', () => ({
 import { triggerInteraction } from '@/utils/interaction';
 
 describe('triggerInteraction', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('plays audio for a known interaction', () => {
     triggerInteraction('add-to-cart');
     expect(mockPlay).toHaveBeenCalled();

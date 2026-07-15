@@ -37,10 +37,6 @@ const sampleAdjustments = [
 ];
 
 describe('StockCountHistory', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Loading / empty ──────────────────────────────────────────
   it('shows loading state initially', async () => {
     mockListCounts.mockReturnValue(new Promise(() => {}));

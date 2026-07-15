@@ -62,10 +62,6 @@ function renderScreen() {
 }
 
 describe('StaffLoginScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('focuses username input when the screen background is clicked', async () => {
     const user = userEvent.setup();
     renderScreen();

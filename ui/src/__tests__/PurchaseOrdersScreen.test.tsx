@@ -65,10 +65,6 @@ const sampleOrders = [
 ];
 
 describe('PurchaseOrdersScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and New Purchase Order button', async () => {
     mockListPOs.mockResolvedValue([]);

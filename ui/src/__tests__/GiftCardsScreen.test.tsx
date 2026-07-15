@@ -72,10 +72,6 @@ const sampleCards = [
 ];
 
 describe('GiftCardsScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and Issue New Card button', async () => {
     mockListGiftCards.mockResolvedValue([]);

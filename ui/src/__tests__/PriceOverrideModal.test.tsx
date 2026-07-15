@@ -25,10 +25,6 @@ function renderModal(props: Partial<PriceOverrideModalProps> = {}) {
 }
 
 describe('PriceOverrideModal', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Closed state ─────────────────────────────────────────────
 
   it('renders nothing when open is false', () => {

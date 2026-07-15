@@ -46,10 +46,6 @@ const closedShifts = [
 ];
 
 describe('ShiftManagementScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Rendering ─────────────────────────────────────────────────
 
   it('renders the title', async () => {

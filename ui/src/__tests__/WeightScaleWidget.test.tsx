@@ -47,10 +47,6 @@ weight-scale-error = Scale error
 
 
 describe('WeightScaleWidget', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('renders the weigh button and idle display when feature is enabled', () => {
     renderWithFluentSync(<WeightScaleWidget />, scaleFtl);
     expect(screen.getByRole('button', { name: /read weight/i })).toBeInTheDocument();

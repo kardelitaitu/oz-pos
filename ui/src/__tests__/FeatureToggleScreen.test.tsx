@@ -46,10 +46,6 @@ const sampleFeaturesResult = { features: sampleFeatures };
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('FeatureToggleScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Loading state ────────────────────────────────────────────
 
   it('renders loading spinner while fetching features', async () => {

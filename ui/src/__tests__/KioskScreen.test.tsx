@@ -31,10 +31,6 @@ const sampleCategories = [
 
 
 describe('KioskScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('loads and displays products', async () => {
     mockListProducts.mockResolvedValue(sampleProducts);
     mockListCategories.mockResolvedValue(sampleCategories);

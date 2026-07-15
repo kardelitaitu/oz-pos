@@ -81,10 +81,6 @@ vi.mock('@/components/Button', () => ({
 // ── Tests ────────────────────────────────────────────────────────
 
 describe('DesignSystem', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Rendering ─────────────────────────────────────────────────
 
   it('renders without crashing', () => {

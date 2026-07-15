@@ -71,10 +71,6 @@ function renderModal(props: Partial<ItemModifierModalProps> = {}) {
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('ItemModifierModal', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Render / open state ─────────────────────────────────────────
 
   it('renders nothing when open is false', () => {

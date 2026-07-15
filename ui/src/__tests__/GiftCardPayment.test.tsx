@@ -26,10 +26,6 @@ const defaultProps = {
 };
 
 describe('GiftCardPayment', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('renders the payment form', () => {
     renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
     expect(screen.getByText('Gift Card')).toBeInTheDocument();

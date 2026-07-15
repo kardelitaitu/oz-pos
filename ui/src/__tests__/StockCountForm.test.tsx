@@ -29,10 +29,6 @@ sc-start-count = Start Count
 
 
 describe('StockCountForm', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('renders the form with title and count type options', () => {
     renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     expect(screen.getByText('New Stock Count')).toBeInTheDocument();

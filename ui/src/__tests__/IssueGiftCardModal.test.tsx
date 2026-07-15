@@ -22,10 +22,6 @@ import { issueGiftCard } from '@/api/giftCards';
 
 
 describe('IssueGiftCardModal', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('renders the form with default generated card number', () => {
     renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     expect(screen.getByText('Issue Gift Card')).toBeInTheDocument();

@@ -44,10 +44,6 @@ const sampleCounts = [
 ];
 
 describe('StockCountsScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Basic rendering ──────────────────────────────────────────
   it('renders the title and New Count button', async () => {
     mockListCounts.mockResolvedValue([]);

@@ -42,10 +42,6 @@ function makeProfile(overrides: Partial<TerminalProfileDto> = {}): TerminalProfi
 // ── Tests ────────────────────────────────────────────────────────
 
 describe('useTerminalProfile', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('starts in loading state', () => {
     mockListTerminals.mockReturnValue(new Promise(() => {})); // never resolves
     const { result } = renderHook(() => useTerminalProfile());

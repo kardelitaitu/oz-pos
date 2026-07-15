@@ -81,10 +81,6 @@ function wrap(onClose?: () => void) {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('RetailOptionsScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── Loading & Rendering ────────────────────────────────────────
 
   it('shows loading state while fetching settings', async () => {

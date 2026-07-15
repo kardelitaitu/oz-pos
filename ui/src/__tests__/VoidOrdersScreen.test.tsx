@@ -59,10 +59,6 @@ const sampleDetail = {
 };
 
 describe('VoidOrdersScreen', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('renders the list view with title', async () => {
     mockListSales.mockResolvedValue([]);
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);

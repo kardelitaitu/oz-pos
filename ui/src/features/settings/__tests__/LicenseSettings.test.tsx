@@ -127,10 +127,6 @@ const SERVER_STATUS = {
 };
 
 describe('LicenseSettings', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   // ── 1. Loading state ──────────────────────────────────────
   describe('Loading state', () => {
     it('shows loading indicator while getLicenseStatus is pending', () => {

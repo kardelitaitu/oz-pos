@@ -94,10 +94,6 @@ function renderOverlay(open = true, onClose = vi.fn()) {
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("FastPINOverlay", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   describe("rendering", () => {
     it("renders nothing when closed", () => {
       const { container } = renderOverlay(false);

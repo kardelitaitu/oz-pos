@@ -21,10 +21,6 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('useWorkspaceNav', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('returns goToWorkspacePicker function', () => {
     const { result } = renderHook(() => useWorkspaceNav());
     expect(typeof result.current.goToWorkspacePicker).toBe('function');

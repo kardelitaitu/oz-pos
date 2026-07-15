@@ -79,10 +79,6 @@ const defaultProps = {
 };
 
 describe('RefundModal', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('renders null when not open', () => {
     const { container } = renderWithFluentSync(<RefundModal {...defaultProps} open={false} />, salesFtl, refundFtl);
     expect(container.innerHTML).toBe('');

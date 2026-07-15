@@ -11,10 +11,6 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 describe('useGatewayStatus', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('returns default offline state initially', () => {
     const { result } = renderHook(() => useGatewayStatus());
     expect(result.current.configured).toBe(false);
