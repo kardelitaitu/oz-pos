@@ -1,8 +1,8 @@
 # ADR #6: CRDT Delta Ledger & Offline Sync
 
-**Status:** In Progress (Phase 1-2 Complete, Q4 core implemented 2026-07-15)
+**Status:** Implemented (2026-07-15)
 **Date:** 2026-07-10
-**Updated:** 2026-07-15 (closed Q1-Q3, Q4 core implemented — daemon wiring pending)
+**Updated:** 2026-07-15 (all phases complete — Q1-Q4 resolved, daemon wiring shipped)
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** crdt, offline, sync, inventory, uuidv7, ulid, concurrency
 
@@ -109,7 +109,7 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 - Stock corrections and adjustments must be modeled as delta rows (a correction is a compensating delta, e.g., `+3` if the actual count is 3 higher than the computed sum).
 - Sync protocol between registers and cloud-server must handle both within-store (same DB, SQLite WAL) and cross-store (different DBs, cloud-mediated) sync correctly (implemented and tested — 19 integration tests).
 - The materialized `stock_summary` cache must be invalidated on every sync and rebuilt — this is a performance consideration for high-volume stores.
-- The `stock_movements` ledger grows unbounded without pruning (implemented: archive-rollup consolidation via migration 072, daemon wiring pending).
+- The `stock_movements` ledger grows unbounded without pruning (implemented: archive-rollup consolidation via migration 072, daemon wiring complete — client-side 60-120s, server-side hourly).
 
 ---
 
@@ -158,7 +158,7 @@ The audit fields (`source_terminal_id`, `source_user_id`, `reason`) are already 
 
 19 integration tests in `platform/sync/tests/integration_test.rs` cover push, pull, conflict resolution, cross-terminal product replication, stock adjustment replication, and 100-item throughput.
 
-### 🔄 Q4: Delta pruning without losing audit history? — IN PROGRESS (Core implemented 2026-07-15, daemon wiring pending)
+### ✅ Q4: Delta pruning without losing audit history? — RESOLVED (2026-07-15)
 
 **Decision:** Archive-rollup consolidation. Specified in `docs/specs/_active/p1-sync-batching-compression-retention.md` (Ledger Retention section).
 
@@ -203,12 +203,12 @@ See `docs/specs/_active/p1-sync-batching-compression-retention.md` for full acce
 - [x] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database — migration 066 adds FK to `workspace_instances.store_id` and changes `user_store_access.store_id` from CASCADE to RESTRICT.
 - [x] Cross-store delta routing via `platform/sync/` — migration 067 adds `store_id` to `stock_movements`. `SyncQueue::apply_remote` handles `stock.movement` action (inserts raw delta). `SyncDaemon` rebuilds `stock_summary` after pull. 3 new tests (2026-07-11).
 
-### Phase 3: Delta Pruning (Core done 2026-07-15, daemon wiring pending)
+### Phase 3: Delta Pruning (Done 2026-07-15)
 
 - [x] Create `stock_movements_archive` table for audit compliance (migration 072). Enable `PRAGMA auto_vacuum = INCREMENTAL`.
 - [x] `archive_stock_movements(older_than_days, max_groups)` — per-item_id archive-rollup consolidation. Copies old rows to archive, inserts SUM(delta) rollup row with `reason: 'archive-rollup'`, deletes old rows from live table. Capped at `max_groups` per call, idempotent, runs `PRAGMA incremental_vacuum(50)` once per cycle.
 - [x] 10 tests: table existence, empty DB, no old rows, rollup creation, recent row preservation, idempotency, max_groups cap, rollup exclusion, zero-sum deltas. All 75 products tests pass.
-- [ ] Daemon integration: spawn background task in `platform/sync/src/daemon.rs` (client-side, 60-120s interval) and `apps/cloud-server/src/prune.rs` (server-side, hourly interval).
+- [x] Daemon integration: `platform/sync/src/daemon.rs` (client-side, `start_prune_task`, 60-120s interval) and `apps/cloud-server/src/prune.rs` (server-side, `start_prune_loop`, hourly interval). Server-side also prunes `offline_queue` in cursor-based batches with `incremental_vacuum`.
 
 ---
 
