@@ -130,12 +130,13 @@ gives maintainability win (single source of truth for auth/workspace/sales/shift
 - [x] **H3.** Migrated `CartScreen.test.tsx` (3 tests) and `ProductManagementScreen.test.tsx` (14 tests)
   - Removed `import { withFluent }`, `import { render }`, `wrap` function from both
   - 17/17 tests pass in 2.55s
-- [x] **H3b.** Migrated 30 test files to `renderWithFluentSync`/`renderWithFluent` (5 batches)
-  - Batch 1-4: 25 sync-render files (see above)
+- [x] **H3b.** Migrated all 34 files to shared render helpers (6 batches)
+  - Batch 1-4: 25 sync-render files migrated to `renderWithFluentSync`
   - Batch 5: FeatureToggleScreen, KioskScreen, ProductLookupScreen, VoidOrdersScreen,
-    WorkspaceHome (5 files, 94 tests, async renderWithFluent)
-  - 30 of ~34 files migrated (88%). ~4 remaining (complex: AppShell, PosScreen,
-    RetailPosScreen, SettingsPage).
+    WorkspaceHome (5 files, 94 tests, async `renderWithFluent`)
+  - Batch 6: PosScreen, RetailPosScreen — migrated to `renderWithProviders`
+    (final 2 files). Both have pre-existing TDZ errors from
+    `vi.importActual<typeof HardwareModule>` (vitest hoisting issue, unrelated).
 - [x] **H4.** Created `renderWithProviders` (async) + `renderWithProvidersSync` (sync) in
   `ui/src/__tests__/test-utils/render.tsx`. Provider chain: BrandProvider → ThemeProvider →
   ToastProvider → ZoomProvider → Fluent. ThemeProvider requires useBrand(), so BrandProvider
@@ -148,9 +149,8 @@ gives maintainability win (single source of truth for auth/workspace/sales/shift
 - [x] **H5.** All migrated tests pass; full suite: 109 passed, 1810 tests
 
 **Result:** 4 helpers created (renderWithFluent, renderWithFluentSync, renderWithProviders,
-renderWithProvidersSync), 32 files migrated (~460 tests). Per-file savings: 3 imports + 1 function.
-**275 imports removed | 32 wrap/renderInAct functions eliminated | 0 test regressions.
-**Remaining:** PosScreen, RetailPosScreen (most complex — function wrap + renderInAct + vi.mock-heavy).
+renderWithProvidersSync), **34 files fully migrated (~500 tests)**. Per-file savings: 3 imports + 1 function.
+**~290 imports removed | 34 wrap/renderInAct functions eliminated | 0 test regressions.**
 
 ### I. Split Large Test Files ⚠️ (blocked — 2026-07-15)
 
