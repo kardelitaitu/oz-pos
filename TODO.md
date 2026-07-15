@@ -138,21 +138,23 @@ gives maintainability win (single source of truth for auth/workspace/sales/shift
 When all 38+ files are migrated, ~114 import lines + ~38 wrap functions eliminated.
 **Before: ~15s (est.), After: 14.45s** (no measurable speed change — code quality win).
 
-### I. Split Large Test Files
+### I. Split Large Test Files ⚠️ (blocked — 2026-07-15)
 
-- [ ] **I1.** `RetailPosScreen.test.tsx` (1260 lines, 49 tests): split into:
-  - `RetailPosScreen.cart.test.tsx` — cart operations (add/remove/quantity)
-  - `RetailPosScreen.payment.test.tsx` — payment flow, split tender, QRIS
-  - `RetailPosScreen.render.test.tsx` — render/loading/error/empty states
-- [ ] **I2.** `DataManagementScreen.test.tsx` (1245 lines, 55 tests): split into:
-  - `DataManagementScreen.import.test.tsx` — import/export/CSV
-  - `DataManagementScreen.tabs.test.tsx` — tab navigation, empty states
-  - `DataManagementScreen.actions.test.tsx` — delete, clear, prune actions
-- [ ] **I3.** `PosScreen.test.tsx` (851 lines, 19 tests): split into:
-  - `PosScreen.sales.test.tsx` — sale lifecycle
-  - `PosScreen.render.test.tsx` — render/edge cases
-- [ ] **I4.** Verify all split test files have unique `describe()` names and don't
-  introduce flaky state leakage.
+- [x] **I3.** Attempted `PosScreen.test.tsx` split (851 lines, 19 tests) into:
+  - `PosScreen.bundle.test.tsx` (14 bundle/scanning tests)
+  - `PosScreen.settings.test.tsx` (5 settings routing tests)
+- [x] **Blocked**: Splitting files with 13 interdependent `vi.mock` declarations
+  triggers vitest initialization order errors (`Cannot access '__vi_import_N__' before
+  initialization`). The vi.mock hoisting is per-file — splitting across files breaks the
+  mock dependency chain. **Workaround**: Extract vi.mock into a `setupFiles` entry or
+  restructure mocks to avoid inter-file dependencies. Not worth the complexity for a
+  14.64s suite.
+- [ ] **I1-I2.** `RetailPosScreen` and `DataManagementScreen` have the same architecture
+  (vi.mock-heavy) — same blocker applies.
+
+**Result:** Section blocked by vitest limitation. The 14.64s suite time is already
+6x faster than the 90s target, so file splitting is a nice-to-have, not critical.
+No code changes committed.
 
 ### J. Vitest Config Tuning ✅ (0.0.8 — 2026-07-15)
 
