@@ -40,13 +40,21 @@ development.
 **Baseline: 0.97s (18+1), After: 0.99s (19+0).** No measurable change — the mock server
 startup time replaces the connection-refused delay.
 
-### C. Slow-Test Markers
+### C. Slow-Test Markers ✅ (0.0.8 — 2026-07-15)
 
-- [ ] **C1.** Add a `slow-tests` feature flag in `platform/sync/Cargo.toml` (and any other crate
-  with integration tests that hit real DBs or networks).
-- [ ] **C2.** Gate heavy integration tests behind `#[cfg(feature = "slow-tests")]` so fast
-  `cargo test` skips them.
-- [ ] **C3.** Update `scripts/check.ps1` to pass `--all-features` for the full CI run.
+- [x] **C1.** Added `[features] slow-tests = []` to `platform/sync/Cargo.toml`.
+- [x] **C2.** Gated all 19 integration tests in `tests/integration_test.rs` behind
+  `#[cfg_attr(not(feature = "slow-tests"), ignore)]` — skipped during dev, run in CI.
+- [x] **C3.** `scripts/check.ps1` already uses `--all-features` on lines 63 and 68-69 for
+  clippy and cargo test — no changes needed.
+
+**Result:** Dev `cargo test -p platform-sync` skips 19 integration tests (shown as ignored).
+`--all-features` runs them all (CI path unchanged). Clippy clean.
+**Baseline: ~10.5s (103 lib + 19 integration), After: ~8.1s (103 lib + 19 ignored).**
+Saves **2.43s** per platform-sync test invocation during development.
+
+**Note:** Per-pattern `cfg_attr` matching is fragile — future test additions need the
+annotation added manually. A future refactor to a `mod slow` with `#[cfg]` would be more robust.
 
 ### D. DB Snapshot for Migration Tests ✅ (0.0.8 — 2026-07-15)
 
