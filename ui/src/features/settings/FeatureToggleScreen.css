@@ -299,7 +299,7 @@
 
 [data-theme='dark'] .feature-toggle-slider::before {
   background: var(--color-bg-elevated);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.3);
 }
 
 [data-theme='dark'] .feature-toggle-item {
