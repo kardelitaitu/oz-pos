@@ -4,21 +4,55 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.0.6] — 2026-07-13
-
-### Added
-- **Version Bumping Automation**: Introduced the `scripts/bump-version.ps1` PowerShell script to automate updating version strings in 18+ configuration, test, route, and UI files, and auto-refresh lockfiles.
+## [0.0.8] — 2026-07-15
 
 ### Changed
-- **Cargo Test Optimization**: Configured package-specific optimization overrides (`opt-level = 3`) under `[profile.dev]` in `Cargo.toml` for `argon2`, `aes-gcm`, `aead`, and `zstd` dependencies to accelerate dev and test suite execution times (specifically targeting `oz-core`).
+- **Version bump**: Codebase version bumped from 0.0.7 to 0.0.8 across 17 files (Cargo.toml, Cargo.lock, Dockerfile.server, tauri.conf.json ×2, package.json, health.rs ×3, data.rs, and 7 UI/React components and tests).
+
+## [0.0.7] — 2026-07-15
+
+### Added
+- **Sync Performance — ADR #10 (P-1: Batching, Compression, Retention)**
+  - Adaptive 64 KB batch splitting (`build_batches`) with priority-aware ordering.
+  - Gzip compression for push/pull HTTP transport via `reqwest`.
+  - 90-day retention with cursor-based `DELETE LIMIT 1000` batch pruning on the cloud server.
+  - `AnchorExpired` error type (410 Gone) for pruned sync data.
+  - Background prune loop on `oz-cloud-server`.
+  - Exponential backoff with full jitter for sync failures.
+- **Sync Performance — ADR #10 (P-2: Priority & Concurrency)**
+  - `SyncPriority` enum (Critical=0, Normal=1, Low=2) with serde and `PartialOrd+Ord`.
+  - Migration 073: `priority` column on `offline_queue`.
+  - `ConcurrencyLimitLayer` (API=10, sync=40) per-route-group limits.
+  - 2-thread Tokio runtime for sync daemon tasks.
+- **Sync Performance — ADR #10 (P-3: Pagination, Snapshot, Observability)**
+  - Cursor-based pull pagination (`created_at|id`, LIMIT 501/500).
+  - `GET /api/sync/snapshot` with 5-min in-memory cache + `AnchorExpired` recovery (`import_snapshot`).
+  - Tiered heartbeat in `/api/sync/status` response.
+  - Prometheus `/metrics` endpoint with 6 metrics (LazyLock registry): `sync_pushes_total`, `sync_anchor_expired_total`, `sync_push_duration_ms`, `sync_pull_duration_ms`, `sync_batch_size_bytes`, `db_connection_contention_seconds`.
+  - `GET /health` endpoint (status, version, DB, uptime).
+  - Structured logging per sync cycle (debug per-batch, info summary).
+- **Delta Pruning — ADR #6**: `archive_stock_movements()` consolidation with snapshot+archive strategy. Migration 072 for stock_movements archival. Client + server daemon tasks wired for pruning.
+- **Login Rate Limiter**: Persistent login attempt tracking with sliding time window. New `rate_limiter` module in `oz-core` with migration 074 (`login_attempts` table). `FastPINOverlay` max-attempts guard with lockout state propagation in `AuthContext`. Desktop and tablet Tauri commands (`record_login_attempt`, `clear_login_attempts`).
+- **Branding overhaul**: Sync script fix for UTF-8 BOM corruption. Standardized icon filenames across all brands (`android-chrome-*` → `icon-*`). Added `purpose="any maskable"` to 512px PWA icon for Android adaptive icon support. Added favicon, apple-touch-icon, and manifest link generation. Regenerated all brand assets.
+- **ADR #12 (Branding)**: Branding asset standardization and whitelabel template documentation.
+- **ADR #11**: Zero-downtime VPS migration strategy.
+- **New tests**: 55 component tests for `DataManagementScreen`, 19 tests for `FeatureToggleScreen`, significantly expanded `SettingsPage.test.tsx` (loading states, error/retry, partial failure resilience, save resilience, currency display, sync, about, sidebar, footer).
+
+### Changed
+- **UI — Settings page**: Made settings load and save resilient to individual API failures (partial-load and partial-save toasts). Replaced emoji icons with SVG across all settings sub-screens. Tokenised `AppearanceSettings` preview (inline styles → CSS vars). Restructured settings layout with percentage-based flex. Dark mode scrollbar and dropdown fixes. Disabled browser autofill on all settings text inputs.
+- **UI — Workspace home**: Pure CSS card sway animations on hover/focus with reduced-motion guard. Randomized multilingual greetings (12 languages). Keyboard shortcut overlays on cards. Role SVG icon in workspace user profile with wiggle animation. `workspace_type_icons` resolution. Coming-soon cards (4 dummy cards, 9 total grid).
+- **UI — Theme**: Light theme accent colors changed to Steel Blue matching brand logo. Off-white card/input backgrounds. Dark theme depth with bloom, blue-tinted glass, and luminous accents. GPU-promoted card icons. `ThemeToggle` with Paint Palette SVG and hover wiggle. Added `sr-only` helper class.
+- **UI — Activation screen**: Connection status indicators with randomized jitter polling. Gradient with SVG noise overlay. Phone number field (Indonesian format). Clipboard paste support. Hardware machine ID chip with copy-to-clipboard.
+- **UI — App shell**: Dev-mode license bypass on frontend. Suppressed license warning in debug builds. Skipped activation screen on existing installs. Auto-kill stale port 1420 process in `start-desktop.bat`.
+- **UI — Terminal/Sales/Staff screens**: Improved `TerminalManagementScreen` with validation, `useCallback`, and error feedback. `StaffManagementScreen` validation moved before `setSaving(true)`. Tokenised `RetailOptionsScreen` (hardcoded colors/emoji → tokens/SVG). `FeatureToggleScreen` group count moved outside `Localized` wrapper.
 
 ### Fixed
-- **UI Test Suite Failures**:
-  - `ThemeToggle.test.tsx`: Swapped obsolete Sun/Moon SVG element assertions with actual DOM `data-theme` updates.
-  - `SalesHistoryScreen.test.tsx`: Corrected Voided filter chip query selector role to `'radio'`.
-  - `RetailOptionsScreen.test.tsx`: Adjusted app version expectation to match locked system version.
-  - `RefundModal.test.tsx`: Wrapped assertions on `onClose` in `vi.waitFor(...)` to support exit animation timers.
-  - `screenExtraction.test.ts`: Whitelisted dynamic and external classes on `KdsScreen`, `SettingsPage`, `WorkspaceHome`, and `AppearanceSettings` to resolve false positives in CSS integrity static checks.
+- **SettingsPage test hang**: Replaced `setTimeout/clearTimeout(number)` loop with per-Timeout-object cleanup. Switched vitest pool from `forks` to `vmThreads` for stable test execution.
+- **CSS dark mode**: Select chevron color, toggle shadow visibility, license token contrast.
+- **Cargo clippy**: Removed `needless_return` keywords in `license.rs`. Removed unnecessary `as i64` cast in `staff.rs`.
+- **UI lint**: Replaced Unicode checkmark with SVG icon in `DataManagementScreen`. Added missing `data-mgmt-tab-icon` CSS class.
+- **TypeScript**: Fixed `consistent-type-imports` errors across 8 files (React imports).
+- **Staff table**: Fixed action cell vertical alignment.
 
 ## [0.0.5] — 2026-07-11
 
@@ -203,7 +237,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.7...v0.0.8
+[0.0.7]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.4
