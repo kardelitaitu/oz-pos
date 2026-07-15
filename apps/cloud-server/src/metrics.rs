@@ -92,7 +92,12 @@ pub static DB_CONTENTION_SECONDS: LazyLock<HistogramVec> = LazyLock::new(|| {
 /// Ensure all LazyLock metrics are registered before rendering.
 fn ensure_registered() {
     // Force initialisation of all lazy metrics by touching each one.
+    // CounterVec metrics need at least one label value pre-created
+    // otherwise they won't appear in the Prometheus text output.
     let _ = &*SYNC_PUSHES_TOTAL;
+    let _ = SYNC_PUSHES_TOTAL.with_label_values(&["accepted"]);
+    let _ = SYNC_PUSHES_TOTAL.with_label_values(&["conflict"]);
+    let _ = SYNC_PUSHES_TOTAL.with_label_values(&["rejected"]);
     let _ = &*SYNC_ANCHOR_EXPIRED_TOTAL;
     let _ = &*SYNC_PUSH_DURATION_MS;
     let _ = &*SYNC_PULL_DURATION_MS;

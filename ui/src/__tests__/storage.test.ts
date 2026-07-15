@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { STORAGE_KEYS, getDecimalSep, setDecimalSep } from '@/utils/storage';
 
 describe('STORAGE_KEYS', () => {

@@ -4,7 +4,7 @@
 // search with no results, feature list rendering, single toggle, bulk
 // enable/disable, dependency display, and group headers.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluent } from '@/__tests__/test-utils/render';

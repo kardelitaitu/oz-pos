@@ -188,7 +188,7 @@ vi.mock('@/utils/interaction', () => ({
 vi.mock('@/contexts/AuthContext', async () => {
   const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
   return {
-    useAuth: createAuthContextMock({ displayName: undefined }),
+    useAuth: createAuthContextMock({}),
   };
 });
 

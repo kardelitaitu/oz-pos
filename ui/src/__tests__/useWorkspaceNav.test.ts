@@ -4,7 +4,7 @@
 // goToWorkspacePicker, which calls setActiveWorkspace(null) to navigate
 // back to the workspace selection screen.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 

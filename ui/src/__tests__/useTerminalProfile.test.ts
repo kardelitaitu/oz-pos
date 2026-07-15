@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useTerminalProfile } from '@/hooks/useTerminalProfile';
 import type { TerminalDto, TerminalProfileDto } from '@/api/terminals';
 
 // ── Mocks ────────────────────────────────────────────────────────
 
-const mockListTerminals = vi.fn<[], Promise<TerminalDto[]>>();
-const mockGetTerminalProfile = vi.fn<[string], Promise<TerminalProfileDto | null>>();
+const mockListTerminals = vi.fn<() => Promise<TerminalDto[]>>();
+const mockGetTerminalProfile = vi.fn<(arg: string) => Promise<TerminalProfileDto | null>>();
 
 vi.mock('@/api/terminals', () => ({
   listTerminals: () => mockListTerminals(),

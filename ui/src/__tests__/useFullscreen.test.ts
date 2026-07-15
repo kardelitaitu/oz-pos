@@ -4,8 +4,8 @@ import { useFullscreen } from '@/hooks/useFullscreen';
 
 // ── Mocks ────────────────────────────────────────────────────────
 
-const mockIsFullscreen = vi.fn<[], Promise<boolean>>();
-const mockSetFullscreen = vi.fn<[boolean], Promise<void>>();
+const mockIsFullscreen = vi.fn<() => Promise<boolean>>();
+const mockSetFullscreen = vi.fn<(arg: boolean) => Promise<void>>();
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 // `render` is kept in the import below — the 'throws when used outside
 // AuthProvider' test relies on a synchronous throw during render, so
 // `renderInAct`'s async boundary cannot be used there.

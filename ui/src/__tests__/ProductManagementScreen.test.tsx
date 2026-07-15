@@ -200,7 +200,7 @@ describe('ProductManagementScreen', () => {
       if (cmd === 'list_products') return Promise.resolve([]);
       return Promise.resolve([]);
     });
-    renderWithFluentSync(<ProductManagementScreen />, productsFtl);;
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitFor(() => {
       expect(screen.getByText(/no products yet/i)).toBeInTheDocument();
     });

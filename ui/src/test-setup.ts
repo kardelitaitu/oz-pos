@@ -2,6 +2,7 @@
 // polyfills the components need.
 
 import '@testing-library/jest-dom/vitest';
+import { beforeEach, vi } from 'vitest';
 
 // ── Global beforeEach: clean mocks and localStorage ─────────────
 // Every test starts with a clean slate. Individual test files that
