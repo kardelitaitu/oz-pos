@@ -62,7 +62,7 @@
   background: var(--color-bg-hover);
   border-color: var(--color-border-hover);
   color: var(--color-fg);
-  transform: translateY(-1px);
+  transform: translateY(-0.0625rem);
 }
 
 .tables-section-btn.active {
@@ -82,13 +82,13 @@
   background-image: 
     radial-gradient(var(--color-border) 1px, transparent 1px),
     radial-gradient(var(--color-border) 1px, transparent 1px);
-  background-size: 20px 20px;
-  background-position: 0 0, 10px 10px;
+  background-size: 1.25rem 1.25rem;
+  background-position: 0 0, 0.625rem 0.625rem;
   border-radius: var(--radius-xl);
   border: 1px solid var(--color-border-strong);
   box-shadow: var(--shadow-inner);
   overflow: hidden;
-  min-height: 400px;
+  min-height: 25rem;
 }
 
 /* Base table style */
@@ -222,7 +222,7 @@
   font-weight: var(--font-weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-top: 2px;
+  margin-top: 0.125rem;
 }
 
 /* ── Detail dialog ──────────────────────────────────── */
@@ -277,7 +277,7 @@
 
 .tables-detail-actions button:hover {
   background-color: var(--color-accent-hover);
-  transform: translateY(-1px);
+  transform: translateY(-0.0625rem);
 }
 
 .tables-detail-actions button:active {
@@ -301,7 +301,7 @@
 }
 
 /* ── Desktop responsive overlay modal ────────────────── */
-@media (min-width: 768px) {
+@media (min-width: 48rem) {
   .tables-detail {
     position: absolute;
     top: 50%;
@@ -309,7 +309,7 @@
     bottom: auto;
     right: auto;
     transform: translate(-50%, -50%);
-    width: 400px;
+    width: 25rem;
     border-radius: var(--radius-xl);
     border: 1px solid var(--color-border);
     box-shadow: var(--shadow-2xl);
