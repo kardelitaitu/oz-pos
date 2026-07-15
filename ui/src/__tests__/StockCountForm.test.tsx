@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 
 // Mock the API module before importing the component.
@@ -26,7 +26,7 @@ sc-cancel = Cancel
 sc-start-count = Start Count
 `;
 
-const wrap = (children: React.ReactNode) => withFluent(children, inventoryFtl, scFtl);
+
 
 describe('StockCountForm', () => {
   beforeEach(() => {
@@ -34,7 +34,7 @@ describe('StockCountForm', () => {
   });
 
   it('renders the form with title and count type options', () => {
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     expect(screen.getByText('New Stock Count')).toBeInTheDocument();
     expect(screen.getByText('Full Inventory')).toBeInTheDocument();
     expect(screen.getByText('Cyclic Count')).toBeInTheDocument();
@@ -43,14 +43,14 @@ describe('StockCountForm', () => {
   });
 
   it('renders notes textarea and action buttons', () => {
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     expect(screen.getByRole('textbox')).toBeInTheDocument();
     expect(screen.getByText('Cancel')).toBeInTheDocument();
     expect(screen.getByText('Start Count')).toBeInTheDocument();
   });
 
   it('defaults count type to full', () => {
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     const fullBtn = screen.getByRole('radio', { name: /full inventory/i });
     expect(fullBtn).toHaveAttribute('aria-checked', 'true');
     const cyclicBtn = screen.getByRole('radio', { name: /cyclic count/i });
@@ -58,14 +58,14 @@ describe('StockCountForm', () => {
   });
 
   it('allows selecting a different count type', async () => {
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     await userEvent.click(screen.getByRole('radio', { name: /cyclic count/i }));
     expect(screen.getByRole('radio', { name: /cyclic count/i })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('radio', { name: /full inventory/i })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('allows entering notes', async () => {
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     const textarea = screen.getByRole('textbox');
     await userEvent.type(textarea, 'Monday morning count');
     expect(textarea).toHaveValue('Monday morning count');
@@ -73,7 +73,7 @@ describe('StockCountForm', () => {
 
   it('calls onCancel when cancel is clicked', async () => {
     const onCancel = vi.fn();
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={onCancel} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={onCancel} />, inventoryFtl, scFtl);
     await userEvent.click(screen.getByText('Cancel'));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
@@ -84,7 +84,7 @@ describe('StockCountForm', () => {
     mockCreate.mockResolvedValueOnce(mockCount);
     const onCreated = vi.fn();
 
-    render(wrap(<StockCountForm onCreated={onCreated} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={onCreated} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     await userEvent.click(screen.getByText('Start Count'));
 
     expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -102,7 +102,7 @@ describe('StockCountForm', () => {
     mockCreate.mockResolvedValueOnce({ id: 'c2' });
     const onCreated = vi.fn();
 
-    render(wrap(<StockCountForm onCreated={onCreated} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={onCreated} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     await userEvent.click(screen.getByRole('radio', { name: /spot check/i }));
     await userEvent.type(screen.getByRole('textbox'), 'Urgent check');
     await userEvent.click(screen.getByText('Start Count'));
@@ -116,7 +116,7 @@ describe('StockCountForm', () => {
     const mockCreate = createStockCount as ReturnType<typeof vi.fn>;
     mockCreate.mockRejectedValueOnce(new Error('Server error'));
 
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     await userEvent.click(screen.getByText('Start Count'));
 
     await vi.waitFor(() => {
@@ -129,7 +129,7 @@ describe('StockCountForm', () => {
     // Never resolve — keeps saving=true
     mockCreate.mockReturnValueOnce(new Promise(() => {}));
 
-    render(wrap(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />));
+    renderWithFluentSync(<StockCountForm onCreated={vi.fn()} onCancel={vi.fn()} />, inventoryFtl, scFtl);
     await userEvent.click(screen.getByText('Start Count'));
 
     // The start button should be disabled while saving.

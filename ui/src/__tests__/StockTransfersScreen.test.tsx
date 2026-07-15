@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import stockTransfersFtl from '@/locales/stock-transfers.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -40,7 +40,7 @@ const mockCancelTransfer = cancelStockTransfer as ReturnType<typeof vi.fn>;
 const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
 const mockListTerminals = listTerminals as ReturnType<typeof vi.fn>;
 
-const wrap = (children: React.ReactNode) => withFluent(children, stockTransfersFtl, sharedFtl);
+
 
 const sampleTransfers = [
   {
@@ -102,20 +102,20 @@ describe('StockTransfersScreen', () => {
   // ── List rendering ───────────────────────────────────────────
   it('renders title and New Transfer button', async () => {
     mockListTransfers.mockResolvedValue([]);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
     expect(screen.getByText('Stock Transfers')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /new transfer/i })).toBeInTheDocument();
   });
 
   it('shows loading state initially', async () => {
     mockListTransfers.mockReturnValue(new Promise(() => {}));
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no transfers exist', async () => {
     mockListTransfers.mockResolvedValue([]);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/no stock transfers found/i)).toBeInTheDocument();
     });
@@ -123,7 +123,7 @@ describe('StockTransfersScreen', () => {
 
   it('loads and displays transfers in the table', async () => {
     mockListTransfers.mockResolvedValue(sampleTransfers);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('StockTransfersScreen', () => {
 
   it('shows terminal IDs when location is null', async () => {
     mockListTransfers.mockResolvedValue([sampleTransfers[2]!]);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-003')).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('StockTransfersScreen', () => {
 
   it('renders status badges with correct class', async () => {
     mockListTransfers.mockResolvedValue(sampleTransfers);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -165,7 +165,7 @@ describe('StockTransfersScreen', () => {
 
   it('shows View button for each transfer row', async () => {
     mockListTransfers.mockResolvedValue(sampleTransfers);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -178,7 +178,7 @@ describe('StockTransfersScreen', () => {
 
   it('shows Cancel button for draft transfers', async () => {
     mockListTransfers.mockResolvedValue([sampleTransfers[0]!]);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe('StockTransfersScreen', () => {
 
   it('does not show Cancel button for non-draft transfers', async () => {
     mockListTransfers.mockResolvedValue([sampleTransfers[2]!]);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-003')).toBeInTheDocument();
@@ -202,7 +202,7 @@ describe('StockTransfersScreen', () => {
   // ── Status filters ───────────────────────────────────────────
   it('renders status filter tabs', async () => {
     mockListTransfers.mockResolvedValue(sampleTransfers);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     const tablist = screen.getByRole('tablist');
     const tabs = within(tablist).getAllByRole('tab');
@@ -212,7 +212,7 @@ describe('StockTransfersScreen', () => {
   it('filters transfers by status', async () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue(sampleTransfers);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -233,7 +233,7 @@ describe('StockTransfersScreen', () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue(sampleTransfers);
     mockGetTransfer.mockResolvedValue(sampleDetail);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -251,7 +251,7 @@ describe('StockTransfersScreen', () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue(sampleTransfers);
     mockGetTransfer.mockResolvedValue(sampleDetail);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -271,7 +271,7 @@ describe('StockTransfersScreen', () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue(sampleTransfers);
     mockGetTransfer.mockResolvedValue(sampleDetail);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -289,7 +289,7 @@ describe('StockTransfersScreen', () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue([sampleTransfers[1]!]);
     mockGetTransfer.mockResolvedValue(sampleDetailInTransit);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-002')).toBeInTheDocument();
@@ -306,7 +306,7 @@ describe('StockTransfersScreen', () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue(sampleTransfers);
     mockGetTransfer.mockResolvedValue(sampleDetail);
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -330,7 +330,7 @@ describe('StockTransfersScreen', () => {
     mockListTransfers.mockResolvedValue(sampleTransfers);
     mockGetTransfer.mockResolvedValue(sampleDetail);
     mockSendTransfer.mockResolvedValue({});
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
@@ -353,7 +353,7 @@ describe('StockTransfersScreen', () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue([sampleTransfers[0]!]);
     mockCancelTransfer.mockResolvedValue({});
-    render(wrap(<StockTransfersScreen />));
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('ST-001')).toBeInTheDocument();
