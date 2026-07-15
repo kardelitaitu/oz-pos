@@ -72,8 +72,6 @@ function capturedToasts(addToast: ReturnType<typeof vi.fn>): ToastInput[] {
 }
 
 beforeEach(() => {
-  localStorage.clear();
-
   // Default mock returns — all async calls resolve successfully.
   // Individual tests override as needed.
   mocks.syncRun.mockResolvedValue({ synced: 1, failed: 0, error: null });

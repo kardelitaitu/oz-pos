@@ -46,10 +46,6 @@ async function renderProvider() {
 }
 
 describe('AuthContext', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
   it('starts with no session, no loading, no error', async () => {
     await renderProvider();
     expect(screen.getByTestId('session').textContent).toBe('no-session');
