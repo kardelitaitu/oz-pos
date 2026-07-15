@@ -29,6 +29,7 @@ settings-sidebar-search-placeholder = Cari pengaturan…
 settings-sidebar-search-clear-aria =
     .aria-label = Hapus pencarian
 settings-sidebar-no-results = Tidak ada bagian yang cocok
+settings-sidebar-recent = Terbaru
 settings-theme-toggle-dark-aria = Alihkan ke mode gelap
 settings-theme-toggle-light-aria = Alihkan ke mode terang
 settings-store-name = Nama Toko

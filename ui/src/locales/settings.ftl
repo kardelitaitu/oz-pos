@@ -209,6 +209,7 @@ settings-sidebar-search-placeholder = Search settings…
 settings-sidebar-search-clear-aria =
     .aria-label = Clear search
 settings-sidebar-no-results = No matching sections
+settings-sidebar-recent = Recent
 settings-theme-toggle-dark-aria = Switch to dark mode
 settings-theme-toggle-light-aria = Switch to light mode
 settings-loading = Loading settings…

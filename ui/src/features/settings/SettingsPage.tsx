@@ -399,6 +399,36 @@ export default function SettingsPage() {
   const [sectionKey, setSectionKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // ── Recently visited sections (max 3, persisted to localStorage) ──
+  const [recentSections, setRecentSections] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('settings-recent-sections');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.every((s: unknown) => typeof s === 'string')) {
+          return parsed.slice(0, 3);
+        }
+      }
+    } catch { /* malformed JSON — start fresh */ }
+    return [];
+  });
+
+  /** Navigate to a section and record it as recently used. */
+  const navigateToSection = useCallback((key: string) => {
+    setActiveSection(key);
+    setMobileSidebarOpen(false);
+    setSectionKey((k) => k + 1);
+    setRecentSections((prev) => {
+      // Move `key` to front, deduplicate, keep max 3
+      const next = [key, ...prev.filter((k) => k !== key)].slice(0, 3);
+      localStorage.setItem('settings-recent-sections', JSON.stringify(next));
+      return next;
+    });
+    // Auto-expand the category containing this section
+    const cat = CATEGORIES.find((c) => c.keys.includes(key));
+    if (cat?.label) setExpandedCategory(cat.label);
+  }, []);
+
   // ── Unsaved changes tracking ────────────────────────────────
   const [isDirty, setIsDirty] = useState(false);
   const markDirty = useCallback(() => { setIsDirty(true); }, []);
@@ -583,10 +613,7 @@ export default function SettingsPage() {
           : (idx - 1 + flatKeys.length) % flatKeys.length;
         const nextKey = flatKeys[next];
         if (!nextKey) return;
-        setActiveSection(nextKey);
-        setSectionKey((k) => k + 1);
-        const cat = CATEGORIES.find((c) => c.keys.includes(nextKey));
-        if (cat?.label) setExpandedCategory(cat.label);
+        navigateToSection(nextKey);
       }
     }
 
@@ -1280,6 +1307,35 @@ export default function SettingsPage() {
           )}
 
           <nav className="settings-sidebar-nav">
+            {/* ── Recently used (only when not searching) ── */}
+            {!q && recentSections.length > 0 && !sidebarCollapsed && (
+              <div className="settings-recent-section">
+                <span className="settings-recent-section-label">
+                  <Localized id="settings-sidebar-recent">Recent</Localized>
+                </span>
+                {recentSections.map((key) => {
+                  const item = NAV_ITEMS.find((n) => n.key === key);
+                  if (!item) return null;
+                  return (
+                    <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
+                      <button
+                        type="button"
+                        className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
+                        onClick={() => navigateToSection(key)}
+                        aria-current={activeSection === key ? 'page' : undefined}
+                        aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
+                      >
+                        <span className="settings-nav-icon">{item.icon}</span>
+                        <span className="settings-nav-label">
+                          <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                        </span>
+                      </button>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            )}
+
             {q && filteredCategories.length === 0 ? (
               <div className="settings-sidebar-empty-search">
                 <Localized id="settings-sidebar-no-results">No matching sections</Localized>
@@ -1323,11 +1379,7 @@ export default function SettingsPage() {
                             <button
                               type="button"
                               className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
-                              onClick={() => {
-                                setActiveSection(key);
-                                setMobileSidebarOpen(false);
-                                setSectionKey((k) => k + 1);
-                              }}
+                              onClick={() => navigateToSection(key)}
                               aria-current={activeSection === key ? 'page' : undefined}
                               aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
                             >
