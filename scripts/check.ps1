@@ -64,9 +64,14 @@ foreach ($pkg in $Packages) {
     }
 }
 
+# Use explicit --test-threads to match CPU count. Cargo's default is already
+# num_cpus, but making it explicit documents intent and ensures consistent
+# parallelism across CI and local environments.
+$cpuCount = $env:NUMBER_OF_PROCESSORS
+if (-not $cpuCount) { $cpuCount = 4 }
 foreach ($pkg in $Packages) {
-    Step -Name "test $pkg" -RetryCommand "cargo test -p $pkg --all-features" -ScriptBlock {
-        cargo test -p $pkg --all-features
+    Step -Name "test $pkg" -RetryCommand "cargo test -p $pkg --all-features --test-threads $cpuCount" -ScriptBlock {
+        cargo test -p $pkg --all-features --test-threads $cpuCount
     }
 }
 
