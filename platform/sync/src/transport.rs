@@ -46,6 +46,9 @@ pub struct PushResponse {
 pub struct PullRequest {
     /// ISO-8601 timestamp of the last successful sync. `None` for initial sync.
     pub since: Option<String>,
+    /// Opaque cursor for paginated pulls (P-3). `None` for first page.
+    #[serde(default)]
+    pub cursor: Option<String>,
 }
 
 /// Response from the pull endpoint.
@@ -53,6 +56,24 @@ pub struct PullRequest {
 pub struct PullResponse {
     /// Items that have changed on the server since the given timestamp.
     pub items: Vec<OfflineQueueItem>,
+    /// Opaque cursor for the next page (P-3). `None` when no more pages.
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+}
+
+/// Response from the snapshot endpoint (P-3 Steps 3-5).
+///
+/// Contains the server's authoritative reference data for a tenant.
+/// The client imports this wholesale when its sync anchor has expired
+/// (data pruned server-side).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncSnapshotResponse {
+    /// Product rows keyed by SKU.
+    pub products: Vec<serde_json::Value>,
+    /// Tax-rate rows keyed by ID.
+    pub tax_rates: Vec<serde_json::Value>,
+    /// User rows keyed by username.
+    pub users: Vec<serde_json::Value>,
 }
 
 /// The HTTP sync transport.
@@ -72,6 +93,7 @@ impl SyncTransport {
         }
         let client = reqwest::Client::builder()
             .no_proxy()
+            .gzip(true)
             .default_headers(headers)
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -118,10 +140,19 @@ impl SyncTransport {
     /// Pull updates from the server since the given timestamp.
     ///
     /// Pass `None` to pull all available data (initial sync).
-    pub async fn pull_updates(&self, since: Option<&str>) -> Result<PullResponse, SyncError> {
+    /// Pull updates from the server since the given timestamp.
+    ///
+    /// Pass `None` for `since` to pull all available data (initial sync).
+    /// Pass `cursor` for paginated subsequent pages (P-3).
+    pub async fn pull_updates(
+        &self,
+        since: Option<&str>,
+        cursor: Option<&str>,
+    ) -> Result<PullResponse, SyncError> {
         let url = format!("{}/api/sync/pull", self.base_url);
         let request = PullRequest {
             since: since.map(|s| s.to_owned()),
+            cursor: cursor.map(|c| c.to_owned()),
         };
 
         let resp = self
@@ -131,6 +162,17 @@ impl SyncTransport {
             .send()
             .await
             .map_err(|e| SyncError::Transport(format!("pull request failed: {e}")))?;
+
+        // P-1 retention: 410 Gone means the client's anchor has expired
+        // (data older than the `since` timestamp has been pruned).
+        if resp.status() == reqwest::StatusCode::GONE {
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            let oldest_available = body
+                .get("oldest_available")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned());
+            return Err(SyncError::AnchorExpired { oldest_available });
+        }
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -146,6 +188,36 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(format!("pull response parse failed: {e}")))?;
 
         Ok(pull_resp)
+    }
+
+    /// Fetch the server's authoritative snapshot of reference data (P-3).
+    ///
+    /// Called when the client's sync anchor has expired — the server's
+    /// delta log has been pruned beyond the client's last sync point.
+    /// The snapshot provides a fresh baseline from which delta pulls resume.
+    pub async fn fetch_snapshot(&self) -> Result<SyncSnapshotResponse, SyncError> {
+        let url = format!("{}/api/sync/snapshot", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| SyncError::Transport(format!("snapshot request failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(SyncError::Transport(format!(
+                "snapshot returned {status}: {body}"
+            )));
+        }
+
+        let snapshot: SyncSnapshotResponse = resp
+            .json()
+            .await
+            .map_err(|e| SyncError::Transport(format!("snapshot parse failed: {e}")))?;
+
+        Ok(snapshot)
     }
 }
 
@@ -269,7 +341,10 @@ mod tests {
 
     #[test]
     fn pull_request_debug() {
-        let req = PullRequest { since: None };
+        let req = PullRequest {
+            since: None,
+            cursor: None,
+        };
         let debug = format!("{req:?}");
         assert!(debug.contains("since"));
     }
@@ -278,6 +353,7 @@ mod tests {
     fn pull_request_json_some_since() {
         let req = PullRequest {
             since: Some("2026-01-01T00:00:00Z".into()),
+            cursor: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["since"], "2026-01-01T00:00:00Z");
@@ -285,7 +361,10 @@ mod tests {
 
     #[test]
     fn pull_request_json_none_since() {
-        let req = PullRequest { since: None };
+        let req = PullRequest {
+            since: None,
+            cursor: None,
+        };
         let json = serde_json::to_value(&req).unwrap();
         assert!(json["since"].is_null());
     }
@@ -294,6 +373,7 @@ mod tests {
     fn pull_request_serde_roundtrip() {
         let req = PullRequest {
             since: Some("2026-01-01T00:00:00Z".into()),
+            cursor: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         let rt: PullRequest = serde_json::from_str(&json).unwrap();
@@ -304,14 +384,20 @@ mod tests {
 
     #[test]
     fn pull_response_debug() {
-        let resp = PullResponse { items: vec![] };
+        let resp = PullResponse {
+            items: vec![],
+            next_cursor: None,
+        };
         let debug = format!("{resp:?}");
         assert!(debug.contains("items"));
     }
 
     #[test]
     fn pull_response_json_field_names() {
-        let resp = PullResponse { items: vec![] };
+        let resp = PullResponse {
+            items: vec![],
+            next_cursor: None,
+        };
         let json = serde_json::to_value(&resp).unwrap();
         assert!(json.as_object().unwrap().contains_key("items"));
     }
@@ -321,6 +407,7 @@ mod tests {
         let item = OfflineQueueItem::new("complete_sale", "{}");
         let resp = PullResponse {
             items: vec![item.clone()],
+            next_cursor: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         let rt: PullResponse = serde_json::from_str(&json).unwrap();
@@ -345,6 +432,7 @@ mod tests {
     fn pull_request_clone() {
         let req = PullRequest {
             since: Some("2026-01-01".into()),
+            cursor: None,
         };
         let cloned = req.clone();
         assert_eq!(cloned.since, req.since);

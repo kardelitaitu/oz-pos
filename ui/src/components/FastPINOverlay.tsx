@@ -189,7 +189,6 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
         err instanceof Error ? err.message : "PIN verification failed";
       setError(message);
       setPin([]);
-      pinSubmitted.current = false;
     } finally {
       setLoading(false);
     }
@@ -247,7 +246,7 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
         handlePinBackspace();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (pin.length >= 1) attemptVerify();
+        if (pin.length >= 1 && !pinSubmitted.current) attemptVerify();
       }
     },
     [
@@ -431,7 +430,7 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
                     placeholder="Username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="username"
+                    autoComplete="off"
                     aria-label="Username"
                     disabled={loading}
                   />

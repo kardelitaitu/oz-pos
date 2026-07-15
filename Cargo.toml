@@ -31,7 +31,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.6"
+version = "0.0.7"
 edition = "2024"
 rust-version = "1.88"   # axum/tower-http deps (time 0.3.47+) require ≥ 1.88
 license = "SEE LICENSE IN LICENSE"
@@ -88,7 +88,7 @@ uuid = { version = "1", features = ["v4", "v7", "serde"] }
 walkdir = "2"
 axum = { version = "0.8", features = ["macros"] }
 jsonwebtoken = "9"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
 tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
@@ -100,7 +100,7 @@ zstd = { version = "0.13", features = ["zstdmt"] }
 aead = "0.5"
 rand = "0.8"
 tracing-appender = "0.2"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+reqwest = { version = "0.12", features = ["json", "blocking", "gzip"] }
 rlua = "0.20"
 notify = { version = "7", features = [] }
 

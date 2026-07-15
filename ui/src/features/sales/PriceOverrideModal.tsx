@@ -195,7 +195,7 @@ export default function PriceOverrideModal({
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Username"
-              autoComplete="username"
+              autoComplete="off"
               aria-label="Manager username"
               disabled={loading}
             />

@@ -72,6 +72,8 @@ pub mod product_variant;
 pub mod promotion;
 /// Purchase orders — order stock from suppliers.
 pub mod purchase_order;
+/// Sliding-window rate limiter for login PIN attempts.
+pub mod rate_limiter;
 /// Product recipes — bill-of-materials for make-from-scratch items.
 pub mod recipe;
 /// Refund and return processing.
@@ -175,6 +177,7 @@ pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
 pub use product_variant::ProductVariant;
 pub use promotion::{Promotion, PromotionApplication, PromotionType};
 pub use purchase_order::{PurchaseOrder, PurchaseOrderLine, PurchaseOrderWithLines};
+pub use rate_limiter::LoginRateLimiter;
 pub use recipe::RecipeItem;
 pub use refund::{Refund, RefundLine};
 pub use sale::{Sale, SaleLine};

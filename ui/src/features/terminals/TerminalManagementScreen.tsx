@@ -630,7 +630,7 @@ export default function TerminalManagementScreen() {
                       id="terminal-field-secret"
                       value={form.terminalSecret}
                       onChange={(e) => setForm({ ...form, terminalSecret: e.target.value })}
-                      autoComplete="new-password"
+                      autoComplete="off"
                     />
                   </label>
                 )}

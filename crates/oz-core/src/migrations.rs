@@ -283,6 +283,18 @@ pub const ALL: &[Migration] = &[
         id: "071_exchange_rate_minor_units.sql",
         sql: include_str!("../migrations/071_exchange_rate_minor_units.sql"),
     },
+    Migration {
+        id: "072_stock_movements_archive.sql",
+        sql: include_str!("../migrations/072_stock_movements_archive.sql"),
+    },
+    Migration {
+        id: "073_offline_queue_priority.sql",
+        sql: include_str!("../migrations/073_offline_queue_priority.sql"),
+    },
+    Migration {
+        id: "074_login_attempts.sql",
+        sql: include_str!("../migrations/074_login_attempts.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -481,6 +493,7 @@ mod tests {
             "workspace_instances",
             "user_workspace_instances",
             "role_workspace_types",
+            "login_attempts",
             "user_store_access",
         ];
 

@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalBrand } from '@/contexts/BrandContext';
+import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
 import './StaffLoginScreen.css';
@@ -94,27 +96,31 @@ export default function StaffLoginScreen() {
   const rawLogoPath = brandSettings?.logo_path || '/256x256.png';
   const { resizedUrl, error: primaryLogoError } = useResizedLogo(rawLogoPath, 256);
   const [fallbackSvgError, setFallbackSvgError] = useState(false);
+  const { addToast } = useToast();
   const [step, setStep] = useState<Step>('username');
   const [username, setUsername] = useState('');
+  const [usernameChecking, setUsernameChecking] = useState(false);
   const [pin, setPin] = useState<string[]>([]);
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const pinSubmitted = useRef(false);
+  const toastShownForError = useRef<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // ── Shake card on error ──────────────────────────────────────
+  // ── Shake card + toast on PIN error ──────────────────────────
 
-  const prevErrorRef = useRef<string | null>(null);
   useEffect(() => {
-    if (error && error !== prevErrorRef.current) {
-      const card = cardRef.current;
-      if (card) {
-        card.classList.add('staff-login-card--shake');
-        const timer = setTimeout(() => card.classList.remove('staff-login-card--shake'), 350);
-        return () => clearTimeout(timer);
-      }
+    if (!error || step !== 'pin' || error === toastShownForError.current) return;
+    toastShownForError.current = error;
+
+    const card = cardRef.current;
+    if (card) {
+      card.classList.add('staff-login-card--shake');
+      setTimeout(() => card.classList.remove('staff-login-card--shake'), 350);
     }
-    prevErrorRef.current = error;
+
+    addToast({ type: 'error', message: error, duration: 5000 });
+    setPin([]);
   }, [error]);
 
   // ── Focus appropriate element when step changes ──────────────
@@ -127,7 +133,7 @@ export default function StaffLoginScreen() {
     }
   }, [step]);
 
-  // ── Reset error when step changes ────────────────────────────
+  // ── Reset errors when step changes ──────────────────────────
 
   useEffect(() => {
     clearError();
@@ -186,7 +192,7 @@ export default function StaffLoginScreen() {
         goBack();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (pin.length >= 1) attemptLogin();
+        if (pin.length >= 1 && !pinSubmitted.current) attemptLogin();
       }
     },
     [step, loading, handlePinDigit, handlePinBackspace, handlePinClear, goBack, attemptLogin, pin.length],
@@ -194,12 +200,31 @@ export default function StaffLoginScreen() {
 
   // ── Username handlers ────────────────────────────────────────
 
-  const handleUsernameSubmit = useCallback((e: React.FormEvent) => {
+  const handleUsernameSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.trim()) {
+    const trimmed = username.trim();
+    if (!trimmed) return;
+
+    setUsernameChecking(true);
+    clearError();
+
+    try {
+      const result = await checkUsername({ username: trimmed });
+      if (!result.found) {
+        addToast({ type: 'error', message: 'User not found' });
+        return;
+      }
+      if (!result.is_active) {
+        addToast({ type: 'error', message: 'Account is deactivated' });
+        return;
+      }
       setStep('pin');
+    } catch {
+      addToast({ type: 'error', message: 'Could not verify username. Check your connection.' });
+    } finally {
+      setUsernameChecking(false);
     }
-  }, [username]);
+  }, [username, clearError]);
 
   const handleUsernameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value);
@@ -208,6 +233,10 @@ export default function StaffLoginScreen() {
   // ── Auto-submit when PIN reaches max length ──────────────────
 
   useEffect(() => {
+    // Reset error gate when user starts re-entering a PIN after error
+    if (pin.length === 1) {
+      toastShownForError.current = null;
+    }
     if (pin.length === MAX_PIN_LENGTH && !loading && !pinSubmitted.current) {
       pinSubmitted.current = true;
       attemptLogin();
@@ -345,16 +374,35 @@ export default function StaffLoginScreen() {
 
   return (
     <div className="staff-login-screen" onClick={handleScreenClick} role="presentation">
-      <div className="staff-login-card" ref={cardRef}>
-        {/* ── Username step ─────────────────────────────────── */}
-        {step === 'username' && (
-          <div className="staff-login-step-content" key="username">
-            {renderLogo()}
+      <div className={`staff-login-card ${step === 'pin' ? 'staff-login-card--pin' : ''}`} ref={cardRef}>
+        {step === 'pin' && (
+          <button
+            type="button"
+            className="staff-login-close-btn"
+            onClick={goBack}
+            aria-label="Close"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
 
-            <Localized id="staff-login-step-username">
-              <p className="staff-login-step-label">Enter your username</p>
-            </Localized>
+        {/* ── Top bar: logo (username) / store + dots (PIN) ── */}
+        <div className="staff-login-top-bar">
+          {step === 'username' && renderLogo()}
+          {step === 'pin' && (
+            <div className="staff-login-pin-top">
+              {storeName && <p className="staff-login-store-name">{storeName}</p>}
+              {renderPinDots()}
+            </div>
+          )}
+        </div>
 
+        {/* ── Main area: form ────────────────────────────────── */}
+        <div className="staff-login-main-area">
+          {step === 'username' && (
             <form onSubmit={handleUsernameSubmit} className="staff-login-form">
               <div className="staff-login-input-wrap">
                 <Localized id="staff-login-username-placeholder" attrs={{ placeholder: true }}>
@@ -363,45 +411,41 @@ export default function StaffLoginScreen() {
                       ref={usernameInputRef}
                       type="text"
                       id="staff-login-username"
-                      name="username"
+                      name="username-off"
                       className="staff-login-input"
                       placeholder="Username"
                       value={username}
                       onChange={handleUsernameChange}
-                      autoComplete="username"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-1p-ignore="true"
                       aria-label="Username"
                       disabled={loading}
                     />
                   </Localized>
                 </Localized>
-              </div>
-              <Localized id="staff-login-next">
                 <button
                   type="submit"
                   className="staff-login-submit-btn"
-                  disabled={!username.trim() || loading}
+                  disabled={!username.trim() || usernameChecking}
+                  aria-label="Next"
                 >
-                  {loading ? (
-                    <>
-                      <span className="staff-login-btn-spinner" />
-                      <Localized id="staff-login-submitting"><span>Verifying…</span></Localized>
-                    </>
+                  {usernameChecking ? (
+                    <span className="staff-login-btn-spinner" />
                   ) : (
-                    'Next'
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
                   )}
                 </button>
-              </Localized>
+              </div>
             </form>
-          </div>
-        )}
+          )}
 
-        {/* ── PIN step ──────────────────────────────────────── */}
-        {step === 'pin' && (
-          <div className="staff-login-step-content" key="pin">
-            {renderLogo(true)}
-            {storeName && <p className="staff-login-store-name">{storeName}</p>}
-
-            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+          {step === 'pin' && (
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
             <div
               className="staff-login-pin-wrap"
               ref={pinWrapRef}
@@ -410,66 +454,35 @@ export default function StaffLoginScreen() {
               role="application"
               aria-label={l10n.getString('staff-login-pin-section-aria')}
             >
-              {renderPinDots()}
               {renderPinPad()}
-
-              {/* Submit button for PINs shorter than max length */}
-              <button
-                type="button"
-                className="staff-login-submit-btn staff-login-pin-submit"
-                onClick={attemptLogin}
-                disabled={pin.length === 0 || loading}
-              >
-                {loading ? (
-                  <>
-                    <span className="staff-login-btn-spinner" />
-                    <Localized id="staff-login-submitting">
-                      <span>Verifying…</span>
-                    </Localized>
-                  </>
-                ) : (
-                  l10n.getString('staff-login-submit')
-                )}
-              </button>
             </div>
+          )}
 
-            {/* Back button */}
-            <Localized id="staff-login-back">
-              <button
-                type="button"
-                className="staff-login-back-btn"
-                onClick={goBack}
-                disabled={loading}
-              >
-                &larr; Back
-              </button>
-            </Localized>
+          {error && step === 'username' && (
+            <div className="staff-login-error" role="alert">
+              <AlertIcon />
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* ── Bottom bar: step indicator (12%) ──────────────── */}
+        <div className="staff-login-bottom-bar">
+          <div
+            className="staff-login-steps"
+            role="status"
+            aria-label={l10n.getString('staff-login-progress-aria')}
+          >
+            <span className={`staff-login-step-dot ${step === 'username' ? 'staff-login-step-dot--active' : 'staff-login-step-dot--done'}`} />
+            <span className="staff-login-step-line" />
+            <span className={`staff-login-step-dot ${step === 'pin' ? 'staff-login-step-dot--active' : ''}`} />
           </div>
-        )}
-
-        {/* ── Error ──────────────────────────────────────────── */}
-        {error && (
-          <div className="staff-login-error" role="alert">
-            <AlertIcon />
-            {error}
-          </div>
-        )}
-
-        {/* ── Step indicator ─────────────────────────────────── */}
-        <div
-          className="staff-login-steps"
-          role="status"
-          aria-label={l10n.getString('staff-login-progress-aria')}
-        >
-          <span className={`staff-login-step-dot ${step === 'username' ? 'staff-login-step-dot--active' : 'staff-login-step-dot--done'}`} />
-          <span className="staff-login-step-line" />
-          <span className={`staff-login-step-dot ${step === 'pin' ? 'staff-login-step-dot--active' : ''}`} />
         </div>
       </div>
 
       {/* ── Footer: version + copyright ────────────────────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.6</span>
+        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.7</span>
         <Localized id="staff-login-copyright">
           <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
         </Localized>

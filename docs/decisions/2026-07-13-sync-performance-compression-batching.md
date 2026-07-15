@@ -1,7 +1,7 @@
 # ADR #10: Sync Performance Strategy
 
-**Status:** Active (Strategy — split into 3 phased specs below)
-**Date:** 2026-07-13
+**Status:** Implemented (all 3 phases complete as of 2026-07-15)
+**Date:** 2026-07-13 (strategy), 2026-07-15 (implemented)
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** sync, compression, batching, performance, network, low-bandwidth, hosting-cost, sqlite, retention
 
@@ -24,9 +24,17 @@ This ADR sets the overall direction. The implementation is split into 3 independ
 
 | Phase | Spec | Focus | Est. effort |
 |-------|------|-------|-------------|
-| **1** | `docs/specs/_active/p1-sync-batching-compression-retention.md` | Client-side batching (64 KB adaptive), Gzip compression, capped exponential backoff, 90-day retention with `incremental_vacuum` | 2-3 weeks |
-| **2** | `docs/specs/_active/p2-sync-priority-concurrency.md` | Sync priority tiers, per-route-group concurrency limits, 2-thread Tokio runtime | 1-2 weeks |
-| **3** | `docs/specs/_active/p3-sync-pagination-snapshot-observability.md` | Pull-side pagination, snapshot endpoint, tiered heartbeat, metrics & monitoring | 2-3 weeks |
+| **1** | `docs/specs/_active/p1-sync-batching-compression-retention.md` | Client-side batching (64 KB), Gzip compression, 90-day retention, `AnchorExpired` (410 Gone), cursor-based pruning | 2-3 weeks | ✅ **DONE** (2026-07-15) |
+| **2** | `docs/specs/_active/p2-sync-priority-concurrency.md` | Sync priority tiers (`SyncPriority`), per-route-group concurrency limits, 2-thread Tokio runtime | 1-2 weeks | ✅ **DONE** (2026-07-15) |
+| **3** | `docs/specs/_active/p3-sync-pagination-snapshot-observability.md` | Pull pagination, snapshot endpoint + cache + recovery, tiered heartbeat, Prometheus metrics, health endpoint, structured logging | 2-3 weeks | ✅ **DONE** (2026-07-15) |
+
+### Implementation summary
+
+- **P-1** (12 commits): 64 KB batch splitting (`build_batches`), gzip via `reqwest`, `MAX_BATCH_BYTES`, 90-day retention with cursor-based `DELETE LIMIT 1000`, `AnchorExpired` error type, prune loop in `oz-cloud-server`.
+- **P-2** (7 commits): `SyncPriority` enum (`Critical=0, Normal=1, Low=2`), `priority` column (migration 073), `enqueue_offline_priority`, priority-sorted `build_batches`, `ConcurrencyLimitLayer` (API=10, sync=40), `worker_threads=2`.
+- **P-3** (12 commits): Cursor-based pull pagination (`created_at|id`, LIMIT 501/500), `GET /api/sync/snapshot` with 5-min in-memory cache, `AnchorExpired` → snapshot recovery + `import_snapshot`, tiered heartbeat in status response, Prometheus `/metrics` (6 metrics), `GET /health`, structured logging per sync cycle.
+
+**Total: 31 commits across all 3 phases.**
 
 ### Rationale for phasing
 

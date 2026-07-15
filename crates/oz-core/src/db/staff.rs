@@ -282,6 +282,81 @@ impl Store<'_> {
         }
         Ok(())
     }
+
+    // ── Login attempt rate limiting (persistent) ───────────────────
+
+    /// Record a failed login attempt for `username` within a sliding
+    /// time window. Returns `Ok(remaining)` on success (number of
+    /// attempts remaining before lockout) or `Err(retry_after_secs)`
+    /// if the user is currently locked out.
+    ///
+    /// Expired attempts are pruned on every call. The implementation
+    /// is backed by the `login_attempts` table so it survives app
+    /// restarts.
+    pub fn record_login_attempt(
+        &self,
+        username: &str,
+        max_attempts: usize,
+        window_secs: u64,
+    ) -> Result<Result<usize, u64>, CoreError> {
+        let now = chrono::Utc::now().timestamp();
+        let window_start = now - window_secs as i64;
+
+        // Prune expired entries outside the window.
+        self.conn.execute(
+            "DELETE FROM login_attempts WHERE username = ?1 AND attempted_at < ?2",
+            params![username, window_start],
+        )?;
+
+        // Count remaining attempts within the window.
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM login_attempts WHERE username = ?1",
+            params![username],
+            |row| row.get(0),
+        )?;
+
+        // If already at or over the limit, calculate retry duration.
+        if count >= max_attempts as i64 {
+            let oldest: i64 = self.conn.query_row(
+                "SELECT attempted_at FROM login_attempts WHERE username = ?1 ORDER BY attempted_at ASC LIMIT 1",
+                params![username],
+                |row| row.get(0),
+            )?;
+            let elapsed = now.saturating_sub(oldest) as u64;
+            let retry_after = window_secs.saturating_sub(elapsed).max(1);
+            return Ok(Err(retry_after));
+        }
+
+        // Record this attempt.
+        self.conn.execute(
+            "INSERT INTO login_attempts (id, username, attempted_at) VALUES (?1, ?2, ?3)",
+            params![uuid::Uuid::now_v7().to_string(), username, now],
+        )?;
+
+        // Re-check after recording to catch the push-over-the-limit case.
+        let new_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM login_attempts WHERE username = ?1",
+            params![username],
+            |row| row.get(0),
+        )?;
+
+        if new_count >= max_attempts as i64 {
+            return Ok(Err(window_secs));
+        }
+
+        let remaining = max_attempts.saturating_sub(new_count as usize);
+        Ok(Ok(remaining))
+    }
+
+    /// Clear all recorded login attempts for `username` (call on
+    /// successful login or admin reset).
+    pub fn clear_login_attempts(&self, username: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "DELETE FROM login_attempts WHERE username = ?1",
+            params![username],
+        )?;
+        Ok(())
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

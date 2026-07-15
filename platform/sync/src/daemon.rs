@@ -23,6 +23,20 @@ use crate::transport::{PushOutcome, SyncTransport};
 /// Base interval; actual per-cycle sleep is randomized 60–120s.
 const DEFAULT_SYNC_INTERVAL: Duration = Duration::from_secs(30);
 
+/// Maximum backoff cap in milliseconds (60 s).
+const MAX_BACKOFF_MS: u64 = 60_000;
+
+/// Compute exponential backoff with full jitter (P-1 spec §Backoff).
+///
+/// Formula: `rand(0, min(MAX_BACKOFF_MS, 2_000 * 2^failures))` ms.
+/// Reset to 0 after a successful sync cycle.
+fn compute_backoff(consecutive_failures: u32) -> Duration {
+    let base = 2_000u64.saturating_mul(2u64.saturating_pow(consecutive_failures));
+    let backoff_ms = std::cmp::min(MAX_BACKOFF_MS, base);
+    let jittered = rand::thread_rng().gen_range(0..=backoff_ms);
+    Duration::from_millis(jittered)
+}
+
 /// Snapshot of the daemon's current state, observable via [`SyncDaemon::status`].
 #[derive(Debug, Clone, Default)]
 pub struct DaemonStatus {
@@ -36,6 +50,10 @@ pub struct DaemonStatus {
     pub last_pulled: usize,
     /// Error message from the last cycle, if any.
     pub last_error: Option<String>,
+    /// Number of consecutive failed sync cycles (drives backoff).
+    pub consecutive_failures: u32,
+    /// Backoff delay applied before the current cycle, if any.
+    pub backoff_ms: Option<u64>,
     /// Number of items currently pending in the offline queue.
     pub pending_count: i64,
 }
@@ -107,6 +125,7 @@ impl SyncDaemon {
             // Re-shadow `rx` as `mut` so the `async move` block can borrow
             // it mutably through the `select!` macro below.
             let mut rx = rx;
+            let mut consecutive_failures: u32 = 0;
 
             if interval == DEFAULT_SYNC_INTERVAL {
                 tracing::info!("sync daemon started interval_range_secs=60..=120");
@@ -115,14 +134,52 @@ impl SyncDaemon {
             }
 
             loop {
-                let sleep_dur = if interval == DEFAULT_SYNC_INTERVAL {
+                // Compute sleep duration: backoff for failures, normal
+                // random interval for the standard daemon rhythm, or a
+                // fixed custom interval (e.g. for tests — backoff is
+                // bypassed to avoid stalling fast test loops).
+                let sleep_dur = if consecutive_failures > 0 && interval == DEFAULT_SYNC_INTERVAL {
+                    let backoff = compute_backoff(consecutive_failures);
+                    {
+                        let mut s = daemon_status.write().await;
+                        s.backoff_ms = Some(backoff.as_millis() as u64);
+                    }
+                    tracing::warn!(
+                        failures = consecutive_failures,
+                        backoff_ms = backoff.as_millis(),
+                        "backing off after sync failure"
+                    );
+                    backoff
+                } else if interval == DEFAULT_SYNC_INTERVAL {
+                    {
+                        let mut s = daemon_status.write().await;
+                        s.backoff_ms = None;
+                    }
                     Duration::from_secs(rand::thread_rng().gen_range(60..=120))
                 } else {
+                    {
+                        let mut s = daemon_status.write().await;
+                        s.backoff_ms = None;
+                    }
                     interval
                 };
+
                 tokio::select! {
                     _ = tokio::time::sleep(sleep_dur) => {
                         Self::run_tick(&db, &daemon_status).await;
+
+                        // Track consecutive failures for backoff on the
+                        // next cycle. Reset to 0 on success.
+                        let had_error = daemon_status.read().await.last_error.is_some();
+                        if had_error {
+                            consecutive_failures += 1;
+                        } else {
+                            consecutive_failures = 0;
+                        }
+                        {
+                            let mut s = daemon_status.write().await;
+                            s.consecutive_failures = consecutive_failures;
+                        }
                     }
                     res = rx.changed() => {
                         if res.is_err() || *rx.borrow() {
@@ -205,7 +262,7 @@ impl SyncDaemon {
             // Phase 4: Pull remote updates and apply them locally.
             if !cfg.server_url.is_empty() {
                 let transport = SyncTransport::new(&cfg.server_url, cfg.api_key.as_deref());
-                match transport.pull_updates(None).await {
+                match transport.pull_updates(None, None).await {
                     Ok(pull_resp) => {
                         pulled = pull_resp.items.len();
                         if !pull_resp.items.is_empty() {
@@ -284,6 +341,46 @@ impl SyncDaemon {
         } else {
             tracing::info!(pushed, "sync cycle completed");
         }
+    }
+
+    /// Start a background pruning task that calls [`Store::archive_stock_movements`]
+    /// on the local database (ADR #6 Q4 / P-1 Ledger Retention).
+    ///
+    /// Runs independently of the sync daemon with a random sleep interval of
+    /// 60-120 seconds, matching the daemon's rhythm. The task is fire-and-
+    /// forget — it runs until the process exits.
+    pub fn start_prune_task(db: DbConnection) {
+        tokio::spawn(async move {
+            tracing::info!("prune daemon started interval_range_secs=60..=120");
+
+            loop {
+                let sleep_dur = Duration::from_secs(rand::thread_rng().gen_range(60..=120));
+                tokio::time::sleep(sleep_dur).await;
+
+                let db = db.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    let conn = db.blocking_lock();
+                    let store = Store::new(&conn);
+                    store.archive_stock_movements(90, 50)
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(count)) => {
+                        if count > 0 {
+                            tracing::info!(count, "prune cycle: archived stock movements");
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!(error = %e, "prune cycle failed");
+                    }
+                    Err(join_err) => {
+                        tracing::error!(error = %join_err, "prune spawn_blocking panicked");
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     /// Gracefully stop the background sync daemon.
@@ -424,5 +521,42 @@ mod tests {
         let mut daemon = SyncDaemon::new();
         daemon.set_interval(Duration::from_secs(10));
         assert_eq!(daemon.interval(), Duration::from_secs(10));
+    }
+
+    // ── Backoff tests ────────────────────────────────────────────
+
+    #[test]
+    fn compute_backoff_produces_finite_duration() {
+        // Jitter is random; just verify the function never panics
+        // and always returns a valid (finite, non-negative) duration.
+        for failures in 0..=10 {
+            let backoff = compute_backoff(failures);
+            assert!(
+                backoff.as_millis() as u64 <= MAX_BACKOFF_MS,
+                "backoff for {failures} failures exceeds cap"
+            );
+        }
+    }
+
+    #[test]
+    fn compute_backoff_capped_at_60_seconds() {
+        // After many failures, the backoff should be capped at 60s.
+        let backoff = compute_backoff(100);
+        assert!(
+            backoff.as_millis() as u64 <= MAX_BACKOFF_MS,
+            "backoff {} ms exceeds cap {MAX_BACKOFF_MS} ms",
+            backoff.as_millis()
+        );
+    }
+
+    #[test]
+    fn compute_backoff_zero_failures_is_instant() {
+        // 2_000 * 2^0 = 2_000, jittered in [0, 2000]
+        let backoff = compute_backoff(0);
+        assert!(
+            backoff.as_millis() <= 2_000,
+            "zero failures should cap at 2000ms, got {}ms",
+            backoff.as_millis()
+        );
     }
 }

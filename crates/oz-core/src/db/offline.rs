@@ -3,7 +3,7 @@
 use rusqlite::params;
 
 use crate::error::CoreError;
-use crate::offline::{OfflineQueueItem, OfflineQueueStatus};
+use crate::offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 
 use super::Store;
 
@@ -24,11 +24,32 @@ impl Store<'_> {
         payload: &str,
         tenant_id: &str,
     ) -> Result<OfflineQueueItem, CoreError> {
-        let item = OfflineQueueItem::with_tenant(action, payload, tenant_id);
+        self.enqueue_offline_inner(action, payload, tenant_id, SyncPriority::Normal)
+    }
+
+    /// Enqueue a transaction with a specific sync priority (P-2).
+    pub fn enqueue_offline_priority(
+        &self,
+        action: &str,
+        payload: &str,
+        priority: SyncPriority,
+    ) -> Result<OfflineQueueItem, CoreError> {
+        self.enqueue_offline_inner(action, payload, "default", priority)
+    }
+
+    fn enqueue_offline_inner(
+        &self,
+        action: &str,
+        payload: &str,
+        tenant_id: &str,
+        priority: SyncPriority,
+    ) -> Result<OfflineQueueItem, CoreError> {
+        let mut item = OfflineQueueItem::with_tenant(action, payload, tenant_id);
+        item.priority = priority;
         self.conn.execute(
-            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![item.id, item.action, item.payload, item.status.as_stored_str(), item.retry_count, item.last_error, item.created_at, item.synced_at, item.tenant_id],
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![item.id, item.action, item.payload, item.status.as_stored_str(), item.retry_count, item.last_error, item.created_at, item.synced_at, item.tenant_id, item.priority as i32],
         )?;
         Ok(item)
     }
@@ -36,7 +57,7 @@ impl Store<'_> {
     /// List all pending (unsynced) offline queue items, oldest first.
     pub fn list_pending_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
              FROM offline_queue WHERE status = 'pending' ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
@@ -46,7 +67,7 @@ impl Store<'_> {
     /// List all offline queue items.
     pub fn list_all_offline(&self) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
              FROM offline_queue ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], Self::row_to_offline_queue_item)?;
@@ -59,7 +80,7 @@ impl Store<'_> {
         tenant_id: &str,
     ) -> Result<Vec<OfflineQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id
+            "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
              FROM offline_queue WHERE status = 'pending' AND tenant_id = ?1 ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map(params![tenant_id], Self::row_to_offline_queue_item)?;
@@ -121,6 +142,10 @@ impl Store<'_> {
             created_at: row.get("created_at")?,
             synced_at: row.get("synced_at")?,
             tenant_id: row.get("tenant_id")?,
+            priority: row
+                .get::<_, i32>("priority")
+                .map(crate::offline::SyncPriority::from)
+                .unwrap_or(crate::offline::SyncPriority::Normal),
         })
     }
 }

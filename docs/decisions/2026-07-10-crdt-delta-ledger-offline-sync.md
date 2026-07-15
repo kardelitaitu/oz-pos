@@ -1,7 +1,8 @@
 # ADR #6: CRDT Delta Ledger & Offline Sync
 
-**Status:** In Progress (Phase 1 Complete 2026-07-10)
+**Status:** In Progress (Phase 1-2 Complete, Q4 core implemented 2026-07-15)
 **Date:** 2026-07-10
+**Updated:** 2026-07-15 (closed Q1-Q3, Q4 core implemented — daemon wiring pending)
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** crdt, offline, sync, inventory, uuidv7, ulid, concurrency
 
@@ -42,7 +43,7 @@ CREATE TABLE stock_movements (
     delta               INTEGER NOT NULL,  -- +N or -N
     reason              TEXT,
     created_at          TEXT NOT NULL,
-    source_terminal_id  TEXT NOT NULL
+    source_terminal_id  TEXT,                    -- nullable (rollup rows have no source terminal)
 );
 ```
 
@@ -103,20 +104,78 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 
 ### Negative
 
-- Requires migrating existing auto-increment IDs to UUIDv7/ULID.
-- Inventory queries must aggregate `stock_movements` instead of reading a single `quantity` column.
+- Requires migrating existing auto-increment IDs to UUIDv7 (completed — all 158 call sites migrated).
+- Inventory queries must aggregate `stock_movements` instead of reading a single `quantity` column (mitigated: `stock_summary` materialized cache avoids scanning full history).
 - Stock corrections and adjustments must be modeled as delta rows (a correction is a compensating delta, e.g., `+3` if the actual count is 3 higher than the computed sum).
-- Sync protocol between registers and cloud-server must handle both within-store (same DB, SQLite WAL) and cross-store (different DBs, cloud-mediated) sync correctly.
+- Sync protocol between registers and cloud-server must handle both within-store (same DB, SQLite WAL) and cross-store (different DBs, cloud-mediated) sync correctly (implemented and tested — 19 integration tests).
 - The materialized `stock_summary` cache must be invalidated on every sync and rebuilt — this is a performance consideration for high-volume stores.
+- The `stock_movements` ledger grows unbounded without pruning (implemented: archive-rollup consolidation via migration 072, daemon wiring pending).
 
 ---
 
 ## Open Questions
 
-1. Should we use UUIDv7 or ULID for primary keys? (UUIDv7 is natively supported in some databases; ULID is more human-readable.)
-2. How do we handle stock corrections that need to override a previous incorrect delta? (A compensating delta is the CRDT-consistent approach; an admin override with audit trail is the practical approach.)
-3. What is the sync protocol for merging deltas between registers and the cloud? How does it handle the within-store (shared DB) vs cross-store (cloud-mediated) distinction?
-4. How do we prune old `stock_movements` rows without losing audit history? (Snapshot + archive approach: periodically materialize the current sum, archive the contributing deltas.)
+### ✅ Q1: UUIDv7 or ULID? — RESOLVED (2026-07-11)
+
+**Decision:** UUIDv7. All 158 `Uuid::new_v4()` call sites replaced with `Uuid::now_v7()` across the workspace. UUIDv7 was chosen over ULID because:
+- Native support in SQLite (stored as TEXT, sorts correctly since v7 is time-ordered by design)
+- No dependency on a separate ULID crate
+- Same 128-bit collision resistance and time-ordering guarantees
+- The `uuid` crate's `v7` feature is already a workspace dependency
+
+### ✅ Q2: Stock corrections — compensating delta or admin override? — RESOLVED (2026-07-13)
+
+**Decision:** Compensating deltas with built-in audit trail. The code has only one write path:
+
+- `adjust_stock_with_reason(sku, delta, reason, terminal_id, user_id)` — writes an immutable delta row to `stock_movements`
+- There is **no single-product** method that directly sets `inventory.qty` — all writes go through the delta ledger (the only bulk write to `inventory` is `rebuild_stock_summary()`, which computes `SUM(delta)` from the ledger)
+- `rebuild_stock_summary()` is the only bulk write to `inventory`, and it computes `SUM(delta)` from the ledger
+
+A correction workflow:
+1. Auditor counts physical stock → 53 units
+2. System computes `SUM(delta)` from ledger → 50 units
+3. Insert a `+3` delta with `reason: "correction-cycle-2026-07"` and audit terminal/user IDs
+
+The audit fields (`source_terminal_id`, `source_user_id`, `reason`) are already populated from session context. A future admin UI would call the same `adjust_stock_with_reason` with `reason: "correction"` — no new code path needed.
+
+### ✅ Q3: Sync protocol — within-store vs cross-store? — RESOLVED (2026-07-11)
+
+**Decision:** Two distinct mechanisms, both implemented and tested.
+
+**Within a store (shared SQLite):**
+- Multiple registers write to the same `stock_movements` table in the same SQLite file
+- SQLite WAL mode handles concurrent writers
+- UUIDv7 primary keys prevent ID collisions
+- No sync needed — all registers see the same data immediately
+
+**Across stores (cloud-mediated):**
+- `platform/sync/` crate implements a push/pull protocol via HTTP to the cloud server
+- Push: `SyncDaemon` reads pending items from `offline_queue`, sends via `SyncTransport::push_items()`
+- Pull: `SyncTransport::pull_updates(None)` fetches remote items
+- Apply: `SyncQueue::apply_remote()` dispatches by action type — `complete_sale` deducts stock, `stock.adjusted` adjusts stock, `product.created` creates product, `stock.movement` inserts raw ledger delta
+- Reconcile: After pull, `rebuild_stock_summary()` recomputes `stock_summary` + `inventory` from `SUM(delta)`
+- The `store_id` column on `stock_movements` acts as a routing key for cross-store transfers
+
+19 integration tests in `platform/sync/tests/integration_test.rs` cover push, pull, conflict resolution, cross-terminal product replication, stock adjustment replication, and 100-item throughput.
+
+### 🔄 Q4: Delta pruning without losing audit history? — IN PROGRESS (Core implemented 2026-07-15, daemon wiring pending)
+
+**Decision:** Archive-rollup consolidation. Specified in `docs/specs/_active/p1-sync-batching-compression-retention.md` (Ledger Retention section).
+
+**Design:** Rows older than 90 days are:
+1. Copied to `stock_movements_archive` for audit compliance (preserved for 3+ years)
+2. Replaced in the live `stock_movements` table by a single **rollup row** per product — `SUM(delta)` of all archived rows, with `reason: 'archive-rollup'`
+3. Deleted from the live table
+
+This works because the CRDT delta ledger is mathematically additive: `SUM(delta)` across live + archive equals `SUM(delta)` across the live table alone (the rollup row consolidates archived deltas). **Zero code changes** needed in `get_stock_from_ledger()`, `rebuild_stock_summary()`, or `list_stock_movements()`.
+
+**Implementation plan (P-1 Phase):**
+1. **Migration**: Create `stock_movements_archive` table (identical schema, no indexes — append-only, infrequently queried). Enable `PRAGMA auto_vacuum = INCREMENTAL` on `stock_movements`.
+2. **Core function**: `archive_stock_movements(conn, older_than_days: i64)` in `crates/oz-core/src/db/products.rs`. Per-item_id transaction: `INSERT INTO archive SELECT … WHERE reason != 'archive-rollup'` → insert rollup row → `DELETE WHERE reason != 'archive-rollup'` → commit. Cap: 50 item groups per cycle.
+3. **Background task**: Server-side in `apps/cloud-server/src/prune.rs` (hourly interval). Client-side spawned alongside `SyncDaemon` in `platform/sync/src/daemon.rs` (60-120s interval).
+4. **Sizing**: Live table stays at ~45K rows/product max for 90-day window. Archive grows at ~9M rows/year for 50 products — acceptable for infrequent audit queries.
+
+See `docs/specs/_active/p1-sync-batching-compression-retention.md` for full acceptance criteria.
 
 ---
 
@@ -134,7 +193,7 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 - [x] 7 new tests: table existence, ledger writes, SUM computation, pagination, stock_summary tracking, creation ledger.
 - [x] `cargo check` ✅, `cargo test -p oz-core -- products` ✅ (67/67), `cargo fmt` ✅.
 
-### Phase 2 (Future)
+### Phase 2 (Done 2026-07-11)
 
 - [x] Choose and adopt UUIDv7 for all entity primary keys — replaced all 158 `Uuid::new_v4()` call sites with `Uuid::now_v7()` across the entire workspace. Added `v7` feature to workspace `uuid` dependency. Added `oz_core::new_id()` helper for future entity ID generation.
 - [x] Implement materialized `stock_summary` cache rebuild from deltas — `rebuild_stock_summary()` method recomputes both `stock_summary` and `inventory` tables from `SUM(delta)` in a single transaction. Sync integration point ready but not yet wired. Added 2 new tests.
@@ -144,13 +203,23 @@ All foreign keys to `store_profiles` in the **global database** explicitly enfor
 - [x] Enforce `ON DELETE RESTRICT` on `store_profiles` foreign keys in the global database — migration 066 adds FK to `workspace_instances.store_id` and changes `user_store_access.store_id` from CASCADE to RESTRICT.
 - [x] Cross-store delta routing via `platform/sync/` — migration 067 adds `store_id` to `stock_movements`. `SyncQueue::apply_remote` handles `stock.movement` action (inserts raw delta). `SyncDaemon` rebuilds `stock_summary` after pull. 3 new tests (2026-07-11).
 
+### Phase 3: Delta Pruning (Core done 2026-07-15, daemon wiring pending)
+
+- [x] Create `stock_movements_archive` table for audit compliance (migration 072). Enable `PRAGMA auto_vacuum = INCREMENTAL`.
+- [x] `archive_stock_movements(older_than_days, max_groups)` — per-item_id archive-rollup consolidation. Copies old rows to archive, inserts SUM(delta) rollup row with `reason: 'archive-rollup'`, deletes old rows from live table. Capped at `max_groups` per call, idempotent, runs `PRAGMA incremental_vacuum(50)` once per cycle.
+- [x] 10 tests: table existence, empty DB, no old rows, rollup creation, recent row preservation, idempotency, max_groups cap, rollup exclusion, zero-sum deltas. All 75 products tests pass.
+- [ ] Daemon integration: spawn background task in `platform/sync/src/daemon.rs` (client-side, 60-120s interval) and `apps/cloud-server/src/prune.rs` (server-side, hourly interval).
+
 ---
 
 ## Related
 
 - ADR #4 — Store-First Tenancy & Workspace Type/Instance Architecture
 - ADR #5 — Subscription Tier & Entitlement
-- `crates/oz-core/src/db/stock.rs`
+- ADR #10 — Sync Performance Strategy (compression, batching, backoff, retention)
+- `docs/specs/_active/p1-sync-batching-compression-retention.md` — Ledger retention spec (Q4 implementation plan)
+- `crates/oz-core/src/db/products.rs` (`adjust_stock_with_reason`, `insert_stock_movement`, `rebuild_stock_summary`, `get_stock_from_ledger`, `list_stock_movements`)
 - `crates/oz-security/src/terminal.rs`
 - `platform/sync/` — Cross-store sync layer
+- `platform/sync/tests/integration_test.rs` — 19 cross-terminal integration tests
 - `ui/src/components/FastPINOverlay.tsx` ✅

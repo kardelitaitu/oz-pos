@@ -318,7 +318,7 @@ export default function CustomerManagementScreen() {
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="e.g. Jane Smith"
-                        autoComplete="name"
+                        autoComplete="off"
                       />
                     </Localized>
                     </Localized>
@@ -337,7 +337,7 @@ export default function CustomerManagementScreen() {
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
                         placeholder="jane@example.com"
-                        autoComplete="email"
+                        autoComplete="off"
                       />
                     </Localized>
                     </Localized>
@@ -356,7 +356,7 @@ export default function CustomerManagementScreen() {
                         value={form.phone}
                         onChange={(e) => setForm({ ...form, phone: e.target.value })}
                         placeholder="+1-555-0100"
-                        autoComplete="tel"
+                        autoComplete="off"
                       />
                     </Localized>
                     </Localized>

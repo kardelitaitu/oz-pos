@@ -4,8 +4,9 @@
 //! Initially only Last-Write-Wins (LWW) is implemented, using the
 //! `created_at` timestamp to determine the winner.
 
-use crate::queue::ResolvedItem;
 use oz_core::offline::OfflineQueueItem;
+
+use crate::queue::ResolvedItem;
 
 /// Resolve a conflict using Last-Write-Wins (LWW).
 ///
@@ -43,6 +44,7 @@ mod tests {
             created_at: created_at.to_owned(),
             synced_at: None,
             tenant_id: "default".into(),
+            priority: oz_core::offline::SyncPriority::Normal,
         }
     }
 
