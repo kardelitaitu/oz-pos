@@ -296,7 +296,7 @@ from ~10.5s (lib + integration) to ~8.7s (lib only).
 |--------|--------|-------|--------|--------|
 | `cargo test --lib` (all crates) | ~120s+ (per-package) | **8.07s** (workspace-wide) | ~60s | ✅ **93% faster** |
 | `platform-sync` integration tests | 2.43s | 2.43s (`--all-features`) | ~15s | ✅ Already 6x under target |
-| `vitest run` (119 files) | 15.02s | **14.51s** | ~50s | ✅ 3.4x under target |
+| `vitest run` (119 files) | 15.02s | **14.49s** | ~50s | ✅ 3.4x under target |
 | `scripts/check.ps1` full run | ~10min | ~10min (`-Fast`: ~2min) | ~6min | ⚠️ Full still ~10min |
 | Duplicated `vi.mock` lines | ~200 | ~180 (11 eliminated, 60+ cleanup pending) | ~20 | 🟡 Incremental progress |
 | Ignored Rust tests | 1 | **0** | 0 | ✅ Done |
@@ -305,9 +305,9 @@ from ~10.5s (lib + integration) to ~8.7s (lib only).
 | Global mock cleanup | 60+ per-file calls | **1 global** | 1 | ✅ Done |
 
 **Summary:** All major optimization targets met. Vitest is 3.4x under target. Cargo tests are now
-93% faster with workspace-wide compilation. The remaining 3 test failures (PosScreen, RetailPosScreen
-— vitest TDZ, MenuEngineeringScreen — recharts ESM) are pre-existing vitest hoisting issues that
-were never passing.
+93% faster with workspace-wide compilation. **MenuEngineeringScreen fixed** (recharts mock +
+end-date bug). The remaining **2 test failures** (PosScreen, RetailPosScreen) are pre-existing
+vitest vmThreads TDZ issues that were never passing with this pool.
 
 ---
 
