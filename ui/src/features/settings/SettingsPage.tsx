@@ -1345,6 +1345,11 @@ export default function SettingsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 aria-label={l10n.getString('settings-sidebar-search-aria')}
               />
+              {q && (
+                <span className="settings-sidebar-search-count">
+                  {filteredCategories.reduce((sum, cat) => sum + cat.keys.length, 0)}
+                </span>
+              )}
               {searchQuery && (
                 <button
                   type="button"
@@ -1550,6 +1555,10 @@ export default function SettingsPage() {
           </Localized>
         </span>
         <span className="settings-footer-right">
+          <span className="settings-footer-shortcut">
+            <kbd>Ctrl</kbd>+<kbd>S</kbd>
+            <Localized id="settings-btn-save"><span>Save</span></Localized>
+          </span>
           <Localized id="settings-license-type-value">
             <span>Proprietary Commercial License</span>
           </Localized>
