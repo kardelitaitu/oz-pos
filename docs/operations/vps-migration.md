@@ -347,32 +347,161 @@ rclone copy /data/oz-pos.db gdrive:/backups/
 rclone copy gdrive:/backups/oz-pos.db /data/
 ```
 
-### Step 3: Verify on the New VPS
+### Step 3: Verify Database Integrity
 
-After the transfer completes, verify the database is intact.
+> ℹ️ **Prerequisite:** Install `sqlite3` on both VPSes if not already present:
+> ```bash
+> sudo apt install sqlite3 -y    # Debian/Ubuntu
+> sudo yum install sqlite -y     # RHEL/CentOS
+> ```
+
+Run these checks on **both** the old VPS (before transfer) and the new VPS
+(after transfer) to ensure data is intact and identical.
+
+#### A. File-Level Check
 
 ```bash
-# On the new VPS — check file size matches
+# On both VPSes — compare file sizes
 ls -lh /data/oz-pos.db
 
-# Verify SQLite integrity
-sqlite3 /data/oz-pos.db "PRAGMA integrity_check;"
-# Expected: ok
+# Generate a SHA-256 checksum on the old VPS, then compare on the new VPS
+# On the old VPS:
+sha256sum /data/oz-pos.db | tee /tmp/old-checksum.txt
+# Copy the checksum file alongside the database
+scp /tmp/old-checksum.txt user@<new-vps-ip>:/tmp/
 
-# Check row counts match the old server
-sqlite3 /data/oz-pos.db "SELECT COUNT(*) FROM offline_queue;"
-sqlite3 /data/oz-pos.db "SELECT COUNT(*) FROM settings;"
-sqlite3 /data/oz-pos.db "SELECT COUNT(*) FROM products;"
-
-# Verify the schema is complete
-sqlite3 /data/oz-pos.db ".tables"
+# On the new VPS:
+sha256sum -c /tmp/old-checksum.txt
+# Expected: /data/oz-pos.db: OK
 ```
 
-**Set correct permissions** so the container user can read/write:
+If the checksums don't match, the file was corrupted during transfer —
+try a different transfer method (rsync or tar+SSH).
+
+#### B. Structural Integrity
 
 ```bash
+# Run on both VPSes — must return "ok"
+sqlite3 /data/oz-pos.db "PRAGMA integrity_check;"
+
+# Check foreign key integrity
+sqlite3 /data/oz-pos.db "PRAGMA foreign_key_check;"
+# Expected: (no rows — zero violations)
+```
+
+If `foreign_key_check` returns rows, the database has orphaned references.
+Each row shows the table, rowid, and parent table that is missing.
+
+#### C. Row Count Comparison
+
+Run these on **both** VPSes and compare the counts. They must match
+exactly.
+
+```bash
+# On the old VPS — dump counts to a file
+sqlite3 /data/oz-pos.db <<'EOF' > /tmp/old-counts.txt
+.mode column
+.headers on
+SELECT 'products'        AS tbl, COUNT(*) AS cnt FROM products
+UNION ALL
+SELECT 'settings',        COUNT(*) FROM settings
+UNION ALL
+SELECT 'offline_queue',   COUNT(*) FROM offline_queue
+UNION ALL
+SELECT 'users',           COUNT(*) FROM users
+UNION ALL
+SELECT 'tax_rates',       COUNT(*) FROM tax_rates
+UNION ALL
+SELECT 'sales',           COUNT(*) FROM sales
+UNION ALL
+SELECT 'sale_items',      COUNT(*) FROM sale_items
+UNION ALL
+SELECT 'stock_movements', COUNT(*) FROM stock_movements
+UNION ALL
+SELECT 'stock_summary',   COUNT(*) FROM stock_summary;
+EOF
+
+# Copy to new VPS and compare
+scp /tmp/old-counts.txt user@<new-vps-ip>:/tmp/
+
+# On the new VPS — generate the same report and diff
+sqlite3 /data/oz-pos.db <<'EOF' > /tmp/new-counts.txt
+.mode column
+.headers on
+SELECT 'products'        AS tbl, COUNT(*) AS cnt FROM products
+UNION ALL
+SELECT 'settings',        COUNT(*) FROM settings
+UNION ALL
+SELECT 'offline_queue',   COUNT(*) FROM offline_queue
+UNION ALL
+SELECT 'users',           COUNT(*) FROM users
+UNION ALL
+SELECT 'tax_rates',       COUNT(*) FROM tax_rates
+UNION ALL
+SELECT 'sales',           COUNT(*) FROM sales
+UNION ALL
+SELECT 'sale_items',      COUNT(*) FROM sale_items
+UNION ALL
+SELECT 'stock_movements', COUNT(*) FROM stock_movements
+UNION ALL
+SELECT 'stock_summary',   COUNT(*) FROM stock_summary;
+EOF
+
+diff /tmp/old-counts.txt /tmp/new-counts.txt
+# No output = identical counts. Any differences need investigation.
+```
+
+> 💡 If any table has a different count, the old server may have written
+> new data after the transfer. Re-run the WAL checkpoint and re-transfer.
+
+#### D. Application-Level Sanity Checks
+
+Quick queries that verify key business data is readable and consistent.
+
+```bash
+sqlite3 /data/oz-pos.db <<'EOF'
+-- Sales totals must be non-negative
+SELECT SUM(total_minor) FROM sales;
+
+-- Every stock_movement must reference a valid product
+SELECT COUNT(*) FROM stock_movements sm
+  LEFT JOIN products p ON sm.sku = p.sku
+  WHERE p.sku IS NULL;
+-- Expected: 0 (no orphaned movements)
+
+-- Sync queue should not have stuck items
+SELECT COUNT(*) FROM offline_queue
+  WHERE status = 'pending' AND retry_count > 10;
+-- Stuck items may need manual review
+
+-- Settings table should have rows (not empty)
+SELECT COUNT(*) FROM settings;
+-- Expected: > 0 (empty = migration likely failed)
+EOF
+```
+
+#### E. Set Permissions
+
+```bash
+# On the new VPS — ensure container user can read/write
 chown 1000:1000 /data/oz-pos.db   # if UID 1000 is the ozpos user
 chmod 644 /data/oz-pos.db
+```
+
+#### F. Quick Start & Health Check
+
+After your migration scenario's restart step completes, smoke-test that
+the server starts correctly with the migrated database:
+
+```bash
+# On the new VPS — check health (server should already be restarted)
+curl http://localhost:3099/health
+# Should return 200 with version info
+
+# Check the server logs for migration-related errors
+docker logs oz-cloud-server 2>&1 | tail -20
+# Look for: "database opened and migrations applied"
+# NOT: "panic", "corrupt", "FATAL"
 ```
 
 ### Step 4: Restart the Old Server (if needed)
