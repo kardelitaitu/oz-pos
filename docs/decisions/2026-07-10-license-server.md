@@ -2,8 +2,6 @@
 
 **Status:** Implemented (2026-07-15)
 **Date:** 2026-07-10
-**Revised:** 2026-07-11
-**Updated:** 2026-07-15 (Phase 3 deployed, Northflank live)
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** licensing, activation, subscription-signing, pocketbase, northflank
 

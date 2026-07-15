@@ -1,6 +1,6 @@
 # ADR #5: Subscription Tier & Entitlement Architecture
 
-**Status:** Accepted (Updated 2026-07-10)
+**Status:** Implemented (2026-07-10)
 **Date:** 2026-07-10
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** subscriptions, entitlements, billing, multi-store, quotas, offline-grace
@@ -177,9 +177,9 @@ pub enum InstanceStatus {
 
 ## Open Questions
 
-1. Should the public key be embedded in the binary or loaded from a configurable path?
-2. How do we handle subscription changes when the register has been offline for more than 14 days?
-3. How should `max_pos_instances` interact with device-bound terminals? (A device-bound terminal is always one instance — should it count toward the quota differently than a user-picked instance?)
+1. **✅ Resolved:** The public key is embedded in the binary via `include_str!("oz-license.key.pub")` in `crates/oz-core/src/license_verification.rs`. Overridable via `OZ_LICENSE_PUBLIC_KEY` env var for testing. See ADR #9.
+2. **✅ Resolved:** After 14 days offline, `effective_tier()` falls back to Free tier quotas. The register must reconnect to the license server to restore paid tier features. See `is_within_grace_period()` in `crates/oz-core/src/subscription.rs`.
+3. **Deferred:** Device-bound terminals always count as one instance toward the quota. A future ADR may distinguish device-bound instances (fixed hardware) from user-picked instances (floating licenses) for quota purposes.
 
 ---
 
