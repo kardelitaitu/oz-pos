@@ -58,14 +58,17 @@ development.
 Each test now clones a pre-built schema in microseconds instead of parsing + executing 48KB of SQL.
 Estimated per-test speedup: 5-10x for migration-heavy tests.
 
-### E. Cargo Dev Profile Tuning
+### E. Cargo Dev Profile Tuning ✅ (0.0.8 — 2026-07-15)
 
-- [ ] **E1.** Review `[profile.dev]` overrides in workspace `Cargo.toml`. Already has
-  `opt-level = 3` for `argon2`, `aes-gcm`, `aead`, `zstd`.
-- [ ] **E2.** Add `opt-level = 3` for `rusqlite` (heavily used in test DB operations).
-- [ ] **E3.** Add `opt-level = 3` for `serde_json` (used in every sync transport test).
-- [ ] **E4.** Consider `[profile.dev] split-debuginfo = "off"` on Windows to speed up
-  linking after test compilation.
+- [x] **E1.** Added `[profile.dev.package.rusqlite] opt-level = 3` — SQLite bundled C code runs optimized
+- [x] **E2.** Added `[profile.dev.package.serde_json] opt-level = 3` — JSON parsing/serialization optimized
+- [x] **E3.** Added `split-debuginfo = "off"` to `[profile.dev]` — faster linking on Linux/macOS (no-op on Windows)
+- [x] **E4.** Existing overrides for `argon2`, `aes-gcm`, `aead`, `zstd` unchanged
+
+**Result:** All 11 oz-core migration tests pass in **0.88s**. Compile-time cost of opt-level=3
+for rusqlite/serde_json is offset by faster test execution (SQLite is used in every DB test).
+No measurable runtime change in migration tests (already fast due to Section D snapshot cloning),
+but benefits heavier tests with many SQL operations.
 
 ### F. Test Parallelism
 
