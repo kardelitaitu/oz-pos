@@ -143,10 +143,18 @@
 
 /* ── Theme Toggle inside status bar ───────────────── */
 .app-statusbar .theme-toggle {
-  width: 22px;
-  height: 22px;
   padding: 3px;
   border-radius: var(--radius-sm);
+}
+
+/* Touch-friendly override — explicit height removed; natural content height
+   (~20px on desktop) is adequate for mouse. On touch, the global
+   `button { min-height: var(--touch-target-min) }` rule applies. */
+@media (pointer: coarse) {
+  .app-statusbar .theme-toggle {
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+  }
 }
 
 .app-statusbar .theme-toggle svg {

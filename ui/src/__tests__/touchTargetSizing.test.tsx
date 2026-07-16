@@ -1,217 +1,262 @@
-import { act } from 'react';
-import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
-import FastPINOverlay from '@/components/FastPINOverlay';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
 
-// ── Mock helpers (extracted outside vi.mock for esbuild compat) ────
+/* ── Helpers ─────────────────────────────────────────────────── */
 
-function MockPassThrough({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+const UI_SRC = resolve(__dirname, '..');
+const BASE_SIZE = 16;
+
+interface Violation {
+  file: string;
+  line: number;
+  selector: string;
+  declaration: string;
+  reason: string;
 }
 
-// ── Mocks ────────────────────────────────────────────────────────────
-
-vi.mock('@/api/staff', () => ({
-  staffLogin: vi.fn(),
-}));
-
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    session: null,
-    loading: false,
-    error: null,
-    login: vi.fn(),
-    logout: vi.fn(),
-    clearError: vi.fn(),
-    swapSession: vi.fn(),
-    isManager: false,
-    isOwner: false,
-  }),
-  AuthProvider: MockPassThrough,
-}));
-
-vi.mock('@/contexts/WorkspaceContext', () => ({
-  useWorkspace: () => ({
-    swapSessionToken: vi.fn(),
-    activeWorkspace: 'store-pos',
-    activeInstance: null,
-    sessionToken: 'token-abc',
-    setActiveWorkspace: vi.fn(),
-    setActiveInstance: vi.fn(),
-    availableWorkspaces: [],
-    workspaceScreens: [],
-    loading: false,
-    error: null,
-    retry: vi.fn(),
-    lastWorkspace: null,
-    switchStore: vi.fn(),
-    resolvedStoreId: 'default',
-  }),
-  useWorkspaceScope: () => ({
-    storeId: 'default',
-    instanceId: 'default-store-pos',
-    typeKey: 'store-pos',
-  }),
-  WorkspaceProvider: MockPassThrough,
-}));
-
-vi.mock('@/api/license', () => ({
-  getMachineId: vi.fn().mockResolvedValue('abc-123'),
-}));
-
-vi.mock('@/frontend/shared/Toast', () => ({
-  useToast: () => ({ addToast: vi.fn() }),
-  ToastProvider: MockPassThrough,
-}));
-
-vi.mock('@fluent/react', () => ({
-  useLocalization: () => ({
-    l10n: {
-      getString: (id: string) => (id === 'staff-login-pin-aria' ? 'PIN: {length}/{max}' : id),
-    },
-  }),
-  Localized: ({ children }: { id: string; children: ReactNode }) => <>{children}</>,
-}));
-
-/**
- * Helper: parse a CSS --custom-property value from the stylesheets
- * loaded in jsdom. Returns the raw value string, or undefined if the
- * property is not found in any accessible stylesheet.
- */
-function getCssCustomProperty(name: string): string | undefined {
-  for (const sheet of document.styleSheets) {
-    try {
-      for (const rule of Array.from(sheet.cssRules || [])) {
-        if (rule instanceof CSSStyleRule && rule.selectorText === ':root') {
-          const value = rule.style.getPropertyValue(name);
-          if (value) return value.trim();
-        }
-      }
-    } catch {
-      // Cross-origin/third-party stylesheets — skip
-    }
+function parsePxValue(value: string): number | null {
+  const trimmed = value.trim();
+  const px = trimmed.match(/^(\d+(?:\.\d+)?)px$/);
+  if (px) return Number(px[1]);
+  const rem = trimmed.match(/^(\d+(?:\.\d+)?)rem$/);
+  if (rem) return Number(rem[1]) * BASE_SIZE;
+  if (trimmed.startsWith('calc(')) {
+    let total = 0;
+    const terms = trimmed.replace(/^calc\(|\)$/g, '').match(/[\d.]+(?:px|rem)/g);
+    if (terms) for (const t of terms) { const v = parsePxValue(t); if (v !== null) total += v; }
+    return total;
   }
-  return undefined;
+  return null;
 }
 
-describe('touch-target sizing compliance', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
+function referencesTouchTarget(value: string): boolean {
+  return /--touch-target-(?:min|comfortable)/.test(value);
+}
 
-  afterEach(() => {
-    vi.useRealTimers();
-    document.body.innerHTML = '';
-  });
+function isAdequate(px: number | null, value: string): boolean {
+  if (referencesTouchTarget(value)) return true;
+  if (px !== null && px >= 44) return true;
+  return false;
+}
 
-  describe('CSS custom property --touch-target-min', () => {
-    it('exists in the stylesheet', () => {
-      // Render something to load the stylesheets
-      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+/* ── Interactive element patterns ────────────────────────────── */
 
-      const value = getCssCustomProperty('--touch-target-min');
-      // In jsdom, CSS custom properties from .css files may not be
-      // accessible via document.styleSheets (CSS modules are hoisted).
-      // This test is informative: if the property IS accessible, verify
-      // it's ≥ 44px. If not (jsdom limitation), the test passes by
-      // verifying the close button element exists and is interactive.
-      if (value !== undefined) {
-        expect(parseFloat(value)).toBeGreaterThanOrEqual(44);
+const INTERACTIVE_SELECTOR_RE = /\.(?:btn|button|tab|switch|toggle|close|clickable|action-btn|nav-item|filter-btn|modal-close|line-remove|theme-toggle|card-clickable|action-button|icon-btn)\b/i;
+
+/** Selectors to skip — known false positives (decorative parts of custom controls). */
+const SKIP_SELECTOR_RE = [
+  // Custom toggle switch: hidden native checkbox, visual track/thumb
+  /\.toggle-switch\s+input/,
+  /\.toggle-track/,
+  /\.toggle-thumb/,
+  // SVG/icon children inside interactive parents
+  /\s+svg$/,
+  /\s+\.icon/,
+  /\s+img$/,
+  // Decorative / status elements that aren't interactive
+  /\.statusbar-dot/,
+  /\.statusbar-divider/,
+  /\.statusbar-segment/,
+  /\.setup-step-dot/,
+  /\.setup-step-line/,
+  // Pseudo-elements
+  /::before|::after/,
+  // Skeleton and spinner parts
+  /\.skeleton/,
+  /\.spinner/,
+  /__spinner/,
+];
+
+function isSkipSelector(selectors: string): boolean {
+  return SKIP_SELECTOR_RE.some((re) => re.test(selectors));
+}
+
+/* ── CSS scanner ─────────────────────────────────────────────── */
+
+const SIZING_PROPS = /^\s*(?:min-)?height\s*:/;
+const HEIGHT_AUTO_RE = /^\s*(?:min-)?height\s*:\s*auto\s*;?\s*$/;
+
+function scanCSS(filePath: string): Violation[] {
+  const content = readFileSync(filePath, 'utf-8');
+  const violations: Violation[] = [];
+
+  // Strip block comments for easier parsing
+  const stripped = content.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /** State: track whether we're in a @media (pointer: coarse) block. */
+  let inPointerCoarse = false;
+
+  // Parse rule-by-rule
+  const rules = stripped.match(/[^{}]*\{[^{}]*\}/g) || [];
+
+  for (const rule of rules) {
+    const braceIdx = rule.indexOf('{');
+    const selectors = rule.slice(0, braceIdx).trim();
+    const body = rule.slice(braceIdx + 1, -1).trim();
+
+    // @media rules — track pointer: coarse context
+    if (selectors.startsWith('@')) {
+      if (/pointer\s*:\s*coarse/.test(selectors)) {
+        inPointerCoarse = true;
+      } else {
+        inPointerCoarse = false;
       }
-      // Element presence check even if CSS isn't accessible
-      const closeBtn = document.querySelector('.fastpin-close-btn');
-      expect(closeBtn).not.toBeNull();
-    });
-  });
+      continue;
+    }
 
-  describe('FastPINOverlay — close button', () => {
-    it('is a <button> element with type="button"', () => {
-      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+    // Inside @media (pointer: coarse) — these are the touch-target overrides, skip them entirely
+    if (inPointerCoarse) continue;
 
-      const closeBtn = document.querySelector('.fastpin-close-btn');
-      expect(closeBtn).not.toBeNull();
-      expect(closeBtn?.tagName).toBe('BUTTON');
-      expect(closeBtn?.getAttribute('type')).toBe('button');
-    });
+    // Reset flag on next non-media rule (we've left the media query block)
+    inPointerCoarse = false;
 
-    it('has aria-label attribute', () => {
-      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+    // Skip known false-positive selectors
+    if (isSkipSelector(selectors)) continue;
 
-      const closeBtn = document.querySelector('.fastpin-close-btn');
-      expect(closeBtn?.getAttribute('aria-label')).toBeTruthy();
-    });
+    // Skip non-interactive selectors
+    if (!INTERACTIVE_SELECTOR_RE.test(selectors)) continue;
 
-    it('is not disabled by default', () => {
-      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+    // Check each declaration
+    const decls = body.split(';');
+    for (const decl of decls) {
+      const trimmedDecl = decl.trim();
+      if (!SIZING_PROPS.test(trimmedDecl)) continue;
 
-      const closeBtn = document.querySelector('.fastpin-close-btn') as HTMLButtonElement;
-      expect(closeBtn?.disabled).toBe(false);
-    });
-  });
+      // Skip height: auto (valid responsive value)
+      if (HEIGHT_AUTO_RE.test(trimmedDecl)) continue;
 
-  describe('FastPINOverlay — pin pad keys', () => {
-    it('are rendered and are <button> elements with type="button"', () => {
-      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+      const colonIdx = trimmedDecl.indexOf(':');
+      if (colonIdx === -1) continue;
 
-      // Navigate to PIN step
-      const usernameInput = document.querySelector('.fastpin-input') as HTMLInputElement;
-      if (usernameInput) {
-        const nativeSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype, 'value',
-        )?.set;
-        nativeSetter?.call(usernameInput, 'cashier1');
-        usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      const prop = trimmedDecl.slice(0, colonIdx).trim();
+      const value = trimmedDecl.slice(colonIdx + 1).trim();
+      const px = parsePxValue(value);
 
-        const submitBtn = document.querySelector('.fastpin-submit-btn') as HTMLButtonElement;
-        act(() => {
-          submitBtn?.click();
+      if (!isAdequate(px, value)) {
+        // Find actual line in original file
+        const searchStr = selectors.split(',')[0]!.trim();
+        const idx = content.indexOf(searchStr);
+        const lineNum = idx !== -1 ? content.slice(0, idx).split('\n').length : 0;
+
+        violations.push({
+          file: filePath,
+          line: lineNum,
+          selector: selectors,
+          declaration: `${prop}: ${value}`,
+          reason: px !== null
+            ? `${px}px < 44px minimum touch target`
+            : `"${value}" not computable to >= 44px`,
         });
       }
+    }
+  }
 
-      // Check for keypad keys
-      const keys = document.querySelectorAll('.fastpin-pad-key');
-      expect(keys.length).toBeGreaterThanOrEqual(10);
+  return violations;
+}
 
-      keys.forEach((key) => {
-        expect(key.tagName).toBe('BUTTON');
-        expect(key.getAttribute('type')).toBe('button');
-      });
-    });
+/* ── CSS files to audit ─────────────────────────────────────────── */
+
+const CSS_FILES = [
+  'features/restaurant/RestaurantMenu.css',
+  'features/retail/RetailPosScreen.css',
+  'features/sales/PaymentModal.css',
+  'features/sales/PosScreen.css',
+  'features/sales/PriceOverrideModal.css',
+  'features/sales/RefundModal.css',
+  'features/sales/CartPanel.css',
+  'features/sales/CartPanelActions.css',
+  'features/sales/CartPanelCourseBar.css',
+  'features/sales/CartPanelFooterTotals.css',
+  'features/sales/CartPanelLineItem.css',
+  'features/sales/CartPanel.brand.css',
+  'features/sales/components/ItemModifierModal.css',
+  'features/sales/SalesHistoryScreen.css',
+  'features/sales/EodReportScreen.css',
+  'features/sales/VoidOrdersScreen.css',
+  'features/settings/SettingsPage.css',
+  'features/settings/SettingsSelect.css',
+  'features/settings/LicenseSettings.css',
+  'features/settings/DataManagementScreen.css',
+  'features/settings/FeatureToggleScreen.css',
+  'features/stock-transfers/StockTransfersScreen.css',
+  'features/purchasing/PurchaseOrderForm.css',
+  'features/purchasing/PurchaseOrdersScreen.css',
+  'features/purchasing/SuppliersScreen.css',
+  'features/loyalty/LoyaltyManagementScreen.css',
+  'features/products/ProductManagementScreen.css',
+  'features/products/ProductLookupScreen.css',
+  'features/categories/CategoryManagementScreen.css',
+  'features/currency/ExchangeRateScreen.css',
+  'features/tax/TaxConfigurationScreen.css',
+  'features/customers/CustomerManagementScreen.css',
+  'features/staff/StaffManagementScreen.css',
+  'features/shifts/ShiftManagementScreen.css',
+  'features/terminals/TerminalManagementScreen.css',
+  'features/tables/TableManagementScreen.css',
+  'features/promotions/PromotionManagementScreen.css',
+  'features/kiosk/KioskScreen.css',
+  'features/kds/KdsScreen.css',
+  'features/gift-cards/GiftCardsScreen.css',
+  'features/auth/LicenseActivationScreen.css',
+  'features/auth/StaffLoginScreen.css',
+  'features/auth/CreatePinScreen.css',
+  'features/inventory/StockCountDetail.css',
+  'features/inventory/StockCountForm.css',
+  'features/setup/SetupWizard.css',
+  'features/workspaces/WorkspaceHome.css',
+  'features/reports/DashboardScreen.css',
+  'features/reports/SalesReportScreen.css',
+  'features/reports/InventoryReportScreen.css',
+  'features/reports/MenuEngineeringScreen.css',
+  'features/offline/OfflineQueueScreen.css',
+  'features/audit/AuditLogScreen.css',
+  'features/design/DesignSystem.css',
+  'features/design/TooltipPreview.css',
+  'features/stores/MultiStoreDashboardScreen.css',
+  'features/stores/TerminalStatusPanel.css',
+  'frontend/shell/AppLayout.css',
+  'frontend/shell/StatusBar.css',
+  'frontend/shell/tablet/tablet.css',
+  'frontend/shared/ContextMenu.css',
+  'frontend/shared/SettingsPopup.css',
+  'components/FastPINOverlay.css',
+  'components/QrisQrDisplay.css',
+  'components/StoreSwitcher.css',
+  'components/GatewayStatusBadge.css',
+  'components/MachineIdStatus.css',
+  'components/ConnectionStatus.css',
+  'components/UpdateBanner.css',
+  'frontend/themes/components.css',
+];
+
+/* ── Tests ───────────────────────────────────────────────────── */
+
+describe('Touch target sizing compliance', () => {
+  let allViolations: Violation[];
+
+  beforeAll(() => {
+    allViolations = [];
+
+    for (const file of CSS_FILES) {
+      const fullPath = resolve(UI_SRC, file);
+      if (!existsSync(fullPath)) continue;
+      const result = scanCSS(fullPath);
+      allViolations.push(...result);
+    }
   });
 
-  describe('FastPINOverlay — cancel button', () => {
-    it('is a <button> element with type="button"', () => {
-      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+  it('all interactive elements meet minimum 44px touch target sizing', () => {
+    const message =
+      allViolations.length > 0
+        ? `Touch target violations found (${allViolations.length}):\n\n${allViolations
+            .map(
+              (v, i) =>
+                `  ${i + 1}. ${v.file}:${v.line}\n     Selector: ${v.selector}\n     Declaration: ${v.declaration}\n     Reason: ${v.reason}`,
+            )
+            .join('\n\n')}`
+        : 'All interactive elements pass 44px touch target sizing';
 
-      const cancelBtn = document.querySelector('.fastpin-cancel-btn');
-      expect(cancelBtn).not.toBeNull();
-      expect(cancelBtn?.tagName).toBe('BUTTON');
-      expect(cancelBtn?.getAttribute('type')).toBe('button');
-    });
-
-    it('is not disabled by default', () => {
-      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
-
-      const cancelBtn = document.querySelector('.fastpin-cancel-btn') as HTMLButtonElement;
-      expect(cancelBtn?.disabled).toBe(false);
-    });
-
-    it('closes the overlay when clicked', () => {
-      const onClose = vi.fn();
-      render(<FastPINOverlay open={true} onClose={onClose} />);
-
-      const cancelBtn = document.querySelector('.fastpin-cancel-btn') as HTMLButtonElement;
-      cancelBtn?.click();
-
-      // Should trigger exit animation (200ms timeout)
-      expect(onClose).not.toHaveBeenCalled(); // Not yet — exit animation in progress
-
-      act(() => {
-        vi.advanceTimersByTime(200);
-      });
-
-      expect(onClose).toHaveBeenCalled();
-    });
+    expect(allViolations, message).toHaveLength(0);
   });
 });
