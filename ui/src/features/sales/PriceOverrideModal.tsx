@@ -124,6 +124,7 @@ export default function PriceOverrideModal({
 
 
   const handleGoBack = useCallback(() => {
+    setError(null);
     if (step === 'username') {
       setStep('price');
     } else if (step === 'pin') {
