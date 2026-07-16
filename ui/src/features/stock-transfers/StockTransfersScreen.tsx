@@ -293,7 +293,10 @@ export default function StockTransfersScreen() {
   }, [showCreate, resetCreateForm, ANIM_MS]);
 
   // ── Focus traps for modals ─────────────────────────────────────
-  useFocusTrap(detailPanelRef, detailId !== null && !detailExiting && !detailLoading, closeDetail);
+  // Deactivate detail trap while receive modal is open so Escape only
+  // closes the top-most modal instead of all active modals.
+  const detailTrapActive = detailId !== null && !detailExiting && !detailLoading && receiveTransferId === null;
+  useFocusTrap(detailPanelRef, detailTrapActive, closeDetail);
   useFocusTrap(createPanelRef, showCreate && !createExiting && !createSaving, closeCreate);
   useFocusTrap(receivePanelRef, receiveTransferId !== null && !receiveExiting && !receiveSaving, closeReceive);
 
