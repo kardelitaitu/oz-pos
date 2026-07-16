@@ -261,7 +261,7 @@ export default function LoyaltyManagementScreen() {
                     const isExpanded = selectedAccount === a.account.id;
                     return (
                       <Fragment key={a.account.id}>
-                        <tr className="loyalty-table-row" tabIndex={0} role="button" onClick={() => setSelectedAccount(isExpanded ? null : a.account.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAccount(isExpanded ? null : a.account.id); } }}>
+                        <tr className="loyalty-table-row" tabIndex={0} role="button" aria-expanded={isExpanded} aria-label={l10n.getString(isExpanded ? 'loyalty-collapse' : 'loyalty-expand')} onClick={() => setSelectedAccount(isExpanded ? null : a.account.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAccount(isExpanded ? null : a.account.id); } }}>
                           <td><span className="loyalty-customer-name">{customerName}</span></td>
                           <td>
                             {a.tier ? (
