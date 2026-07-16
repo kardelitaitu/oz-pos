@@ -211,8 +211,8 @@
   --bp-mobile: 480px;
 
   /* ── Touch targets ─────────────────────────────────── */
-  --touch-target-min: 44px;
-  --touch-target-comfortable: 48px;
+  --touch-target-min: 32px;
+  --touch-target-comfortable: 36px;
 
   /* ── Z-index layers ────────────────────────────── */
   --z-base:      0;

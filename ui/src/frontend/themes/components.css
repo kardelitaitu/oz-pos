@@ -613,10 +613,12 @@
   [role="tab"], [role="radio"], [role="switch"],
   summary, label {
     min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
   }
   .btn, .card-clickable, .nav-item,
   [role="tablist"] [role="tab"] {
     min-height: var(--touch-target-comfortable);
+    min-width: var(--touch-target-comfortable);
   }
 }
 

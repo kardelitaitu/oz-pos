@@ -15,8 +15,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import {
   listCurrencies,
-  getDefaultCurrency,
-  setDefaultCurrency,
   type CurrencyDto,
 } from '@/api/currency';
 import {
@@ -638,7 +636,7 @@ export default function SettingsPage() {
       initialSnapshotRef.current = {
         receipt: rR.status === 'fulfilled' ? rR.value : (snapReceipt ?? receipt),
         store: sR.status === 'fulfilled' ? sR.value : store,
-        defaultCurrency: dcR.status === 'fulfilled' ? (dcR.value ?? 'USD') : defaultCurrency,
+        defaultCurrency: ctxCurrency,
         sync: syncR.status === 'fulfilled' ? syncR.value : sync,
         syncServerUrl: syncR.status === 'fulfilled' ? (syncR.value.serverUrl ?? '') : syncServerUrl,
         displayCardSize: snapCardSize ?? displayCardSize,
@@ -668,7 +666,7 @@ export default function SettingsPage() {
     const results = await Promise.allSettled([
       setReceiptSettings(receipt, session?.user_id ?? ''),
       setStoreSettings(store, session?.user_id ?? ''),
-      setDefaultCurrency({ code: defaultCurrency }),
+      setCtxCurrency(defaultCurrency).catch(() => {}),
       setUserPreferences(userId, [
         { key: 'cardsize', value: String(displayCardSize) },
         { key: 'fontsize', value: String(displayFontSize) },
