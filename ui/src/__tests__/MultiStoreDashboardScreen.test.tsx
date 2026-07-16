@@ -99,14 +99,14 @@ describe('MultiStoreDashboardScreen', () => {
 
   // ── Loading state ─────────────────────────────────────────────
 
-  it('shows loading text while data is being fetched', () => {
+  it('shows loading skeleton while data is being fetched', () => {
     // Never resolve — keeps loading state.
     mockListStores.mockReturnValue(new Promise(() => {}));
     mockListTerminals.mockReturnValue(new Promise(() => {}));
 
     render(<MultiStoreDashboardScreen />);
 
-    expect(screen.getByText('Loading dashboard…')).toBeInTheDocument();
+    expect(document.querySelector('.multi-store-dashboard-loading-skeleton')).toBeInTheDocument();
   });
 
   // ── Error state ──────────────────────────────────────────────
