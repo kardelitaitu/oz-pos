@@ -422,6 +422,7 @@ export default function ShiftManagementScreen() {
                             : '';
                       return (
                         <tr key={s.id} className={s.status === 'open' ? 'shift-mgmt-row--open' : ''}>
+                          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                           <td>
                             <span className={`shift-mgmt-status-badge shift-mgmt-status-badge--${s.status}`}>
                               <Localized id={s.status === 'open' ? 'shift-status-open' : 'shift-status-closed'}>

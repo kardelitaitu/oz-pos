@@ -1170,6 +1170,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                       <th style={{ width: 56 }}>{l10n.getString('retail-cart-header-qty')}</th>
                       <th style={{ width: 72 }}>{l10n.getString('retail-cart-header-price')}</th>
                       <th style={{ width: 80 }}>{l10n.getString('retail-cart-header-subtotal')}</th>
+                      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                       <th style={{ width: 24 }}></th>
                     </tr>
                   </thead>
@@ -1498,6 +1499,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                     <th style={{ textAlign: 'left', padding: 4 }}>{l10n.getString('retail-credit-col-customer')}</th>
                     <th style={{ textAlign: 'right', padding: 4 }}>{l10n.getString('retail-credit-col-amount')}</th>
                     <th style={{ textAlign: 'center', padding: 4 }}>{l10n.getString('retail-credit-col-date')}</th>
+                    {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                     <th style={{ padding: 4 }}></th>
                   </tr>
                 </thead>

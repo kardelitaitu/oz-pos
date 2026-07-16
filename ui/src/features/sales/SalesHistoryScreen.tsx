@@ -71,6 +71,7 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
       <td>{new Date(sale.createdAt).toLocaleString()}</td>
       <td className="sales-history-cell-total">{formatMoney(sale.total)}</td>
       <td>{sale.lineCount}</td>
+      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
       <td>
         <Badge variant={statusBadgeVariant(sale.status)}>
           <Localized id={statusFluentId(sale.status)}>

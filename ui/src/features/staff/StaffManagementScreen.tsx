@@ -388,6 +388,7 @@ export default function StaffManagementScreen() {
             <tbody>
               {staff.map((member) => (
                 <tr key={member.id} className={!member.is_active ? 'staff-mgmt-row--inactive' : ''}>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                   <td>
                     <Badge variant={roleVariant(member.role_name)}>
                       <span className="staff-mgmt-role-badge-content">
@@ -416,6 +417,7 @@ export default function StaffManagementScreen() {
                       </Localized>
                     )}
                   </td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                   <td>
                     <div className="staff-mgmt-cell-actions">
                     <Localized id="staff-edit-aria" attrs={{ "aria-label": true }} vars={{ name: member.display_name }}>

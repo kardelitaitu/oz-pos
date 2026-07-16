@@ -263,6 +263,7 @@ export default function TaxConfigurationScreen() {
                         )}
                       </td>
                       <td>{r.display_rate}</td>
+                      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                       <td>
                         <span className={`tax-config-type-badge ${r.is_inclusive ? 'tax-config-type--inclusive' : 'tax-config-type--exclusive'}`}>
                           <Localized id={r.is_inclusive ? 'tax-config-type-inclusive' : 'tax-config-type-exclusive'}>
@@ -271,8 +272,10 @@ export default function TaxConfigurationScreen() {
                         </span>
                       </td>
                       <td>{r.is_default ? l10n.getString('tax-config-yes') : '\u2014'}</td>
+                      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                       <td className="tax-config-cell-actions">
                         <Localized id="tax-config-edit-aria" attrs={{ "aria-label": true }} vars={{ name: r.name }}>
+                        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                         <button
                           type="button"
                           className="tax-config-action-btn"
@@ -284,6 +287,7 @@ export default function TaxConfigurationScreen() {
                         </button>
                         </Localized>
                         <Localized id="tax-config-delete-aria" attrs={{ "aria-label": true }} vars={{ name: r.name }}>
+                        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                         <button
                           type="button"
                           className="tax-config-action-btn tax-config-action-btn--danger"
@@ -363,8 +367,10 @@ export default function TaxConfigurationScreen() {
                               </Localized>
                             )}
                           </td>
+                          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                           <td className="tax-config-cell-actions">
                             <Localized id="tax-config-cat-edit-aria" attrs={{ "aria-label": true }} vars={{ name: cat.name }}>
+                            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                             <button
                               type="button"
                               className="tax-config-action-btn"

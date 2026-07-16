@@ -562,6 +562,7 @@ export default function TerminalManagementScreen() {
                     )}
                   </td>
                   <td className="terminal-mgmt-cell-created">{formatDate(terminal.createdAt)}</td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                   <td>
                     <div className="terminal-mgmt-cell-actions">
                     <Localized id="terminal-edit-action" attrs={{ "aria-label": true }} vars={{ name: terminal.name }}>

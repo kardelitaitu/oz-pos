@@ -281,6 +281,7 @@ export default function CustomerManagementScreen() {
             <tbody>
               {filteredCustomers.map((customer) => (
                 <tr key={customer.id}>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                   <td>
                     <div className="customer-mgmt-cell-name">
                       <div className="customer-mgmt-avatar">

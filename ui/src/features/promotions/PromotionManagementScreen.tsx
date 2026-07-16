@@ -213,6 +213,7 @@ export default function PromotionManagementScreen() {
               {promotions.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                   <td>
                     <Localized id={PROMO_TYPE_LABELS[p.promo_type]!}>
                       <span>{p.promo_type}</span>

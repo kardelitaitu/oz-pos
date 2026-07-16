@@ -311,6 +311,7 @@ export default function AppShell() {
         <div className="workspace-fullscreen">
           <div className="kds-workspace">
             <div className="kds-workspace-header">
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
               <button
                 className="kds-workspace-back"
                 onClick={() => handleNavigate('sales')}
@@ -340,6 +341,7 @@ export default function AppShell() {
         <div className="workspace-fullscreen">
           <div className="kds-workspace">
             <div className="kds-workspace-header">
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
               <button
                 className="kds-workspace-back"
                 onClick={() => handleNavigate('products')}

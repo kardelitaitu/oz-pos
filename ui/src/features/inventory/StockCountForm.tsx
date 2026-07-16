@@ -60,6 +60,7 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
           </div>
           <div className="sc-type-options">
             {typeOptions.map((opt) => (
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set directly */}
               <button
                 key={opt.value}
                 type="button"

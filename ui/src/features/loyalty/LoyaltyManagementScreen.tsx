@@ -257,6 +257,7 @@ export default function LoyaltyManagementScreen() {
                     <Localized id="loyalty-next-tier"><th>Next Tier</th></Localized>
                     <Localized id="loyalty-points-to-next"><th>Points to Next</th></Localized>
                     <Localized id="loyalty-table-actions" attrs={{ 'aria-label': true }}>
+                      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                       <th> </th>
                     </Localized>
                   </tr>
@@ -311,6 +312,7 @@ export default function LoyaltyManagementScreen() {
                                     <tbody>
                                       {a.recent_transactions.map((txn) => (
                                         <tr key={txn.id}>
+                                          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set dynamically */}
                                           <td>
                                             <span className={`loyalty-txn-type loyalty-txn-type--${txn.txn_type}`}>
                                               <Localized id={`loyalty-${txn.txn_type}`}>

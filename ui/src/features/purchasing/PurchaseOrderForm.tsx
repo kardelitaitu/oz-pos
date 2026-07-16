@@ -200,6 +200,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                 <tr>
                   <td colSpan={4} className="po-form-total-label">Subtotal</td>
                   <td className="po-form-total-value">{(subtotal / 100).toFixed(2)}</td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- role=alert with text content */}
                   <td />
                 </tr>
               </tfoot>

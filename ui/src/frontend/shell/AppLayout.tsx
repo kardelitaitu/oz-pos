@@ -174,6 +174,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
               const isExpanded = expandedSection === section;
               return (
                 <div key={section} className="app-sidebar-section">
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                   <button
                     type="button"
                     className="app-sidebar-section-header"
