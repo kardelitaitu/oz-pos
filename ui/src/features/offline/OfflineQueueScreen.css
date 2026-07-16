@@ -86,6 +86,9 @@
 
 .offline-queue-table-wrap {
   overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-primary);
 }
 
 .offline-queue-table {
@@ -96,17 +99,30 @@
 
 .offline-queue-table th {
   text-align: left;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg-secondary);
-  border-bottom: 2px solid var(--color-border);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
 .offline-queue-table td {
-  padding: var(--space-3) var(--space-3);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
   vertical-align: middle;
+}
+
+.offline-queue-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.offline-queue-table tbody tr:hover {
+  background: var(--color-bg-secondary);
+  transition: background 0.1s ease;
 }
 
 /* ── Cell styles ──────────────────────────────────────────────────── */

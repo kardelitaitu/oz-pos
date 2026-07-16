@@ -321,7 +321,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  will-change: backdrop-filter;
   z-index: var(--z-modal);
   padding: var(--space-4);
 }
@@ -339,13 +342,9 @@
     animation: shift-overlay-out var(--duration-200) var(--ease-in) forwards;
   }
 
-  .shift-modal-exit {
-    animation: shift-modal-out var(--duration-200) var(--ease-in) forwards;
-  }
-
   @keyframes shift-overlay-in {
     from { opacity: 0; }
-    to { opacity: 1; }
+    to { opacity: 1;
   }
 
   @keyframes shift-overlay-out {
@@ -353,14 +352,21 @@
     to { opacity: 0; }
   }
 
-  @keyframes shift-modal-in {
-    from { opacity: 0; transform: translateY(0.5rem); }
-    to { opacity: 1; transform: translateY(0); }
+  .shift-modal-exit {
+    animation: shift-modal-out var(--duration-200) var(--ease-in) forwards;
   }
 
   @keyframes shift-modal-out {
     from { opacity: 1; transform: translateY(0); }
     to { opacity: 0; transform: translateY(0.25rem); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shift-mgmt-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    will-change: auto;
   }
 }
 

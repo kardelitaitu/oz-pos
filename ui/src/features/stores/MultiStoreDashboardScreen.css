@@ -48,6 +48,12 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
+  transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
+}
+
+.multi-store-stat-card:hover {
+  border-color: var(--color-accent-dim);
+  box-shadow: var(--shadow-md);
 }
 
 .multi-store-stat-value {
