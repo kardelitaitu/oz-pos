@@ -16,7 +16,7 @@
   -webkit-backdrop-filter: blur(6px);
   will-change: backdrop-filter;
   transform: translateZ(0);
-  animation: settings-popup-fade-in var(--duration-250) var(--ease-out);
+  animation: settings-popup-fade-in 250ms var(--ease-out);
 }
 
 @keyframes settings-popup-fade-in {
@@ -34,7 +34,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-2xl);
-  animation: settings-popup-slide-up var(--duration-200) var(--ease-out);
+  animation: settings-popup-slide-up 250ms var(--ease-out);
 }
 
 @keyframes settings-popup-slide-up {

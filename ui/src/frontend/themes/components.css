@@ -229,10 +229,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
+  animation: modal-fade-in 250ms var(--ease-out);
 }
 
-/* ── Modal overlay anim ─────────────────────────────── */
 @keyframes modal-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -248,7 +252,7 @@
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  animation: modal-slide-up var(--duration-200) var(--ease-out);
+  animation: modal-slide-up 250ms var(--ease-out);
 }
 
 .modal-header {
@@ -346,6 +350,16 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+/* Reduced motion — disable animations only, preserve visual styling */
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay {
+    animation: none;
+  }
+  .modal-panel {
+    animation: none;
   }
 }
 
