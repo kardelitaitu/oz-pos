@@ -427,6 +427,7 @@ export default function CategoryManagementScreen() {
       >
         {/* Name input */}
         <div className="cat-mgmt-field">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="cat-new-name" className="cat-mgmt-label">
             <Localized id="categories-name">
               <span>Name</span>
@@ -537,6 +538,7 @@ export default function CategoryManagementScreen() {
       >
         {/* Name input */}
         <div className="cat-mgmt-field">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="cat-edit-name" className="cat-mgmt-label">
             <Localized id="categories-name">
               <span>Name</span>

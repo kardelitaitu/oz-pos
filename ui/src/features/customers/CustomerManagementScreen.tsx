@@ -340,6 +340,7 @@ export default function CustomerManagementScreen() {
         cancelLabel={l10n.getString('customer-mgmt-btn-cancel')}
       >
         <div className="customer-mgmt-field">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="customer-field-name" className="customer-mgmt-label">
             <Localized id="customer-mgmt-field-name">
               <span>Name *</span>
@@ -359,6 +360,7 @@ export default function CustomerManagementScreen() {
         </div>
 
         <div className="customer-mgmt-field">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="customer-field-email" className="customer-mgmt-label">
             <Localized id="customer-mgmt-field-email">
               <span>Email</span>
@@ -378,6 +380,7 @@ export default function CustomerManagementScreen() {
         </div>
 
         <div className="customer-mgmt-field">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="customer-field-phone" className="customer-mgmt-label">
             <Localized id="customer-mgmt-field-phone">
               <span>Phone</span>
@@ -397,6 +400,7 @@ export default function CustomerManagementScreen() {
         </div>
 
         <div className="customer-mgmt-field">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="customer-field-notes" className="customer-mgmt-label">
             <Localized id="customer-mgmt-field-notes">
               <span>Notes</span>

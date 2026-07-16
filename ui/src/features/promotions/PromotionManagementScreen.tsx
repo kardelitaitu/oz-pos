@@ -287,11 +287,13 @@ export default function PromotionManagementScreen() {
             <div className="promo-mgmt-modal-body">
               <div className="promo-mgmt-form">
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-name"><Localized id="promotions-name"><span>Name</span></Localized></label>
                   <input id="promo-field-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required aria-label={l10n.getString('promotions-field-name')} />
                 </div>
 
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-type"><Localized id="promotions-type"><span>Type</span></Localized></label>
                   <select id="promo-field-type" value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label={l10n.getString('promotions-field-type')}>
                     {PROMO_TYPES.map((t) => (
@@ -303,6 +305,7 @@ export default function PromotionManagementScreen() {
                 </div>
 
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-value"><Localized id="promotions-value"><span>Value</span></Localized></label>
                   <input id="promo-field-value" type="number" value={form.value_minor} onChange={(e) => setForm({ ...form, value_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-value')} />
                 </div>
@@ -310,18 +313,22 @@ export default function PromotionManagementScreen() {
                 {form.promo_type === 'buy_x_get_y' && (
                   <>
                     <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                       <label htmlFor="promo-field-min-qty"><Localized id="promotions-min-qty"><span>Min Qty</span></Localized></label>
                       <input id="promo-field-min-qty" type="number" value={form.min_qty ?? ''} onChange={(e) => setForm({ ...form, min_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-min-qty')} />
                     </div>
                     <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                       <label htmlFor="promo-field-trigger-sku"><Localized id="promotions-trigger-sku"><span>Trigger SKU</span></Localized></label>
                       <input id="promo-field-trigger-sku" type="text" value={form.trigger_sku ?? ''} onChange={(e) => setForm({ ...form, trigger_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-trigger-sku')} />
                     </div>
                     <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                       <label htmlFor="promo-field-reward-sku"><Localized id="promotions-reward-sku"><span>Reward SKU</span></Localized></label>
                       <input id="promo-field-reward-sku" type="text" value={form.reward_sku ?? ''} onChange={(e) => setForm({ ...form, reward_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-reward-sku')} />
                     </div>
                     <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                       <label htmlFor="promo-field-reward-qty"><Localized id="promotions-reward-qty"><span>Reward Qty</span></Localized></label>
                       <input id="promo-field-reward-qty" type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm({ ...form, reward_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-reward-qty')} />
                     </div>
@@ -329,20 +336,24 @@ export default function PromotionManagementScreen() {
                 )}
 
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-starts-at"><Localized id="promotions-field-starts-at"><span>Starts At</span></Localized></label>
                   <input id="promo-field-starts-at" type="datetime-local" value={form.starts_at ? form.starts_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-starts-at')} />
                 </div>
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-ends-at"><Localized id="promotions-field-ends-at"><span>Ends At</span></Localized></label>
                   <input id="promo-field-ends-at" type="datetime-local" value={form.ends_at ? form.ends_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-ends-at')} />
                 </div>
 
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-min-order"><Localized id="promotions-min-order"><span>Min Order</span></Localized></label>
                   <input id="promo-field-min-order" type="number" value={form.min_order_minor} onChange={(e) => setForm({ ...form, min_order_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-min-order')} />
                 </div>
 
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-category"><Localized id="promotions-category"><span>Category</span></Localized></label>
                   <input id="promo-field-category" type="text" value={form.category_id ?? ''} onChange={(e) => setForm({ ...form, category_id: e.target.value || null })} aria-label={l10n.getString('promotions-field-category')} />
                 </div>

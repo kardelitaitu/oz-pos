@@ -234,6 +234,7 @@ export default function ExchangeRateScreen() {
         cancelLabel={l10n.getString('currency-btn-cancel')}
       >
         <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="er-field-from" className="exchange-rate-label">
             <Localized id="currency-field-from">
               <span>From Currency</span>
@@ -253,6 +254,7 @@ export default function ExchangeRateScreen() {
         </div>
 
         <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="er-field-to" className="exchange-rate-label">
             <Localized id="currency-field-to">
               <span>To Currency</span>
@@ -272,6 +274,7 @@ export default function ExchangeRateScreen() {
         </div>
 
         <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="er-field-rate" className="exchange-rate-label">
             <Localized id="currency-field-rate">
               <span>Rate</span>
@@ -292,6 +295,7 @@ export default function ExchangeRateScreen() {
         </div>
 
         <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="er-field-source" className="exchange-rate-label">
             <Localized id="currency-field-source">
               <span>Source (optional)</span>
@@ -310,6 +314,7 @@ export default function ExchangeRateScreen() {
         </div>
 
         <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label htmlFor="er-field-date" className="exchange-rate-label">
             <Localized id="currency-field-date">
               <span>Effective Date</span>
