@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listTaxRates,
@@ -14,6 +14,7 @@ import { listCategories, type CategoryDto } from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { SettingsPopup } from '@/frontend/shared';
 import './TaxConfigurationScreen.css';
 
 interface TaxFormData {
@@ -172,10 +173,6 @@ export default function TaxConfigurationScreen() {
         : [...prev, rateId],
     );
   }, []);
-
-  // ── Refs for focus management ───────────────────────────────────
-
-  const taxNameInputRef = useFocusOnShow(showModal);
 
   return (
     <div className="tax-config">
@@ -358,225 +355,156 @@ export default function TaxConfigurationScreen() {
       )}
 
       {/* ── Tax Rate Form Modal ──────────────────────────────────── */}
-      {showModal && (
-        <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('tax-config-modal-aria', { editing: editingId !== null ? 'true' : 'false' })}>
-          <div className="tax-config-modal">
-            <div className="tax-config-modal-header">
-              <Localized id="tax-config-modal-title" vars={{ editing: editingId !== null ? 'true' : 'false' }}>
-                <h2>{editingId ? 'Edit Tax Rate' : 'Add Tax Rate'}</h2>
-              </Localized>
-                <Localized id="tax-config-modal-close" attrs={{ "aria-label": true }}>
-                  <button
-                    type="button"
-                    className="tax-config-modal-close"
-                    onClick={() => setShowModal(false)}
-                    aria-label="Close"
-                  >
-                    &times;
-                  </button>
-                </Localized>
-            </div>
+      <SettingsPopup
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={l10n.getString('tax-config-modal-title', { editing: editingId !== null ? 'true' : 'false' })}
+        saving={saving}
+        onSave={handleSave}
+        saveLabel={l10n.getString('tax-config-btn-save')}
+        saveDisabled={!form.name.trim() || !form.rateBps.trim()}
+        cancelLabel={l10n.getString('tax-config-btn-cancel')}
+      >
+        <div className="tax-config-field tax-config-field--horizontal">
+          <label htmlFor="tax-field-name" className="tax-config-label">
+            <Localized id="tax-config-field-name">
+              <span>Tax Name</span>
+            </Localized>
+          </label>
+          <input
+            className="tax-config-input"
+            type="text"
+            id="tax-field-name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder={l10n.getString('tax-config-field-name-placeholder')}
+          />
+        </div>
 
-            <div className="tax-config-modal-body">
-              <div className="tax-config-field tax-config-field--horizontal">
-                <label htmlFor="tax-field-name" className="tax-config-label">
-                  <Localized id="tax-config-field-name">
-                    <span>Tax Name</span>
-                  </Localized>
-                </label>
-                <input
-                  className="tax-config-input"
-                  type="text"
-                  id="tax-field-name"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder={l10n.getString('tax-config-field-name-placeholder')}
-                  ref={taxNameInputRef}
-                />
-              </div>
-
-              <div className="tax-config-field tax-config-field--horizontal">
-                <label htmlFor="tax-field-rate" className="tax-config-label">
-                  <Localized id="tax-config-field-rate">
-                    <span>Rate (BPS)</span>
-                  </Localized>
-                </label>
-                <div className="tax-config-field-input-wrap">
-                  <input
-                    className="tax-config-input"
-                    type="number"
-                    id="tax-field-rate"
-                    min="0"
-                    value={form.rateBps}
-                    onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
-                    placeholder={l10n.getString('tax-config-field-rate-placeholder')}
-                  />
-                  <Localized id="tax-config-rate-hint">
-                    <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
-                  </Localized>
-                </div>
-              </div>
-
-              {/* Inclusive / Exclusive toggle */}
-              <div className="tax-config-field tax-config-field--horizontal">
-                <Localized id="tax-config-tax-type">
-                  <span className="tax-config-label">Tax Type</span>
-                </Localized>
-                <div className="tax-config-toggle-group" role="radiogroup" aria-label={l10n.getString('tax-config-tax-type-aria')}>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={!form.isInclusive}
-                    className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
-                    onClick={() => setForm({ ...form, isInclusive: false })}
-                  >
-                    <Localized id="tax-config-type-exclusive-label">
-                      <span>Exclusive</span>
-                    </Localized>
-                    <Localized id="tax-config-type-exclusive-desc">
-                      <span className="tax-config-toggle-desc">Added at checkout</span>
-                    </Localized>
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={form.isInclusive}
-                    className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
-                    onClick={() => setForm({ ...form, isInclusive: true })}
-                  >
-                    <Localized id="tax-config-type-inclusive-label">
-                      <span>Inclusive</span>
-                    </Localized>
-                    <Localized id="tax-config-type-inclusive-desc">
-                      <span className="tax-config-toggle-desc">Included in price</span>
-                    </Localized>
-                  </button>
-                </div>
-              </div>
-
-              <label className="tax-config-checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.isDefault}
-                  onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                />
-                {l10n.getString('tax-config-set-default')}
-              </label>
-            </div>
-
-            <div className="tax-config-modal-actions">
-              <Localized id="tax-config-btn-cancel">
-                <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancel</Button>
-              </Localized>
-              <Button
-                variant="primary"
-                loading={saving}
-                disabled={!form.name.trim() || !form.rateBps.trim()}
-                onClick={handleSave}
-              >
-                <Localized id="tax-config-btn-save">
-                  <span>Save</span>
-                </Localized>
-              </Button>
-            </div>
+        <div className="tax-config-field tax-config-field--horizontal">
+          <label htmlFor="tax-field-rate" className="tax-config-label">
+            <Localized id="tax-config-field-rate">
+              <span>Rate (BPS)</span>
+            </Localized>
+          </label>
+          <div className="tax-config-field-input-wrap">
+            <input
+              className="tax-config-input"
+              type="number"
+              id="tax-field-rate"
+              min="0"
+              value={form.rateBps}
+              onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
+              placeholder={l10n.getString('tax-config-field-rate-placeholder')}
+            />
+            <Localized id="tax-config-rate-hint">
+              <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
+            </Localized>
           </div>
         </div>
-      )}
+
+        {/* Inclusive / Exclusive toggle */}
+        <div className="tax-config-field tax-config-field--horizontal">
+          <Localized id="tax-config-tax-type">
+            <span className="tax-config-label">Tax Type</span>
+          </Localized>
+          <div className="tax-config-toggle-group" role="radiogroup" aria-label={l10n.getString('tax-config-tax-type-aria')}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!form.isInclusive}
+              className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
+              onClick={() => setForm({ ...form, isInclusive: false })}
+            >
+              <Localized id="tax-config-type-exclusive-label">
+                <span>Exclusive</span>
+              </Localized>
+              <Localized id="tax-config-type-exclusive-desc">
+                <span className="tax-config-toggle-desc">Added at checkout</span>
+              </Localized>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={form.isInclusive}
+              className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
+              onClick={() => setForm({ ...form, isInclusive: true })}
+            >
+              <Localized id="tax-config-type-inclusive-label">
+                <span>Inclusive</span>
+              </Localized>
+              <Localized id="tax-config-type-inclusive-desc">
+                <span className="tax-config-toggle-desc">Included in price</span>
+              </Localized>
+            </button>
+          </div>
+        </div>
+
+        <label className="tax-config-checkbox">
+          <input
+            type="checkbox"
+            checked={form.isDefault}
+            onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+          />
+          {l10n.getString('tax-config-set-default')}
+        </label>
+      </SettingsPopup>
 
       {/* ── Category Tax Rates Modal ─────────────────────────────── */}
-      {showCatModal && (
-        <div className="tax-config-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('tax-config-cat-modal-aria', { name: editingCatName })}>
-          <div className="tax-config-modal">
-            <div className="tax-config-modal-header">
-              <Localized id="tax-config-cat-modal-title" vars={{ name: editingCatName }}>
-                <h2>Tax Rates &mdash; {editingCatName}</h2>
-              </Localized>
-              <Localized id="tax-config-modal-close" attrs={{ "aria-label": true }}>
-                <button
-                  type="button"
-                  className="tax-config-modal-close"
-                  onClick={() => setShowCatModal(false)}
-                  aria-label="Close"
+      <SettingsPopup
+        open={showCatModal}
+        onClose={() => setShowCatModal(false)}
+        title={l10n.getString('tax-config-cat-modal-title', { name: editingCatName })}
+        saving={savingCat}
+        onSave={handleSaveCat}
+        saveLabel={l10n.getString('tax-config-btn-save')}
+        cancelLabel={l10n.getString('tax-config-btn-cancel')}
+        size="sm"
+      >
+        <Localized id="tax-config-cat-modal-desc">
+          <p className="tax-config-section-desc">
+            Select the tax rates that apply to all products in this category.
+          </p>
+        </Localized>
+
+        {rates.length === 0 ? (
+          <Localized id="tax-config-no-rates">
+            <p className="tax-config-loading">
+              No tax rates available. Create one first.
+            </p>
+          </Localized>
+        ) : (
+          <div className="tax-config-cat-rate-list">
+            {rates.map((r) => {
+              const checked = selectedCatRateIds.includes(r.id);
+              return (
+                <label
+                  key={r.id}
+                  className={`tax-config-cat-rate-item ${checked ? 'tax-config-cat-rate-item--checked' : ''}`}
+                  htmlFor={"tax-cat-rate-" + r.id}
+                  aria-label={r.name}
                 >
-                  &times;
-                </button>
-              </Localized>
-            </div>
-
-            <div className="tax-config-modal-body">
-              <Localized id="tax-config-cat-modal-desc">
-                <p className="tax-config-section-desc">
-                  Select the tax rates that apply to all products in this category.
-                </p>
-              </Localized>
-
-              {rates.length === 0 ? (
-                <Localized id="tax-config-no-rates">
-                  <p className="tax-config-loading">
-                    No tax rates available. Create one first.
-                  </p>
-                </Localized>
-              ) : (
-                <div className="tax-config-cat-rate-list">
-                  {rates.map((r) => {
-                    const checked = selectedCatRateIds.includes(r.id);
-                    return (
-                      <label
-                        key={r.id}
-                        className={`tax-config-cat-rate-item ${checked ? 'tax-config-cat-rate-item--checked' : ''}`}
-                        htmlFor={"tax-cat-rate-" + r.id}
-                        aria-label={r.name}
-                      >
-                        <input
-                          type="checkbox"
-                          id={"tax-cat-rate-" + r.id}
-                          checked={checked}
-                          onChange={() => toggleCatRate(r.id)}
-                        />
-                        <div className="tax-config-cat-rate-info">
-                          <span className="tax-config-cat-rate-name">{r.name}</span>
-                          <span className="tax-config-cat-rate-meta">
-                            {r.display_rate}
-                            {' \u00b7 '}
-                            {l10n.getString(r.is_inclusive ? 'tax-config-type-inclusive' : 'tax-config-type-exclusive')}
-                          </span>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="tax-config-modal-actions">
-              <Localized id="tax-config-btn-cancel">
-                <Button variant="ghost" onClick={() => setShowCatModal(false)} disabled={savingCat}>Cancel</Button>
-              </Localized>
-              <Button
-                variant="primary"
-                loading={savingCat}
-                onClick={handleSaveCat}
-              >
-                <Localized id="tax-config-btn-save">
-                  <span>Save</span>
-                </Localized>
-              </Button>
-            </div>
+                  <input
+                    type="checkbox"
+                    id={"tax-cat-rate-" + r.id}
+                    checked={checked}
+                    onChange={() => toggleCatRate(r.id)}
+                  />
+                  <div className="tax-config-cat-rate-info">
+                    <span className="tax-config-cat-rate-name">{r.name}</span>
+                    <span className="tax-config-cat-rate-meta">
+                      {r.display_rate}
+                      {' \u00b7 '}
+                      {l10n.getString(r.is_inclusive ? 'tax-config-type-inclusive' : 'tax-config-type-exclusive')}
+                    </span>
+                  </div>
+                </label>
+              );
+            })}
           </div>
-        </div>
-      )}
+        )}
+      </SettingsPopup>
     </div>
   );
 }
 
-// ── Focus-on-show hook ──────────────────────────────────────────────
-
-function useFocusOnShow(show: boolean) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (show && ref.current) {
-      ref.current.focus();
-    }
-  }, [show]);
-  return ref;
-}
