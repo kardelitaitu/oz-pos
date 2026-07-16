@@ -196,6 +196,12 @@
   cursor: not-allowed;
 }
 
+.pos-cart-discount-apply:focus-visible,
+.pos-cart-discount-cancel:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 .pos-cart-discount-cancel {
   background: transparent;
   color: var(--color-fg-secondary);

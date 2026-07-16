@@ -379,6 +379,11 @@
   color: var(--color-accent-fg);
 }
 
+.pos-cart-line-override:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 /* ── Responsive: tablet thumbnail shrink ────────────────────
  * On narrower viewports the right-side panel reflows below the
  * menu (see CartPanel.css @media) and we trim the thumbnail so
