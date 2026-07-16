@@ -254,11 +254,26 @@
   font-size: 2rem;
   color: var(--color-success);
   line-height: 1;
+  animation: data-mgmt-pop 0.35s var(--ease-out) both;
 }
 
 .data-mgmt-progress-done svg {
   width: 1em;
   height: 1em;
+  animation: data-mgmt-checkmark-draw 0.4s var(--ease-out) both;
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+}
+
+@keyframes data-mgmt-pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes data-mgmt-checkmark-draw {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
 }
 
 /* ── Done state ──────────────────────────────────────────────────── */
