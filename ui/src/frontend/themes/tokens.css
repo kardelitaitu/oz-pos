@@ -226,12 +226,12 @@
   --blur-amount: 0px;
   --shadow-glow: none;
 
-  /* Neutral — warm-cool white with subtle blue tint */
-  --neutral-50:  #f8fafc;
-  --neutral-100: #f1f5f9;
-  --neutral-200: #e2e8f0;
-  --neutral-300: #cbd5e1;
-  --neutral-400: #94a3b8;
+  /* Neutral — max ~60 % white, blue-tinted steel */
+  --neutral-50:  #d6dade;
+  --neutral-100: #c8d0d8;
+  --neutral-200: #b4bfcb;
+  --neutral-300: #9bacc0;
+  --neutral-400: #7a93ad;
   --neutral-500: #64748b;
   --neutral-600: #475569;
   --neutral-700: #334155;
@@ -240,11 +240,11 @@
   --neutral-950: #020617;
 
   /* Brand / Primary — Steel Blue */
-  --primary-50:  #f0f5fa;
-  --primary-100: #dbeafe;
-  --primary-200: #b9d6f2;
-  --primary-300: #8db4d7;
-  --primary-400: #5f8ebb;
+  --primary-50:  #e5edf5;
+  --primary-100: #cde0f0;
+  --primary-200: #aac8e3;
+  --primary-300: #7aa8cc;
+  --primary-400: #4f82b0;
   --primary-500: #2b5c8f;
   --primary-600: #224b75;
   --primary-700: #1c3e60;
@@ -254,11 +254,11 @@
 
   /* Semantic colour tokens (light) */
   /* Blue-tinted gradient gives a soft light-source feel from above */
-  --color-bg:              linear-gradient(160deg, #eef4fb 0%, #e2ecf7 50%, #d8e8f5 100%);
-  --color-bg-elevated:     #ffffff;
-  --color-bg-surface:      rgba(255, 255, 255, 0.7);
+  --color-bg:              linear-gradient(160deg, #d5e0ea 0%, #c8d8e5 50%, #bcd0e0 100%);
+  --color-bg-elevated:     #d6dee5;
+  --color-bg-surface:      rgba(214, 222, 229, 0.85);
   --color-bg-overlay:      rgba(0, 0, 0, 0.45);
-  --color-bg-input:        #ffffff;
+  --color-bg-input:        #d0dae3;
 
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);
@@ -297,7 +297,7 @@
   --color-link-hover:      var(--primary-700);
   --color-link-visited:    #6d28d9;
 
-  --color-bg-primary:      #ffffff;
+  --color-bg-primary:      #d6dee5;
   --color-bg-secondary:    var(--neutral-100);
   --color-bg-hover:        rgba(43, 92, 143, 0.06);
 
