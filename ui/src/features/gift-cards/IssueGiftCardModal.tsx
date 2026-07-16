@@ -4,6 +4,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { issueGiftCard, type IssueGiftCardInput } from '@/api/giftCards';
 import { Button } from '@/components/Button';
 import { generateGiftCardNumber } from '@/utils/giftCardBarcode';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 /** Props for the IssueGiftCardModal component. */
 export interface IssueGiftCardModalProps {
@@ -19,11 +20,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   const ANIM_MS = animDuration(200);
   const [exiting, setExiting] = useState(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const exitingRef = useRef(false);
   const cardInputRef = useRef<HTMLInputElement>(null);
-
-  // Keep ref in sync with state for the Escape keydown handler.
-  exitingRef.current = exiting;
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return () => {
@@ -43,28 +41,15 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
     }, ANIM_MS);
   }, [onClose, ANIM_MS]);
 
-  // ── Document-level Escape handler ──────────────────────────
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !exitingRef.current) {
-        handleClose();
-      }
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [handleClose]);
-
-  // ── Auto-focus the card number input on mount ────────────
-  useEffect(() => {
-    cardInputRef.current?.focus();
-  }, []);
-
   const [cardNumber, setCardNumber] = useState(generateGiftCardNumber());
   const [amount, setAmount] = useState('');
   const [issuedTo, setIssuedTo] = useState('');
   const [pin, setPin] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+
+  // ── Focus trap (Escape + Tab cycling) ─────────────────────
+  useFocusTrap(panelRef, !exiting && !processing, handleClose);
 
   const handleSubmit = async () => {
     const initialAmountMinor = parseInt(amount, 10);
@@ -106,7 +91,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
       aria-label={l10n.getString('modal-close-aria')}
     >
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
-      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} ref={panelRef}>
         <Localized id="gift-cards-issue-title">
           <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
         </Localized>

@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { formatMoney } from '@/types/domain';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './ItemModifierModal.css';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -176,6 +177,10 @@ export default function ItemModifierModal({
     }
   }, [open, groups]);
 
+  // ── Focus trap (Escape + Tab cycling) ─────────────────────────
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open, onClose);
+
   if (!open) return null;
 
   return (
@@ -191,6 +196,7 @@ export default function ItemModifierModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Customise ${productName}`}
+        ref={panelRef}
       >
         {/* ── Header ─────────────────────────────────────── */}
         <div className="modifier-header">
