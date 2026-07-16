@@ -1260,8 +1260,8 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-              /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */
-              <div className="payment-customer-search-overlay" role="presentation" onClick={() => setShowCustomerSearch(false)}>
+              /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-static-element-interactions */
+              <div className="payment-customer-search-overlay" onClick={() => setShowCustomerSearch(false)}>
                 {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
                 <div className="payment-customer-search-modal" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}>
                   <Localized id="payment-customer-search-heading">
