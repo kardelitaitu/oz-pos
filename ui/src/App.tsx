@@ -4,6 +4,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { LocaleProvider } from './i18n/LocaleContext';
 import { ZoomProvider } from '@/contexts/ZoomContext';
+import { HardwareAccelProvider } from '@/contexts/HardwareAccelContext';
 import AppShell from '@/frontend/shell/AppShell';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
@@ -219,15 +220,16 @@ export default function App() {
       <LocaleProvider>
         <BrandProvider>
           <ZoomProvider>
-            <ThemeProvider>
+            <HardwareAccelProvider>
+              <ThemeProvider>
               <AuthProvider>
                 <ToastProvider>
                   <WorkspaceProvider>
                     <AppShell />
                   </WorkspaceProvider>
                 </ToastProvider>
-              </AuthProvider>
-            </ThemeProvider>
+              </AuthProvider>              </ThemeProvider>
+            </HardwareAccelProvider>
           </ZoomProvider>
         </BrandProvider>
       </LocaleProvider>

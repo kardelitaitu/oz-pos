@@ -24,6 +24,11 @@ vi.mock('@/contexts/ZoomContext', () => ({
   useAppZoom: () => ({ zoomLevel: 'auto', setZoomLevel: vi.fn() }),
 }));
 
+vi.mock('@/contexts/HardwareAccelContext', () => ({
+  useHardwareAccel: () => ({ enabled: true, setEnabled: vi.fn() }),
+  HardwareAccelProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock('@/contexts/BrandContext', () => ({
   useBrand: () => ({
     settings: {
@@ -48,12 +53,6 @@ const mockApplyAccentPalette = vi.fn();
 vi.mock('@/utils/color', () => ({
   deriveAccentPalette: (base: string) => mockDeriveAccentPalette(base),
   applyAccentPalette: (palette: unknown) => mockApplyAccentPalette(palette),
-}));
-
-vi.mock('@/components/Card', () => ({
-  Card: ({ children, shadow }: { children: React.ReactNode; shadow?: string }) => (
-    <div data-testid="card" data-shadow={shadow}>{children}</div>
-  ),
 }));
 
 vi.mock('@/frontend/shared/Toast', () => ({
@@ -108,22 +107,29 @@ describe('AppearanceSettings', () => {
 
   // ── Rendering ──────────────────────────────────────────────────
 
-  it('renders inside a Card wrapper in non-embedded mode', async () => {
+  it('renders inside three CSS card containers in non-embedded mode', async () => {
     render(<AppearanceSettings />);
     await waitFor(() => {
-      expect(screen.getByTestId('card')).toBeInTheDocument();
+      const cards = document.querySelectorAll('.card');
+      expect(cards).toHaveLength(3);
     });
   });
 
-  it('renders without Card wrapper in embedded mode', () => {
+  it('renders card containers in embedded mode without reset/save buttons', () => {
     render(<AppearanceSettings embedded colour="#ff0000" storeName="Test Store" />);
-    expect(screen.queryByTestId('card')).not.toBeInTheDocument();
+    // Embedded mode now also renders cards, just without reset/save.
+    const cards = document.querySelectorAll('.card');
+    expect(cards).toHaveLength(3);
+    expect(screen.queryByLabelText('Save appearance')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Reset all appearance settings')).not.toBeInTheDocument();
   });
 
-  it('shows "Appearance" section title in non-embedded mode', async () => {
+  it('shows "Branding" section title as first card heading in non-embedded mode', async () => {
     render(<AppearanceSettings />);
     await waitFor(() => {
-      expect(screen.getByText('Appearance')).toBeInTheDocument();
+      expect(screen.getByText('Branding')).toBeInTheDocument();
+      expect(screen.getByText('Interface')).toBeInTheDocument();
+      expect(screen.getByText('Preview')).toBeInTheDocument();
     });
   });
 

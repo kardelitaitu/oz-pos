@@ -6,6 +6,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.0.9] — 2026-07-15
 
+### Added
+- **Hardware Acceleration toggle (Appearance settings)**: New `HardwareAccelContext` + `useHardwareAccel` hook that manages a `data-hw-accel="disabled"` attribute on `<html>`, persisted to localStorage. When disabled, all CSS `backdrop-filter`, `will-change`, and `transform: translateZ(0)` hints are overridden via a dedicated `HardwareAccel.css` file — covers 10 selectors across 7 CSS files (modal-overlay, workspace cards, dropdown, QRIS/FastPIN/license/PIN overlays). Toggle uses `role="switch"` with proper ARIA attributes. Added 5 Fluent keys in both EN and ID locales. Test mocks added for `HardwareAccelContext` in `AppearanceSettings.test.tsx` and `SettingsPage.test.tsx`.
+
 ### Changed
 - **Version bump**: Codebase version bumped from 0.0.8 to 0.0.9 across 5 files (Cargo.toml, Cargo.lock, tauri.conf.json ×2, package.json).
 - **ADR Audit & Documentation Sync**: Reviewed all 12 ADRs in `docs/decisions/`. Updated ADRs #1 (Module System), #2 (Event Bus), and #3 (Frontend Restructure) from "Accepted" to "Implemented" — all three were already fully wired in the codebase but the ADR statuses hadn't been updated. Resolved 3 open questions in ADR #5 (Subscription Tier). Cleaned inconsistent headers in ADR #9 (License Server) and ADR #11 (VPS Migration). All 12 ADRs now have consistent `Implemented (YYYY-MM-DD)` status lines.

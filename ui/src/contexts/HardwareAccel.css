@@ -1,0 +1,71 @@
+/* ═══════════════════════════════════════════════════════════════════
+ * Hardware Acceleration Gating
+ *
+ * When the user disables hardware acceleration via Appearance settings,
+ * the HardwareAccelContext sets `data-hw-accel="disabled"` on <html>.
+ * Every `will-change`, `backdrop-filter`, and `transform: translateZ(0)`
+ * in the app is overridden here to disable GPU compositing.
+ *
+ * Useful for:
+ *   - Low-end devices where GPU compositing causes jank
+ *   - Touchscreen Windows tablets with integrated GPUs
+ *   - Battery saving (GPU compositing uses more power)
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Modal overlay (components.css) ──────────────────── */
+html[data-hw-accel="disabled"] .modal-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  will-change: auto !important;
+  transform: none !important;
+}
+
+/* ── Workspace cards (WorkspaceHome.css) ─────────────── */
+html[data-hw-accel="disabled"] .workspace-card,
+html[data-hw-accel="disabled"] .workspace-card--active,
+html[data-hw-accel="disabled"] .workspace-card:hover {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  will-change: auto !important;
+}
+
+html[data-hw-accel="disabled"] .workspace-skeleton-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-hw-accel="disabled"] .workspace-card-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── Settings dropdown (SettingsPage.css) ────────────── */
+html[data-hw-accel="disabled"] .ssel-dropdown {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── QRIS overlay (QrisQrDisplay.css) ───────────────── */
+html[data-hw-accel="disabled"] .qris-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── FastPIN overlay (FastPINOverlay.css) ────────────── */
+html[data-hw-accel="disabled"] .fastpin-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── License activation (LicenseActivationScreen.css) ── */
+html[data-hw-accel="disabled"] .license-activation-card,
+html[data-hw-accel="disabled"] .custom-context-menu {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── Create PIN card (CreatePinScreen.css) ───────────── */
+html[data-hw-accel="disabled"] .create-pin-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

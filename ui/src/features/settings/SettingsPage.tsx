@@ -37,6 +37,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
+import SettingsSelect from './SettingsSelect';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { useTheme } from '@/frontend/shell/ThemeProvider';
@@ -928,26 +929,21 @@ export default function SettingsPage() {
                     </Localized>
                   </label>
                   <span className="settings-field-input-wrap">
-                    <select
-                      className="settings-select"
+                    <SettingsSelect
                       id="settings-field-default-currency"
                       value={currencies.length > 0 ? defaultCurrency : ''}
-                      onChange={(e) => { setDefaultCurrencyState(e.target.value); markDirty(); }}
+                      onChange={(v) => { setDefaultCurrencyState(v); markDirty(); }}
+                      options={currencies.length > 0
+                        ? currencies.map((c) => ({
+                            value: c.code,
+                            label: `${c.code} — ${c.name} (${c.symbol})`,
+                          }))
+                        : []
+                      }
                       disabled={currencies.length === 0}
-                      aria-label={l10n.getString('settings-field-default-currency')}
-                    >
-                      {currencies.length === 0 ? (
-                        <Localized id="settings-currency-loading">
-                          <option value="" disabled>Loading currencies…</option>
-                        </Localized>
-                      ) : (
-                        currencies.map((c) => (
-                          <option key={c.code} value={c.code}>
-                            {c.code} — {c.name} ({c.symbol})
-                          </option>
-                        ))
-                      )}
-                    </select>
+                      ariaLabel={l10n.getString('settings-field-default-currency')}
+                      placeholder={currencies.length === 0 ? l10n.getString('settings-currency-loading') : ''}
+                    />
                   </span>
                 </div>
               </div>
@@ -1030,20 +1026,16 @@ export default function SettingsPage() {
                   <Localized id="settings-field-font-smoothing">
                     <span className="settings-label">Font Smoothing</span>
                   </Localized>
-                  <select
-                    className="settings-select"
+                  <SettingsSelect
                     id="settings-field-font-smoothing"
                     value={displayFontSmoothing}
-                    onChange={(e) => { setDisplayFontSmoothing(e.target.value); markDirty(); }}
-                    aria-label={l10n.getString('settings-field-font-smoothing')}
-                  >
-                    <Localized id="settings-font-smoothing-antialiased">
-                      <option value="antialiased">Antialiased (crisp)</option>
-                    </Localized>
-                    <Localized id="settings-font-smoothing-subpixel">
-                      <option value="subpixel">Subpixel (smooth)</option>
-                    </Localized>
-                  </select>
+                    onChange={(v) => { setDisplayFontSmoothing(v); markDirty(); }}
+                    options={[
+                      { value: 'antialiased', label: l10n.getString('settings-font-smoothing-antialiased') },
+                      { value: 'subpixel', label: l10n.getString('settings-font-smoothing-subpixel') },
+                    ]}
+                    ariaLabel={l10n.getString('settings-field-font-smoothing')}
+                  />
                 </div>
               </div>
             </Card>
@@ -1092,26 +1084,20 @@ export default function SettingsPage() {
               {/* Decimal separator */}
               <label className="settings-field" htmlFor="settings-field-decimal-separator">
                 {l10n.getString('settings-field-decimal-separator')}
-                <select
-                  className="settings-select"
+                <SettingsSelect
                   id="settings-field-decimal-separator"
                   value={receipt.decimalSeparator}
-                  onChange={(e) => {
-                    setReceipt({ ...receipt, decimalSeparator: e.target.value });
-                    setDecimalSep(e.target.value);
+                  onChange={(v) => {
+                    setReceipt({ ...receipt, decimalSeparator: v });
+                    setDecimalSep(v);
                     markDirty();
                   }}
-                >
-                  <Localized id="settings-decimal-separator-dot">
-                    <option value="dot">1.00 (dot)</option>
-                  </Localized>
-                  <Localized id="settings-decimal-separator-comma">
-                    <option value="comma">1,00 (comma)</option>
-                  </Localized>
-                  <Localized id="settings-decimal-separator-none">
-                    <option value="none">1 (none)</option>
-                  </Localized>
-                </select>
+                  options={[
+                    { value: 'dot', label: l10n.getString('settings-decimal-separator-dot') },
+                    { value: 'comma', label: l10n.getString('settings-decimal-separator-comma') },
+                    { value: 'none', label: l10n.getString('settings-decimal-separator-none') },
+                  ]}
+                />
               </label>
 
               {/* Show tax */}
@@ -1135,19 +1121,15 @@ export default function SettingsPage() {
               {/* Paper width */}
               <label className="settings-field" htmlFor="settings-field-paper-width">
                 {l10n.getString('settings-field-paper-width')}
-                <select
-                  className="settings-select"
+                <SettingsSelect
                   id="settings-field-paper-width"
                   value={receipt.paperWidth}
-                  onChange={(e) => { setReceipt({ ...receipt, paperWidth: e.target.value }); markDirty(); }}
-                >
-                  <Localized id="settings-paper-width-standard">
-                    <option value="standard">80 mm (standard)</option>
-                  </Localized>
-                  <Localized id="settings-paper-width-narrow">
-                    <option value="narrow">58 mm (narrow)</option>
-                  </Localized>
-                </select>
+                  onChange={(v) => { setReceipt({ ...receipt, paperWidth: v }); markDirty(); }}
+                  options={[
+                    { value: 'standard', label: l10n.getString('settings-paper-width-standard') },
+                    { value: 'narrow', label: l10n.getString('settings-paper-width-narrow') },
+                  ]}
+                />
               </label>
 
               {/* Footer */}

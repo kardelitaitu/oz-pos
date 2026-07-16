@@ -79,6 +79,11 @@ vi.mock('@/contexts/ZoomContext', () => ({
   ZoomProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
+vi.mock('@/contexts/HardwareAccelContext', () => ({
+  useHardwareAccel: () => ({ enabled: true, setEnabled: vi.fn() }),
+  HardwareAccelProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
 beforeEach(() => {
   cleanup();
   failCommands.clear();

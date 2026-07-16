@@ -9,11 +9,12 @@ import {
 } from '@/api/branding';
 import { useBrand } from '@/contexts/BrandContext';
 import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
-import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { useAppZoom } from '@/contexts/ZoomContext';
 import type { ZoomLevel } from '@/contexts/ZoomContext';
+import { useHardwareAccel } from '@/contexts/HardwareAccelContext';
 import { useToast } from '@/frontend/shared/Toast';
+import SettingsSelect from './SettingsSelect';
 import './AppearanceSettings.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ export function AppearanceSettings({
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const { zoomLevel, setZoomLevel } = useAppZoom();
+  const { enabled: hwAccelEnabled, setEnabled: setHwAccelEnabled } = useHardwareAccel();
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -150,8 +152,11 @@ export function AppearanceSettings({
     }
   }, [refreshBrandSettings, addToast, l10n]);
 
-  const content = (
-    <div className="settings-form">
+  // ── Card body slices (shared between embedded and non-embedded) ──
+  // Defined after all callbacks to avoid TDZ errors.
+
+  const brandingFields = (
+    <>
       <div className="appearance-field">
         <label htmlFor="brand-colour" className="settings-label">
           <Localized id="appearance-primary-colour">Primary Colour</Localized>
@@ -235,49 +240,55 @@ export function AppearanceSettings({
           autoComplete="off"
         />
       </div>
+    </>
+  );
 
+  const interfaceFields = (
+    <>
       <div className="appearance-field">
         <label htmlFor="interface-zoom" className="settings-label">
           <Localized id="appearance-interface-zoom">Interface Zoom</Localized>
         </label>
-        <select
+        <SettingsSelect
           id="interface-zoom"
           value={zoomLevel}
-          onChange={(e) => setZoomLevel(e.target.value as ZoomLevel)}
-          className="settings-select"
-        >
-          <option value="auto"><Localized id="appearance-zoom-auto">Automatic (Scale with screen)</Localized></option>
-          <option value="100"><Localized id="appearance-zoom-100">100% (Default)</Localized></option>
-          <option value="125"><Localized id="appearance-zoom-125">125%</Localized></option>
-          <option value="150"><Localized id="appearance-zoom-150">150%</Localized></option>
-          <option value="200"><Localized id="appearance-zoom-200">200%</Localized></option>
-        </select>
+          onChange={(v) => setZoomLevel(v as ZoomLevel)}
+          options={[
+            { value: 'auto', label: l10n.getString('appearance-zoom-auto') },
+            { value: '100', label: l10n.getString('appearance-zoom-100') },
+            { value: '125', label: l10n.getString('appearance-zoom-125') },
+            { value: '150', label: l10n.getString('appearance-zoom-150') },
+            { value: '200', label: l10n.getString('appearance-zoom-200') },
+          ]}
+        />
       </div>
 
-      {!embedded && (
-        <div className="appearance-reset-actions">
-          <Localized id="appearance-reset-all-aria" attrs={{ 'aria-label': true }}>
-            <button
-              type="button"
-              className="appearance-reset-all-btn"
-              onClick={handleResetAll}
-              disabled={resetting}
-              aria-label="Reset all appearance settings"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
-              </svg>
-              <Localized id="appearance-reset-all">Reset all to defaults</Localized>
-            </button>
+      <div className="appearance-field">
+        <label className="settings-toggle">
+          <span className="settings-toggle-switch">
+            <input
+              type="checkbox"
+              checked={hwAccelEnabled}
+              onChange={(e) => setHwAccelEnabled(e.target.checked)}
+            />
+            <span className="settings-toggle-slider" />
+          </span>
+          <Localized id="appearance-hw-accel">
+            <span>Hardware Acceleration</span>
           </Localized>
-        </div>
-      )}
+        </label>
+        <p className="settings-hint">
+          <Localized id="appearance-hw-accel-hint">
+            <span>Disable if UI animations feel janky on low-end devices</span>
+          </Localized>
+        </p>
+      </div>
+    </>
+  );
 
+  const previewFields = (
+    <>
       <div className="appearance-preview">
-        <h3 className="appearance-preview-heading">
-          <Localized id="appearance-preview">Preview</Localized>
-        </h3>
         <div
           className="appearance-preview-box"
           style={{
@@ -313,29 +324,71 @@ export function AppearanceSettings({
           </div>
         </div>
       </div>
-
-      {!embedded && (
-        <div className="settings-actions">
-          <Localized id="appearance-save-aria" attrs={{ 'aria-label': true }}>
-            <Button variant="primary" onClick={save} disabled={saving} aria-label="Save appearance">
-              <Localized id="save">Save</Localized>
-            </Button>
-          </Localized>
-        </div>
-      )}
-    </div>
+    </>
   );
 
-  if (embedded) {
-    return content;
-  }
-
   return (
-    <Card shadow="sm">
-      <h2 className="settings-section-title">
-        <Localized id="settings-appearance">Appearance</Localized>
-      </h2>
-      {content}
-    </Card>
+    <>
+      <div className="card card--padding-md card--shadow-sm">
+        <div className="card-header">
+          <h2 className="settings-section-title">
+            <Localized id="appearance-interface">Interface</Localized>
+          </h2>
+        </div>
+        <div className="settings-form">
+          {interfaceFields}
+        </div>
+      </div>
+
+      <div className="card card--padding-md card--shadow-sm">
+        <div className="card-header">
+          <h2 className="settings-section-title">
+            <Localized id="appearance-branding">Branding</Localized>
+          </h2>
+        </div>
+        <div className="settings-form">
+          {brandingFields}
+        </div>
+      </div>
+
+      <div className="card card--padding-md card--shadow-sm">
+        <div className="card-header">
+          <h2 className="settings-section-title">
+            <Localized id="appearance-preview-heading">Preview</Localized>
+          </h2>
+        </div>
+        <div className="settings-form">
+          {!embedded && (
+            <div className="appearance-reset-actions">
+              <Localized id="appearance-reset-all-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="appearance-reset-all-btn"
+                  onClick={handleResetAll}
+                  disabled={resetting}
+                  aria-label="Reset all appearance settings"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+                  </svg>
+                  <Localized id="appearance-reset-all">Reset all to defaults</Localized>
+                </button>
+              </Localized>
+            </div>
+          )}
+          {previewFields}
+          {!embedded && (
+            <div className="settings-actions">
+              <Localized id="appearance-save-aria" attrs={{ 'aria-label': true }}>
+                <Button variant="primary" onClick={save} disabled={saving} aria-label="Save appearance">
+                  <Localized id="save">Save</Localized>
+                </Button>
+              </Localized>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
