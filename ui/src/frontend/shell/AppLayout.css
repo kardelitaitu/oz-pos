@@ -265,8 +265,12 @@
   gap: 2px;
   padding: var(--space-1) 0 0 var(--space-1);
   overflow: hidden;
-  animation: sidebar-section-expand 0.2s var(--ease-out) both;
-  transform-origin: top;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-sidebar-section-items {
+    animation: sidebar-section-expand 0.2s var(--ease-out) both;
+  }
 }
 
 @keyframes sidebar-section-expand {
