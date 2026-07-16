@@ -27,7 +27,7 @@
 
 .status-indicator.checking {
   background-color: #f59e0b; /* Amber */
-  animation: pulse 1.5s infinite ease-in-out;
+  animation: pulse 1.5s infinite var(--ease-in-out);
 }
 
 .status-indicator.online {

@@ -142,7 +142,7 @@
   transition:
     background-color var(--duration-150) var(--ease-out),
     height var(--duration-200) var(--ease-out);
-  animation: retail-resize-pulse 2.5s ease-in-out infinite;
+  animation: retail-resize-pulse 2.5s var(--ease-in-out) infinite;
 }
 
 .retail-resize-handle:hover::after {
@@ -373,7 +373,7 @@
   height: 0.5rem;
   border-radius: 50%;
   background: var(--color-warning);
-  animation: retail-price-pulse 2s ease-in-out infinite;
+  animation: retail-price-pulse 2s var(--ease-in-out) infinite;
 }
 @media (prefers-reduced-motion: no-preference) {
   @keyframes retail-price-pulse {
@@ -789,7 +789,7 @@
   height: 3rem;
   opacity: 0.45;
   color: var(--color-primary-pos);
-  animation: retail-breathe 3s ease-in-out infinite;
+  animation: retail-breathe 3s var(--ease-in-out) infinite;
 }
 
 .retail-cart-empty span {
@@ -1725,7 +1725,7 @@
   background: var(--color-info-bg);
   border-top: 1px solid var(--color-info);
   font-size: 0.6875rem;
-  animation: retail-slide-up 200ms ease-out;
+  animation: retail-slide-up 200ms var(--ease-out);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1776,7 +1776,7 @@
 /* ── Cart line animation ────────────────────────────────────── */
 
 .retail-cart-table-inner tbody tr {
-  animation: retail-fade-in 180ms ease-out, retail-line-flash 700ms ease-out;
+  animation: retail-fade-in 180ms var(--ease-out), retail-line-flash 700ms var(--ease-out);
 }
 
 .retail-cart-table-inner tbody tr:focus-within {
@@ -2031,7 +2031,7 @@
   pointer-events: none;
   z-index: 500;
   background: rgba(16, 185, 129, 0.15);
-  animation: retail-flash-out 300ms ease-out forwards;
+  animation: retail-flash-out 300ms var(--ease-out) forwards;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -2342,7 +2342,7 @@
 
 .scale-indicator-dot--unstable {
   background: var(--color-warning-pos);
-  animation: scale-pulse 1s ease-in-out infinite;
+  animation: scale-pulse 1s var(--ease-in-out) infinite;
 }
 
 @media (prefers-reduced-motion: no-preference) {

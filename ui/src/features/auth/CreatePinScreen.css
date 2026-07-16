@@ -132,7 +132,7 @@
 }
 
 .spinner {
-  animation: spin 1s linear infinite;
+  animation: spin 1s var(--ease-linear) infinite;
 }
 
 @keyframes spin {

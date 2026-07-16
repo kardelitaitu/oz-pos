@@ -194,7 +194,7 @@
   height: 0.5rem;
   border-radius: 50%;
   background: var(--color-warning, #eab308);
-  animation: product-card-price-pulse 2s ease-in-out infinite;
+  animation: product-card-price-pulse 2s var(--ease-in-out) infinite;
   z-index: 1;
 }
 @media (prefers-reduced-motion: no-preference) {

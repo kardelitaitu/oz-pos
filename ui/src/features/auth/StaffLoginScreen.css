@@ -181,7 +181,7 @@
 
   /* ── Spinner ────────────────────────────────── */
   .staff-login-btn-spinner {
-    animation: login-spin 0.6s linear infinite;
+    animation: login-spin 0.6s var(--ease-linear) infinite;
   }
 
   @keyframes login-spin {
@@ -331,7 +331,7 @@
   border: 2px solid var(--color-accent);
   border-top-color: transparent;
   border-radius: var(--radius-full);
-  animation: staff-login-spin 0.6s linear infinite;
+  animation: staff-login-spin 0.6s var(--ease-linear) infinite;
 }
 
 @keyframes staff-login-spin {

@@ -114,7 +114,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .kiosk-price-volatility-hint {
-    animation: kiosk-price-pulse 2s ease-in-out infinite;
+    animation: kiosk-price-pulse 2s var(--ease-in-out) infinite;
   }
 
   @keyframes kiosk-price-pulse {

@@ -223,7 +223,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .kds-ticket--red {
-    animation: kds-pulse 2s ease-in-out infinite;
+    animation: kds-pulse 2s var(--ease-in-out) infinite;
   }
 }
 

@@ -157,7 +157,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .restaurant-search:focus-within {
-    animation: search-pulse 0.6s ease-in-out;
+    animation: search-pulse 0.6s var(--ease-in-out);
   }
 
   @keyframes search-pulse {

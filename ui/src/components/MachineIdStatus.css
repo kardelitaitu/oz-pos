@@ -30,7 +30,7 @@
 
 /* Loading shimmer */
 .machine-id-chip--loading .machine-id-value {
-  animation: machine-id-shimmer 1.4s ease-in-out infinite;
+  animation: machine-id-shimmer 1.4s var(--ease-in-out) infinite;
   color: transparent;
   background: linear-gradient(
     90deg,

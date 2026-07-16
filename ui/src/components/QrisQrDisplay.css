@@ -122,7 +122,7 @@
   }
 
   .qris-qr-wrapper.qris-pulse {
-    animation: qris-pulse 2s ease-in-out infinite;
+    animation: qris-pulse 2s var(--ease-in-out) infinite;
   }
 
   @keyframes qris-pulse {
@@ -212,7 +212,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .qris-spinner {
-    animation: qris-spin 0.8s linear infinite;
+    animation: qris-spin 0.8s var(--ease-linear) infinite;
   }
 
   @keyframes qris-spin {
