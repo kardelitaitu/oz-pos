@@ -9,6 +9,7 @@ import {
   type CreatePromotionArgs,
 } from '@/api/promotions';
 import { useAuth } from '@/contexts/AuthContext';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -54,6 +55,8 @@ export default function PromotionManagementScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
+  const deleteExit = useExitAnimation(!!deleteTarget, () => setDeleteTarget(null));
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -81,6 +84,8 @@ export default function PromotionManagementScreen() {
   const closeModal = useCallback(() => {
     setModalMode(null);
   }, []);
+
+  const modalExit = useExitAnimation(!!modalMode, closeModal);
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) return;
@@ -242,14 +247,14 @@ export default function PromotionManagementScreen() {
       )}
 
       {/* ── Delete confirmation modal ── */}
-      {deleteTarget && (
-        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('promotions-modal-delete-label')}>
-          <div className="promo-mgmt-modal">
+      {deleteExit.shouldRender && deleteTarget && (
+        <div className={`promo-mgmt-overlay${deleteExit.exiting ? ' promo-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('promotions-modal-delete-label')}>
+          <div className={`promo-mgmt-modal${deleteExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
             <div className="promo-mgmt-modal-header">
               <Localized id="promotions-delete-confirm-title">
                 <h2 className="promo-mgmt-modal-title">Delete Promotion</h2>
               </Localized>
-              <button type="button" className="promo-mgmt-modal-close" onClick={() => setDeleteTarget(null)} aria-label={l10n.getString('close')}>&times;</button>
+              <button type="button" className="promo-mgmt-modal-close" onClick={deleteExit.requestClose} aria-label={l10n.getString('close')}>&times;</button>
             </div>
             <div className="promo-mgmt-modal-body">
               <Localized id="promotions-delete-confirm" vars={{ name: deleteTarget.name }}>
@@ -258,7 +263,7 @@ export default function PromotionManagementScreen() {
             </div>
             <div className="promo-mgmt-modal-actions">
               <Localized id="cancel">
-                <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting !== null}>Cancel</Button>
+                <Button variant="ghost" onClick={deleteExit.requestClose} disabled={deleting !== null}>Cancel</Button>
               </Localized>
               <Localized id="delete">
                 <Button variant="danger" loading={deleting !== null} onClick={confirmDelete}>Delete</Button>
@@ -269,14 +274,14 @@ export default function PromotionManagementScreen() {
       )}
 
       {/* ── Add / Edit modal ── */}
-      {modalMode && (
-        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(modalMode === 'add' ? 'promotions-modal-add-label' : 'promotions-modal-edit-label')}>
-          <div className="promo-mgmt-modal promo-mgmt-modal--wide">
+      {modalExit.shouldRender && modalMode && (
+        <div className={`promo-mgmt-overlay${modalExit.exiting ? ' promo-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString(modalMode === 'add' ? 'promotions-modal-add-label' : 'promotions-modal-edit-label')}>
+          <div className={`promo-mgmt-modal promo-mgmt-modal--wide${modalExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
             <div className="promo-mgmt-modal-header">
               <Localized id={modalMode === 'add' ? 'promotions-add' : 'promotions-edit'}>
                 <h2 className="promo-mgmt-modal-title">{modalMode === 'add' ? 'Add Promotion' : 'Edit Promotion'}</h2>
               </Localized>
-              <button type="button" className="promo-mgmt-modal-close" onClick={closeModal} aria-label={l10n.getString('close')}>&times;</button>
+              <button type="button" className="promo-mgmt-modal-close" onClick={modalExit.requestClose} aria-label={l10n.getString('close')}>&times;</button>
             </div>
 
             <div className="promo-mgmt-modal-body">
@@ -346,7 +351,7 @@ export default function PromotionManagementScreen() {
 
             <div className="promo-mgmt-modal-actions">
               <Localized id="cancel">
-                <Button variant="ghost" onClick={closeModal} disabled={saving}>Cancel</Button>
+                <Button variant="ghost" onClick={modalExit.requestClose} disabled={saving}>Cancel</Button>
               </Localized>
               <Localized id="save">
                 <Button variant="primary" loading={saving} disabled={!form.name.trim()} onClick={handleSave}>Save</Button>
