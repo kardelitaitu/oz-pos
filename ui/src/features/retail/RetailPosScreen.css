@@ -2136,8 +2136,8 @@
 }
 
 .retail-cart-qty-btn {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2rem;
+  height: 2rem;
   font-size: 0.875rem;
 }
 
@@ -2149,6 +2149,8 @@
 .retail-cart-remove-btn {
   font-size: 1.125rem;
   padding: 2px 6px;
+  min-width: 2rem;
+  min-height: 2rem;
 }
 
 /* ── Customer badge in cart ─────────────────────────── */
