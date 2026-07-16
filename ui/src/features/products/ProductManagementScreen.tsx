@@ -17,6 +17,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import VariantManagementScreen from './VariantManagementScreen';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './ProductManagementScreen.css';
 
 interface FormData {
@@ -69,6 +70,8 @@ export default function ProductManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSku, setEditingSku] = useState<string | null>(null);
+
+  const modalExit = useExitAnimation(showModal, () => setShowModal(false));
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -324,9 +327,9 @@ export default function ProductManagementScreen() {
         </div>
       )}
 
-      {showModal && (
-        <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
-          <div className="product-mgmt-modal">
+      {modalExit.shouldRender && showModal && (
+        <div className={`product-mgmt-overlay${modalExit.exiting ? ' product-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
+          <div className={`product-mgmt-modal${modalExit.exiting ? ' product-mgmt-modal--exiting' : ''}`}>
             <div className="product-mgmt-modal-header">
               <Localized id={editingSku ? 'product-mgmt-modal-edit-title' : 'product-mgmt-modal-add-title'}>
                 <h2>{editingSku ? 'Edit Product' : 'Add Product'}</h2>
@@ -335,7 +338,7 @@ export default function ProductManagementScreen() {
                 <button
                   type="button"
                   className="product-mgmt-modal-close"
-                  onClick={() => setShowModal(false)}
+                  onClick={modalExit.requestClose}
                   aria-label="Close"
                 >
                   &times;
@@ -506,7 +509,7 @@ export default function ProductManagementScreen() {
 
             <div className="product-mgmt-modal-actions">
               <Localized id="product-mgmt-btn-cancel">
-                <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancel</Button>
+                <Button variant="ghost" onClick={modalExit.requestClose} disabled={saving}>Cancel</Button>
               </Localized>
               <Button
                 variant="primary"

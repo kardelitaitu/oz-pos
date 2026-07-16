@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { renderHook } from '@testing-library/react';
 import { renderHookInAct } from '@/test-utils/renderInAct';
 import { useProducts } from '@/features/products/useProducts';
 import type { ProductDto, CategoryDto } from '@/api/products';
@@ -57,10 +59,14 @@ afterEach(() => {
 
 describe('useProducts', () => {
   describe('loading state', () => {
-    it('starts with loading=true', async () => {
+    it('starts with loading=true', () => {
       mocks.listProducts.mockReturnValue(new Promise(() => {}));
 
-      const { result } = await renderHookInAct(() => useProducts());
+      let result!: ReturnType<typeof renderHook<ReturnType<typeof useProducts>, unknown>>['result'];
+      act(() => {
+        const hook = renderHook(() => useProducts());
+        result = hook.result;
+      });
 
       expect(result.current.loading).toBe(true);
       expect(result.current.products).toEqual([]);
@@ -189,16 +195,23 @@ describe('useProducts', () => {
   });
 
   describe('cleanup', () => {
-    it('does not set state after unmount', async () => {
-      mocks.listProducts.mockReturnValue(new Promise((resolve) => setTimeout(() => resolve([makeProductDto()]), 100)));
+    it('does not set state after unmount', () => {
+      let resolve!: (v: unknown) => void;
+      mocks.listProducts.mockReturnValue(new Promise((r) => { resolve = r; }));
 
-      const { unmount } = await renderHookInAct(() => useProducts());
+      let result!: ReturnType<typeof renderHook<ReturnType<typeof useProducts>, unknown>>['result'];
+      let unmount!: () => void;
+      act(() => {
+        const hook = renderHook(() => useProducts());
+        result = hook.result;
+        unmount = hook.unmount;
+      });
 
       unmount();
+      act(() => { resolve([makeProductDto()]); });
 
-      await vi.waitFor(() => {
-        expect(mocks.listProducts).toHaveBeenCalled();
-      });
+      // After unmount, resolving the promise should not update state
+      expect(result.current.loading).toBe(true);
     });
   });
 });

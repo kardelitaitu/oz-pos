@@ -173,6 +173,16 @@
     to   { opacity: 1; }
   }
 
+  @keyframes product-overlay-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+
+  .product-mgmt-overlay--exiting {
+    animation: product-overlay-fade-out var(--duration-200) var(--ease-in) forwards;
+    pointer-events: none;
+  }
+
   .product-mgmt-modal {
     animation: product-modal-in var(--duration-200) var(--ease-out) both;
   }
@@ -181,6 +191,15 @@
     from { opacity: 0; transform: translateY(0.5rem); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  @keyframes product-modal-out {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(0.35rem); }
+  }
+
+  .product-mgmt-modal--exiting {
+    animation: product-modal-out var(--duration-200) var(--ease-in) forwards;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -188,6 +207,11 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     will-change: auto;
+  }
+
+  .product-mgmt-overlay--exiting,
+  .product-mgmt-modal--exiting {
+    opacity: 0;
   }
 }
 

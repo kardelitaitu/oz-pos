@@ -2241,7 +2241,7 @@
   text-align: left;
   font-family: inherit;
   font-size: 0.8125rem;
-  transition: background 0.1s;
+  transition: background var(--duration-100);
 }
 
 .retail-customer-search-item:last-child {

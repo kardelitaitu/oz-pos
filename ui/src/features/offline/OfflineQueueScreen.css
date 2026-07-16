@@ -132,7 +132,7 @@
 
 .offline-queue-table tbody tr:hover {
   background: var(--color-bg-secondary);
-  transition: background 0.1s ease;
+  transition: background var(--duration-100) var(--ease-out);
 }
 
 /* ── Cell styles ──────────────────────────────────────────────────── */

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { renderHookInAct } from '@/test-utils/renderInAct';
 import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 
@@ -117,10 +118,13 @@ describe('useBarcodeScanner', () => {
 
       const { unmount } = await renderHookInAct(() => useBarcodeScanner(makeOpts()));
 
-      unmount();
+      act(() => { unmount(); });
 
-      expect(unsubScan).toHaveBeenCalled();
-      expect(unsubErr).toHaveBeenCalled();
+      // The cleanup effect resolves the unsubscribe promises as microtasks
+      await vi.waitFor(() => {
+        expect(unsubScan).toHaveBeenCalled();
+        expect(unsubErr).toHaveBeenCalled();
+      });
     });
   });
 
