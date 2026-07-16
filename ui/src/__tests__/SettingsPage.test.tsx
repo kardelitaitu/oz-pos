@@ -287,8 +287,8 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /currency/i })).toBeInTheDocument();
     });
-    // Currency select is now a custom SettingsSelect (button, not native <select>).
-    const currencyTrigger = screen.getByLabelText(/default currency/i);
+    // Currency select trigger button with aria-label="Default currency".
+    const currencyTrigger = screen.getByRole('button', { name: /default currency/i });
     expect(currencyTrigger).toBeInTheDocument();
     // The selected value is shown in the trigger button text.
     expect(currencyTrigger).toHaveTextContent(/USD/);
@@ -297,13 +297,16 @@ describe('SettingsPage', () => {
   it('changes default currency via select', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByLabelText(/default currency/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /default currency/i })).toBeInTheDocument();
     });
     // Custom SettingsSelect: click the trigger to open the dropdown.
-    const currencyTrigger = screen.getByLabelText(/default currency/i);
+    const currencyTrigger = screen.getByRole('button', { name: /default currency/i });
     await userEvent.click(currencyTrigger);
-    // Click the EUR option in the portal dropdown.
-    const eurOption = screen.getByRole('option', { name: /EUR/ });
+    // Click the EUR option in the portal dropdown (scope to portal to avoid native <option>).
+    const dropdown = document.querySelector('.ssel-dropdown')!;
+    const eurOption = Array.from(dropdown.querySelectorAll('.ssel-option')).find(
+      (el) => el.textContent?.includes('EUR'),
+    )!;
     await userEvent.click(eurOption);
     // Verify the trigger now shows EUR.
     expect(currencyTrigger).toHaveTextContent(/EUR/);

@@ -86,10 +86,10 @@ describe('SettingsSelect', () => {
       expect(trigger).not.toHaveTextContent('undefined');
     });
 
-    it('renders with id on the trigger button', () => {
+    it('renders with id on the hidden native select for label association', () => {
       renderSelect({ id: 'my-custom-id' });
-      const trigger = screen.getByRole('button');
-      expect(trigger).toHaveAttribute('id', 'my-custom-id');
+      const nativeSelect = document.querySelector('select.sr-only');
+      expect(nativeSelect).toHaveAttribute('id', 'my-custom-id');
     });
 
     it('sets aria-expanded to false when closed', () => {
@@ -150,8 +150,11 @@ describe('SettingsSelect', () => {
       const { onChange } = renderSelect();
       // Open the dropdown.
       await user.click(screen.getByRole('button'));
-      // Click the "1,00 (comma)" option.
-      const option = screen.getByRole('option', { name: '1,00 (comma)' });
+      // Click the "1,00 (comma)" option — scope to the portal dropdown.
+      const dropdown = document.querySelector('.ssel-dropdown')!;
+      const option = Array.from(dropdown.querySelectorAll('.ssel-option')).find(
+        (el) => el.textContent === '1,00 (comma)',
+      )!;
       await user.click(option);
       expect(onChange).toHaveBeenCalledTimes(1);
       expect(onChange).toHaveBeenCalledWith('comma');
@@ -163,7 +166,7 @@ describe('SettingsSelect', () => {
       const user = userEvent.setup();
       renderSelect({ value: 'comma' });
       await user.click(screen.getByRole('button'));
-      const options = screen.getAllByRole('option');
+      const options = document.querySelectorAll('.ssel-option');
       expect(options[0]).toHaveAttribute('aria-selected', 'false');
       expect(options[1]).toHaveAttribute('aria-selected', 'true');
       expect(options[2]).toHaveAttribute('aria-selected', 'false');
@@ -397,7 +400,7 @@ describe('SettingsSelect', () => {
       const user = userEvent.setup();
       renderSelect();
       await user.click(screen.getByRole('button'));
-      const options = screen.getAllByRole('option');
+      const options = document.querySelectorAll('.ssel-option');
       expect(options).toHaveLength(3);
       expect(options[0]).toHaveTextContent('1.00 (dot)');
       expect(options[1]).toHaveTextContent('1,00 (comma)');
@@ -457,7 +460,8 @@ describe('SettingsSelect', () => {
         value: 'only',
       });
       await user.click(screen.getByRole('button'));
-      const option = screen.getByRole('option', { name: 'Only option' });
+      const dropdown = document.querySelector('.ssel-dropdown')!;
+      const option = dropdown.querySelector('.ssel-option')!;
       await user.click(option);
       expect(onChange).toHaveBeenCalledWith('only');
     });
@@ -494,7 +498,7 @@ describe('SettingsSelect', () => {
       const user = userEvent.setup();
       renderSelect({ value: 'dot' });
       await user.click(screen.getByRole('button'));
-      const options = screen.getAllByRole('option');
+      const options = document.querySelectorAll('.ssel-option');
       expect(options[0]).toHaveAttribute('role', 'option');
       expect(options[0]).toHaveAttribute('aria-selected', 'true');
     });
@@ -562,7 +566,10 @@ describe('SettingsSelect', () => {
       const user = userEvent.setup();
       const { onChange } = renderSelect();
       await user.click(screen.getByRole('button'));
-      const option = screen.getByRole('option', { name: /comma/ });
+      const dropdown = document.querySelector('.ssel-dropdown')!;
+      const option = Array.from(dropdown.querySelectorAll('.ssel-option')).find(
+        (el) => el.textContent?.includes('comma'),
+      )!;
       // Simulate tap on the option.
       await user.click(option);
       expect(onChange).toHaveBeenCalledWith('comma');
