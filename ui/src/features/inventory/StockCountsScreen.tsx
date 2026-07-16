@@ -6,6 +6,7 @@ import {
 } from '@/api/inventoryCounts';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './StockCountsScreen.css';
 
 /** Stock counts list screen — displays all stock counts with status filters and links to create new counts or view details. */
@@ -74,11 +75,34 @@ export default function StockCountsScreen() {
       </div>
 
       {loading ? (
-        <p className="sc-loading">
-          <Localized id="sc-loading">
-            <span>Loading stock counts…</span>
-          </Localized>
-        </p>
+        <div className="sc-loading-skeleton" aria-hidden="true">
+          <div className="sc-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="7rem" height="2.25rem" />
+          </div>
+          <div className="sc-filters">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} variant="block" width="5rem" height="1.75rem" />
+            ))}
+          </div>
+          <div className="sc-list">
+            {[0, 1, 2, 3].map((i) => (
+              <Card key={i} shadow="sm" className="sc-card">
+                <div className="sc-card-row">
+                  <Skeleton variant="text" width="5rem" height="1rem" />
+                  <Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-sm)' }} />
+                </div>
+                <div className="sc-card-meta">
+                  <Skeleton variant="text" width="4rem" height="0.75rem" />
+                  <Skeleton variant="text" width="6rem" height="0.75rem" />
+                </div>
+                <div className="sc-card-actions">
+                  <Skeleton variant="text" width="3rem" height="0.875rem" />
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
       ) : filtered.length === 0 ? (
         <p className="sc-empty">
           <Localized id="sc-empty-list">

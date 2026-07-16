@@ -41,7 +41,24 @@
   border-color: var(--color-accent);
 }
 
-.sc-loading,
+.sc-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sc-loading-skeleton .sc-header {
+  margin-bottom: 0;
+}
+
+.sc-loading-skeleton .sc-filters {
+  margin-bottom: 0;
+}
+
+.sc-loading-skeleton .sc-list {
+  pointer-events: none;
+}
+
 .sc-empty {
   text-align: center;
   color: var(--color-fg-tertiary);

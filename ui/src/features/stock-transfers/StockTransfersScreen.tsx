@@ -18,6 +18,7 @@ import { listTerminals, type TerminalDto } from '@/api/terminals';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './StockTransfersScreen.css';
 
 const STATUS_FILTERS = ['all', 'draft', 'pending', 'in_transit', 'received', 'cancelled'] as const;
@@ -279,9 +280,43 @@ export default function StockTransfersScreen() {
       </div>
 
       {loading ? (
-        <Localized id="loading">
-          <p className="stock-transfers-loading">Loading…</p>
-        </Localized>
+        <div className="stock-transfers-loading-skeleton" aria-hidden="true">
+          <div className="stock-transfers-header">
+            <Skeleton variant="block" width="12rem" height="1.75rem" />
+            <Skeleton variant="block" width="8rem" height="2.25rem" />
+          </div>
+          <div className="stock-transfers-filters">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} variant="block" width="5rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+            ))}
+          </div>
+          <div className="stock-transfers-table-wrap">
+            <table className="stock-transfers-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Transfer #', 'Status', 'Source', 'Destination', 'Created', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 5 ? '5rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="4.5rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="8rem" height="0.75rem" /></td>
+                    <td className="stock-transfers-cell-actions">
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error ? (
         <Card shadow="sm">
           <div className="stock-transfers-empty">

@@ -100,10 +100,12 @@ describe('VariantManagementScreen', () => {
 
   // ── Loading state ─────────────────────────────────────────────
 
-  it('shows loading state while fetching variants', () => {
+  it('shows loading skeleton while fetching variants', () => {
     mockListVariants.mockReturnValue(new Promise(() => {}));
     render(<VariantManagementScreen {...defaultProps} />);
-    expect(screen.getByText('Loading variants…')).toBeInTheDocument();
+    const skeleton = document.querySelector('.product-mgmt-table')?.closest('[aria-hidden="true"]');
+    expect(skeleton).toBeInTheDocument();
+    expect(screen.queryByText('Loading variants…')).not.toBeInTheDocument();
   });
 
   // ── Error state ──────────────────────────────────────────────

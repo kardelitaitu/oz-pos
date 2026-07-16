@@ -8,6 +8,7 @@ import {
   type ProductVariantDto,
 } from '@/api/products';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 
 interface Props {
@@ -173,9 +174,37 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               <Button variant="secondary" onClick={load}>Retry</Button>
             </div>
           ) : loading ? (
-            <Localized id="variant-mgmt-loading">
-              <p className="product-mgmt-loading">Loading variants…</p>
-            </Localized>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }} aria-hidden="true">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-3)' }}>
+                <Skeleton variant="block" width="7rem" height="2.25rem" />
+              </div>
+              <div className="product-mgmt-table-wrap">
+                <table className="product-mgmt-table" aria-hidden="true">
+                  <thead>
+                    <tr>
+                      {['Name', 'SKU', 'Price', 'Barcode', 'Status', ''].map((_, i) => (
+                        <th key={i}><Skeleton variant="text" width={i < 5 ? '4rem' : '3rem'} height="0.75rem" /></th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[0, 1, 2, 3].map((r) => (
+                      <tr key={r}>
+                        <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
+                        <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
+                        <td><Skeleton variant="text" width="4rem" height="0.875rem" /></td>
+                        <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                        <td><Skeleton variant="text" width="3rem" height="0.875rem" /></td>
+                        <td className="product-mgmt-cell-actions">
+                          <Skeleton variant="block" width="3rem" height="1.375rem" />
+                          <Skeleton variant="block" width="3rem" height="1.375rem" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : variants.length === 0 ? (
             <div className="product-mgmt-empty">
               <Localized id="variant-mgmt-empty">

@@ -52,10 +52,11 @@ describe('StockCountsScreen', () => {
     expect(screen.getByRole('button', { name: /new count/i })).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton while fetching stock counts', async () => {
     mockListCounts.mockReturnValue(new Promise(() => {}));
     renderWithFluentSync(<StockCountsScreen />, stockCountingFtl, sharedFtl);
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(document.querySelector('.sc-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no counts exist', async () => {

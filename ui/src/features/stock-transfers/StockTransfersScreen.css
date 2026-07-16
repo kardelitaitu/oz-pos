@@ -23,6 +23,24 @@
   text-align: center;
 }
 
+.stock-transfers-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.stock-transfers-loading-skeleton .stock-transfers-header {
+  margin-bottom: 0;
+}
+
+.stock-transfers-loading-skeleton .stock-transfers-filters {
+  margin-bottom: 0;
+}
+
+.stock-transfers-loading-skeleton .stock-transfers-table thead {
+  pointer-events: none;
+}
+
 .stock-transfers-empty {
   padding: var(--space-12) var(--space-4);
   text-align: center;
