@@ -113,7 +113,12 @@
 }
 
 .setup-step-panel {
-  animation: setup-fade-slide-in 0.35s var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setup-step-panel {
+    animation: setup-fade-slide-in 0.35s var(--ease-out) both;
+  }
 }
 
 @keyframes setup-fade-slide-in {
@@ -456,7 +461,12 @@
   align-items: center;
   justify-content: center;
   margin-bottom: var(--space-6);
-  animation: setup-check-bounce 0.5s var(--ease-out) 0.2s both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setup-complete-check {
+    animation: setup-check-bounce 0.5s var(--ease-out) 0.2s both;
+  }
 }
 
 .setup-complete-check svg {
