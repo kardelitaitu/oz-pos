@@ -27,7 +27,7 @@
   font-weight: 450;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.1s;
+  transition: background var(--duration-100);
 }
 
 .ctx-menu-item:hover {
