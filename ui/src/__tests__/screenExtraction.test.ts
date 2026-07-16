@@ -375,6 +375,17 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'inventory/StockCountDetail.tsx',
     css: ['inventory/StockCountDetail.css'],
     dynamicClassPrefixes: ['sc-badge--', 'sc-add-line-item--', 'sc-diff-'],
+    knownDynamicFragments: [
+      // String-interpolated fragments in the skeleton table header that
+      // the static class-name parser falsely extracts as CSS classes.
+      // These are template-literal substrings like 'sc-lines-col-' + suffix.
+      'sc-lines-col-',
+      'sku',
+      'name',
+      'expected',
+      'counted',
+      'diff',
+    ],
   },
   {
     name: 'StockCountForm',

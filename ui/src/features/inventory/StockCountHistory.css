@@ -26,7 +26,6 @@
   margin-bottom: 1.25rem;
 }
 
-.sc-hist-loading,
 .sc-hist-empty {
   text-align: center;
   color: var(--color-fg-tertiary);

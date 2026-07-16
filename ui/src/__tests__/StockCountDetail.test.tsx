@@ -57,10 +57,13 @@ describe('StockCountDetail', () => {
   });
 
   // ── Loading / not found ──────────────────────────────────────
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     mockGetStockCount.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    const { container } = renderWithFluentSync(<StockCountDetail countId="sc-1" onBack={vi.fn()} />, stockCountingFtl, sharedFtl);
+    const skeleton = container.querySelector('[aria-hidden="true"].sc-detail-screen');
+    expect(skeleton).toBeInTheDocument();
+    // Verify old loading text is not present
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
   it('shows not found when count is null', async () => {
