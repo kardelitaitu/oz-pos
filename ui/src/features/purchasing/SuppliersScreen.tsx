@@ -10,6 +10,7 @@ import {
 } from '@/api/purchasing';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { SettingsPopup } from '@/frontend/shared';
 import './SuppliersScreen.css';
 
 interface FormData {
@@ -234,65 +235,120 @@ export default function SuppliersScreen() {
         </div>
       )}
 
-      {showModal && (
-        <div className="suppliers-overlay" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit supplier' : 'Add supplier'}>
-          <div className="suppliers-modal">
-            <div className="suppliers-modal-header">
-              <h2>{editingId ? 'Edit Supplier' : 'Add Supplier'}</h2>
-              <button type="button" className="suppliers-modal-close" onClick={closeModal} aria-label="Close">&times;</button>
-            </div>
-            <div className="suppliers-modal-body">
-              <label className="suppliers-field">
-                <span className="suppliers-label">Code *</span>
-                <input className="suppliers-input" type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-              </label>
-              <label className="suppliers-field">
-                <span className="suppliers-label">Name *</span>
-                <input className="suppliers-input" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              </label>
-              <div className="suppliers-row">
-                <label className="suppliers-field">
-                  <span className="suppliers-label">Contact Person</span>
-                  <input className="suppliers-input" type="text" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} />
-                </label>
-                <label className="suppliers-field">
-                  <span className="suppliers-label">Phone</span>
-                  <input className="suppliers-input" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-                </label>
-              </div>
-              <label className="suppliers-field">
-                <span className="suppliers-label">Email</span>
-                <input className="suppliers-input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              </label>
-              <label className="suppliers-field">
-                <span className="suppliers-label">Address</span>
-                <input className="suppliers-input" type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-              </label>
-              <div className="suppliers-row">
-                <label className="suppliers-field">
-                  <span className="suppliers-label">Tax ID</span>
-                  <input className="suppliers-input" type="text" value={form.tax_id} onChange={(e) => setForm({ ...form, tax_id: e.target.value })} />
-                </label>
-                <label className="suppliers-field">
-                  <span className="suppliers-label">Payment Terms</span>
-                  <input className="suppliers-input" type="text" value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })} />
-                </label>
-              </div>
-              <label className="suppliers-field">
-                <span className="suppliers-label">Notes</span>
-                <textarea className="suppliers-input suppliers-textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} />
-              </label>
-              {error && <div className="suppliers-error" role="alert">{error}</div>}
-            </div>
-            <div className="suppliers-modal-actions">
-              <Button variant="ghost" onClick={closeModal} disabled={saving}>Cancel</Button>
-              <Button variant="primary" loading={saving} disabled={!form.name.trim() || !form.code.trim()} onClick={handleSave}>
-                {editingId ? 'Update' : 'Create'}
-              </Button>
-            </div>
-          </div>
+      <SettingsPopup
+        open={showModal}
+        onClose={closeModal}
+        title={l10n.getString(editingId ? 'suppliers-edit-title' : 'suppliers-add-title')}
+        saving={saving}
+        error={error}
+        onSave={handleSave}
+        saveLabel={l10n.getString(editingId ? 'suppliers-btn-update' : 'suppliers-btn-create')}
+        saveDisabled={!form.name.trim() || !form.code.trim()}
+        cancelLabel={l10n.getString('suppliers-btn-cancel')}
+      >
+        <label className="suppliers-field" htmlFor="supplier-field-code">
+          <span className="suppliers-label">Code *</span>
+          <input
+            className="suppliers-input"
+            type="text"
+            id="supplier-field-code"
+            value={form.code}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+            autoComplete="off"
+          />
+        </label>
+        <label className="suppliers-field" htmlFor="supplier-field-name">
+          <span className="suppliers-label">Name *</span>
+          <input
+            className="suppliers-input"
+            type="text"
+            id="supplier-field-name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            autoComplete="off"
+          />
+        </label>
+        <div className="suppliers-row">
+          <label className="suppliers-field" htmlFor="supplier-field-contact">
+            <span className="suppliers-label">Contact Person</span>
+            <input
+              className="suppliers-input"
+              type="text"
+              id="supplier-field-contact"
+              value={form.contact_person}
+              onChange={(e) => setForm({ ...form, contact_person: e.target.value })}
+              autoComplete="off"
+            />
+          </label>
+          <label className="suppliers-field" htmlFor="supplier-field-phone">
+            <span className="suppliers-label">Phone</span>
+            <input
+              className="suppliers-input"
+              type="tel"
+              id="supplier-field-phone"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              autoComplete="off"
+            />
+          </label>
         </div>
-      )}
+        <label className="suppliers-field" htmlFor="supplier-field-email">
+          <span className="suppliers-label">Email</span>
+          <input
+            className="suppliers-input"
+            type="email"
+            id="supplier-field-email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            autoComplete="off"
+          />
+        </label>
+        <label className="suppliers-field" htmlFor="supplier-field-address">
+          <span className="suppliers-label">Address</span>
+          <input
+            className="suppliers-input"
+            type="text"
+            id="supplier-field-address"
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+            autoComplete="off"
+          />
+        </label>
+        <div className="suppliers-row">
+          <label className="suppliers-field" htmlFor="supplier-field-tax-id">
+            <span className="suppliers-label">Tax ID</span>
+            <input
+              className="suppliers-input"
+              type="text"
+              id="supplier-field-tax-id"
+              value={form.tax_id}
+              onChange={(e) => setForm({ ...form, tax_id: e.target.value })}
+              autoComplete="off"
+            />
+          </label>
+          <label className="suppliers-field" htmlFor="supplier-field-payment-terms">
+            <span className="suppliers-label">Payment Terms</span>
+            <input
+              className="suppliers-input"
+              type="text"
+              id="supplier-field-payment-terms"
+              value={form.payment_terms}
+              onChange={(e) => setForm({ ...form, payment_terms: e.target.value })}
+              autoComplete="off"
+            />
+          </label>
+        </div>
+        <label className="suppliers-field" htmlFor="supplier-field-notes">
+          <span className="suppliers-label">Notes</span>
+          <textarea
+            className="suppliers-input suppliers-textarea"
+            id="supplier-field-notes"
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            rows={3}
+          />
+        </label>
+      </SettingsPopup>
     </div>
   );
 }

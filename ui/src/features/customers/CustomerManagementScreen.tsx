@@ -12,6 +12,7 @@ import {
 } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { SettingsPopup } from '@/frontend/shared';
 import './CustomerManagementScreen.css';
 
 // ── Form state ──────────────────────────────────────────────────────
@@ -286,134 +287,92 @@ export default function CustomerManagementScreen() {
               </div>
       )}
 
-      {/* ── Add/Edit Modal ──────────────────────────────────────── */}
-      {showModal && (
-        <div className="customer-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(editingId ? 'customer-mgmt-modal-edit-aria' : 'customer-mgmt-modal-add-aria')}>
-            <div className="customer-mgmt-modal">
-              <div className="customer-mgmt-modal-header">
-                <Localized id={editingId ? 'customer-mgmt-modal-edit-title' : 'customer-mgmt-modal-add-title'}>
-                  <h2>{editingId ? 'Edit Customer' : 'Add Customer'}</h2>
-                </Localized>
-                <Localized id="customer-mgmt-modal-close" attrs={{ 'aria-label': true }}>
-                  <button
-                    type="button"
-                    className="customer-mgmt-modal-close"
-                    onClick={closeModal}
-                    aria-label="Close"
-                  >
-                    &times;
-                  </button>
-                </Localized>
-              </div>
+      <SettingsPopup
+        open={showModal}
+        onClose={closeModal}
+        title={l10n.getString(editingId ? 'customer-mgmt-modal-edit-title' : 'customer-mgmt-modal-add-title')}
+        saving={saving}
+        error={error}
+        onSave={handleSave}
+        saveLabel={l10n.getString(editingId ? 'customer-mgmt-btn-update' : 'customer-mgmt-btn-create')}
+        saveDisabled={!form.name.trim()}
+        cancelLabel={l10n.getString('customer-mgmt-btn-cancel')}
+      >
+        <div className="customer-mgmt-field">
+          <label htmlFor="customer-field-name" className="customer-mgmt-label">
+            <Localized id="customer-mgmt-field-name">
+              <span>Name *</span>
+            </Localized>
+          </label>
+          <Localized id="customer-mgmt-name-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="customer-mgmt-input"
+              type="text"
+              id="customer-field-name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Jane Smith"
+              autoComplete="off"
+            />
+          </Localized>
+        </div>
 
-              <div className="customer-mgmt-modal-body">
-                <div className="customer-mgmt-field">
-                  <Localized id="customer-mgmt-field-name">
-                    <span className="customer-mgmt-label">Name *</span>
-                  </Localized>                    <Localized id="customer-mgmt-name-aria" attrs={{ 'aria-label': true }}>
-                    <Localized id="customer-mgmt-name-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className="customer-mgmt-input"
-                        type="text"
-                        id="customer-field-name"
-                        aria-label="Name"
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                        placeholder="e.g. Jane Smith"
-                        autoComplete="off"
-                      />
-                    </Localized>
-                    </Localized>
-                </div>
+        <div className="customer-mgmt-field">
+          <label htmlFor="customer-field-email" className="customer-mgmt-label">
+            <Localized id="customer-mgmt-field-email">
+              <span>Email</span>
+            </Localized>
+          </label>
+          <Localized id="customer-mgmt-email-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="customer-mgmt-input"
+              type="email"
+              id="customer-field-email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="jane@example.com"
+              autoComplete="off"
+            />
+          </Localized>
+        </div>
 
-                <div className="customer-mgmt-field">
-                  <Localized id="customer-mgmt-field-email">
-                    <span className="customer-mgmt-label">Email</span>
-                  </Localized>                    <Localized id="customer-mgmt-email-aria" attrs={{ 'aria-label': true }}>
-                    <Localized id="customer-mgmt-email-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className="customer-mgmt-input"
-                        type="email"
-                        id="customer-field-email"
-                        aria-label="Email"
-                        value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        placeholder="jane@example.com"
-                        autoComplete="off"
-                      />
-                    </Localized>
-                    </Localized>
-                </div>
+        <div className="customer-mgmt-field">
+          <label htmlFor="customer-field-phone" className="customer-mgmt-label">
+            <Localized id="customer-mgmt-field-phone">
+              <span>Phone</span>
+            </Localized>
+          </label>
+          <Localized id="customer-mgmt-phone-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="customer-mgmt-input"
+              type="tel"
+              id="customer-field-phone"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="+1-555-0100"
+              autoComplete="off"
+            />
+          </Localized>
+        </div>
 
-                <div className="customer-mgmt-field">
-                  <Localized id="customer-mgmt-field-phone">
-                    <span className="customer-mgmt-label">Phone</span>
-                  </Localized>                    <Localized id="customer-mgmt-phone-aria" attrs={{ 'aria-label': true }}>
-                    <Localized id="customer-mgmt-phone-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className="customer-mgmt-input"
-                        type="tel"
-                        id="customer-field-phone"
-                        aria-label="Phone"
-                        value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                        placeholder="+1-555-0100"
-                        autoComplete="off"
-                      />
-                    </Localized>
-                    </Localized>
-                </div>
-
-                <div className="customer-mgmt-field">
-                  <Localized id="customer-mgmt-field-notes">
-                    <span className="customer-mgmt-label">Notes</span>
-                  </Localized>                    <Localized id="customer-mgmt-notes-aria" attrs={{ 'aria-label': true }}>
-                    <Localized id="customer-mgmt-notes-placeholder" attrs={{ placeholder: true }}>
-                      <textarea
-                        className="customer-mgmt-input customer-mgmt-textarea"
-                        id="customer-field-notes"
-                        aria-label="Notes"
-                        value={form.notes}
-                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                        placeholder="Preferences, special notes…"
-                        rows={3}
-                      />
-                    </Localized>
-                    </Localized>
-                </div>
-
-                {error && (
-                  <div className="customer-mgmt-error" role="alert">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="15" y1="9" x2="9" y2="15" />
-                      <line x1="9" y1="9" x2="15" y2="15" />
-                    </svg>
-                    {error}
-                  </div>
-                )}
-              </div>
-
-              <div className="customer-mgmt-modal-actions">
-                <Localized id="customer-mgmt-btn-cancel">
-                  <Button variant="ghost" onClick={closeModal} disabled={saving}>
-                    Cancel
-                  </Button>
-                </Localized>
-                <Button
-                  variant="primary"
-                  loading={saving}
-                  disabled={!form.name.trim()}
-                  onClick={handleSave}
-                >
-                  <Localized id={editingId ? 'customer-mgmt-btn-update' : 'customer-mgmt-btn-create'}>
-                    <span>{editingId ? 'Update' : 'Create'}</span>
-                  </Localized>
-                </Button>
-              </div>
-            </div>
-          </div>
-      )}
+        <div className="customer-mgmt-field">
+          <label htmlFor="customer-field-notes" className="customer-mgmt-label">
+            <Localized id="customer-mgmt-field-notes">
+              <span>Notes</span>
+            </Localized>
+          </label>
+          <Localized id="customer-mgmt-notes-placeholder" attrs={{ placeholder: true }}>
+            <textarea
+              className="customer-mgmt-input customer-mgmt-textarea"
+              id="customer-field-notes"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="Preferences, special notes…"
+              rows={3}
+            />
+          </Localized>
+        </div>
+      </SettingsPopup>
     </div>
   );
 }

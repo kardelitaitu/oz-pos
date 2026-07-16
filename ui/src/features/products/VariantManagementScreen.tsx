@@ -8,6 +8,7 @@ import {
   type ProductVariantDto,
 } from '@/api/products';
 import { Button } from '@/components/Button';
+import { SettingsPopup } from '@/frontend/shared';
 
 interface Props {
   productSku: string;
@@ -260,183 +261,150 @@ export default function VariantManagementScreen({ productSku, productName, onClo
           )}
         </div>
 
-        {showModal && (            <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-dialog-aria', { mode: editingSku ? 'edit' : 'add' })} style={{ zIndex: 200 }}>
-            <div className="product-mgmt-modal">
-              <div className="product-mgmt-modal-header">
-                <Localized id={editingSku ? 'variant-mgmt-modal-edit-title' : 'variant-mgmt-modal-add-title'}>
-                  <h2>{editingSku ? 'Edit Variant' : 'Add Variant'}</h2>
-                </Localized>
-                <Localized id="variant-mgmt-close-aria" attrs={{ 'aria-label': true }}>
-                  <button
-                    type="button"
-                    className="product-mgmt-modal-close"
-                    onClick={() => setShowModal(false)}
-                    aria-label="Close"
-                  >
-                    &times;
-                  </button>
-                </Localized>
-              </div>
+        <SettingsPopup
+          open={showModal}
+          onClose={() => setShowModal(false)}
+          title={l10n.getString(editingSku ? 'variant-mgmt-modal-edit-title' : 'variant-mgmt-modal-add-title')}
+          saving={saving}
+          onSave={handleSave}
+          saveLabel={l10n.getString(editingSku ? 'variant-mgmt-btn-update' : 'variant-mgmt-btn-create')}
+          saveDisabled={!form.name.trim() || !form.sku.trim()}
+          cancelLabel={l10n.getString('variant-mgmt-btn-cancel')}
+        >
+          <label className="product-mgmt-field" htmlFor="variant-field-name">
+            {l10n.getString('variant-mgmt-field-name-required')}
+            <Localized id="variant-mgmt-name-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="product-mgmt-input"
+                type="text"
+                id="variant-field-name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Large"
+              />
+            </Localized>
+          </label>
 
-              <div className="product-mgmt-modal-body">
-                <label className="product-mgmt-field" htmlFor="variant-field-name">
-                  {l10n.getString('variant-mgmt-field-name-required')}
-                  <Localized id="variant-mgmt-name-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="product-mgmt-input"
-                      type="text"
-                      id="variant-field-name"
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g. Large"
-                    />
-                  </Localized>
-                </label>
+          <label className="product-mgmt-field" htmlFor="variant-field-sku">
+            {l10n.getString('variant-mgmt-field-sku-required')}
+            <Localized id="variant-mgmt-sku-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="product-mgmt-input"
+                type="text"
+                id="variant-field-sku"
+                value={form.sku}
+                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                disabled={!!editingSku}
+                placeholder="e.g. TEA-LARGE"
+              />
+            </Localized>
+          </label>
 
-                <label className="product-mgmt-field" htmlFor="variant-field-sku">
-                  {l10n.getString('variant-mgmt-field-sku-required')}
-                  <Localized id="variant-mgmt-sku-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="product-mgmt-input"
-                      type="text"
-                      id="variant-field-sku"
-                      value={form.sku}
-                      onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                      disabled={!!editingSku}
-                      placeholder="e.g. TEA-LARGE"
-                    />
-                  </Localized>
-                </label>
+          <div className="product-mgmt-row">
+            <label className="product-mgmt-field" htmlFor="variant-field-price">
+              {l10n.getString('variant-mgmt-field-price')}
+              <Localized id="variant-mgmt-price-placeholder" attrs={{ placeholder: true }}>
+                <input
+                  className="product-mgmt-input"
+                  type="number"
+                  id="variant-field-price"
+                  min="0"
+                  value={form.priceMinor}
+                  onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
+                  placeholder="450"
+                />
+              </Localized>
+            </label>
 
-                <div className="product-mgmt-row">
-                  <label className="product-mgmt-field" htmlFor="variant-field-price">
-                    {l10n.getString('variant-mgmt-field-price')}
-                    <Localized id="variant-mgmt-price-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className="product-mgmt-input"
-                        type="number"
-                        id="variant-field-price"
-                        min="0"
-                        value={form.priceMinor}
-                        onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
-                        placeholder="450"
-                      />
-                    </Localized>
-                  </label>
-
-                  <label className="product-mgmt-field" htmlFor="variant-field-currency">
-                    {l10n.getString('variant-mgmt-field-currency')}
-                    <Localized id="variant-mgmt-currency-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className="product-mgmt-input"
-                        type="text"
-                        id="variant-field-currency"
-                        value={form.currency}
-                        onChange={(e) => setForm({ ...form, currency: e.target.value })}
-                        placeholder="USD"
-                        maxLength={3}
-                      />
-                    </Localized>
-                  </label>
-                </div>
-
-                <label className="product-mgmt-field" htmlFor="variant-field-barcode">
-                  {l10n.getString('variant-mgmt-field-barcode')}
-                  <Localized id="variant-mgmt-barcode-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="product-mgmt-input"
-                      type="text"
-                      id="variant-field-barcode"
-                      value={form.barcode}
-                      onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                      placeholder="4901234567890"
-                    />
-                  </Localized>
-                </label>
-
-                <div className="product-mgmt-row">
-                  <label className="product-mgmt-field" htmlFor="variant-field-sort">
-                    {l10n.getString('variant-mgmt-field-sort-order')}
-                    <Localized id="variant-mgmt-sort-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className="product-mgmt-input"
-                        type="number"
-                        id="variant-field-sort"
-                        min="0"
-                        value={form.sortOrder}
-                        onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
-                        placeholder="0"
-                      />
-                    </Localized>
-                  </label>
-
-                  <label className="product-mgmt-field" htmlFor="variant-field-active" style={{ justifyContent: 'flex-end', paddingBottom: 'var(--space-1)' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                      <input
-                        type="checkbox"
-                        id="variant-field-active"
-                        checked={form.isActive}
-                        onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                      />
-                      {l10n.getString('variant-mgmt-field-active')}
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="product-mgmt-modal-actions">
-                <Localized id="variant-mgmt-btn-cancel">
-                  <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancel</Button>
-                </Localized>
-                <Button
-                  variant="primary"
-                  loading={saving}
-                  disabled={!form.name.trim() || !form.sku.trim()}
-                  onClick={handleSave}
-                >
-                  <Localized id={editingSku ? 'variant-mgmt-btn-update' : 'variant-mgmt-btn-create'}>
-                    <span>{editingSku ? 'Update' : 'Create'}</span>
-                  </Localized>
-                </Button>
-              </div>
-            </div>
-          </div>        )}
-
-        {confirmDeleteSku && (
-          <div className="product-mgmt-overlay" role="alertdialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-delete-confirm-aria')} style={{ zIndex: 200 }}>
-            <div className="product-mgmt-modal" style={{ width: '380px' }}>
-              <div className="product-mgmt-modal-header">
-                <Localized id="variant-mgmt-delete-confirm-title">
-                  <h2>Delete Variant</h2>
-                </Localized>
-              </div>
-              <div className="product-mgmt-modal-body">
-                {(() => {
-                  const v = variants.find((x) => x.sku === confirmDeleteSku);
-                  return v ? (
-                    <Localized id="variant-mgmt-delete-confirm-body" vars={{ name: v.name, sku: v.sku }}>
-                      <p>Are you sure you want to delete variant &quot;{v.name}&quot; ({v.sku})? This action cannot be undone.</p>
-                    </Localized>
-                  ) : null;
-                })()}
-              </div>
-              <div className="product-mgmt-modal-actions">
-                <Localized id="variant-mgmt-delete-confirm-cancel">
-                  <Button variant="ghost" onClick={() => setConfirmDeleteSku(null)} disabled={!!deletingSku}>Cancel</Button>
-                </Localized>
-                <Button
-                  variant="danger"
-                  loading={!!deletingSku}
-                  onClick={handleDelete}
-                >
-                  <Localized id="variant-mgmt-delete-confirm-confirm">
-                    <span>Delete</span>
-                  </Localized>
-                </Button>
-              </div>
-            </div>
+            <label className="product-mgmt-field" htmlFor="variant-field-currency">
+              {l10n.getString('variant-mgmt-field-currency')}
+              <Localized id="variant-mgmt-currency-placeholder" attrs={{ placeholder: true }}>
+                <input
+                  className="product-mgmt-input"
+                  type="text"
+                  id="variant-field-currency"
+                  value={form.currency}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  placeholder="USD"
+                  maxLength={3}
+                />
+              </Localized>
+            </label>
           </div>
-        )}
+
+          <label className="product-mgmt-field" htmlFor="variant-field-barcode">
+            {l10n.getString('variant-mgmt-field-barcode')}
+            <Localized id="variant-mgmt-barcode-placeholder" attrs={{ placeholder: true }}>
+              <input
+                className="product-mgmt-input"
+                type="text"
+                id="variant-field-barcode"
+                value={form.barcode}
+                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                placeholder="4901234567890"
+              />
+            </Localized>
+          </label>
+
+          <div className="product-mgmt-row">
+            <label className="product-mgmt-field" htmlFor="variant-field-sort">
+              {l10n.getString('variant-mgmt-field-sort-order')}
+              <Localized id="variant-mgmt-sort-placeholder" attrs={{ placeholder: true }}>
+                <input
+                  className="product-mgmt-input"
+                  type="number"
+                  id="variant-field-sort"
+                  min="0"
+                  value={form.sortOrder}
+                  onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
+                  placeholder="0"
+                />
+              </Localized>
+            </label>
+
+            <label className="product-mgmt-field" htmlFor="variant-field-active" style={{ justifyContent: 'flex-end', paddingBottom: 'var(--space-1)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <input
+                  type="checkbox"
+                  id="variant-field-active"
+                  checked={form.isActive}
+                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                />
+                {l10n.getString('variant-mgmt-field-active')}
+              </span>
+            </label>
+          </div>
+        </SettingsPopup>
+
+        <SettingsPopup
+          open={!!confirmDeleteSku}
+          onClose={() => setConfirmDeleteSku(null)}
+          title={l10n.getString('variant-mgmt-delete-confirm-title')}
+          size="sm"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmDeleteSku(null)} disabled={!!deletingSku}>
+                <Localized id="variant-mgmt-delete-confirm-cancel">
+                  <span>Cancel</span>
+                </Localized>
+              </Button>
+              <Button variant="danger" loading={!!deletingSku} onClick={handleDelete}>
+                <Localized id="variant-mgmt-delete-confirm-confirm">
+                  <span>Delete</span>
+                </Localized>
+              </Button>
+            </>
+          }
+        >
+          {(() => {
+            const v = variants.find((x) => x.sku === confirmDeleteSku);
+            return v ? (
+              <Localized id="variant-mgmt-delete-confirm-body" vars={{ name: v.name, sku: v.sku }}>
+                <p>Are you sure you want to delete variant &quot;{v.name}&quot; ({v.sku})? This action cannot be undone.</p>
+              </Localized>
+            ) : null;
+          })()}
+        </SettingsPopup>
       </div>
     </div>
   );

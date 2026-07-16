@@ -90,8 +90,8 @@
   /* Stronger radial bloom — visible glow from top implies depth */
   --color-bg:              radial-gradient(ellipse at 50% -10%, #132540 0%, #07111d 60%, #040a12 100%);
   /* Blue-tinted glass surfaces — hue resonance with the background */
-  --color-bg-elevated:     rgba(43, 92, 143, 0.08);
-  --color-bg-surface:      rgba(43, 92, 143, 0.05);
+  --color-bg-elevated:     rgba(16, 82, 188, 0.08);
+  --color-bg-surface:      rgba(16, 82, 188, 0.05);
   --color-bg-overlay:      rgba(0, 0, 0, 0.55);
   --color-bg-input:        rgba(0, 0, 0, 0.25);
 
@@ -106,7 +106,7 @@
   --color-accent:          #5a9fd4;
   --color-accent-hover:    #73b2e0;
   --color-accent-active:   #3d88c4;
-  --color-accent-subtle:   rgba(43, 92, 143, 0.18);
+  --color-accent-subtle:   rgba(16, 82, 188, 0.18);
   --color-accent-fg:       #ffffff;
 
   /* Blue-tinted borders for hue resonance */
@@ -114,7 +114,7 @@
   --color-border-hover:    rgba(90, 159, 212, 0.25);
   --color-border-strong:   rgba(90, 159, 212, 0.35);
   --color-border-focus:    #5a9fd4;
-  --color-border-subtle:   rgba(43, 92, 143, 0.06);
+  --color-border-subtle:   rgba(16, 82, 188, 0.06);
 
   --color-success:         #4ade80;
   --color-success-bg:      rgba(74, 222, 128, 0.08);
@@ -183,9 +183,9 @@
   /* ── Shadows (Steel Blue Glassmorphic) — blue-tinted for depth ──── */
   --shadow-xs:   0 1px 2px rgba(4, 10, 18, 0.5);
   --shadow-sm:   0 1px 3px rgba(4, 10, 18, 0.5), 0 1px 2px rgba(4, 10, 18, 0.4);
-  --shadow-md:   0 4px 12px -1px rgba(4, 10, 18, 0.55), 0 2px 4px -2px rgba(43, 92, 143, 0.15);
-  --shadow-lg:   0 10px 24px -3px rgba(4, 10, 18, 0.6), 0 4px 8px -4px rgba(43, 92, 143, 0.2);
-  --shadow-xl:   0 20px 40px -5px rgba(4, 10, 18, 0.65), 0 8px 16px -6px rgba(43, 92, 143, 0.25);
+  --shadow-md:   0 4px 12px -1px rgba(4, 10, 18, 0.55), 0 2px 4px -2px rgba(16, 82, 188, 0.15);
+  --shadow-lg:   0 10px 24px -3px rgba(4, 10, 18, 0.6), 0 4px 8px -4px rgba(16, 82, 188, 0.2);
+  --shadow-xl:   0 20px 40px -5px rgba(4, 10, 18, 0.65), 0 8px 16px -6px rgba(16, 82, 188, 0.25);
   --shadow-2xl:  0 25px 60px -12px rgba(4, 10, 18, 0.7), 0 0 0 1px rgba(90, 159, 212, 0.08);
   --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.5);
 
@@ -226,12 +226,12 @@
   --blur-amount: 0px;
   --shadow-glow: none;
 
-  /* Neutral — max ~60 % white, blue-tinted steel */
-  --neutral-50:  #d6dade;
-  --neutral-100: #c8d0d8;
-  --neutral-200: #b4bfcb;
-  --neutral-300: #9bacc0;
-  --neutral-400: #7a93ad;
+  /* Neutral — Tailwind slate (industry standard) */
+  --neutral-50:  #f8fafc;
+  --neutral-100: #f1f5f9;
+  --neutral-200: #e2e8f0;
+  --neutral-300: #cbd5e1;
+  --neutral-400: #94a3b8;
   --neutral-500: #64748b;
   --neutral-600: #475569;
   --neutral-700: #334155;
@@ -240,25 +240,25 @@
   --neutral-950: #020617;
 
   /* Brand / Primary — Steel Blue */
-  --primary-50:  #e5edf5;
-  --primary-100: #cde0f0;
-  --primary-200: #aac8e3;
-  --primary-300: #7aa8cc;
-  --primary-400: #4f82b0;
-  --primary-500: #2b5c8f;
-  --primary-600: #224b75;
-  --primary-700: #1c3e60;
-  --primary-800: #16304b;
-  --primary-900: #102235;
-  --primary-950: #08111b;
+  --primary-50:  #f3f6fc;
+  --primary-100: #e2eaf7;
+  --primary-200: #c3d4ee;
+  --primary-300: #9fbae4;
+  --primary-400: #749bd8;
+  --primary-500: #1052bc;
+  --primary-600: #0d439a;
+  --primary-700: #0b3880;
+  --primary-800: #08295e;
+  --primary-900: #051a3c;
+  --primary-950: #020c1c;
 
   /* Semantic colour tokens (light) */
   /* Blue-tinted gradient gives a soft light-source feel from above */
-  --color-bg:              linear-gradient(160deg, #d5e0ea 0%, #c8d8e5 50%, #bcd0e0 100%);
-  --color-bg-elevated:     #d6dee5;
-  --color-bg-surface:      rgba(214, 222, 229, 0.85);
+  --color-bg:              linear-gradient(160deg, #f8fafc 0%, #f1f5f9 50%, #eef2f6 100%);
+  --color-bg-elevated:     #ffffff;
+  --color-bg-surface:      rgba(255, 255, 255, 0.7);
   --color-bg-overlay:      rgba(0, 0, 0, 0.45);
-  --color-bg-input:        #d0dae3;
+  --color-bg-input:        #ffffff;
 
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);
@@ -273,11 +273,11 @@
   --color-accent-subtle:   var(--primary-100);
   --color-accent-fg:       #ffffff;
 
-  --color-border:          rgba(43, 92, 143, 0.12);
-  --color-border-hover:    rgba(43, 92, 143, 0.22);
-  --color-border-strong:   rgba(43, 92, 143, 0.32);
+  --color-border:          rgba(16, 82, 188, 0.12);
+  --color-border-hover:    rgba(16, 82, 188, 0.22);
+  --color-border-strong:   rgba(16, 82, 188, 0.32);
   --color-border-focus:    var(--primary-500);
-  --color-border-subtle:   rgba(43, 92, 143, 0.06);
+  --color-border-subtle:   rgba(16, 82, 188, 0.06);
 
   --color-success:         #16a34a;
   --color-success-bg:      #f0fdf4;
@@ -297,21 +297,21 @@
   --color-link-hover:      var(--primary-700);
   --color-link-visited:    #6d28d9;
 
-  --color-bg-primary:      #d6dee5;
+  --color-bg-primary:      #ffffff;
   --color-bg-secondary:    var(--neutral-100);
-  --color-bg-hover:        rgba(43, 92, 143, 0.06);
+  --color-bg-hover:        rgba(16, 82, 188, 0.06);
 
-  --color-accent-dim:      rgba(43, 92, 143, 0.1);
-  --color-accent-alpha:    rgba(43, 92, 143, 0.18);
+  --color-accent-dim:      rgba(16, 82, 188, 0.1);
+  --color-accent-alpha:    rgba(16, 82, 188, 0.18);
   --color-accent-secondary: var(--primary-400);
 
   /* Shadows — blue-tinted for cohesion with steel blue palette */
   --shadow-xs:   0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-sm:   0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(43, 92, 143, 0.05);
-  --shadow-md:   0 4px 12px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(43, 92, 143, 0.08);
-  --shadow-lg:   0 10px 24px -3px rgba(15, 23, 42, 0.12), 0 4px 8px -4px rgba(43, 92, 143, 0.1);
-  --shadow-xl:   0 20px 40px -5px rgba(15, 23, 42, 0.14), 0 8px 16px -6px rgba(43, 92, 143, 0.12);
-  --shadow-2xl:  0 25px 60px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(43, 92, 143, 0.06);
+  --shadow-sm:   0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(16, 82, 188, 0.05);
+  --shadow-md:   0 4px 12px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(16, 82, 188, 0.08);
+  --shadow-lg:   0 10px 24px -3px rgba(15, 23, 42, 0.12), 0 4px 8px -4px rgba(16, 82, 188, 0.1);
+  --shadow-xl:   0 20px 40px -5px rgba(15, 23, 42, 0.14), 0 8px 16px -6px rgba(16, 82, 188, 0.12);
+  --shadow-2xl:  0 25px 60px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(16, 82, 188, 0.06);
   --shadow-inner: inset 0 2px 4px rgba(15, 23, 42, 0.06);
 }
 
@@ -364,14 +364,14 @@
   --color-accent:          #5a9fd4;
   --color-accent-hover:    #73b2e0;
   --color-accent-active:   #3d88c4;
-  --color-accent-subtle:   rgba(43, 92, 143, 0.2);
+  --color-accent-subtle:   rgba(16, 82, 188, 0.2);
   --color-accent-fg:       #ffffff;
 
   --color-border:          rgba(90, 159, 212, 0.12);
   --color-border-hover:    rgba(90, 159, 212, 0.22);
   --color-border-strong:   rgba(90, 159, 212, 0.32);
   --color-border-focus:    #5a9fd4;
-  --color-border-subtle:   rgba(43, 92, 143, 0.08);
+  --color-border-subtle:   rgba(16, 82, 188, 0.08);
 
   --color-success:         #4ade80;
   --color-success-bg:      rgba(74, 222, 128, 0.08);
@@ -399,9 +399,9 @@
   /* Shadows — blue-tinted for steel blue dark surfaces */
   --shadow-xs:   0 1px 2px rgba(8, 14, 22, 0.5);
   --shadow-sm:   0 1px 3px rgba(8, 14, 22, 0.55), 0 1px 2px rgba(8, 14, 22, 0.4);
-  --shadow-md:   0 4px 12px -1px rgba(8, 14, 22, 0.6), 0 2px 4px -2px rgba(43, 92, 143, 0.15);
-  --shadow-lg:   0 10px 24px -3px rgba(8, 14, 22, 0.65), 0 4px 8px -4px rgba(43, 92, 143, 0.2);
-  --shadow-xl:   0 20px 40px -5px rgba(8, 14, 22, 0.7), 0 8px 16px -6px rgba(43, 92, 143, 0.25);
+  --shadow-md:   0 4px 12px -1px rgba(8, 14, 22, 0.6), 0 2px 4px -2px rgba(16, 82, 188, 0.15);
+  --shadow-lg:   0 10px 24px -3px rgba(8, 14, 22, 0.65), 0 4px 8px -4px rgba(16, 82, 188, 0.2);
+  --shadow-xl:   0 20px 40px -5px rgba(8, 14, 22, 0.7), 0 8px 16px -6px rgba(16, 82, 188, 0.25);
   --shadow-2xl:  0 25px 60px -12px rgba(8, 14, 22, 0.75), 0 0 0 1px rgba(90, 159, 212, 0.06);
   --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.5);
 }

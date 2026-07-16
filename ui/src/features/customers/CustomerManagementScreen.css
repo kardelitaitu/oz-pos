@@ -183,71 +183,6 @@
   opacity: 0.5;
   cursor: default;
 }
-
-/* ── Modal ────────────────────────────────────────────────────────── */
-
-.customer-mgmt-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-overlay);
-}
-
-.customer-mgmt-modal {
-  width: 27.5rem;
-  max-width: 92vw;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-}
-
-.customer-mgmt-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.customer-mgmt-modal-header h2 {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-fg);
-}
-
-.customer-mgmt-modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--color-fg-tertiary);
-  padding: 0;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-}
-
-.customer-mgmt-modal-close:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
-}
-
-.customer-mgmt-modal-body {
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
 .customer-mgmt-field {
   display: flex;
   flex-direction: column;
@@ -281,35 +216,6 @@
   resize: vertical;
   min-height: 3.75rem;
   font-family: inherit;
-}
-
-/* ── Error ────────────────────────────────────────────────────────── */
-
-.customer-mgmt-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-dim);
-  border-radius: var(--radius-md);
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.customer-mgmt-error svg {
-  flex-shrink: 0;
-}
-
-/* ── Modal actions ────────────────────────────────────────────────── */
-
-.customer-mgmt-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--color-border);
 }
 
 @media (prefers-reduced-motion: no-preference) {

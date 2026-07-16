@@ -22,6 +22,11 @@ const supplierFtl = `
 supplier-name-required = Name is required
 supplier-code-required = Code is required
 supplier-save-failed = Save failed
+suppliers-add-title = Add Supplier
+suppliers-edit-title = Edit Supplier
+suppliers-btn-create = Create
+suppliers-btn-update = Update
+suppliers-btn-cancel = Cancel
 `;
 
 
