@@ -230,12 +230,20 @@
 }
 
 .restaurant-categories::-webkit-scrollbar {
-  height: 0.25rem;
+  height: 6px;
+}
+
+.restaurant-categories::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .restaurant-categories::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: var(--color-border-strong);
   border-radius: var(--radius-full);
+}
+
+.restaurant-categories::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-tertiary);
 }
 
 .restaurant-category-pill {

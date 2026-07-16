@@ -239,7 +239,7 @@
 }
 
 .retail-categories::-webkit-scrollbar {
-  height: 0.1875rem;
+  height: 6px;
 }
 
 .retail-categories::-webkit-scrollbar-thumb {
@@ -2077,7 +2077,7 @@
 }
 
 .retail-recent-items::-webkit-scrollbar {
-  height: 2px;
+  height: 6px;
 }
 
 .retail-recent-btn {
