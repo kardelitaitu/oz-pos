@@ -666,7 +666,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                 </select>
 
                 {voidReason === 'other' && (
-                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs above */}
+                  /* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs above */
                   <Localized id="void-orders-reason-aria" attrs={{ 'aria-label': true }}>
                   <Localized id="void-orders-reason-placeholder" attrs={{ placeholder: true }}>
                     <input
