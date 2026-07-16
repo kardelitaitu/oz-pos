@@ -19,6 +19,11 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   const ANIM_MS = animDuration(200);
   const [exiting, setExiting] = useState(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exitingRef = useRef(false);
+  const cardInputRef = useRef<HTMLInputElement>(null);
+
+  // Keep ref in sync with state for the Escape keydown handler.
+  exitingRef.current = exiting;
 
   useEffect(() => {
     return () => {
@@ -37,6 +42,22 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
       onClose();
     }, ANIM_MS);
   }, [onClose, ANIM_MS]);
+
+  // ── Document-level Escape handler ──────────────────────────
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !exitingRef.current) {
+        handleClose();
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [handleClose]);
+
+  // ── Auto-focus the card number input on mount ────────────
+  useEffect(() => {
+    cardInputRef.current?.focus();
+  }, []);
 
   const [cardNumber, setCardNumber] = useState(generateGiftCardNumber());
   const [amount, setAmount] = useState('');
@@ -78,8 +99,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   };
 
   return (
-    <div className={`gift-cards-modal-overlay${exiting ? ' gift-cards-modal-overlay--exiting' : ''}`} role="button" tabIndex={0} aria-label="Close" onClick={handleClose} onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}>
-      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+    <div className={`gift-cards-modal-overlay${exiting ? ' gift-cards-modal-overlay--exiting' : ''}`} role="presentation" onClick={handleClose}>
+      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Localized id="gift-cards-issue-title">
           <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
         </Localized>
@@ -90,6 +111,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
               <div className="gift-cards-modal-label">Card Number</div>
             </Localized>
             <input
+              ref={cardInputRef}
               type="text"
               className="gift-cards-modal-input"
               id="gift-card-number"
