@@ -124,6 +124,18 @@
   to { transform: rotate(360deg); }
 }
 
+/* ── Navigation item ─────────────────────────────────── */
+.nav-item:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Tab ─────────────────────────────────────────────── */
+[role="tablist"] [role="tab"]:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 /* ── Input ──────────────────────────────────────────── */
 .input-wrapper {
   display: flex;
