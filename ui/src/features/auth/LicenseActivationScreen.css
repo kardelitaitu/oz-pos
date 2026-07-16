@@ -28,7 +28,12 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .license-activation-hero {
+    animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
 }
 
 .license-activation-logo {
@@ -48,9 +53,14 @@
   width: 100%;
   max-width: 31.25rem;
   box-shadow: var(--shadow-glow, var(--shadow-2xl));
-  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: 0.1s;
-  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .license-activation-card {
+    opacity: 0;
+    animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: 0.1s;
+  }
 }
 
 .license-activation-header {
@@ -202,7 +212,18 @@
 }
 
 .spinner {
-  animation: spin var(--duration-1000) var(--ease-linear) infinite;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .spinner {
+    animation: spin var(--duration-1000) var(--ease-linear) infinite;
+  }
 }
 @keyframes spin {
   100% { transform: rotate(360deg); }
@@ -239,7 +260,12 @@
   cursor: pointer;
   min-width: 8.75rem;
   transform-origin: top left;
-  animation: context-menu-enter 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .custom-context-menu {
+    animation: context-menu-enter 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
 }
 
 .custom-context-menu:hover {

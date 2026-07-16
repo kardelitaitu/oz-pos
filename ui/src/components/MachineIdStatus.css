@@ -30,7 +30,6 @@
 
 /* Loading shimmer */
 .machine-id-chip--loading .machine-id-value {
-  animation: machine-id-shimmer var(--duration-1500) var(--ease-in-out) infinite;
   color: transparent;
   background: linear-gradient(
     90deg,
@@ -41,6 +40,12 @@
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .machine-id-chip--loading .machine-id-value {
+    animation: machine-id-shimmer var(--duration-1500) var(--ease-in-out) infinite;
+  }
 }
 
 @keyframes machine-id-shimmer {
