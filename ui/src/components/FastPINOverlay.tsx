@@ -411,7 +411,6 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
   return (
     <div
       className={`fastpin-overlay${exiting ? ' fastpin-overlay--exiting' : ''}`}
-      aria-hidden="true"
       onClick={(e) => {
         if (e.target === e.currentTarget && !loading) handleClose();
       }}

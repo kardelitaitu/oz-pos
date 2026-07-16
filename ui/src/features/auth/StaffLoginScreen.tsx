@@ -372,8 +372,10 @@ export default function StaffLoginScreen() {
 
   const storeName = brandSettings?.store_name || '';
 
+  // Focus management: clicking anywhere refocuses the active input
+  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
   return (
-    <div className="staff-login-screen" onClick={handleScreenClick} role="presentation">
+    <div className="staff-login-screen" onClick={handleScreenClick}>
       <div className={`staff-login-card ${step === 'pin' ? 'staff-login-card--pin' : ''}`} ref={cardRef}>
         {step === 'pin' && (
           <button
