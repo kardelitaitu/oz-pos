@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
+import { Skeleton } from '@/components/Skeleton';
 import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
@@ -1275,9 +1276,14 @@ export default function PaymentModal({
                   />
                   <div className="payment-customer-search-list">
                     {loadingCustomers ? (
-                      <Localized id="payment-customer-search-loading">
-                        <div className="payment-customer-search-loading">Loading...</div>
-                      </Localized>
+                      <div className="payment-customer-search-list-skeleton" aria-hidden="true">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="payment-customer-search-item">
+                            <Skeleton width="8rem" height="1rem" />
+                            <Skeleton width="5rem" height="0.75rem" style={{ marginTop: '2px' }} />
+                          </div>
+                        ))}
+                      </div>
                     ) : customerSearchResults.length === 0 ? (
                       <Localized id="payment-customer-search-empty">
                         <div className="payment-customer-search-empty">No customers found</div>
