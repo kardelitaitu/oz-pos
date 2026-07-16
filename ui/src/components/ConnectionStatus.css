@@ -28,7 +28,12 @@
 
 .status-indicator.checking {
   background-color: #f59e0b; /* Amber */
-  animation: pulse var(--duration-1500) infinite var(--ease-in-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .status-indicator.checking {
+    animation: pulse var(--duration-1500) infinite var(--ease-in-out);
+  }
 }
 
 .status-indicator.online {
