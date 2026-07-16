@@ -91,13 +91,6 @@
   margin-top: var(--space-6);
 }
 
-.appearance-preview-heading {
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-  margin: 0 0 var(--space-2);
-  color: var(--color-fg-secondary);
-}
-
 .appearance-preview-box {
   display: flex;
   flex-direction: column;

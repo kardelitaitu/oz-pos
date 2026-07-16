@@ -207,6 +207,20 @@
   font-size: 0.875rem;
 }
 
+.promo-mgmt-field--horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.promo-mgmt-field--horizontal > label:first-child {
+  min-width: 7rem;
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+}
+
 .promo-mgmt-field input,
 .promo-mgmt-field select {
   padding: 0.5rem 0.75rem;

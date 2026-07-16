@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import './SettingsSelect.css';
 
 /** A single option for the SettingsSelect dropdown. */
 export interface SettingsSelectOption {

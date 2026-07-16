@@ -378,10 +378,12 @@ export default function TaxConfigurationScreen() {
             </div>
 
             <div className="tax-config-modal-body">
-              <label className="tax-config-field" htmlFor="tax-field-name" aria-label={l10n.getString('tax-config-field-name-aria')}>
-                <Localized id="tax-config-field-name">
-                  <span className="tax-config-label">Tax Name</span>
-                </Localized>
+              <div className="tax-config-field tax-config-field--horizontal">
+                <label htmlFor="tax-field-name" className="tax-config-label">
+                  <Localized id="tax-config-field-name">
+                    <span>Tax Name</span>
+                  </Localized>
+                </label>
                 <input
                   className="tax-config-input"
                   type="text"
@@ -391,26 +393,32 @@ export default function TaxConfigurationScreen() {
                   placeholder={l10n.getString('tax-config-field-name-placeholder')}
                   ref={taxNameInputRef}
                 />
-              </label>
+              </div>
 
-              <label className="tax-config-field" htmlFor="tax-field-rate">
-                {l10n.getString('tax-config-field-rate')}
-                <input
-                  className="tax-config-input"
-                  type="number"
-                  id="tax-field-rate"
-                  min="0"
-                  value={form.rateBps}
-                  onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
-                  placeholder={l10n.getString('tax-config-field-rate-placeholder')}
-                />
-                <Localized id="tax-config-rate-hint">
-                  <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
-                </Localized>
-              </label>
+              <div className="tax-config-field tax-config-field--horizontal">
+                <label htmlFor="tax-field-rate" className="tax-config-label">
+                  <Localized id="tax-config-field-rate">
+                    <span>Rate (BPS)</span>
+                  </Localized>
+                </label>
+                <div className="tax-config-field-input-wrap">
+                  <input
+                    className="tax-config-input"
+                    type="number"
+                    id="tax-field-rate"
+                    min="0"
+                    value={form.rateBps}
+                    onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
+                    placeholder={l10n.getString('tax-config-field-rate-placeholder')}
+                  />
+                  <Localized id="tax-config-rate-hint">
+                    <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
+                  </Localized>
+                </div>
+              </div>
 
               {/* Inclusive / Exclusive toggle */}
-              <div className="tax-config-field">
+              <div className="tax-config-field tax-config-field--horizontal">
                 <Localized id="tax-config-tax-type">
                   <span className="tax-config-label">Tax Type</span>
                 </Localized>

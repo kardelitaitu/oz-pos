@@ -176,6 +176,18 @@
   gap: var(--space-1);
 }
 
+.data-mgmt-field--horizontal {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.data-mgmt-field--horizontal > .data-mgmt-label {
+  min-width: 8rem;
+  padding-top: var(--space-2);
+  flex-shrink: 0;
+}
+
 .data-mgmt-label {
   font-size: var(--text-sm);
   font-weight: 500;

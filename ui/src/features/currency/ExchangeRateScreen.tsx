@@ -213,10 +213,12 @@ export default function ExchangeRateScreen() {
             </div>
 
             <div className="exchange-rate-modal-body">
-              <label className="exchange-rate-field" htmlFor="er-field-from" aria-label={l10n.getString('currency-field-from')}>
-                <Localized id="currency-field-from">
-                  <span className="exchange-rate-label">From Currency</span>
-                </Localized>
+              <div className="exchange-rate-field exchange-rate-field--horizontal">
+                <label htmlFor="er-field-from" className="exchange-rate-label">
+                  <Localized id="currency-field-from">
+                    <span>From Currency</span>
+                  </Localized>
+                </label>
                 <select
                   className="exchange-rate-input exchange-rate-select"
                   id="er-field-from"
@@ -228,12 +230,14 @@ export default function ExchangeRateScreen() {
                   </Localized>
                   {currencyOptions}
                 </select>
-              </label>
+              </div>
 
-              <label className="exchange-rate-field" htmlFor="er-field-to" aria-label={l10n.getString('currency-field-to')}>
-                <Localized id="currency-field-to">
-                  <span className="exchange-rate-label">To Currency</span>
-                </Localized>
+              <div className="exchange-rate-field exchange-rate-field--horizontal">
+                <label htmlFor="er-field-to" className="exchange-rate-label">
+                  <Localized id="currency-field-to">
+                    <span>To Currency</span>
+                  </Localized>
+                </label>
                 <select
                   className="exchange-rate-input exchange-rate-select"
                   id="er-field-to"
@@ -245,12 +249,14 @@ export default function ExchangeRateScreen() {
                   </Localized>
                   {currencyOptions}
                 </select>
-              </label>
+              </div>
 
-              <label className="exchange-rate-field" htmlFor="er-field-rate" aria-label={l10n.getString('currency-field-rate')}>
-                <Localized id="currency-field-rate">
-                  <span className="exchange-rate-label">Rate</span>
-                </Localized>
+              <div className="exchange-rate-field exchange-rate-field--horizontal">
+                <label htmlFor="er-field-rate" className="exchange-rate-label">
+                  <Localized id="currency-field-rate">
+                    <span>Rate</span>
+                  </Localized>
+                </label>
                 <Localized id="currency-rate-placeholder" attrs={{ placeholder: true }}>
                   <input
                     className="exchange-rate-input"
@@ -263,12 +269,14 @@ export default function ExchangeRateScreen() {
                     placeholder="1.25"
                   />
                 </Localized>
-              </label>
+              </div>
 
-              <label className="exchange-rate-field" htmlFor="er-field-source" aria-label={l10n.getString('currency-field-source')}>
-                <Localized id="currency-field-source">
-                  <span className="exchange-rate-label">Source (optional)</span>
-                </Localized>
+              <div className="exchange-rate-field exchange-rate-field--horizontal">
+                <label htmlFor="er-field-source" className="exchange-rate-label">
+                  <Localized id="currency-field-source">
+                    <span>Source (optional)</span>
+                  </Localized>
+                </label>
                 <Localized id="currency-source-placeholder" attrs={{ placeholder: true }}>
                   <input
                     className="exchange-rate-input"
@@ -279,12 +287,14 @@ export default function ExchangeRateScreen() {
                     placeholder="e.g. ECB"
                   />
                 </Localized>
-              </label>
+              </div>
 
-              <label className="exchange-rate-field" htmlFor="er-field-date" aria-label={l10n.getString('currency-field-date')}>
-                <Localized id="currency-field-date">
-                  <span className="exchange-rate-label">Effective Date</span>
-                </Localized>
+              <div className="exchange-rate-field exchange-rate-field--horizontal">
+                <label htmlFor="er-field-date" className="exchange-rate-label">
+                  <Localized id="currency-field-date">
+                    <span>Effective Date</span>
+                  </Localized>
+                </label>
                 <input
                   className="exchange-rate-input"
                   type="date"
@@ -292,7 +302,7 @@ export default function ExchangeRateScreen() {
                   value={form.effectiveDate}
                   onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })}
                 />
-              </label>
+              </div>
             </div>
 
             <div className="exchange-rate-modal-actions">

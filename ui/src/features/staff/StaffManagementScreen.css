@@ -49,7 +49,7 @@
 .staff-mgmt-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .staff-mgmt-table th {
@@ -97,6 +97,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  font-size: var(--text-sm);
 }
 
 .staff-mgmt-role-icon {
@@ -105,20 +106,20 @@
 
 .staff-mgmt-cell-username {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--color-fg-secondary);
 }
 
 .staff-mgmt-status-active {
   color: var(--color-success);
   font-weight: var(--font-weight-medium);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .staff-mgmt-status-inactive {
   color: var(--color-fg-tertiary);
   font-weight: var(--font-weight-medium);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 /* ── Actions ──────────────────────────────────────────────────────── */
@@ -127,15 +128,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  justify-content: flex-end;
 }
 
 .staff-mgmt-action-btn {
   background: none;
   border: 1px solid var(--color-border);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1_5) var(--space-3);
   border-radius: var(--radius-md);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   cursor: pointer;
   color: var(--color-fg-secondary);
   transition: all var(--duration-150) var(--ease-out);
@@ -163,74 +163,23 @@
   background: var(--color-success-bg);
 }
 
-/* ── Modal ────────────────────────────────────────────────────────── */
-
-.staff-mgmt-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-overlay);
-}
-
-.staff-mgmt-modal {
-  width: 27.5rem;
-  max-width: 92vw;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-}
-
-.staff-mgmt-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.staff-mgmt-modal-header h2 {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-fg);
-}
-
-.staff-mgmt-modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--color-fg-tertiary);
-  padding: 0;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-}
-
-.staff-mgmt-modal-close:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
-}
-
-.staff-mgmt-modal-body {
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
+/* ── Form fields ──────────────────────────────────────────────────── */
 
 .staff-mgmt-field {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+.staff-mgmt-field--horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.staff-mgmt-field--horizontal > .staff-mgmt-label {
+  min-width: 7rem;
+  flex-shrink: 0;
 }
 
 .staff-mgmt-label {
@@ -291,16 +240,6 @@
 
 .staff-mgmt-error svg {
   flex-shrink: 0;
-}
-
-/* ── Modal actions ────────────────────────────────────────────────── */
-
-.staff-mgmt-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--color-border);
 }
 
 /* ── Workspace Access ──────────────────────────────────────────────── */

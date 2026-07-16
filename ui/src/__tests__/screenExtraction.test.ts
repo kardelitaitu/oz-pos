@@ -198,6 +198,13 @@ const SCREENS: ScreenEntry[] = [
       'mobile-open',
       'visible',
     ],
+    knownDynamicFragments: [
+      // Object-key strings inside template-literal interpolations that
+      // the static class-name parser falsely extracts as CSS classes.
+      'store-name',
+      'address',
+      'tax-id',
+    ],
   },
   {
     name: 'DataManagementScreen',
@@ -433,6 +440,14 @@ const SCREENS: ScreenEntry[] = [
       'tax-config',
       'exchange-rate-config',
       'promo-mgmt',
+    ],
+    knownDynamicFragments: [
+      // Card component classes (defined in frontend/themes/components.css)
+      // that are used inline in AppearanceSettings.tsx but not present
+      // in the screen's own CSS files.
+      'card--padding-md',
+      'card--shadow-sm',
+      'card-header',
     ],
     externalClasses: [
       'card',

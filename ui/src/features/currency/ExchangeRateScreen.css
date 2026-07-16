@@ -146,6 +146,17 @@
   margin-bottom: var(--space-3);
 }
 
+.exchange-rate-field--horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.exchange-rate-field--horizontal > .exchange-rate-label {
+  min-width: 7rem;
+  flex-shrink: 0;
+}
+
 .exchange-rate-label {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);

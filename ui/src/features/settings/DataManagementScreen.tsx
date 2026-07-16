@@ -548,7 +548,7 @@ export default function DataManagementScreen() {
                 </Localized>
 
                 <div className="data-mgmt-form">
-                  <div className="data-mgmt-field">
+                  <div className="data-mgmt-field data-mgmt-field--horizontal">
                     <Localized id="data-mgmt-encrypt-password">
                       <label className="data-mgmt-label" htmlFor="export-password">Password</label>
                     </Localized>
@@ -572,7 +572,7 @@ export default function DataManagementScreen() {
                       </button>
                     </div>
                   </div>
-                  <div className="data-mgmt-field">
+                  <div className="data-mgmt-field data-mgmt-field--horizontal">
                     <Localized id="data-mgmt-encrypt-confirm">
                       <label className="data-mgmt-label" htmlFor="export-password-confirm">Confirm password</label>
                     </Localized>
@@ -696,7 +696,7 @@ export default function DataManagementScreen() {
                   </div>
                 </div>
 
-                <div className="data-mgmt-field">
+                <div className="data-mgmt-field data-mgmt-field--horizontal">
                   <Localized id="data-mgmt-import-password">
                     <label className="data-mgmt-label" htmlFor="import-password">Decryption password</label>
                   </Localized>

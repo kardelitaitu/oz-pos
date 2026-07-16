@@ -450,6 +450,22 @@
   gap: var(--space-1_5);
 }
 
+.shift-mgmt-field--horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.shift-mgmt-field--horizontal > .shift-mgmt-label {
+  min-width: 7rem;
+  flex-shrink: 0;
+}
+
+/* Textarea fields should keep label top-aligned. */
+.shift-mgmt-field--horizontal:has(textarea) {
+  align-items: flex-start;
+}
+
 .shift-mgmt-label {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);

@@ -583,7 +583,7 @@ export default function TerminalManagementScreen() {
 
               <div className="terminal-mgmt-modal-body">
                 {/* Name */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-name" aria-label={l10n.getString('terminal-field-name-aria')}>
+                <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-name" aria-label={l10n.getString('terminal-field-name-aria')}>
                   <Localized id="terminal-name-label">
                     <span className="terminal-mgmt-label">Terminal name</span>
                   </Localized>
@@ -601,7 +601,7 @@ export default function TerminalManagementScreen() {
                 </label>
 
                 {/* Device ID */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-device-id" aria-label={l10n.getString('terminal-field-device-id-aria')}>
+                <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-device-id" aria-label={l10n.getString('terminal-field-device-id-aria')}>
                   <Localized id="terminal-device-id-label">
                     <span className="terminal-mgmt-label">Device identifier</span>
                   </Localized>
@@ -620,7 +620,7 @@ export default function TerminalManagementScreen() {
 
                 {/* Secret — only for register */}
                 {!isEditing && (
-                  <label className="terminal-mgmt-field" htmlFor="terminal-field-secret" aria-label={l10n.getString('terminal-field-secret-aria')}>
+                  <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-secret" aria-label={l10n.getString('terminal-field-secret-aria')}>
                     <Localized id="terminal-secret-label">
                       <span className="terminal-mgmt-label">Optional shared secret for sync authentication</span>
                     </Localized>
@@ -636,7 +636,7 @@ export default function TerminalManagementScreen() {
                 )}
 
                 {/* Metadata */}
-                <label className="terminal-mgmt-field" htmlFor="terminal-field-metadata" aria-label={l10n.getString('terminal-field-metadata-aria')}>
+                <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-metadata" aria-label={l10n.getString('terminal-field-metadata-aria')}>
                   <Localized id="terminal-metadata-label">
                     <span className="terminal-mgmt-label">Optional JSON metadata</span>
                   </Localized>
@@ -797,7 +797,7 @@ export default function TerminalManagementScreen() {
                           </div>
                         )}
                         <div className="terminal-mgmt-binding-fields">
-                          <label className="terminal-mgmt-field" htmlFor="bind-store">
+                          <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-store">
                             <span className="terminal-mgmt-label">Store</span>
                             <select
                               id="bind-store"
@@ -811,7 +811,7 @@ export default function TerminalManagementScreen() {
                               ))}
                             </select>
                           </label>
-                          <label className="terminal-mgmt-field" htmlFor="bind-instance">
+                          <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-instance">
                             <span className="terminal-mgmt-label">Workspace Instance</span>
                             <select
                               id="bind-instance"

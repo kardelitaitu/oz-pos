@@ -1072,106 +1072,139 @@ export default function SettingsPage() {
           >
             <div className="settings-form">
               {/* Show currency */}
-              <label className="settings-toggle">
-                <span className="settings-toggle-switch">
-                  <Localized id="settings-toggle-show-currency-aria" attrs={{ 'aria-label': true }}>
-                    <input
-                      type="checkbox"
-                      checked={receipt.showCurrency}
-                      onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
-                      aria-label="Show currency symbol on amounts"
-                    />
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="receipt-show-currency" className="settings-label">
+                  <Localized id="settings-toggle-show-currency">
+                    <span>Show currency symbol on amounts</span>
                   </Localized>
-                  <span className="settings-toggle-slider" />
+                </label>
+                <span className="settings-field-input-wrap">
+                  <label className="settings-toggle">
+                    <span className="settings-toggle-switch">
+                      <Localized id="settings-toggle-show-currency-aria" attrs={{ 'aria-label': true }}>
+                        <input
+                          id="receipt-show-currency"
+                          type="checkbox"
+                          checked={receipt.showCurrency}
+                          onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
+                          aria-label="Show currency symbol on amounts"
+                        />
+                      </Localized>
+                      <span className="settings-toggle-slider" />
+                    </span>
+                  </label>
                 </span>
-                <Localized id="settings-toggle-show-currency">
-                  <span>Show currency symbol on amounts</span>
-                </Localized>
-              </label>
+              </div>
 
               {/* Decimal separator */}
-              <label className="settings-field" htmlFor="settings-field-decimal-separator">
-                {l10n.getString('settings-field-decimal-separator')}
-                <SettingsSelect
-                  id="settings-field-decimal-separator"
-                  value={receipt.decimalSeparator}
-                  onChange={(v) => {
-                    setReceipt({ ...receipt, decimalSeparator: v });
-                    setDecimalSep(v);
-                    markDirty();
-                  }}
-                  options={[
-                    { value: 'dot', label: l10n.getString('settings-decimal-separator-dot') },
-                    { value: 'comma', label: l10n.getString('settings-decimal-separator-comma') },
-                    { value: 'none', label: l10n.getString('settings-decimal-separator-none') },
-                  ]}
-                />
-              </label>
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="settings-field-decimal-separator" className="settings-label">
+                  {l10n.getString('settings-field-decimal-separator')}
+                </label>
+                <span className="settings-field-input-wrap">
+                  <SettingsSelect
+                    id="settings-field-decimal-separator"
+                    value={receipt.decimalSeparator}
+                    onChange={(v) => {
+                      setReceipt({ ...receipt, decimalSeparator: v });
+                      setDecimalSep(v);
+                      markDirty();
+                    }}
+                    options={[
+                      { value: 'dot', label: l10n.getString('settings-decimal-separator-dot') },
+                      { value: 'comma', label: l10n.getString('settings-decimal-separator-comma') },
+                      { value: 'none', label: l10n.getString('settings-decimal-separator-none') },
+                    ]}
+                  />
+                </span>
+              </div>
 
               {/* Show tax */}
-              <label className="settings-toggle">
-                <span className="settings-toggle-switch">
-                  <Localized id="settings-toggle-show-tax-aria" attrs={{ 'aria-label': true }}>
-                    <input
-                      type="checkbox"
-                      checked={receipt.showTax}
-                      onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
-                      aria-label="Show tax line on receipts"
-                    />
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="receipt-show-tax" className="settings-label">
+                  <Localized id="settings-toggle-show-tax">
+                    <span>Show tax line on receipts</span>
                   </Localized>
-                  <span className="settings-toggle-slider" />
+                </label>
+                <span className="settings-field-input-wrap">
+                  <label className="settings-toggle">
+                    <span className="settings-toggle-switch">
+                      <Localized id="settings-toggle-show-tax-aria" attrs={{ 'aria-label': true }}>
+                        <input
+                          id="receipt-show-tax"
+                          type="checkbox"
+                          checked={receipt.showTax}
+                          onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
+                          aria-label="Show tax line on receipts"
+                        />
+                      </Localized>
+                      <span className="settings-toggle-slider" />
+                    </span>
+                  </label>
                 </span>
-                <Localized id="settings-toggle-show-tax">
-                  <span>Show tax line on receipts</span>
-                </Localized>
-              </label>
+              </div>
 
               {/* Paper width */}
-              <label className="settings-field" htmlFor="settings-field-paper-width">
-                {l10n.getString('settings-field-paper-width')}
-                <SettingsSelect
-                  id="settings-field-paper-width"
-                  value={receipt.paperWidth}
-                  onChange={(v) => { setReceipt({ ...receipt, paperWidth: v }); markDirty(); }}
-                  options={[
-                    { value: 'standard', label: l10n.getString('settings-paper-width-standard') },
-                    { value: 'narrow', label: l10n.getString('settings-paper-width-narrow') },
-                  ]}
-                />
-              </label>
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="settings-field-paper-width" className="settings-label">
+                  {l10n.getString('settings-field-paper-width')}
+                </label>
+                <span className="settings-field-input-wrap">
+                  <SettingsSelect
+                    id="settings-field-paper-width"
+                    value={receipt.paperWidth}
+                    onChange={(v) => { setReceipt({ ...receipt, paperWidth: v }); markDirty(); }}
+                    options={[
+                      { value: 'standard', label: l10n.getString('settings-paper-width-standard') },
+                      { value: 'narrow', label: l10n.getString('settings-paper-width-narrow') },
+                    ]}
+                  />
+                </span>
+              </div>
 
               {/* Footer */}
-              <label className="settings-field" htmlFor="settings-field-receipt-footer">
-                {l10n.getString('settings-field-footer')}
-                <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="settings-input" autoComplete="off"
-                    type="text"
-                    id="settings-field-receipt-footer"
-                    placeholder="Thank you for shopping!"
-                    value={receipt.footer}
-                    onChange={(e) => { setReceipt({ ...receipt, footer: e.target.value }); markDirty(); }}
-                  />
-                </Localized>
-              </label>
-
-              {/* Show table number */}
-              <label className="settings-toggle">
-                <span className="settings-toggle-switch">
-                  <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="settings-field-receipt-footer" className="settings-label">
+                  {l10n.getString('settings-field-footer')}
+                </label>
+                <span className="settings-field-input-wrap">
+                  <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      type="checkbox"
-                      checked={receipt.showTableNumber}
-                      onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
-                      aria-label="Show table number on cart and receipts"
+                      className="settings-input" autoComplete="off"
+                      type="text"
+                      id="settings-field-receipt-footer"
+                      placeholder="Thank you for shopping!"
+                      value={receipt.footer}
+                      onChange={(e) => { setReceipt({ ...receipt, footer: e.target.value }); markDirty(); }}
                     />
                   </Localized>
-                  <span className="settings-toggle-slider" />
                 </span>
-                <Localized id="settings-toggle-show-table-number">
-                  <span>Show table number on cart and receipts</span>
-                </Localized>
-              </label>
+              </div>
+
+              {/* Show table number */}
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="receipt-show-table-number" className="settings-label">
+                  <Localized id="settings-toggle-show-table-number">
+                    <span>Show table number on cart and receipts</span>
+                  </Localized>
+                </label>
+                <span className="settings-field-input-wrap">
+                  <label className="settings-toggle">
+                    <span className="settings-toggle-switch">
+                      <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
+                        <input
+                          id="receipt-show-table-number"
+                          type="checkbox"
+                          checked={receipt.showTableNumber}
+                          onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
+                          aria-label="Show table number on cart and receipts"
+                        />
+                      </Localized>
+                      <span className="settings-toggle-slider" />
+                    </span>
+                  </label>
+                </span>
+              </div>
             </div>
           </Card>
         );
@@ -1191,72 +1224,87 @@ export default function SettingsPage() {
                 </p>
               )}
 
-              <label className="settings-field" htmlFor="settings-field-server-url">
-                {l10n.getString('settings-sync-server-url')}
-                <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="settings-input" autoComplete="off"
-                    type="url"
-                    id="settings-field-server-url"
-                    placeholder="https://api.example.com"
-                    value={syncServerUrl}
-                    onChange={(e) => { setSyncServerUrl(e.target.value); markDirty(); }}
-                  />
-                </Localized>
-              </label>
-
-              <label className="settings-field" htmlFor="settings-field-api-key">
-                {l10n.getString('settings-sync-api-key')}
-                <div className="settings-input-wrap">
-                  <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="settings-field-server-url" className="settings-label">
+                  {l10n.getString('settings-sync-server-url')}
+                </label>
+                <span className="settings-field-input-wrap">
+                  <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
                     <input
                       className="settings-input" autoComplete="off"
-                      type={syncApiKeyVisible ? 'text' : 'password'}
-                      id="settings-field-api-key"
-                      placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
-                      value={syncApiKey}
-                      onChange={(e) => { setSyncApiKey(e.target.value); markDirty(); }}
+                      type="url"
+                      id="settings-field-server-url"
+                      placeholder="https://api.example.com"
+                      value={syncServerUrl}
+                      onChange={(e) => { setSyncServerUrl(e.target.value); markDirty(); }}
                     />
                   </Localized>
-                  <button
-                    type="button"
-                    className="settings-input-toggle"
-                    onClick={() => setSyncApiKeyVisible((v) => !v)}
-                    aria-label={l10n.getString(syncApiKeyVisible ? 'settings-api-key-hide-aria' : 'settings-api-key-show-aria')}
-                    tabIndex={-1}
-                  >
-                    {syncApiKeyVisible ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </label>
-
-              <label className="settings-toggle">
-                <span className="settings-toggle-switch">
-                  <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
-                    <input
-                      type="checkbox"
-                      checked={sync.enabled}
-                      onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
-                      aria-label="Enable Cloud Sync"
-                    />
-                  </Localized>
-                  <span className="settings-toggle-slider" />
                 </span>
-                <Localized id="settings-sync-enabled">
-                  <span>Enable Cloud Sync</span>
-                </Localized>
-              </label>
+              </div>
+
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="settings-field-api-key" className="settings-label">
+                  {l10n.getString('settings-sync-api-key')}
+                </label>
+                <span className="settings-field-input-wrap">
+                  <div className="settings-input-wrap">
+                    <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
+                      <input
+                        className="settings-input" autoComplete="off"
+                        type={syncApiKeyVisible ? 'text' : 'password'}
+                        id="settings-field-api-key"
+                        placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
+                        value={syncApiKey}
+                        onChange={(e) => { setSyncApiKey(e.target.value); markDirty(); }}
+                      />
+                    </Localized>
+                    <button
+                      type="button"
+                      className="settings-input-toggle"
+                      onClick={() => setSyncApiKeyVisible((v) => !v)}
+                      aria-label={l10n.getString(syncApiKeyVisible ? 'settings-api-key-hide-aria' : 'settings-api-key-show-aria')}
+                      tabIndex={-1}
+                    >
+                      {syncApiKeyVisible ? (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                          <line x1="1" y1="1" x2="23" y2="23" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </span>
+              </div>
+
+              <div className="settings-field settings-field--horizontal">
+                <label htmlFor="sync-enabled" className="settings-label">
+                  <Localized id="settings-sync-enabled">
+                    <span>Enable Cloud Sync</span>
+                  </Localized>
+                </label>
+                <span className="settings-field-input-wrap">
+                  <label className="settings-toggle">
+                    <span className="settings-toggle-switch">
+                      <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
+                        <input
+                          id="sync-enabled"
+                          type="checkbox"
+                          checked={sync.enabled}
+                          onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
+                          aria-label="Enable Cloud Sync"
+                        />
+                      </Localized>
+                      <span className="settings-toggle-slider" />
+                    </span>
+                  </label>
+                </span>
+              </div>
 
               {(sync.serverUrl !== null || sync.enabled) && (
                 <>

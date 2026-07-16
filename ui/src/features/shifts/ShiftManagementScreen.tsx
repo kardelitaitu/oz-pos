@@ -441,10 +441,12 @@ export default function ShiftManagementScreen() {
               {error && (
                 <div className="shift-mgmt-modal-error" role="alert">{error}</div>
               )}
-              <label className="shift-mgmt-field" htmlFor="open-balance">
-                <Localized id="shift-open-balance-label">
-                  <span className="shift-mgmt-label">Opening balance (minor units)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                <label htmlFor="open-balance" className="shift-mgmt-label">
+                  <Localized id="shift-open-balance-label">
+                    <span>Opening balance (minor units)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-open-balance-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="open-balance"
@@ -458,7 +460,7 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
             </div>
             <div className="shift-mgmt-modal-actions">
               <Localized id="shift-btn-cancel">
@@ -503,10 +505,12 @@ export default function ShiftManagementScreen() {
                   Record cash removed from the drawer (safe drop, manager pickup, etc.).
                 </p>
               </Localized>
-              <label className="shift-mgmt-field" htmlFor="payout-amount">
-                <Localized id="shift-payout-amount-label">
-                  <span className="shift-mgmt-label">Amount (minor units)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                <label htmlFor="payout-amount" className="shift-mgmt-label">
+                  <Localized id="shift-payout-amount-label">
+                    <span>Amount (minor units)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-payout-amount-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="payout-amount"
@@ -520,11 +524,13 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
-              <label className="shift-mgmt-field" htmlFor="payout-reason">
-                <Localized id="shift-payout-reason-label">
-                  <span className="shift-mgmt-label">Reason</span>
-                </Localized>
+              </div>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                <label htmlFor="payout-reason" className="shift-mgmt-label">
+                  <Localized id="shift-payout-reason-label">
+                    <span>Reason</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-payout-reason-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="payout-reason"
@@ -537,7 +543,7 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
             </div>
             <div className="shift-mgmt-modal-actions">
               <Localized id="shift-btn-cancel">
@@ -635,10 +641,12 @@ export default function ShiftManagementScreen() {
                 </div>
               </div>
 
-              <label className="shift-mgmt-field" htmlFor="close-balance">
-                <Localized id="shift-close-counted-label">
-                  <span className="shift-mgmt-label">Counted cash in drawer (minor units)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                <label htmlFor="close-balance" className="shift-mgmt-label">
+                  <Localized id="shift-close-counted-label">
+                    <span>Counted cash in drawer (minor units)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-close-counted-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="close-balance"
@@ -652,12 +660,14 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
 
-              <label className="shift-mgmt-field" htmlFor="close-notes">
-                <Localized id="shift-close-notes-label">
-                  <span className="shift-mgmt-label">Notes (optional)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                <label htmlFor="close-notes" className="shift-mgmt-label">
+                  <Localized id="shift-close-notes-label">
+                    <span>Notes (optional)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-close-notes-placeholder" attrs={{ placeholder: true }}>
                   <textarea
                     id="close-notes"
@@ -670,7 +680,7 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
             </div>
             <div className="shift-mgmt-modal-actions">
               <Localized id="shift-btn-cancel">
