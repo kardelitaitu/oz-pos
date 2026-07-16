@@ -95,13 +95,25 @@
 
 /* ── States ───────────────────────────────────────────────── */
 
-.audit-log-loading,
 .audit-log-error,
 .audit-log-empty {
   padding: var(--space-12) var(--space-6);
   text-align: center;
   color: var(--color-fg-tertiary);
   font-size: var(--text-sm);
+}
+
+/* ── Skeleton loading ───────────────────────────────────── */
+.audit-log-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.audit-log-skeleton-filters {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
 }
 
 .audit-log-error {
@@ -131,6 +143,10 @@
 .audit-log-table thead {
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
+}
+
+.audit-log-loading-skeleton .audit-log-table thead {
+  pointer-events: none;
 }
 
 .audit-log-table th {

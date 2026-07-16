@@ -1180,15 +1180,19 @@ export default function SettingsPage() {
                 </label>
                 <span className="settings-field-input-wrap">
                   <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="settings-input" {...cmInput}
-                      type="text"
+                    <textarea
+                      className="settings-input settings-textarea"
                       id="settings-field-receipt-footer"
+                      rows={3}
+                      maxLength={500}
                       placeholder="Thank you for shopping!"
                       value={receipt.footer}
                       onChange={(e) => { setReceipt({ ...receipt, footer: e.target.value }); markDirty(); }}
                     />
                   </Localized>
+                  <span className="settings-hint settings-char-count">
+                    {receipt.footer.length}/500
+                  </span>
                 </span>
               </div>
 

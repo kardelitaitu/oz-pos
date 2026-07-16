@@ -1083,6 +1083,20 @@
   box-sizing: border-box;
 }
 
+.settings-textarea {
+  resize: vertical;
+  font-family: inherit;
+  line-height: var(--leading-relaxed);
+}
+
+.settings-char-count {
+  text-align: right;
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  padding-right: var(--space-0_5);
+  user-select: none;
+}
+
 .settings-input:focus {
   outline: none;
   border-color: var(--color-accent);

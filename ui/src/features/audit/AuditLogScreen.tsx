@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { listAuditLog, type AuditEntryDto } from '@/api/audit';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './AuditLogScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -189,9 +190,40 @@ export default function AuditLogScreen() {
 
       {/* Content */}
       {loading && entries.length === 0 ? (
-        <Localized id="audit-log-loading-text">
-          <div className="audit-log-loading"><span>Loading audit log…</span></div>
-        </Localized>
+        <div className="audit-log-loading-skeleton">
+          {/* Filters skeleton */}
+          <div className="audit-log-skeleton-filters">
+            <Skeleton variant="block" width="100%" height="2.25rem" />
+            <Skeleton variant="block" width="10rem" height="2rem" />
+          </div>
+          {/* Table skeleton */}
+          <div className="audit-log-table-wrap">
+            <table className="audit-log-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>User ID</th>
+                  <th>Outcome</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i}>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="text" width="9rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.25rem" /></td>
+                    <td><Skeleton variant="text" width="8rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error && entries.length === 0 ? (
         <Card shadow="sm">
           <div className="audit-log-error">
