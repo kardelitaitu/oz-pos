@@ -42,10 +42,11 @@ describe('TaxConfigurationScreen', () => {
     expect(screen.getByRole('heading', { name: /tax configuration/i })).toBeInTheDocument();
   });
 
-  it('shows loading state', async () => {
+  it('shows loading skeleton while fetching tax rates', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
     renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
-    expect(screen.getByText(/loading tax rates/i)).toBeInTheDocument();
+    expect(document.querySelector('.tax-config-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/loading tax rates/i)).not.toBeInTheDocument();
   });
 
   it('renders tax rate rows', async () => {

@@ -12,6 +12,7 @@ import {
 } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import './CustomerManagementScreen.css';
 
@@ -186,9 +187,49 @@ export default function CustomerManagementScreen() {
 
       {/* Content */}
       {loading ? (
-        <Localized id="customer-mgmt-loading">
-          <p className="customer-mgmt-loading">Loading customers…</p>
-        </Localized>
+        <div className="customer-mgmt-loading-skeleton" aria-hidden="true">
+          {/* Header skeleton: title + button */}
+          <div className="customer-mgmt-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="9rem" height="2.25rem" />
+          </div>
+          {/* Search bar skeleton */}
+          <div className="customer-mgmt-skeleton-search">
+            <Skeleton variant="circle" width="1rem" height="1rem" />
+            <Skeleton variant="text" width="100%" height="1.125rem" />
+          </div>
+          {/* Table skeleton: header + 4 rows with 5 columns */}
+          <div className="customer-mgmt-table-wrap">
+            <table className="customer-mgmt-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Name', 'Email', 'Phone', 'Notes', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 4 ? '4rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td>
+                      <div className="customer-mgmt-cell-name">
+                        <Skeleton variant="circle" width="2rem" height="2rem" />
+                        <Skeleton variant="text" width="6rem" height="0.875rem" />
+                      </div>
+                    </td>
+                    <td><Skeleton variant="text" width="8rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td className="customer-mgmt-cell-actions">
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : customers.length === 0 ? (
         <Card shadow="sm">
           <div className="customer-mgmt-empty">

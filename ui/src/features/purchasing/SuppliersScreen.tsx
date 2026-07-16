@@ -10,6 +10,7 @@ import {
 } from '@/api/purchasing';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import './SuppliersScreen.css';
 
@@ -181,9 +182,45 @@ export default function SuppliersScreen() {
       </div>
 
       {loading ? (
-        <Localized id="suppliers-loading">
-          <p className="suppliers-loading">Loading suppliers…</p>
-        </Localized>
+        <div className="suppliers-loading-skeleton" aria-hidden="true">
+          {/* Header skeleton: title + button */}
+          <div className="suppliers-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="9rem" height="2.25rem" />
+          </div>
+          {/* Search bar skeleton */}
+          <div className="suppliers-skeleton-search">
+            <Skeleton variant="circle" width="1rem" height="1rem" />
+            <Skeleton variant="text" width="100%" height="1.125rem" />
+          </div>
+          {/* Table skeleton: header + 4 rows with 7 columns */}
+          <div className="suppliers-table-wrap">
+            <table className="suppliers-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Code', 'Name', 'Contact', 'Phone', 'Email', 'Status', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 6 ? '4rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td className="suppliers-cell-actions">
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : suppliers.length === 0 ? (
         <Card shadow="sm">
           <div className="suppliers-empty">

@@ -19,6 +19,25 @@
   color: var(--color-fg-secondary);
 }
 
+.tax-config-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tax-config-loading-skeleton .tax-config-header {
+  margin-bottom: 0;
+}
+
+.tax-config-loading-skeleton .tax-config-table th,
+.tax-config-loading-skeleton .tax-config-table td {
+  vertical-align: middle;
+}
+
+.tax-config-loading-skeleton .tax-config-table thead {
+  pointer-events: none;
+}
+
 .tax-config-empty {
   text-align: center;
   padding: var(--space-12) var(--space-4);

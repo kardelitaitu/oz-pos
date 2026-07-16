@@ -14,6 +14,7 @@ import { listCategories, type CategoryDto } from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import './TaxConfigurationScreen.css';
 
@@ -186,9 +187,40 @@ export default function TaxConfigurationScreen() {
       </div>
 
       {loading ? (
-        <Localized id="tax-config-loading">
-          <p className="tax-config-loading">Loading tax rates&hellip;</p>
-        </Localized>
+        <div className="tax-config-loading-skeleton" aria-hidden="true">
+          {/* Header skeleton: title + button */}
+          <div className="tax-config-header">
+            <Skeleton variant="block" width="14rem" height="1.75rem" />
+            <Skeleton variant="block" width="8rem" height="2.25rem" />
+          </div>
+          {/* Table skeleton: header + 4 rows with 5 columns */}
+          <div className="tax-config-table-wrap">
+            <table className="tax-config-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Name', 'Rate (%)', 'Type', 'Default', ''].map((_, i) => (
+                    <th key={i}>
+                      <Skeleton variant="text" width={i < 4 ? '4rem' : '3rem'} height="0.75rem" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="3rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="5rem" height="1.25rem" style={{ borderRadius: 'var(--radius-sm)' }} /></td>
+                    <td><Skeleton variant="text" width="2.5rem" height="0.875rem" /></td>
+                    <td className="tax-config-cell-actions">
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <>
           {/* ── Tax Rates Table ────────────────────────────────────── */}

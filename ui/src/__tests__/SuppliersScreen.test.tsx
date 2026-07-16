@@ -69,10 +69,11 @@ describe('SuppliersScreen', () => {
     expect(screen.getByText('john@acme.com')).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton while fetching suppliers', async () => {
     mockListSuppliers.mockReturnValue(new Promise(() => {}));
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
-    expect(screen.getByText(/loading suppliers/i)).toBeInTheDocument();
+    expect(document.querySelector('.suppliers-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/loading suppliers/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no suppliers exist', async () => {
