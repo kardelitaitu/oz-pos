@@ -1081,3 +1081,470 @@ fn currency_settings_survive_load_all_across_shift_ops() {
         "load_all must include currency.thousands_separator"
     );
 }
+
+// ── Migration correctness: old → new key ─────────────────────────────
+
+#[test]
+fn migration_075_moves_old_key_to_new() {
+    // Simulate a DB that existed before migration 075: only the old key exists.
+    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+         CREATE TABLE IF NOT EXISTS migrations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL UNIQUE,
+            applied_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+         INSERT INTO settings (key, value) VALUES ('store.default_currency', 'EUR');",
+    )
+    .unwrap();
+
+    // Run all migrations (including 075).
+    oz_core::migrations::run(&mut conn).unwrap();
+
+    // Old key must be gone.
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
+        None,
+        "old key must be deleted by migration 075"
+    );
+
+    // New key must have the value.
+    assert_eq!(
+        oz_core::Settings::get_default_currency(&conn).unwrap(),
+        Some("EUR".into()),
+        "new key must contain the migrated value"
+    );
+}
+
+#[test]
+fn migration_075_noop_when_old_key_absent() {
+    // A fresh DB (no old key) — migration must not insert a bogus row.
+    let mut conn = migrations::fresh_db();
+    let all_before = oz_core::Settings::load_all(&conn).unwrap();
+
+    // Run migrations again (idempotent).
+    oz_core::migrations::run(&mut conn).unwrap();
+
+    let all_after = oz_core::Settings::load_all(&conn).unwrap();
+    assert_eq!(
+        all_before.len(),
+        all_after.len(),
+        "migration 075 must not add rows when old key is absent"
+    );
+}
+
+#[test]
+fn migration_075_preserves_other_settings() {
+    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+         CREATE TABLE IF NOT EXISTS migrations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL UNIQUE,
+            applied_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+         INSERT INTO settings (key, value) VALUES
+            ('store.name', 'My Store'),
+            ('store.default_currency', 'GBP'),
+            ('store.address', '123 Street'),
+            ('receipt.show_currency', '1'),
+            ('store.tax_id', 'TAX-001');",
+    )
+    .unwrap();
+
+    oz_core::migrations::run(&mut conn).unwrap();
+
+    // All non-currency settings must survive.
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.name").unwrap(),
+        Some("My Store".into())
+    );
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.address").unwrap(),
+        Some("123 Street".into())
+    );
+    assert_eq!(
+        oz_core::Settings::get(&conn, "receipt.show_currency").unwrap(),
+        Some("1".into())
+    );
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.tax_id").unwrap(),
+        Some("TAX-001".into())
+    );
+
+    // Old currency key is gone, new one exists.
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
+        None
+    );
+    assert_eq!(
+        oz_core::Settings::get_default_currency(&conn).unwrap(),
+        Some("GBP".into())
+    );
+}
+
+#[test]
+fn migration_075_prefers_existing_new_key() {
+    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+         CREATE TABLE IF NOT EXISTS migrations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL UNIQUE,
+            applied_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+         -- Both keys exist (e.g. partial migration or manual intervention).
+         INSERT INTO settings (key, value) VALUES
+            ('currency.default', 'JPY'),
+            ('store.default_currency', 'USD');",
+    )
+    .unwrap();
+
+    oz_core::migrations::run(&mut conn).unwrap();
+
+    // Old key must be deleted; new key must keep its original value (JPY).
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
+        None
+    );
+    assert_eq!(
+        oz_core::Settings::get_default_currency(&conn).unwrap(),
+        Some("JPY".into())
+    );
+}
+
+// ── Namespace isolation: currency.* vs store.* vs receipt.* ───────────
+
+#[test]
+fn currency_keys_isolated_from_store_keys() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Set across three namespaces.
+    s.set_store_name("Shop").unwrap();
+    s.set_default_currency("AUD").unwrap();
+    s.set_currency_format("code").unwrap();
+    s.set_currency_decimal_separator("comma").unwrap();
+
+    // Remove a store key — currency keys must survive.
+    Settings::remove(&conn, "store.name").unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("AUD".into()));
+    assert_eq!(s.get_currency_format().unwrap(), "code");
+    assert_eq!(s.get_currency_decimal_separator().unwrap(), "comma");
+
+    // Remove a currency key — other currency keys must survive.
+    Settings::remove(&conn, "currency.format").unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("AUD".into()));
+    // After removal, format falls back to default.
+    assert_eq!(s.get_currency_format().unwrap(), "symbol");
+}
+
+#[test]
+fn currency_keys_isolated_from_receipt_keys() {
+    let conn = setup();
+    let s = store(&conn);
+
+    s.set_currency_decimal_separator("comma").unwrap();
+    // Receipt decimal separator is a separate setting.
+    oz_core::Settings::set_receipt_decimal_separator(&conn, "dot").unwrap();
+
+    // They must not interfere.
+    assert_eq!(s.get_currency_decimal_separator().unwrap(), "comma");
+    assert_eq!(
+        oz_core::Settings::get_receipt_decimal_separator(&conn).unwrap(),
+        "dot"
+    );
+
+    // Remove receipt key — currency key must survive.
+    Settings::remove(&conn, "receipt.decimal_separator").unwrap();
+    assert_eq!(s.get_currency_decimal_separator().unwrap(), "comma");
+}
+
+#[test]
+fn load_all_never_contains_old_default_currency_key() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Use the typed API (which writes to the new key and cleans the old one).
+    s.set_default_currency("NZD").unwrap();
+
+    let all = Settings::load_all(&conn).unwrap();
+    assert!(
+        !all.iter().any(|(k, _)| k == "store.default_currency"),
+        "load_all must never include the old store.default_currency key after typed set"
+    );
+    assert!(
+        all.iter().any(|(k, _)| k == "currency.default"),
+        "load_all must include currency.default after typed set"
+    );
+}
+
+#[test]
+fn direct_raw_write_to_old_key_does_not_affect_new_key_reads() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Someone writes directly to the old key (e.g. raw SQL).
+    Settings::set(&conn, "store.default_currency", "CHF").unwrap();
+
+    // If new key is absent, get_default_currency falls back.
+    assert_eq!(s.get_default_currency().unwrap(), Some("CHF".into()));
+
+    // But load_all will show the old key.
+    let all = Settings::load_all(&conn).unwrap();
+    assert!(
+        all.iter().any(|(k, _)| k == "store.default_currency"),
+        "old key must appear in load_all when written directly"
+    );
+
+    // Once we write via typed API, the old key must be cleaned up.
+    s.set_default_currency("SEK").unwrap();
+    assert!(
+        !Settings::load_all(&conn)
+            .unwrap()
+            .iter()
+            .any(|(k, _)| k == "store.default_currency"),
+        "typed set must clean up old key"
+    );
+    assert_eq!(s.get_default_currency().unwrap(), Some("SEK".into()));
+}
+
+// ── Overwrite protection: store settings don't clobber currency ──────
+
+#[test]
+fn overwrite_store_settings_preserves_currency_settings() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Set currency settings.
+    s.set_default_currency("KRW").unwrap();
+    s.set_currency_format("code").unwrap();
+    s.set_currency_symbol_position("suffix").unwrap();
+
+    // Overwrite store settings (simulating the bulk set_store_settings flow).
+    Settings::set_store_name(&conn, "New Name").unwrap();
+    Settings::set_store_address(&conn, "New Address").unwrap();
+    Settings::set_store_tax_id(&conn, "NEW-TAX").unwrap();
+    Settings::set_store_branch(&conn, "Downtown").unwrap();
+    // Note: NOT calling set_default_currency here — simulating a store-only update.
+
+    // Currency settings must be unchanged.
+    assert_eq!(s.get_default_currency().unwrap(), Some("KRW".into()));
+    assert_eq!(s.get_currency_format().unwrap(), "code");
+    assert_eq!(s.get_currency_symbol_position().unwrap(), "suffix");
+}
+
+#[test]
+fn overwrite_currency_settings_preserves_store_settings() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Set store settings.
+    s.set_store_name("Original Store").unwrap();
+    s.set_store_address("123 Main St").unwrap();
+
+    // Set currency settings.
+    s.set_default_currency("MXN").unwrap();
+    s.set_currency_format("symbol").unwrap();
+
+    // Overwrite currency settings.
+    s.set_default_currency("CAD").unwrap();
+    s.set_currency_format("code").unwrap();
+
+    // Store settings must be unchanged.
+    assert_eq!(s.get_store_name().unwrap(), Some("Original Store".into()));
+    assert_eq!(s.get_store_address().unwrap(), Some("123 Main St".into()));
+}
+
+// ── Setup wizard lifecycle ───────────────────────────────────────────
+
+#[test]
+fn setup_writes_global_currency_key() {
+    let conn = setup();
+    let store = Store::new(&conn);
+
+    // Simulate what complete_setup does.
+    let registry = oz_core::FeatureRegistry::simple_retail();
+    store.save_features(&registry).unwrap();
+    oz_core::Settings::prune_stale_features(&conn, &registry).unwrap();
+    oz_core::Settings::set(
+        &conn,
+        oz_core::settings::keys::STORE_PRESET,
+        "simple-retail",
+    )
+    .unwrap();
+    oz_core::Settings::set(&conn, oz_core::settings::keys::SETUP_COMPLETE, "1").unwrap();
+    oz_core::Settings::set_default_currency(&conn, "EUR").unwrap();
+    oz_core::Settings::set(&conn, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false").unwrap();
+
+    // The currency must be stored under the global key, not the store key.
+    assert_eq!(
+        oz_core::Settings::get(&conn, "currency.default").unwrap(),
+        Some("EUR".into()),
+        "setup must write to the global currency.default key"
+    );
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
+        None,
+        "setup must not leave the old store.default_currency key"
+    );
+
+    // All other setup keys must coexist.
+    assert_eq!(
+        oz_core::Settings::get(&conn, oz_core::settings::keys::STORE_PRESET).unwrap(),
+        Some("simple-retail".into())
+    );
+    assert_eq!(
+        oz_core::Settings::get(&conn, oz_core::settings::keys::SETUP_COMPLETE).unwrap(),
+        Some("1".into())
+    );
+}
+
+// ─── Comprehensive namespace roundtrip ────────────────────────────────
+
+#[test]
+fn all_currency_keys_have_distinct_namespaces() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Set every currency-related key through its typed API.
+    s.set_default_currency("PLN").unwrap();
+    s.set_currency_format("code").unwrap();
+    s.set_currency_symbol_position("suffix").unwrap();
+    s.set_currency_decimal_separator("comma").unwrap();
+    s.set_currency_thousands_separator("space").unwrap();
+
+    // Load all and verify distinct keys.
+    let all = Settings::load_all(&conn).unwrap();
+    let currency_keys: Vec<&str> = all
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .filter(|k| k.starts_with("currency."))
+        .collect();
+
+    assert!(currency_keys.contains(&"currency.default"));
+    assert!(currency_keys.contains(&"currency.format"));
+    assert!(currency_keys.contains(&"currency.symbol_position"));
+    assert!(currency_keys.contains(&"currency.decimal_separator"));
+    assert!(currency_keys.contains(&"currency.thousands_separator"));
+    assert_eq!(currency_keys.len(), 5, "exactly 5 currency.* keys");
+
+    // No non-currency keys leak into the currency namespace.
+    assert!(
+        !currency_keys
+            .iter()
+            .any(|k| k.starts_with("currency.default.")),
+        "no sub-keys should exist under currency.default"
+    );
+    assert!(
+        !currency_keys
+            .iter()
+            .any(|k| k.starts_with("currency.format.")),
+        "no sub-keys should exist under currency.format"
+    );
+}
+
+#[test]
+fn set_default_currency_idempotent_same_value_roundtrip() {
+    let conn = setup();
+    let s = store(&conn);
+
+    s.set_default_currency("USD").unwrap();
+    s.set_default_currency("USD").unwrap();
+    s.set_default_currency("USD").unwrap();
+
+    assert_eq!(s.get_default_currency().unwrap(), Some("USD".into()));
+    // No old key after repeated sets.
+    assert_eq!(
+        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
+        None
+    );
+}
+
+#[test]
+fn default_currency_remove_restores_fallback() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Write old key and new key.
+    s.set_setting("store.default_currency", "DKK").unwrap();
+    s.set_setting("currency.default", "NOK").unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("NOK".into()));
+
+    // Remove the new key — fallback must kick in.
+    oz_core::Settings::remove(&conn, "currency.default").unwrap();
+    assert_eq!(
+        s.get_default_currency().unwrap(),
+        Some("DKK".into()),
+        "must fall back to old key when new key is removed"
+    );
+}
+
+#[test]
+fn default_currency_both_keys_absent_returns_none() {
+    let conn = setup();
+    let s = store(&conn);
+
+    assert_eq!(s.get_default_currency().unwrap(), None);
+
+    // Setting then removing.
+    s.set_default_currency("USD").unwrap();
+    oz_core::Settings::remove(&conn, "currency.default").unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), None);
+}
+
+// ── Currency settings survive full Store lifecycle ────────────────────
+
+#[test]
+fn currency_settings_persist_after_feature_save() {
+    let conn = setup();
+    let s = store(&conn);
+
+    s.set_default_currency("SGD").unwrap();
+    s.set_currency_format("code").unwrap();
+
+    // Save features (uses set_batch internally — must not clobber currency).
+    let reg = oz_core::FeatureRegistry::simple_retail();
+    s.save_features(&reg).unwrap();
+
+    assert_eq!(s.get_default_currency().unwrap(), Some("SGD".into()));
+    assert_eq!(s.get_currency_format().unwrap(), "code");
+}
+
+#[test]
+fn currency_settings_persist_after_prune_stale_features() {
+    let conn = setup();
+    let s = store(&conn);
+
+    s.set_default_currency("HKD").unwrap();
+    s.set_currency_symbol_position("suffix").unwrap();
+
+    // Prune stale features.
+    let reg = oz_core::FeatureRegistry::simple_retail();
+    oz_core::Settings::prune_stale_features(&conn, &reg).unwrap();
+
+    assert_eq!(s.get_default_currency().unwrap(), Some("HKD".into()));
+    assert_eq!(s.get_currency_symbol_position().unwrap(), "suffix");
+}
