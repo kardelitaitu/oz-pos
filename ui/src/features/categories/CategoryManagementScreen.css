@@ -24,9 +24,18 @@
   color: var(--color-fg);
 }
 
-.cat-mgmt-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
+.cat-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cat-mgmt-loading-skeleton .cat-mgmt-header {
+  margin-bottom: 0;
+}
+
+.cat-mgmt-loading-skeleton .cat-mgmt-grid {
+  pointer-events: none;
 }
 
 .cat-mgmt-empty {

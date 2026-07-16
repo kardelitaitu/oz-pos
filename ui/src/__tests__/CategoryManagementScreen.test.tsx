@@ -66,10 +66,11 @@ describe('CategoryManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
   });
 
-  it('shows loading state', () => {
+  it('shows loading skeleton while fetching categories', () => {
     mockListCategories.mockReturnValue(new Promise(() => {}));
     renderScreen();
-    expect(screen.getByText('Loading categories…')).toBeDefined();
+    expect(document.querySelector('.cat-mgmt-loading-skeleton')).toBeDefined();
+    expect(screen.queryByText('Loading categories…')).toBeNull();
   });
 
   it('shows empty state', async () => {

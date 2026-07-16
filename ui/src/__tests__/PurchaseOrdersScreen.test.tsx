@@ -86,10 +86,11 @@ describe('PurchaseOrdersScreen', () => {
     expect(screen.getByText('110.00')).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton while fetching purchase orders', async () => {
     mockListPOs.mockReturnValue(new Promise(() => {}));
     renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
-    expect(screen.getByText(/loading purchase orders/i)).toBeInTheDocument();
+    expect(document.querySelector('.po-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/loading purchase orders/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no orders exist', async () => {

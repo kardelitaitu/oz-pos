@@ -44,10 +44,22 @@
   border-color: var(--color-accent);
 }
 
-.po-loading {
-  color: var(--color-fg-tertiary);
-  padding: var(--space-8);
-  text-align: center;
+.po-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.po-loading-skeleton .po-header {
+  margin-bottom: 0;
+}
+
+.po-loading-skeleton .po-filters {
+  margin-bottom: 0;
+}
+
+.po-loading-skeleton .po-table thead {
+  pointer-events: none;
 }
 
 .po-empty {

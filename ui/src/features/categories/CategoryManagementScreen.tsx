@@ -9,6 +9,7 @@ import {
 } from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import './CategoryManagementScreen.css';
 
@@ -307,9 +308,28 @@ export default function CategoryManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="categories-loading">
-          <p className="cat-mgmt-loading">Loading categories…</p>
-        </Localized>
+        <div className="cat-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="cat-mgmt-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="9rem" height="2.25rem" />
+          </div>
+          <div className="cat-mgmt-grid">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Card key={i} shadow="xs">
+                <div className="cat-mgmt-card">
+                  <Skeleton variant="circle" width="2.75rem" height="2.75rem" />
+                  <div className="cat-mgmt-card-info">
+                    <Skeleton variant="text" width={`${5 + (i % 3) * 2}rem`} height="1rem" />
+                    <Skeleton variant="text" width="6rem" height="0.75rem" />
+                    <Skeleton variant="text" width="4rem" height="0.75rem" />
+                  </div>
+                  <Skeleton variant="block" width="1.75rem" height="1.75rem" />
+                  <Skeleton variant="block" width="1.75rem" height="1.75rem" />
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
       ) : categories.length === 0 ? (
         <Card shadow="sm">
           <div className="cat-mgmt-empty">

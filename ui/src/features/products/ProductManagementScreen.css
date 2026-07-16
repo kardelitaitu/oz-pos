@@ -16,9 +16,18 @@
   color: var(--color-fg);
 }
 
-.product-mgmt-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
+.product-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.product-mgmt-loading-skeleton .product-mgmt-header {
+  margin-bottom: 0;
+}
+
+.product-mgmt-loading-skeleton .product-mgmt-table thead {
+  pointer-events: none;
 }
 
 .product-mgmt-empty {
