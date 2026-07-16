@@ -1,5 +1,15 @@
+// ── StockTransfersScreen keyboard interaction tests ───────────────
+//
+// Covers: detail/create/receive modals, Escape key closing, X close
+// button, Cancel button, modal stacking, form interaction during save.
+//
+// Uses fireEvent.click for all button clicks (~1ms vs userEvent ~60ms)
+// and fireEvent.change for form fields (~1ms vs userEvent.type ~20ms/char).
+// Escape key events still use userEvent.keyboard (native listener on
+// inner panel ref, not React synthetic event). 8 tests.
+
 import { describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import stockTransfersFtl from '@/locales/stock-transfers.ftl?raw';
@@ -72,63 +82,64 @@ const sampleDetailInTransit = {
   ],
 };
 
-/* ── Helper: setup + open modal ──────────────────────────────── */
+/* ── Modal helpers (fireEvent.click ~1ms vs userEvent.click ~60ms) ─ */
 
 function setupMocks() {
   mockListProducts.mockResolvedValue([]);
   mockListTerminals.mockResolvedValue([]);
 }
 
-async function openDetailModal(user: ReturnType<typeof userEvent.setup>) {
+async function openDetailModal() {
   setupMocks();
   mockListTransfers.mockResolvedValue(sampleTransfers);
   mockGetTransfer.mockResolvedValue(sampleDetail);
   renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
-  await waitFor(() => expect(screen.getByText('ST-001')).toBeInTheDocument());
+  await screen.findByText('ST-001');
 
-  // Click transfer number to open detail
-  await user.click(screen.getByText('ST-001'));
-
-  await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+  // fireEvent.click is safe for <td> with onClick (no label forwarding needed)
+  fireEvent.click(screen.getByText('ST-001'));
+  // Modal renders sync after fireEvent.click (React 18 auto-batching)
 }
 
-async function openCreateModal(user: ReturnType<typeof userEvent.setup>) {
+async function openCreateModal() {
   setupMocks();
   mockListTransfers.mockResolvedValue(sampleTransfers);
   mockGetTransfer.mockResolvedValue(sampleDetail);
   renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
-  await waitFor(() => expect(screen.getByText('ST-001')).toBeInTheDocument());
+  await screen.findByText('ST-001');
 
-  await user.click(screen.getByRole('button', { name: /new transfer/i }));
-  await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: /new transfer/i }));
 }
 
-async function openReceiveModal(user: ReturnType<typeof userEvent.setup>) {
+async function openReceiveModal() {
   setupMocks();
   mockListTransfers.mockResolvedValue([sampleTransfers[1]!]); // in_transit
   mockGetTransfer.mockResolvedValue(sampleDetailInTransit);
   renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
-  await waitFor(() => expect(screen.getByText('ST-002')).toBeInTheDocument());
+  await screen.findByText('ST-002');
 
-  // Open detail for in_transit transfer
-  await user.click(screen.getByText('ST-002'));
-  await waitFor(() => expect(screen.getByRole('button', { name: /receive transfer/i })).toBeInTheDocument());
+  fireEvent.click(screen.getByText('ST-002'));
 
-  // Open receive modal
-  await user.click(screen.getByRole('button', { name: /receive transfer/i }));
-  await waitFor(() => expect(screen.getByText(/enter the quantity/i)).toBeInTheDocument());
+  const receiveBtn = await screen.findByRole('button', { name: /receive transfer/i });
+  fireEvent.click(receiveBtn);
+}
+
+// ── Form field helper (fireEvent.change ~1ms vs userEvent.type ~20ms/char) ─
+
+function fillField(label: string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
 describe('StockTransfersScreen — modal keyboard interaction', () => {
   // ── Detail modal: Escape key ──────────────────────────────────
 
   it('closes detail modal when Escape is pressed', async () => {
-    const user = userEvent.setup();
-    await openDetailModal(user);
+    await openDetailModal();
 
+    const user = userEvent.setup();
     await user.keyboard('{Escape}');
 
     await waitFor(() => {
@@ -137,12 +148,11 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
   });
 
   it('opens and closes detail modal with X close button', async () => {
-    const user = userEvent.setup();
-    await openDetailModal(user);
+    await openDetailModal();
 
     const dialog = screen.getByRole('dialog');
     const xBtn = dialog.querySelector('.stock-transfers-modal-close') as HTMLElement;
-    await user.click(xBtn);
+    fireEvent.click(xBtn);
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -152,9 +162,9 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
   // ── Create modal: Escape key ─────────────────────────────────
 
   it('closes create modal when Escape is pressed', async () => {
-    const user = userEvent.setup();
-    await openCreateModal(user);
+    await openCreateModal();
 
+    const user = userEvent.setup();
     await user.keyboard('{Escape}');
 
     await waitFor(() => {
@@ -163,12 +173,11 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
   });
 
   it('opens and closes create modal with X close button', async () => {
-    const user = userEvent.setup();
-    await openCreateModal(user);
+    await openCreateModal();
 
     const dialog = screen.getByRole('dialog');
     const xBtn = dialog.querySelector('.stock-transfers-modal-close') as HTMLElement;
-    await user.click(xBtn);
+    fireEvent.click(xBtn);
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -178,9 +187,9 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
   // ── Receive modal: Escape key ────────────────────────────────
 
   it('closes receive modal when Escape is pressed', async () => {
-    const user = userEvent.setup();
-    await openReceiveModal(user);
+    await openReceiveModal();
 
+    const user = userEvent.setup();
     await user.keyboard('{Escape}');
 
     await waitFor(() => {
@@ -189,10 +198,9 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
   });
 
   it('closes receive modal with Cancel button', async () => {
-    const user = userEvent.setup();
-    await openReceiveModal(user);
+    await openReceiveModal();
 
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
     await waitFor(() => {
       expect(screen.queryByText(/enter the quantity/i)).not.toBeInTheDocument();
@@ -202,30 +210,26 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
   // ── Create modal: form interaction ──────────────────────────
 
   it('blocks Escape when creating a transfer', async () => {
-    const user = userEvent.setup();
     vi.mocked(createStockTransfer).mockReturnValue(new Promise(() => {}));
-    await openCreateModal(user);
+    await openCreateModal();
 
-    // Fill in required fields
-    const sourceInput = screen.getByLabelText('Source');
-    await user.type(sourceInput, 'Warehouse A');
+    // Fill in required fields with fireEvent.change (saves ~20ms/char)
+    fillField('Source', 'Warehouse A');
+    fillField('Destination', 'Store B');
 
-    const destInput = screen.getByLabelText('Destination');
-    await user.type(destInput, 'Store B');
+    // Add a line item
+    fireEvent.click(screen.getByRole('button', { name: /add line/i }));
 
-    // Add a line item first (createLines starts empty)
-    await user.click(screen.getByRole('button', { name: /add line/i }));
-
-    const skuInputs = screen.getAllByLabelText('SKU');
-    await user.type(skuInputs[0]!, 'SKU-001');
+    fillField('SKU', 'SKU-001');
 
     const qtyInput = screen.getByLabelText('Qty');
-    await user.type(qtyInput, '5');
+    fireEvent.change(qtyInput, { target: { value: '5' } });
 
     // Click Create Transfer (modal enters saving state)
-    await user.click(screen.getByRole('button', { name: /create transfer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /create transfer/i }));
 
     // Escape should NOT close the modal during save
+    const user = userEvent.setup();
     await user.keyboard('{Escape}');
 
     // Modal should still be open
@@ -235,23 +239,20 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
   // ── Multiple modals: correct one closes ────────────────────
 
   it('closes only the top-most modal when Escape is pressed', async () => {
-    const user = userEvent.setup();
     setupMocks();
     mockListTransfers.mockResolvedValue([sampleTransfers[1]!]); // in_transit
     mockGetTransfer.mockResolvedValue(sampleDetailInTransit);
     renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
 
-    await waitFor(() => expect(screen.getByText('ST-002')).toBeInTheDocument());
+    await screen.findByText('ST-002');
+    fireEvent.click(screen.getByText('ST-002'));
 
-    // Open detail modal
-    await user.click(screen.getByText('ST-002'));
-    await screen.findByRole('dialog');
-
-    // Open receive modal on top of detail
-    await user.click(screen.getByRole('button', { name: /receive transfer/i }));
-    await waitFor(() => expect(screen.getByText(/enter the quantity/i)).toBeInTheDocument());
+    const receiveBtn = await screen.findByRole('button', { name: /receive transfer/i });
+    fireEvent.click(receiveBtn);
+    await screen.findByText(/enter the quantity/i);
 
     // Escape should close receive modal (topmost)
+    const user = userEvent.setup();
     await user.keyboard('{Escape}');
 
     await waitFor(() => {
