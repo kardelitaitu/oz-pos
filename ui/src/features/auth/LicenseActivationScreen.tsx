@@ -193,7 +193,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
                   disabled={loading}
                 />
                 {email && !loading && (
-                  <button type="button" className="license-input-clear" onClick={() => setEmail('')}>
+                  <button type="button" className="license-input-clear" onClick={() => setEmail('')} aria-label={l10n.getString('auth-clear-email')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18"></line>
                       <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -224,7 +224,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
                   disabled={loading}
                 />
                 {phone && !loading && (
-                  <button type="button" className="license-input-clear" onClick={() => setPhone('')}>
+                  <button type="button" className="license-input-clear" onClick={() => setPhone('')} aria-label={l10n.getString('auth-clear-phone')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18"></line>
                       <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -255,7 +255,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
                   disabled={loading}
                 />
                 {key && !loading && (
-                  <button type="button" className="license-input-clear" onClick={() => setKey('')}>
+                  <button type="button" className="license-input-clear" onClick={() => setKey('')} aria-label={l10n.getString('auth-clear-key')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18"></line>
                       <line x1="6" y1="6" x2="18" y2="18"></line>
