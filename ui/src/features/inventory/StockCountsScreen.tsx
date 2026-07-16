@@ -60,7 +60,7 @@ export default function StockCountsScreen() {
 
       <div className="sc-filters">
         {['all', 'draft', 'in_progress', 'completed', 'cancelled'].map((f) => (
-          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+          /* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */
           <button
             key={f}
             type="button"

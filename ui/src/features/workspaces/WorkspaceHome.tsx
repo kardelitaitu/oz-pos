@@ -199,7 +199,7 @@ function LayerFloatingButtons({
           </>
         )}
         {error && (
-          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+          /* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */
           <button
             type="button"
             className="workspace-home-logout-btn"
