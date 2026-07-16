@@ -346,6 +346,16 @@
     to   { opacity: 1; }
   }
 
+  @keyframes sales-history-overlay-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+
+  .sales-history-overlay--exiting {
+    animation: sales-history-overlay-out var(--duration-200) var(--ease-in) forwards;
+    pointer-events: none;
+  }
+
   .sales-history-modal {
     animation: sales-history-modal-slide-up var(--duration-200) var(--ease-out);
   }
@@ -354,6 +364,15 @@
     from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
+
+  @keyframes sales-history-modal-slide-down {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(0.5rem) scale(0.98); }
+  }
+
+  .sales-history-modal--exiting {
+    animation: sales-history-modal-slide-down var(--duration-200) var(--ease-in) forwards;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -361,6 +380,14 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     will-change: auto;
+  }
+
+  .sales-history-overlay--exiting {
+    opacity: 0;
+  }
+
+  .sales-history-modal--exiting {
+    opacity: 0;
   }
 }
 
