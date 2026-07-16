@@ -688,12 +688,16 @@
   color: var(--color-fg);
 }
 
-.shift-mgmt-report-loading {
+.shift-mgmt-report-skeleton {
   margin-top: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--color-fg-tertiary);
-  text-align: center;
-  padding: var(--space-4);
+  pointer-events: none;
+}
+
+.shift-mgmt-report-skeleton-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
 }
 
 /* ── Active shift actions (payout + close) ──────────── */

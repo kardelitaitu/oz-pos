@@ -410,7 +410,38 @@ export default function StockTransfersScreen() {
               <button type="button" className="stock-transfers-modal-close" onClick={closeDetail} aria-label={l10n.getString('close')}>&times;</button>
             </div>
             {detailLoading ? (
-              <Localized id="loading"><p className="stock-transfers-loading">Loading…</p></Localized>
+              <div className="stock-transfers-detail-skeleton" aria-hidden="true">
+                <div className="stock-transfers-detail-info">
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <div key={i} className="stock-transfers-detail-field">
+                      <Skeleton width="3rem" height="0.75rem" />
+                      <Skeleton width="80%" height="0.875rem" />
+                    </div>
+                  ))}
+                </div>
+                <table className="stock-transfers-lines-table" aria-hidden="true">
+                  <thead>
+                    <tr>
+                      {['SKU', 'Product', 'Qty', 'Received'].map((_, i) => (
+                        <th key={i}><Skeleton width="3rem" height="0.75rem" /></th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: 4 }, (_, r) => (
+                      <tr key={r}>
+                        <td><Skeleton width="4rem" height="0.875rem" /></td>
+                        <td><Skeleton width="6rem" height="0.875rem" /></td>
+                        <td><Skeleton width="2rem" height="0.875rem" /></td>
+                        <td><Skeleton width="2rem" height="0.875rem" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="stock-transfers-detail-actions">
+                  <Skeleton variant="block" width="7rem" height="2rem" style={{ borderRadius: 'var(--radius-lg)' }} />
+                </div>
+              </div>
             ) : detail ? (
               <div className="stock-transfers-detail">
                 <div className="stock-transfers-detail-info">

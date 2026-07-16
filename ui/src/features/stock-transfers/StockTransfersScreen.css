@@ -16,13 +16,6 @@
   color: var(--color-fg);
 }
 
-.stock-transfers-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
-  padding: var(--space-8);
-  text-align: center;
-}
-
 .stock-transfers-loading-skeleton {
   display: flex;
   flex-direction: column;
@@ -299,6 +292,19 @@
   gap: var(--space-2);
   margin-top: var(--space-4);
   flex-wrap: wrap;
+}
+
+/* ── Detail skeleton ─────────────────────────────────────────────────── */
+.stock-transfers-detail-skeleton {
+  pointer-events: none;
+}
+
+.stock-transfers-detail-skeleton .stock-transfers-lines-table thead {
+  pointer-events: none;
+}
+
+.stock-transfers-detail-skeleton .stock-transfers-lines-table tbody tr td {
+  border-bottom: none;
 }
 
 /* ── Lines table (in detail) ─────────────────────────────────── */

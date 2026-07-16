@@ -979,9 +979,15 @@ export default function ShiftManagementScreen() {
 
               {/* ── Shift Report sections ──────────────── */}
               {reportLoading && (
-                <Localized id="shift-report-loading">
-                  <div className="shift-mgmt-report-loading">Loading report…</div>
-                </Localized>
+                <div className="shift-mgmt-report-skeleton" aria-hidden="true">
+                  <Skeleton variant="block" width="8rem" height="0.875rem" style={{ marginBottom: 'var(--space-2)' }} />
+                  {Array.from({ length: 4 }, (_, i) => (
+                    <div key={i} className="shift-mgmt-report-skeleton-row">
+                      <Skeleton width="40%" height="0.75rem" />
+                      <Skeleton width="30%" height="0.75rem" />
+                    </div>
+                  ))}
+                </div>
               )}
 
               {shiftReport && !reportLoading && (
