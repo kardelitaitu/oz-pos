@@ -119,6 +119,11 @@
   opacity: 0.9;
 }
 
+.update-banner-btn--primary:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 .update-banner-btn--primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -134,6 +139,11 @@
 .update-banner-btn--dismiss:hover {
   background: var(--color-bg-surface);
   color: var(--color-fg-secondary);
+}
+
+.update-banner-btn--dismiss:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 /* Dark mode adjustments */
