@@ -157,131 +157,142 @@ export function AppearanceSettings({
 
   const brandingFields = (
     <>
-      <div className="appearance-field">
+      <div className="settings-field settings-field--horizontal">
         <label htmlFor="brand-colour" className="settings-label">
           <Localized id="appearance-primary-colour">Primary Colour</Localized>
         </label>
-        <div className="appearance-colour-row">
-          <Localized id="appearance-primary-colour-picker-aria" attrs={{ 'aria-label': true }}>
-            <input
-              id="brand-colour"
-              type="color"
-              value={activeColour}
-              onChange={(e) => updateColour(e.target.value)}
-              aria-label="Primary colour picker"
-              className="appearance-colour-picker"
-            />
-          </Localized>
-          <Localized id="appearance-colour-hex-aria" attrs={{ 'aria-label': true }}>
-            <input
-              id="appearance-colour-hex"
-              name="appearance-colour-hex"
-              type="text"
-              value={activeColour}
-              onChange={(e) => {
-                const normalised = normaliseHex(e.target.value);
-                if (normalised) updateColour(normalised);
-              }}
-              className="appearance-colour-hex settings-input"
-              autoComplete="off"
-              aria-label="Colour hex value"
-            />
-          </Localized>
-          <Localized id="appearance-reset-colour-aria" attrs={{ 'aria-label': true }}>
-            <button
-              type="button"
-              className="appearance-colour-reset"
-              onClick={() => updateColour(DEFAULT_COLOUR)}
-              aria-label="Reset colour to default"
-              title={l10n.getString('appearance-reset-colour')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
-              </svg>
-            </button>
-          </Localized>
-        </div>
+        <span className="settings-field-input-wrap">
+          <div className="appearance-colour-row">
+            <Localized id="appearance-primary-colour-picker-aria" attrs={{ 'aria-label': true }}>
+              <input
+                id="brand-colour"
+                type="color"
+                value={activeColour}
+                onChange={(e) => updateColour(e.target.value)}
+                aria-label="Primary colour picker"
+                className="appearance-colour-picker"
+              />
+            </Localized>
+            <Localized id="appearance-colour-hex-aria" attrs={{ 'aria-label': true }}>
+              <input
+                id="appearance-colour-hex"
+                name="appearance-colour-hex"
+                type="text"
+                value={activeColour}
+                onChange={(e) => {
+                  const normalised = normaliseHex(e.target.value);
+                  if (normalised) updateColour(normalised);
+                }}
+                className="appearance-colour-hex settings-input"
+                autoComplete="off"
+                aria-label="Colour hex value"
+              />
+            </Localized>
+            <Localized id="appearance-reset-colour-aria" attrs={{ 'aria-label': true }}>
+              <button
+                type="button"
+                className="appearance-colour-reset"
+                onClick={() => updateColour(DEFAULT_COLOUR)}
+                aria-label="Reset colour to default"
+                title={l10n.getString('appearance-reset-colour')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+                </svg>
+              </button>
+            </Localized>
+          </div>
+        </span>
       </div>
 
-      <div className="appearance-field">
+      <div className="settings-field settings-field--horizontal">
         <span className="settings-label">
           <Localized id="appearance-logo">Store Logo</Localized>
         </span>
-        <div className="appearance-logo-row">
-          {logoPath && (
-            <Localized id="appearance-logo-alt" attrs={{ alt: true }}>
-              <img
-                src={`file://${logoPath}`}
-                alt="Store logo"
-                className="appearance-logo-preview"
-              />
+        <span className="settings-field-input-wrap">
+          <div className="appearance-logo-row">
+            {logoPath && (
+              <Localized id="appearance-logo-alt" attrs={{ alt: true }}>
+                <img
+                  src={`file://${logoPath}`}
+                  alt="Store logo"
+                  className="appearance-logo-preview"
+                />
+              </Localized>
+            )}
+            <Localized id="appearance-choose-logo-aria" attrs={{ 'aria-label': true }}>
+              <Button variant="secondary" onClick={handlePickLogo} aria-label="Pick logo file">
+                <Localized id="appearance-choose-logo">Choose Logo</Localized>
+              </Button>
             </Localized>
-          )}
-          <Localized id="appearance-choose-logo-aria" attrs={{ 'aria-label': true }}>
-            <Button variant="secondary" onClick={handlePickLogo} aria-label="Pick logo file">
-              <Localized id="appearance-choose-logo">Choose Logo</Localized>
-            </Button>
-          </Localized>
-          {logoPath && <span className="appearance-logo-path">{logoPath}</span>}
-        </div>
+            {logoPath && <span className="appearance-logo-path">{logoPath}</span>}
+          </div>
+        </span>
       </div>
 
-      <div className="appearance-field">
+      <div className="settings-field settings-field--horizontal">
         <label htmlFor="store-name-display" className="settings-label">
           <Localized id="appearance-store-name">Display Store Name</Localized>
         </label>
-        <input
-          id="store-name-display"
-          type="text"
-          value={activeStoreName}
-          onChange={(e) => updateStoreName(e.target.value)}
-          className="settings-input"
-          autoComplete="off"
-        />
+        <span className="settings-field-input-wrap">
+          <input
+            id="store-name-display"
+            type="text"
+            value={activeStoreName}
+            onChange={(e) => updateStoreName(e.target.value)}
+            className="settings-input"
+            autoComplete="off"
+          />
+        </span>
       </div>
     </>
   );
 
   const interfaceFields = (
     <>
-      <div className="appearance-field">
+      <div className="settings-field settings-field--horizontal">
         <label htmlFor="interface-zoom" className="settings-label">
           <Localized id="appearance-interface-zoom">Interface Zoom</Localized>
         </label>
-        <SettingsSelect
-          id="interface-zoom"
-          value={zoomLevel}
-          onChange={(v) => setZoomLevel(v as ZoomLevel)}
-          options={[
-            { value: 'auto', label: l10n.getString('appearance-zoom-auto') },
-            { value: '100', label: l10n.getString('appearance-zoom-100') },
-            { value: '125', label: l10n.getString('appearance-zoom-125') },
-            { value: '150', label: l10n.getString('appearance-zoom-150') },
-            { value: '200', label: l10n.getString('appearance-zoom-200') },
-          ]}
-        />
+        <span className="settings-field-input-wrap">
+          <SettingsSelect
+            id="interface-zoom"
+            value={zoomLevel}
+            onChange={(v) => setZoomLevel(v as ZoomLevel)}
+            options={[
+              { value: 'auto', label: l10n.getString('appearance-zoom-auto') },
+              { value: '100', label: l10n.getString('appearance-zoom-100') },
+              { value: '125', label: l10n.getString('appearance-zoom-125') },
+              { value: '150', label: l10n.getString('appearance-zoom-150') },
+              { value: '200', label: l10n.getString('appearance-zoom-200') },
+            ]}
+          />
+        </span>
       </div>
 
-      <div className="appearance-field">
-        <label className="settings-toggle">
-          <span className="settings-toggle-switch">
-            <input
-              type="checkbox"
-              checked={hwAccelEnabled}
-              onChange={(e) => setHwAccelEnabled(e.target.checked)}
-            />
-            <span className="settings-toggle-slider" />
-          </span>
-          <Localized id="appearance-hw-accel">
-            <span>Hardware Acceleration</span>
-          </Localized>
+      <div className="settings-field settings-field--horizontal">
+        <label htmlFor="hw-accel-checkbox" className="settings-label">
+          <Localized id="appearance-hw-accel">Hardware Acceleration</Localized>
         </label>
-        <p className="settings-hint">
-          <Localized id="appearance-hw-accel-hint">
-            <span>Disable if UI animations feel janky on low-end devices</span>
-          </Localized>
-        </p>
+        <span className="settings-field-input-wrap">
+          <label className="settings-toggle">
+            <span className="settings-toggle-switch">
+              <input
+                id="hw-accel-checkbox"
+                type="checkbox"
+                checked={hwAccelEnabled}
+                onChange={(e) => setHwAccelEnabled(e.target.checked)}
+              />
+              <span className="settings-toggle-slider" />
+            </span>
+          </label>
+          <p className="settings-hint">
+            <Localized id="appearance-hw-accel-hint">
+              <span>Disable if UI animations feel janky on low-end devices</span>
+            </Localized>
+          </p>
+        </span>
       </div>
     </>
   );
