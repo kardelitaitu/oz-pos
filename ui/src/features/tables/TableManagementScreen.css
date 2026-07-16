@@ -152,12 +152,16 @@
 }
 
 /* Occupied */
+@media (prefers-reduced-motion: no-preference) {
+  .tables-table--occupied {
+    animation: table-occupied-pulse var(--duration-2000) infinite var(--ease-in-out);
+  }
+}
 .tables-table--occupied {
   background: linear-gradient(135deg, var(--color-danger) 0%, color-mix(in srgb, var(--color-danger) 80%, black) 100%);
   box-shadow: 
     0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  animation: table-occupied-pulse var(--duration-2000) infinite var(--ease-in-out);
 }
 .tables-table--occupied:hover {
   box-shadow: 
@@ -191,21 +195,23 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-@keyframes table-occupied-pulse {
-  0% {
-    box-shadow: 
-      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  }
-  50% {
-    box-shadow: 
-      0 4px 20px color-mix(in srgb, var(--color-danger) 45%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  }
-  100% {
-    box-shadow: 
-      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes table-occupied-pulse {
+    0% {
+      box-shadow: 
+        0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    50% {
+      box-shadow: 
+        0 4px 20px color-mix(in srgb, var(--color-danger) 45%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    100% {
+      box-shadow: 
+        0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
   }
 }
 
@@ -236,7 +242,12 @@
   padding: var(--space-6);
   box-shadow: var(--shadow-2xl);
   z-index: 100;
-  animation: slideUp var(--duration-200) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tables-detail {
+    animation: slideUp var(--duration-200) var(--ease-out);
+  }
 }
 
 .tables-detail h2 {
@@ -295,9 +306,16 @@
   background: var(--color-bg-hover);
 }
 
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
 }
 
 /* ── Desktop responsive overlay modal ────────────────── */
@@ -313,11 +331,11 @@
     border-radius: var(--radius-xl);
     border: 1px solid var(--color-border);
     box-shadow: var(--shadow-2xl);
-    animation: fadeIn var(--duration-200) var(--ease-out);
   }
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  @media (prefers-reduced-motion: no-preference) {
+    .tables-detail {
+      animation: fadeIn var(--duration-200) var(--ease-out);
+    }
+  }
 }
