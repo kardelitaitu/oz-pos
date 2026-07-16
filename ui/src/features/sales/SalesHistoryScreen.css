@@ -154,8 +154,38 @@
   opacity: 0.9;
 }
 
-.sales-history-loading {
-  color: var(--color-fg-secondary);
+.sales-history-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sales-history-loading-skeleton .sales-history-header {
+  margin-bottom: 0;
+}
+
+.sales-history-loading-skeleton .sales-history-filters {
+  margin-bottom: 0;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.sales-history-loading-skeleton .sales-history-table thead {
+  pointer-events: none;
+}
+
+.sales-history-detail-skeleton {
+  padding: var(--space-4);
+  pointer-events: none;
+}
+
+.sales-history-detail-skeleton .sales-history-lines-table thead {
+  pointer-events: none;
+}
+
+.sales-history-detail-skeleton .sales-history-lines-table tbody tr td {
+  border-bottom: none;
 }
 
 .sales-history-empty {
@@ -294,34 +324,52 @@
 .sales-history-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  will-change: backdrop-filter;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal);
-  animation: sales-history-overlay-in var(--duration-200) var(--ease-out);
-}
-
-.sales-history-modal {
-  background: var(--color-bg);
-  border-radius: var(--radius-lg);
-  width: 90%;
-  max-width: 40rem;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-lg);
-  animation: sales-history-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .sales-history-overlay {
+    animation: sales-history-overlay-in var(--duration-200) var(--ease-out);
+  }
+
   @keyframes sales-history-overlay-in {
     from { opacity: 0; }
     to   { opacity: 1; }
   }
+
+  .sales-history-modal {
+    animation: sales-history-modal-slide-up var(--duration-200) var(--ease-out);
+  }
+
   @keyframes sales-history-modal-slide-up {
     from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sales-history-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    will-change: auto;
+  }
+}
+
+.sales-history-modal {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
+  width: 90%;
+  max-width: 40rem;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl);
 }
 
 .sales-history-modal-header {
