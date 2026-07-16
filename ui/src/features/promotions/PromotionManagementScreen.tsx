@@ -11,6 +11,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './PromotionManagementScreen.css';
 
 type ModalMode = 'add' | 'edit' | null;
@@ -148,7 +149,39 @@ export default function PromotionManagementScreen() {
       </div>
 
       {loading ? (
-        <p className="promo-mgmt-loading"><Localized id="loading"><span>Loading…</span></Localized></p>
+        <div className="promo-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="promo-mgmt-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="9rem" height="2.25rem" />
+          </div>
+          <div className="promo-mgmt-table-wrap">
+            <table className="promo-mgmt-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Name', 'Type', 'Value', 'Active', 'Starts', 'Ends', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 6 ? '4rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="3rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="2.5rem" height="1.375rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td className="promo-mgmt-actions">
+                      <Skeleton variant="block" width="3rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : promotions.length === 0 ? (
         <Card shadow="sm">
           <div className="promo-mgmt-empty">

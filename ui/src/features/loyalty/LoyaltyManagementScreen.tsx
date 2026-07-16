@@ -10,6 +10,7 @@ import {
 import { listCustomers, type CustomerDto } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './LoyaltyManagementScreen.css';
 
 interface TierFormData {
@@ -119,9 +120,39 @@ export default function LoyaltyManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="loading">
-          <p className="loyalty-mgmt-loading">Loading…</p>
-        </Localized>
+        <div className="loyalty-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="loyalty-mgmt-header">
+            <Skeleton variant="block" width="6rem" height="1.75rem" />
+            <div className="loyalty-mgmt-tabs">
+              <Skeleton variant="block" width="5rem" height="2.25rem" />
+              <Skeleton variant="block" width="4rem" height="2.25rem" />
+            </div>
+          </div>
+          <div className="loyalty-table-wrap">
+            <table className="loyalty-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Customer', 'Tier', 'Points', 'Lifetime Points', 'Next Tier', 'Points to Next', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 6 ? '5rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="3rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="3rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="circle" width="1.25rem" height="1.25rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : tierTab ? (
         <div className="loyalty-tiers-section">
           <div className="loyalty-tiers-grid">

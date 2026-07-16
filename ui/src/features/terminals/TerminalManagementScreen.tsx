@@ -22,6 +22,7 @@ import { FEATURES } from '@/hooks/useFeatures';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './TerminalManagementScreen.css';
 
 // ── Feature groups for the override toggle UI ─────────────────────
@@ -456,9 +457,40 @@ export default function TerminalManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="terminal-management-loading">
-          <p className="terminal-mgmt-loading">Loading terminals…</p>
-        </Localized>
+        <div className="terminal-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="terminal-mgmt-header">
+            <Skeleton variant="block" width="14rem" height="1.75rem" />
+            <Skeleton variant="block" width="9rem" height="2.25rem" />
+          </div>
+          <div className="terminal-mgmt-table-wrap">
+            <table className="terminal-mgmt-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Name', 'Device ID', 'Status', 'Last Seen', 'Created', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 5 ? '5rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.75rem" /></td>
+                    <td>
+                      <div className="terminal-mgmt-cell-actions">
+                        <Skeleton variant="block" width="3rem" height="1.375rem" />
+                        <Skeleton variant="block" width="3rem" height="1.375rem" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error ? (
         <Card shadow="sm">
           <div className="terminal-mgmt-empty">

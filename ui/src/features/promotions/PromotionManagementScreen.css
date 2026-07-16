@@ -17,9 +17,18 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.promo-mgmt-loading {
-  text-align: center;
-  color: var(--color-fg-tertiary);
+.promo-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.promo-mgmt-loading-skeleton .promo-mgmt-header {
+  margin-bottom: 0;
+}
+
+.promo-mgmt-loading-skeleton .promo-mgmt-table thead {
+  pointer-events: none;
 }
 
 .promo-mgmt-empty {

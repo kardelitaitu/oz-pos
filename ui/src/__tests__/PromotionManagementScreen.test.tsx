@@ -80,11 +80,12 @@ describe('PromotionManagementScreen', () => {
     });
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton while fetching promotions', () => {
     mockListPromotions.mockImplementation(() => new Promise(() => {}));
     renderScreen();
 
-    expect(screen.getByText('Loading…')).toBeTruthy();
+    expect(document.querySelector('.promo-mgmt-loading-skeleton')).toBeTruthy();
+    expect(screen.queryByText('Loading…')).toBeNull();
   });
 
   it('shows empty state when no promotions', async () => {
