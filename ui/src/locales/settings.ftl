@@ -748,5 +748,7 @@ settings-up-to-date = ✓ You're up to date
 settings-update-available = { $version } is available
 settings-install-update = Install Now
 settings-installing-update = Installing…
+settings-update-status-label = Status
+settings-update-not-checked = Not checked
 settings-update-check-error = Update check failed
 settings-update-retry = Retry
