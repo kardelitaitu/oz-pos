@@ -122,6 +122,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **SettingsPopup reduced-motion cleanup**: Added `backdrop-filter: none` to reduced-motion media query, matching `components.css` pattern.
 - **About page polish**: Migrated System & License Ownership card from old `.settings-license-row` pattern to the standard `.settings-field--horizontal` layout for visual consistency with General/Receipt/Sync sections. Updates card now shows inline status states (Up to date, version available, Check failed, Checking…, Not checked) with color-coded modifiers (`--active` green, `--inactive` muted, `--warning` orange). Removed dead CSS classes (`.settings-license-section`, `.settings-license-row`, `.settings-license-row--last`, `.settings-license-label`). Added `settings-update-status-label` and `settings-update-not-checked` Fluent keys to both EN/ID locales.
 - **SettingsSelect dropdown background**: Fixed from `var(--color-bg)` to `var(--color-bg-elevated)` to match Modal/SettingsPopup pattern and avoid subtle color mismatch with trigger.
+- **StockTransfersScreen overlay backdrop**: Upgraded from plain `var(--color-bg-overlay)` to `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)` with will-change hint, matching ShiftManagementScreen and SettingsPopup dark blur pattern. Added fade-in animation for overlay and slide-up animation for modal with `prefers-reduced-motion` guard. Modal background upgraded from `var(--color-bg)` to `var(--color-bg-elevated)` and border-radius from `radius-lg` to `radius-xl`.
 - **Skeleton loading (25 screens)**: Replaced plain text loading messages with proper skeleton structures matching real layout across all settings-adjacent screens:
   - **AuditLogScreen**: Filters skeleton (search bar + outcome chips) + 6-row table skeleton.
   - **OfflineQueueScreen**: Header skeleton + 5-row table skeleton (7 columns).
@@ -148,6 +149,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   - **GiftCardsScreen**: Header + toolbar (search+filter) + 3 card skeletons with status badge pills via Card component.
   - **StaffManagementScreen**: Header + 6-column table (Role pill, Workspace, Name, Username, Status, Actions) with 4 skeleton rows.
   - **TerminalStatusPanel**: Header (title + count skeleton) + 4 rows mimicking real list items — circle dot (0.625rem), name (80% width), device (60% width), time (2.5rem).
+  - **TerminalManagementScreen (secondary — overrides **+** binding)**: 3 feature group sections with header + 2 toggle rows each replacing 'Loading overrides…' plus binding info area + 2 select field skeletons + button skeleton replacing 'Loading binding…'.
+  - **StockTransfersScreen (secondary — detail modal)**: 6 info field skeletons (2-column grid) + 4-column lines table (SKU, Product, Qty, Received) with 4 skeleton rows + actions button replacing 'Loading…'.
+  - **ShiftManagementScreen (secondary — report modal)**: Title skeleton + 4 flex rows (flex space-between) replacing 'Loading report…'.
   - All skeletons use `aria-hidden="true"` parent containers, `pointer-events: none`, and mirror real table/grid layouts.
   - Removed dead CSS classes (`-loading` variants) from all converted screens.
 - **Receipt footer textarea**: Changed from single-line `<input>` to `<textarea rows=3 maxLength=500>` with character count hint.
