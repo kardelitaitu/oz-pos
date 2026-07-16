@@ -59,6 +59,9 @@ function relativeTime(ms: number, l10n: ReturnType<typeof useLocalization>['l10n
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Duration (ms) for row flash after a server status update. */
+const FLASH_DURATION = 1_400;
+
 /** Default 30-second polling interval for server status checks. */
 const POLL_INTERVAL_MS = 30_000;
 
@@ -82,6 +85,38 @@ export default function LicenseSettings() {
   // Track the interval ID so we can clear it on unmount.
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Row flash animation ─────────────────────────────────────────
+  // Track recently-updated rows for a brief green background pulse.
+  const [flashRows, setFlashRows] = useState<Map<string, 'updated'>>(new Map());
+  const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const triggerFlash = useCallback((key: string) => {
+    setFlashRows((prev) => {
+      const next = new Map(prev);
+      next.set(key, 'updated');
+      return next;
+    });
+    const existing = flashTimeoutsRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const tid = setTimeout(() => {
+      setFlashRows((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      flashTimeoutsRef.current.delete(key);
+    }, FLASH_DURATION);
+    flashTimeoutsRef.current.set(key, tid);
+  }, []);
+
+  // Cleanup flash timeouts on unmount.
+  useEffect(() => {
+    return () => {
+      flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
+      flashTimeoutsRef.current.clear();
+    };
+  }, []);
+
   // Track mount state to avoid setState after unmount.
   const mountedRef = useRef(true);
 
@@ -101,6 +136,7 @@ export default function LicenseSettings() {
       setLastCheckedAt(Date.now());
       setPollFailures(0);
       setPollError(null);
+      triggerFlash('server-status');
     } catch {
       if (!mountedRef.current) return;
       setPollFailures((prev) => {
@@ -111,7 +147,7 @@ export default function LicenseSettings() {
         return next;
       });
     }
-  }, [l10n]);
+  }, [l10n, triggerFlash]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,6 +195,7 @@ export default function LicenseSettings() {
       setLastCheckedAt(Date.now());
       setPollFailures(0);
       setPollError(null);
+      triggerFlash('server-status');
       addToast({ type: 'info', message: l10n.getString('settings-license-server-status-retrieved') });
     } catch (err) {
       const msg = err instanceof Error ? err.message : l10n.getString('settings-license-server-check-failed');
@@ -167,7 +204,7 @@ export default function LicenseSettings() {
     } finally {
       setCheckingServer(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   // ── Loading / Error states ──────────────────────────────────
   if (loading) {
@@ -307,7 +344,7 @@ export default function LicenseSettings() {
         </div>
 
         {/* ── Live status indicator ── */}
-        <div className="settings-license-row settings-license-row--status">
+        <div className={`settings-license-row settings-license-row--status${flashRows.has('server-status') ? ' settings-license-row--flash-updated' : ''}`}>
           <span className="settings-license-label">
             <Localized id="settings-license-server-status"><span>Server Status</span></Localized>
           </span>
@@ -357,7 +394,7 @@ export default function LicenseSettings() {
 
         {/* ── Server results (shown automatically after first poll) ── */}
         {serverStatus && (
-          <div className="settings-license-server-section" role="region" aria-label={l10n.getString('settings-license-server-results')}>
+          <div className={`settings-license-server-section${flashRows.has('server-status') ? ' settings-license-server-section--flash' : ''}`} role="region" aria-label={l10n.getString('settings-license-server-results')}>
             <div className="settings-license-row">
               <span className="settings-license-label">
                 <Localized id="settings-license-server-tier"><span>Server Tier</span></Localized>

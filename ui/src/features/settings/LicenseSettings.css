@@ -126,6 +126,31 @@
   align-items: center;
 }
 
+/* ── Row flash animation ───────────────────────────────────────────
+ * Brief green background pulse on the server-status row when data
+ * is updated via poll or manual refresh. */
+
+@keyframes license-flash-updated {
+  0%, 100% { background-color: transparent; }
+  20% { background-color: rgba(34, 197, 94, 0.10); }
+  50% { background-color: rgba(34, 197, 94, 0.06); }
+}
+
+.settings-license-row--flash-updated {
+  animation: license-flash-updated 1.2s var(--ease-out) forwards;
+}
+
+@keyframes license-section-flash {
+  0%, 100% { background-color: transparent; }
+  20% { background-color: rgba(34, 197, 94, 0.08); }
+  50% { background-color: rgba(34, 197, 94, 0.04); }
+}
+
+.settings-license-server-section--flash {
+  animation: license-section-flash 1.2s var(--ease-out) forwards;
+  border-radius: var(--radius-sm);
+}
+
 /* ── Last checked row ──────────────────────────────────── */
 
 .settings-license-row--last-checked {

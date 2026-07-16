@@ -6,6 +6,9 @@
 //! - **Backup status**: last backup timestamp, one-click snapshot
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+
+/** Duration (ms) for the row flash animation. */
+const FLASH_DURATION = 1_400;
 import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -152,6 +155,38 @@ export default function DataManagementScreen() {
   const [showImportPw, setShowImportPw] = useState(false);
   const { addToast } = useToast();
 
+  // ── Row flash animation ─────────────────────────────────────────
+  // Track recently-updated sections for a brief green background pulse.
+  const [flashRows, setFlashRows] = useState<Map<string, 'updated'>>(new Map());
+  const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const triggerFlash = useCallback((key: string) => {
+    setFlashRows((prev) => {
+      const next = new Map(prev);
+      next.set(key, 'updated');
+      return next;
+    });
+    const existing = flashTimeoutsRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const tid = setTimeout(() => {
+      setFlashRows((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      flashTimeoutsRef.current.delete(key);
+    }, FLASH_DURATION);
+    flashTimeoutsRef.current.set(key, tid);
+  }, []);
+
+  // Cleanup flash timeouts on unmount.
+  useEffect(() => {
+    return () => {
+      flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
+      flashTimeoutsRef.current.clear();
+    };
+  }, []);
+
   // ── Refs to hold latest form state so callbacks don't depend on
   //     keystroke-level state (which would defeat useCallback).
   const exportStateRef = useRef(exportState);
@@ -186,12 +221,13 @@ export default function DataManagementScreen() {
         lastBackupSize: `${(result.sizeBytes / 1024 / 1024).toFixed(1)} MB`,
         backingUp: false,
       });
+      triggerFlash('backup');
       addToast({ message: l10n.getString('data-mgmt-toast-backup-success'), type: 'success' });
     } catch {
       setBackup((prev) => ({ ...prev, backingUp: false }));
       addToast({ message: l10n.getString('data-mgmt-toast-backup-fail'), type: 'error' });
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   // ── Toggle data type selection ──────────────────────────────────
 
@@ -261,6 +297,7 @@ export default function DataManagementScreen() {
         progress: 100,
         outputFile: result.path,
       }));
+      triggerFlash('export-done');
       addToast({ message: l10n.getString('data-mgmt-toast-export-success'), type: 'success' });
     } catch (err) {
       setExportState((prev) => ({
@@ -270,7 +307,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: l10n.getString('data-mgmt-toast-export-fail'), type: 'error' });
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   const resetExport = useCallback(() => {
     setExportState(INITIAL_EXPORT);
@@ -333,6 +370,7 @@ export default function DataManagementScreen() {
           skipped: 0,
         },
       }));
+      triggerFlash('import-preview');
     } catch (err) {
       setImportState((prev) => ({
         ...prev,
@@ -340,7 +378,7 @@ export default function DataManagementScreen() {
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
       }));
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   const startImport = useCallback(async () => {
     const is = importStateRef.current;
@@ -371,6 +409,7 @@ export default function DataManagementScreen() {
         },
         step: 'done',
       }));
+      triggerFlash('import-done');
       addToast({ message: l10n.getString('data-mgmt-toast-import-success'), type: 'success' });
     } catch (err) {
       setImportState((prev) => ({
@@ -380,7 +419,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), type: 'error' });
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
@@ -705,7 +744,7 @@ export default function DataManagementScreen() {
                   <h2 className="data-mgmt-section-title">Preview import</h2>
                 </Localized>
 
-                <div className="data-mgmt-meta">
+                <div className={`data-mgmt-meta${flashRows.has('import-preview') ? ' data-mgmt-meta--flash' : ''}`}>
                   <div className="data-mgmt-meta-row">
                     <Localized id="data-mgmt-import-meta-file">
                       <span className="data-mgmt-meta-label">File</span>
@@ -772,7 +811,7 @@ export default function DataManagementScreen() {
                 </div>
 
                 {importState.dryRun && (
-                  <div className="data-mgmt-dry-run">
+                  <div className={`data-mgmt-dry-run${flashRows.has('import-preview') ? ' data-mgmt-dry-run--flash' : ''}`}>
                     <Localized id="data-mgmt-import-dry-run-title">
                       <h3 className="data-mgmt-dry-run-title">Changes to be applied</h3>
                     </Localized>
@@ -848,7 +887,7 @@ export default function DataManagementScreen() {
                 </p>
               </Localized>
 
-              <div className="data-mgmt-backup-status">
+              <div className={`data-mgmt-backup-status${flashRows.has('backup') ? ' data-mgmt-backup-status--flash' : ''}`}>
                 <div className="data-mgmt-backup-row">
                   <Localized id="data-mgmt-backup-label-last">
                     <span className="data-mgmt-label">Last backup</span>

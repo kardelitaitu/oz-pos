@@ -51,6 +51,18 @@ interface ScreenEntry {
    * component rendering a `.card` class internally.
    */
   externalClasses?: string[];
+  /**
+   * String values that the static `extractUsedClassNames` parser
+   * falsely extracts as CSS class names because they appear inside
+   * template-literal interpolations (e.g. `flashRows.has('backup')`).
+   * Unlike `dynamicClassPrefixes` (which handles BEM-like dynamic
+   * modifiers), these fragments are NOT real CSS classes — they are
+   * function arguments, comparison values, or other string literals
+   * that happen to look like class names to the regex parser.
+   *
+   * Entries here are excluded from the "used but not defined" check.
+   */
+  knownDynamicFragments?: string[];
 }
 
 const SCREENS: ScreenEntry[] = [
@@ -192,11 +204,24 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'settings/DataManagementScreen.tsx',
     css: ['settings/DataManagementScreen.css'],
     dynamicClassPrefixes: ['data-mgmt-toast--'],
+    knownDynamicFragments: [
+      // Template-literal parameters inside flashRows.has() that the
+      // static class-name parser falsely extracts as class names.
+      'import-preview',
+      'backup',
+    ],
   },
   {
     name: 'FeatureToggleScreen',
     tsx: 'settings/FeatureToggleScreen.tsx',
     css: ['settings/FeatureToggleScreen.css'],
+    dynamicClassPrefixes: [
+      // Flash + checkmark classes constructed via template literals.
+      // 'feature-toggle-item' covers both the base item class and
+      // the --flash-enabled/--flash-disabled modifier variants.
+      'feature-toggle-item',
+      'feature-toggle-checkmark--',
+    ],
   },
 
   // ── Shifts ────────────────────────────────────────────
@@ -423,7 +448,7 @@ const SCREENS: ScreenEntry[] = [
 
 describe.each(SCREENS)(
   'CSS class integrity — $name',
-  ({ name, tsx, css, dynamicClassPrefixes, externalClasses }: ScreenEntry) => {
+  ({ name, tsx, css, dynamicClassPrefixes, externalClasses, knownDynamicFragments }: ScreenEntry) => {
     const tsxPath = path.join(FEATURES_DIR, tsx);
     const tsxContent = fs.readFileSync(tsxPath, 'utf8');
     const used = extractUsedClassNames(tsxContent);
@@ -446,9 +471,10 @@ describe.each(SCREENS)(
     }
 
     it(`every className used in ${name} has a CSS rule defined`, () => {
+      const fragments = new Set(knownDynamicFragments ?? []);
       const missing: string[] = [];
       for (const cls of used) {
-        if (!fileIndex.has(cls)) {
+        if (!fileIndex.has(cls) && !fragments.has(cls)) {
           missing.push(cls);
         }
       }

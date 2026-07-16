@@ -333,8 +333,8 @@ describe('SalesReportScreen', () => {
   it('renders top product rows with data', async () => {
     mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
     mockGetTopProducts.mockResolvedValue([
-      buildTopProduct({ name: 'Latte', total_qty: 30, total_minor: 120000 }),
-      buildTopProduct({ name: 'Mocha', total_qty: 20, total_minor: 100000 }),
+      buildTopProduct({ product_id: 'prod-1', name: 'Latte', total_qty: 30, total_minor: 120000 }),
+      buildTopProduct({ product_id: 'prod-2', name: 'Mocha', total_qty: 20, total_minor: 100000 }),
     ]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);

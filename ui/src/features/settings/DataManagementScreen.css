@@ -455,3 +455,21 @@
   animation: data-mgmt-fade-in var(--duration-200) var(--ease-out);
 }
 
+/* ── Row flash animation ───────────────────────────────────────────
+ * Brief green background pulse on updated data rows. */
+
+@keyframes data-mgmt-flash-updated {
+  0%, 100% { background-color: transparent; }
+  20% { background-color: rgba(34, 197, 94, 0.10); }
+  50% { background-color: rgba(34, 197, 94, 0.06); }
+}
+
+.data-mgmt-backup-status--flash,
+.data-mgmt-meta--flash,
+.data-mgmt-dry-run--flash {
+  animation: data-mgmt-flash-updated 1.2s var(--ease-out) forwards;
+  border-radius: var(--radius-sm);
+}
+
+
+
