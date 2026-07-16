@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import { RoleIcon } from '@/components/RoleIcon';
 import { useToast } from '@/frontend/shared/Toast';
@@ -319,9 +320,35 @@ export default function StaffManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="staff-loading">
-          <p className="staff-mgmt-loading">Loading staff…</p>
-        </Localized>
+        <div className="staff-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="staff-mgmt-header">
+            <Skeleton variant="block" width="6rem" height="1.75rem" />
+            <Skeleton variant="block" width="6rem" height="2.25rem" />
+          </div>
+          <div className="staff-mgmt-table-wrap">
+            <table className="staff-mgmt-table">
+              <thead>
+                <tr>
+                  {['Role', 'Workspace', 'Name', 'Username', 'Status', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width="4rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="block" width="5rem" height="1.25rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="6rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td><Skeleton variant="text" width="3.5rem" /></td>
+                    <td><Skeleton variant="block" width="5rem" height="1.5rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : staff.length === 0 ? (
         <Card shadow="sm">
           <div className="staff-mgmt-empty">

@@ -87,10 +87,12 @@ describe('StaffManagementScreen', () => {
     expect(screen.getByRole('button', { name: /add your first staff member/i })).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
-    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
-    expect(screen.getByText(/loading staff/i)).toBeInTheDocument();
+    const { container } = renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    const skeleton = container.querySelector('[aria-hidden="true"].staff-mgmt-loading-skeleton');
+    expect(skeleton).toBeInTheDocument();
+    expect(screen.queryByText(/loading staff/i)).not.toBeInTheDocument();
   });
 
   it('opens add modal', async () => {

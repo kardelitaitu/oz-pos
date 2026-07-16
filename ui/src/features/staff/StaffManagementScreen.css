@@ -16,11 +16,20 @@
   color: var(--color-fg);
 }
 
-.staff-mgmt-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
-  padding: var(--space-8);
-  text-align: center;
+.staff-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  pointer-events: none;
+}
+
+.staff-mgmt-loading-skeleton .staff-mgmt-header {
+  pointer-events: none;
+  margin-bottom: 0;
+}
+
+.staff-mgmt-loading-skeleton .staff-mgmt-table thead {
+  pointer-events: none;
 }
 
 /* ── Empty state ──────────────────────────────────────────────────── */
