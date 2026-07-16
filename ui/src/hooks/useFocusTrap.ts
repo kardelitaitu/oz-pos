@@ -1,4 +1,4 @@
-import { useEffect, useCallback, type RefObject } from 'react';
+import { useEffect, useCallback, useRef, type RefObject } from 'react';
 
 /**
  * Reusable focus-trap hook for modal dialogs.
@@ -8,6 +8,10 @@ import { useEffect, useCallback, type RefObject } from 'react';
  * 2. Traps Tab / Shift+Tab cycling within the panel.
  * 3. Calls `onEscape` when Escape is pressed.
  * 4. Locks body scroll while the trap is active.
+ *
+ * Uses a ref for `onEscape` to avoid re-attaching the event listener
+ * (and the associated body-scroll-lock flicker) when the callback
+ * reference changes across renders.
  *
  * Mirrors the pattern used in `Modal.tsx`, `SettingsPopup.tsx`, and
  * the shared `frontend/shared/Modal.tsx`.
@@ -21,10 +25,16 @@ export function useFocusTrap(
   active: boolean,
   onEscape: () => void,
 ): void {
+  // Keep onEscape in a ref so handleKeyDown never needs to change,
+  // preventing the effect from re-running (and scroll-lock flickering)
+  // just because the parent passed a new inline callback.
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onEscape();
+        onEscapeRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panelRef.current) return;
@@ -49,7 +59,7 @@ export function useFocusTrap(
         }
       }
     },
-    [panelRef, onEscape],
+    [panelRef],
   );
 
   useEffect(() => {
