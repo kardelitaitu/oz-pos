@@ -59,7 +59,9 @@ describe('PriceOverrideModal', () => {
     const user = userEvent.setup();
     renderModal();
     await user.click(screen.getByText('Cancel'));
-    expect(defaultProps.onClose).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(defaultProps.onClose).toHaveBeenCalled();
+    });
   });
 
   // ── Username step ────────────────────────────────────────────

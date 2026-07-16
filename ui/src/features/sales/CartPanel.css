@@ -273,7 +273,7 @@
    * cousin so the icon stays visually quiet as a passive cue
    * rather than competing with the menu. */
   .pos-cart-empty-msg svg {
-    animation: pos-cart-empty-breathe 4s var(--ease-in-out) infinite;
+    animation: pos-cart-empty-breathe var(--duration-4000) var(--ease-in-out) infinite;
   }
 
   @keyframes pos-cart-empty-breathe {

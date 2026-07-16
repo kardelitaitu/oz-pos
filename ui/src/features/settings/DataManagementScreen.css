@@ -32,7 +32,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color var(--duration-150) var(--ease-out), background var(--duration-150) var(--ease-out);
 }
 
 .data-mgmt-tab:hover {
@@ -120,7 +120,7 @@
   padding: var(--space-2);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--duration-150) var(--ease-out);
 }
 
 .data-mgmt-type-checkbox:hover {
@@ -206,7 +206,7 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border, rgba(128, 128, 128, 0.2));
   border-radius: var(--radius-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
 }
 
 .data-mgmt-input:focus-visible {
@@ -307,7 +307,7 @@
   border: 2px dashed var(--color-border, rgba(128, 128, 128, 0.25));
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color var(--duration-150) var(--ease-out), background var(--duration-150) var(--ease-out);
 }
 
 .data-mgmt-file-dropzone:hover {
@@ -502,7 +502,7 @@
 .data-mgmt-backup-status--flash,
 .data-mgmt-meta--flash,
 .data-mgmt-dry-run--flash {
-  animation: data-mgmt-flash-updated 1.2s var(--ease-out) forwards;
+  animation: data-mgmt-flash-updated var(--duration-1200) var(--ease-out) forwards;
   border-radius: var(--radius-sm);
 }
 

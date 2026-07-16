@@ -256,11 +256,11 @@
 }
 
 .feature-toggle-item--flash-enabled {
-  animation: flash-enabled 1.2s var(--ease-out) forwards;
+  animation: flash-enabled var(--duration-1200) var(--ease-out) forwards;
 }
 
 .feature-toggle-item--flash-disabled {
-  animation: flash-disabled 1.2s var(--ease-out) forwards;
+  animation: flash-disabled var(--duration-1200) var(--ease-out) forwards;
 }
 
 .feature-toggle-item:last-child {
@@ -314,7 +314,7 @@
   inset: 0;
   background: var(--color-border-hover);
   border-radius: 1.5rem;
-  transition: background 0.2s ease;
+  transition: background var(--duration-200) var(--ease-out);
 }
 
 .feature-toggle-slider::before {
@@ -326,7 +326,7 @@
   bottom: 0.1875rem;
   background: var(--color-bg-elevated);
   border-radius: 50%;
-  transition: transform 0.2s ease;
+  transition: transform var(--duration-200) var(--ease-out);
   box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.15);
 }
 
@@ -341,7 +341,7 @@
 .feature-toggle-switch input:disabled + .feature-toggle-slider {
   opacity: 0.5;
   cursor: not-allowed;
-  animation: toggle-pulse 1.2s ease-in-out infinite;
+  animation: toggle-pulse var(--duration-1200) var(--ease-in-out) infinite;
 }
 
 /* ── Toggle checkmark overlay ─────────────────────────────────────
@@ -374,7 +374,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  animation: checkmark-pop 1.4s var(--ease-out) forwards;
+  animation: checkmark-pop var(--duration-1500) var(--ease-out) forwards;
   z-index: 1;
 }
 

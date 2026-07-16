@@ -78,7 +78,7 @@
     radial-gradient(ellipse 600px 400px at 20% 10%, var(--ws-accent-bg, rgba(99, 102, 241, 0.03)) 0%, transparent 70%),
     radial-gradient(ellipse 500px 300px at 80% 90%, var(--ws-accent-bg, rgba(99, 102, 241, 0.02)) 0%, transparent 70%);
   background-size: 200% 200%;
-  animation: ws-bg-shift 20s ease-in-out infinite;
+  animation: ws-bg-shift 20s var(--ease-in-out) infinite;
 }
 
 @keyframes ws-bg-shift {
@@ -307,7 +307,7 @@
     var(--shadow-sm);
   border-color: var(--ws-accent, var(--color-border-hover));
   background: var(--ws-accent-bg, var(--color-bg-elevated));
-  animation: ws-card-hover-sway 3.5s ease-in-out infinite;
+  animation: ws-card-hover-sway var(--duration-3500) var(--ease-in-out) infinite;
 }
 
 /* ── Card exit animation ─────────────────────────────────────────── */
@@ -414,7 +414,7 @@
 
 /* Active pulse — only when NOT hovering */
 .workspace-card--active .workspace-card-icon .workspace-card-icon-inner {
-  animation: ws-icon-pulse 3s ease-in-out infinite;
+  animation: ws-icon-pulse var(--duration-3000) var(--ease-in-out) infinite;
 }
 
 /* Wiggle on hover or focus */
@@ -524,7 +524,7 @@
     inset 0 0 0 0.0625rem var(--ws-accent, var(--color-accent)),
     0 0 1.25rem var(--ws-glow, transparent),
     var(--shadow-sm);
-  animation: ws-glow-breath 3s ease-in-out infinite;
+  animation: ws-glow-breath var(--duration-3000) var(--ease-in-out) infinite;
 }
 
 .workspace-card--active:hover {
@@ -542,7 +542,7 @@
   height: 0.5rem;
   color: var(--ws-accent, var(--color-accent));
   transform: translate(-0.25rem, 0.25rem);
-  animation: ws-dot-pulse 2s ease-in-out infinite;
+  animation: ws-dot-pulse var(--duration-2000) var(--ease-in-out) infinite;
 }
 
 /* ── Click ripple effect ──────────────────────────────────────── */
@@ -687,7 +687,7 @@
     var(--color-bg-surface) 100%
   );
   background-size: 200% 100%;
-  animation: ws-shimmer 1.5s ease-in-out infinite;
+  animation: ws-shimmer var(--duration-1500) var(--ease-in-out) infinite;
 }
 
 .workspace-skeleton-title {
@@ -701,7 +701,7 @@
     var(--color-bg-surface) 100%
   );
   background-size: 200% 100%;
-  animation: ws-shimmer 1.5s ease-in-out infinite;
+  animation: ws-shimmer var(--duration-1500) var(--ease-in-out) infinite;
 }
 
 .workspace-skeleton-desc {
@@ -715,7 +715,7 @@
     var(--color-bg-surface) 100%
   );
   background-size: 200% 100%;
-  animation: ws-shimmer 1.5s ease-in-out infinite;
+  animation: ws-shimmer var(--duration-1500) var(--ease-in-out) infinite;
   animation-delay: 0.1s;
 }
 
@@ -737,7 +737,7 @@
   height: 4rem;
   margin: 0 auto var(--space-4);
   color: var(--color-fg-tertiary);
-  animation: ws-float 4s ease-in-out infinite;
+  animation: ws-float var(--duration-4000) var(--ease-in-out) infinite;
 }
 
 .workspace-empty-icon svg {

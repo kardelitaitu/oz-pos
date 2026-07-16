@@ -84,6 +84,11 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
   HardwareAccelProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn().mockResolvedValue(undefined), loading: false }),
+  CurrencyProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
 // scrollIntoView is not implemented in jsdom — mock it for SettingsSelect usage.
 Element.prototype.scrollIntoView = vi.fn();
 

@@ -560,7 +560,7 @@
 .skeleton {
   background: var(--color-bg-surface);
   border-radius: var(--radius-md);
-  animation: skeleton-pulse 1.5s var(--ease-in-out) infinite;
+  animation: skeleton-pulse var(--duration-1500) var(--ease-in-out) infinite;
 }
 .skeleton--text {
   height: 0.75em;

@@ -77,7 +77,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .shift-mgmt-active-dot {
-    animation: shift-pulse 1.5s ease-in-out infinite;
+    animation: shift-pulse var(--duration-1500) var(--ease-in-out) infinite;
   }
 
   @keyframes shift-pulse {

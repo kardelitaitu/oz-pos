@@ -157,7 +157,7 @@
   box-shadow: 
     0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  animation: table-occupied-pulse 2s infinite ease-in-out;
+  animation: table-occupied-pulse var(--duration-2000) infinite var(--ease-in-out);
 }
 .tables-table--occupied:hover {
   box-shadow: 

@@ -93,7 +93,7 @@
  * the cousin-pos retail empty-state pattern. */
 @media (prefers-reduced-motion: no-preference) {
   .eod-report-empty svg {
-    animation: eod-empty-breathe 4s ease-in-out infinite;
+    animation: eod-empty-breathe var(--duration-4000) var(--ease-in-out) infinite;
   }
 
   @keyframes eod-empty-breathe {
@@ -243,7 +243,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .eod-report-shift-active-dot {
-    animation: eod-shift-pulse 1.5s ease-in-out infinite;
+    animation: eod-shift-pulse var(--duration-1500) var(--ease-in-out) infinite;
   }
 
   @keyframes eod-shift-pulse {
@@ -507,7 +507,7 @@
   height: 100%;
   background: var(--color-accent);
   border-radius: var(--radius-full);
-  transition: width 0.4s ease;
+  transition: width var(--duration-400) var(--ease-out);
   min-width: 0;
 }
 
@@ -565,7 +565,7 @@
   height: 100%;
   border-radius: var(--radius-sm);
   background: var(--color-border);
-  transition: width 0.3s ease;
+  transition: width var(--duration-300) var(--ease-out);
 }
 
 .eod-report-hour-bar--active {
