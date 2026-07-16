@@ -7,7 +7,8 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 
 const mockUseGatewayStatus = vi.fn();
 const mockGoToWorkspacePicker = vi.fn();
-const mockSession = { user_id: 'user-1', username: 'test', role_name: 'cashier' };
+
+const authSession = { value: { user_id: 'user-1', username: 'test', role_name: 'cashier' } };
 
 vi.mock('@/hooks/useGatewayStatus', () => ({
   useGatewayStatus: (...args: unknown[]) => mockUseGatewayStatus(...args),
@@ -18,7 +19,7 @@ vi.mock('@/hooks/useWorkspaceNav', () => ({
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ session: mockSession }),
+  useAuth: () => ({ session: authSession.value }),
 }));
 
 vi.mock('@/frontend/shell/ThemeToggle', () => ({
@@ -37,6 +38,7 @@ beforeEach(() => {
   mockUseGatewayStatus.mockReset();
   mockGoToWorkspacePicker.mockReset();
   mockUseGatewayStatus.mockReturnValue({ online: true, configured: true });
+  authSession.value = { user_id: 'user-1', username: 'test', role_name: 'cashier' };
 });
 
 function renderBar() {
@@ -79,25 +81,21 @@ describe('StatusBar', () => {
   });
 
   it('hides Switch User button when no session', () => {
-    const mockNoSession = {} as typeof mockSession;
-    Object.assign(mockNoSession, null);
-    vi.mocked(vi.fn()).mockReturnValue(null);
-
-    vi.mocked(vi.fn()).mockImplementation(() => ({
-      useAuth: () => ({ session: null }),
-    }));
-  });
-
-  it('shows Workspace button', () => {
+    authSession.value = null!;
     renderBar();
-    expect(screen.getByText('Workspace')).toBeTruthy();
+    expect(screen.queryByText('Switch User')).toBeNull();
   });
 
-  it('calls goToWorkspacePicker on Workspace click', async () => {
+  it('shows Switch Workspace button', () => {
+    renderBar();
+    expect(screen.getByText('Switch Workspace')).toBeTruthy();
+  });
+
+  it('calls goToWorkspacePicker on workspace click', async () => {
     const user = userEvent.setup();
     renderBar();
 
-    await user.click(screen.getByText('Workspace'));
+    await user.click(screen.getByText('Switch Workspace'));
     expect(mockGoToWorkspacePicker).toHaveBeenCalledTimes(1);
   });
 

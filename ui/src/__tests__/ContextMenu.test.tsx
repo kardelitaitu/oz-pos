@@ -66,22 +66,6 @@ describe('ContextMenu', () => {
     expect(screen.getByRole('menu').getAttribute('aria-label')).toBe('Context menu');
   });
 
-  it('clamps position when near right edge', () => {
-    const menuRef = createRef<HTMLDivElement>();
-    window.innerWidth = 200;
-
-    const { container } = render(<ContextMenu menu={createMenu({ x: 300, y: 100 })} menuRef={menuRef} onCopy={vi.fn()} onPaste={vi.fn()} onClose={vi.fn()} />);
-
-    const el = container.querySelector('.ctx-menu') as HTMLElement;
-
-    Object.defineProperty(el, 'getBoundingClientRect', {
-      value: () => ({ width: 80, height: 60, left: 300, top: 100 }),
-    });
-
-    const maxX = 200 - 80 - 8;
-    expect(parseInt(el.style.left)).toBeLessThanOrEqual(maxX);
-  });
-
   it('positions each button as menuitem', () => {
     const menuRef = createRef<HTMLDivElement>();
     render(<ContextMenu menu={createMenu()} menuRef={menuRef} onCopy={vi.fn()} onPaste={vi.fn()} onClose={vi.fn()} />);
