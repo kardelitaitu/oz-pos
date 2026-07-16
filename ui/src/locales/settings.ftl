@@ -725,3 +725,15 @@ settings-sync-pull-toast-success = Pulled { $products } products, { $tax_rates }
 settings-sync-pull-toast-empty = Server snapshot was empty — nothing to pull
 settings-sync-pull-toast-fail = Pull failed — check server URL and token
 settings-toast-failed-sync = Failed to load sync settings
+
+# ── Updates ──
+settings-updates-heading = Updates
+settings-current-version = Current Version
+settings-check-for-updates = Check for Updates
+settings-checking-for-updates = Checking…
+settings-up-to-date = ✓ You're up to date
+settings-update-available = { $version } is available
+settings-install-update = Install Now
+settings-installing-update = Installing…
+settings-update-check-error = Update check failed
+settings-update-retry = Retry

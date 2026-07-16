@@ -700,6 +700,18 @@ settings-toast-failed-credit-settings = Gagal memuat pengaturan kredit
 settings-toast-failed-hardware-settings = Gagal memuat pengaturan perangkat keras
 settings-toast-failed-scanners = Gagal memuat pemindai
 settings-toast-failed-sync = Gagal memuat pengaturan sinkronisasi
+
+# ── Updates ──
+settings-updates-heading = Pembaruan
+settings-current-version = Versi Saat Ini
+settings-check-for-updates = Periksa Pembaruan
+settings-checking-for-updates = Memeriksa…
+settings-up-to-date = ✓ Anda telah menggunakan versi terbaru
+settings-update-available = { $version } tersedia
+settings-install-update = Pasang Sekarang
+settings-installing-update = Memasang…
+settings-update-check-error = Pemeriksaan pembaruan gagal
+settings-update-retry = Coba Lagi
 settings-toast-failed-displays = Gagal memuat layar
 settings-toast-saved = Pengaturan tersimpan
 settings-toast-failed-save = Gagal menyimpan pengaturan

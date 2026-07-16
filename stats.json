@@ -1,19 +1,19 @@
 ﻿{
     "schemaVersion":  1,
     "label":  "code size",
-    "message":  "262.9k lines",
+    "message":  "263.8k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  262907,
-                  "totalFiles":  1310,
+                  "totalLines":  263777,
+                  "totalFiles":  1314,
                   "languages":  {
                                     "sql":  {
                                                 "lines":  1761,
                                                 "files":  73
                                             },
                                     "rust":  {
-                                                 "lines":  120171,
-                                                 "files":  332
+                                                 "lines":  120844,
+                                                 "files":  334
                                              },
                                     "go":  {
                                                "lines":  6541,
@@ -28,8 +28,8 @@
                                                  "files":  488
                                              },
                                     "typescript":  {
-                                                       "lines":  76038,
-                                                       "files":  320
+                                                       "lines":  76235,
+                                                       "files":  322
                                                    }
                                 }
               }

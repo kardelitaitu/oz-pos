@@ -356,6 +356,42 @@ export default function SettingsPage() {
 
   const [appVersion, setAppVersion] = useState('');
 
+  // ── Updater state ─────────────────────────────────────────
+  type UpdateCheckState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'installing' | 'error';
+  const [updateState, setUpdateState] = useState<UpdateCheckState>('idle');
+  const [updateVersion, setUpdateVersion] = useState('');
+  const updateInstanceRef = useRef<{ version?: string; downloadAndInstall(): Promise<void> } | null>(null);
+
+  const handleCheckUpdates = useCallback(async () => {
+    setUpdateState('checking');
+    setUpdateVersion('');
+    updateInstanceRef.current = null;
+    try {
+      const updater = await import('@tauri-apps/plugin-updater');
+      const update = await updater.check();
+      if (update) {
+        setUpdateVersion(update.version ?? '');
+        updateInstanceRef.current = update;
+        setUpdateState('available');
+      } else {
+        setUpdateState('up-to-date');
+      }
+    } catch {
+      setUpdateState('error');
+    }
+  }, []);
+
+  const handleInstallUpdate = useCallback(async () => {
+    const instance = updateInstanceRef.current;
+    if (!instance) return;
+    setUpdateState('installing');
+    try {
+      await instance.downloadAndInstall();
+    } catch {
+      setUpdateState('available');
+    }
+  }, []);
+
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const { refreshBrandSettings } = useBrand();
@@ -1227,35 +1263,125 @@ export default function SettingsPage() {
 
       case 'about':
         return (
-          <Card
-            shadow="sm"
-            header={<Localized id="settings-system-license-header"><h2 className="settings-section-title">System &amp; License Ownership</h2></Localized>}
-          >
-            <div className="settings-form settings-license-section">
-              <div className="settings-license-row">
-                <Localized id="settings-software-edition"><span className="settings-license-label">Software Edition</span></Localized>
-                <Localized id="settings-app-version" vars={{ version: appVersion }}>
-                  <span className="settings-license-value">OZ-POS Enterprise v{appVersion}</span>
-                </Localized>
+          <>
+            <Card
+              shadow="sm"
+              header={<Localized id="settings-system-license-header"><h2 className="settings-section-title">System &amp; License Ownership</h2></Localized>}
+            >
+              <div className="settings-form settings-license-section">
+                <div className="settings-license-row">
+                  <Localized id="settings-software-edition"><span className="settings-license-label">Software Edition</span></Localized>
+                  <Localized id="settings-app-version" vars={{ version: appVersion }}>
+                    <span className="settings-license-value">OZ-POS Enterprise v{appVersion}</span>
+                  </Localized>
+                </div>
+                <div className="settings-license-row">
+                  <Localized id="settings-license-type"><span className="settings-license-label">License Type</span></Localized>
+                  <Localized id="settings-license-type-value">
+                    <span className="settings-license-value settings-license-value--warning">Proprietary Commercial License</span>
+                  </Localized>
+                </div>
+                <div className="settings-license-row">
+                  <Localized id="settings-copyright-notice"><span className="settings-license-label">Copyright Notice</span></Localized>
+                  <Localized id="settings-copyright-notice-value">
+                    <span className="settings-license-value">&copy; 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
+                  </Localized>
+                </div>
+                <div className="settings-license-row settings-license-row--last">
+                  <Localized id="settings-commercial-contact"><span className="settings-license-label">Commercial Contact</span></Localized>
+                  <span className="settings-license-value settings-license-value--mono">adikaradwiatmaja@gmail.com</span>
+                </div>
               </div>
-              <div className="settings-license-row">
-                <Localized id="settings-license-type"><span className="settings-license-label">License Type</span></Localized>
-                <Localized id="settings-license-type-value">
-                  <span className="settings-license-value settings-license-value--warning">Proprietary Commercial License</span>
-                </Localized>
+            </Card>
+
+            <Card
+              shadow="sm"
+              header={<Localized id="settings-updates-heading"><h2 className="settings-section-title">Updates</h2></Localized>}
+            >
+              <div className="settings-form">
+                <div className="settings-license-row">
+                  <Localized id="settings-current-version"><span className="settings-license-label">Current Version</span></Localized>
+                  <span className="settings-license-value">{appVersion}</span>
+                </div>
+
+                <div className="settings-actions" style={{ marginTop: '12px' }}>
+                  {(updateState === 'idle' || updateState === 'up-to-date' || updateState === 'error') && (
+                    <Button
+                      variant="secondary"
+                      onClick={handleCheckUpdates}
+                    >
+                      <Localized id={
+                        updateState === 'error'
+                          ? 'settings-update-retry'
+                          : 'settings-check-for-updates'
+                      }>
+                        <span>{updateState === 'error' ? 'Retry' : 'Check for Updates'}</span>
+                      </Localized>
+                    </Button>
+                  )}
+
+                  {(updateState === 'checking') && (
+                    <Button
+                      variant="secondary"
+                      loading
+                      disabled
+                    >
+                      <Localized id="settings-checking-for-updates">
+                        <span>Checking…</span>
+                      </Localized>
+                    </Button>
+                  )}
+
+                  {updateState === 'available' && (
+                    <Button
+                      variant="primary"
+                      onClick={handleInstallUpdate}
+                    >
+                      <Localized id="settings-install-update">
+                        <span>Install Now</span>
+                      </Localized>
+                    </Button>
+                  )}
+
+                  {updateState === 'installing' && (
+                    <Button
+                      variant="primary"
+                      loading
+                      disabled
+                    >
+                      <Localized id="settings-installing-update">
+                        <span>Installing…</span>
+                      </Localized>
+                    </Button>
+                  )}
+                </div>
+
+                {updateState === 'up-to-date' && (
+                  <p className="settings-hint" style={{ marginTop: '8px' }}>
+                    <Localized id="settings-up-to-date">
+                      <span>✓ You're up to date</span>
+                    </Localized>
+                  </p>
+                )}
+
+                {updateState === 'available' && (
+                  <p className="settings-hint" style={{ marginTop: '8px' }}>
+                    <Localized id="settings-update-available" vars={{ version: updateVersion }}>
+                      <span>{updateVersion} is available</span>
+                    </Localized>
+                  </p>
+                )}
+
+                {updateState === 'error' && (
+                  <p className="settings-hint settings-hint--error" style={{ marginTop: '8px' }}>
+                    <Localized id="settings-update-check-error">
+                      <span>Update check failed</span>
+                    </Localized>
+                  </p>
+                )}
               </div>
-              <div className="settings-license-row">
-                <Localized id="settings-copyright-notice"><span className="settings-license-label">Copyright Notice</span></Localized>
-                <Localized id="settings-copyright-notice-value">
-                  <span className="settings-license-value">&copy; 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
-                </Localized>
-              </div>
-              <div className="settings-license-row settings-license-row--last">
-                <Localized id="settings-commercial-contact"><span className="settings-license-label">Commercial Contact</span></Localized>
-                <span className="settings-license-value settings-license-value--mono">adikaradwiatmaja@gmail.com</span>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </>
         );
 
       case 'license':
