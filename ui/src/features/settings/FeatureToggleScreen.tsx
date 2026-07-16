@@ -209,6 +209,8 @@ export default function FeatureToggleScreen() {
         message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
         type: 'error',
       });
+    } finally {
+      setToggling(null);
     }
   }, [l10n, addToast, triggerFlash]);
 
