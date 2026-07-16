@@ -48,10 +48,24 @@
   min-width: 8.75rem;
 }
 
-.gift-cards-loading {
-  text-align: center;
-  color: var(--color-fg-tertiary);
-  padding: var(--space-8);
+.gift-cards-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  pointer-events: none;
+}
+
+.gift-cards-loading-skeleton .gift-cards-header {
+  pointer-events: none;
+  margin-bottom: 0;
+}
+
+.gift-cards-loading-skeleton .gift-cards-toolbar {
+  pointer-events: none;
+}
+
+.gift-cards-loading-skeleton .gift-cards-list {
+  pointer-events: none;
 }
 
 .gift-cards-empty {

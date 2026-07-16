@@ -10,6 +10,7 @@ import {
 } from '@/api/bundles';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import './BundleManagementScreen.css';
 
@@ -193,9 +194,35 @@ export default function BundleManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="bundles-loading">
-          <p className="bundle-mgmt-loading">Loading bundles...</p>
-        </Localized>
+        <div className="bundle-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="bundle-mgmt-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="7rem" height="2.25rem" />
+          </div>
+          <div className="bundle-mgmt-table-wrap">
+            <table className="bundle-mgmt-table">
+              <thead>
+                <tr>
+                  {['Name', 'SKU', 'Price', 'Items', 'Active', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width="4rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td style={{ textAlign: 'center' }}><Skeleton variant="text" width="1.5rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.25rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="block" width="5rem" height="1.5rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : bundles.length === 0 ? (
         <Card shadow="sm">
           <div className="bundle-mgmt-empty">

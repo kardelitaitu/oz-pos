@@ -16,9 +16,20 @@
   color: var(--color-fg);
 }
 
-.bundle-mgmt-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
+.bundle-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  pointer-events: none;
+}
+
+.bundle-mgmt-loading-skeleton .bundle-mgmt-header {
+  pointer-events: none;
+  margin-bottom: 0;
+}
+
+.bundle-mgmt-loading-skeleton .bundle-mgmt-table thead {
+  pointer-events: none;
 }
 
 .bundle-mgmt-empty {

@@ -91,10 +91,13 @@ describe('BundleManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Add Bundle')).toBeDefined());
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton initially', () => {
     mockListBundles.mockImplementation(() => pendingPromise());
-    renderScreen();
-    expect(screen.getByText('Loading bundles…')).toBeDefined();
+    const { container } = renderScreen();
+
+    const skeleton = container.querySelector('[aria-hidden="true"].bundle-mgmt-loading-skeleton');
+    expect(skeleton).toBeTruthy();
+    expect(screen.queryByText(/loading bundles/i)).toBeNull();
   });
 
   it('shows empty state when no bundles', async () => {

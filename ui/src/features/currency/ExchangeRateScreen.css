@@ -15,8 +15,19 @@
   font-weight: var(--font-weight-bold);
 }
 
-.exchange-rate-loading {
-  color: var(--color-fg-secondary);
+.exchange-rate-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  pointer-events: none;
+}
+
+.exchange-rate-loading-skeleton .exchange-rate-header {
+  pointer-events: none;
+}
+
+.exchange-rate-loading-skeleton .exchange-rate-table thead {
+  opacity: 0.5;
 }
 
 .exchange-rate-error {

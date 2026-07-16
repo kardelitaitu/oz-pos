@@ -74,12 +74,14 @@ describe('ExchangeRateScreen', () => {
     });
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton initially', () => {
     mockListExchangeRates.mockImplementation(() => new Promise(() => {}));
     mockListCurrencies.mockImplementation(() => new Promise(() => {}));
-    renderScreen();
+    const { container } = renderScreen();
 
-    expect(screen.getByText('Loading exchange rates…')).toBeTruthy();
+    const skeleton = container.querySelector('[aria-hidden="true"].exchange-rate-loading-skeleton');
+    expect(skeleton).toBeTruthy();
+    expect(screen.queryByText(/loading exchange rates/i)).toBeNull();
   });
 
   it('shows error state with retry', async () => {

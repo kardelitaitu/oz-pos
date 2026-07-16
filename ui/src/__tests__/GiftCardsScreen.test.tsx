@@ -92,10 +92,13 @@ describe('GiftCardsScreen', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     mockListGiftCards.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    const { container } = renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+
+    const skeleton = container.querySelector('[aria-hidden="true"].gift-cards-loading-skeleton');
+    expect(skeleton).toBeInTheDocument();
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no cards exist', async () => {

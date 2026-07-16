@@ -10,6 +10,7 @@ import {
 } from '@/api/currency';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import './ExchangeRateScreen.css';
 
@@ -132,9 +133,35 @@ export default function ExchangeRateScreen() {
       </div>
 
       {loading ? (
-        <Localized id="currency-loading">
-          <p className="exchange-rate-loading">Loading exchange rates&hellip;</p>
-        </Localized>
+        <div className="exchange-rate-loading-skeleton" aria-hidden="true">
+          <div className="exchange-rate-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="4rem" height="2.25rem" />
+          </div>
+          <div className="exchange-rate-table-wrap">
+            <table className="exchange-rate-table">
+              <thead>
+                <tr>
+                  {['From', 'To', 'Rate', 'Source', 'Effective Date', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width="4rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="3rem" /></td>
+                    <td><Skeleton variant="text" width="3rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" /></td>
+                    <td><Skeleton variant="block" width="3.5rem" height="1.5rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error ? (
         <Card shadow="sm">
           <div className="exchange-rate-error">
