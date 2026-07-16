@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useToast } from '@/frontend/shared/Toast';
+import { SettingsPopup, useToast } from '@/frontend/shared';
 import {
   listTerminals,
   registerTerminal,
@@ -562,381 +562,322 @@ export default function TerminalManagementScreen() {
       )}
 
       {/* ── Add/Edit Modal ──────────────────────────────────────── */}
-      {showModal && (
-        <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(isEditing ? 'terminal-edit-title' : 'terminal-register-title')}>
-            <div className="terminal-mgmt-modal">
-              <div className="terminal-mgmt-modal-header">
-                <Localized id={isEditing ? 'terminal-edit-title' : 'terminal-register-title'}>
-                  <h2>{isEditing ? 'Edit Terminal' : 'Register New Terminal'}</h2>
-                </Localized>
-                <Localized id="terminal-modal-close" attrs={{ "aria-label": true }}>
-                  <button
-                    type="button"
-                    className="terminal-mgmt-modal-close"
-                    onClick={closeModal}
-                    aria-label="Close"
-                  >
-                    &times;
-                  </button>
-                </Localized>
-              </div>
+      <SettingsPopup
+        open={showModal}
+        onClose={closeModal}
+        title={l10n.getString(isEditing ? 'terminal-edit-title' : 'terminal-register-title')}
+        error={error}
+        saving={saving}
+        onSave={handleSave}
+        saveLabel={l10n.getString(isEditing ? 'terminal-save' : 'terminal-register-action')}
+        saveDisabled={!form.name.trim() || !form.deviceId.trim()}
+        cancelLabel={l10n.getString('terminal-cancel')}
+        size="lg"
+      >
+        {/* Name */}
+        <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-name" aria-label={l10n.getString('terminal-field-name-aria')}>
+          <Localized id="terminal-name-label">
+            <span className="terminal-mgmt-label">Terminal name</span>
+          </Localized>
+          <Localized id="terminal-name-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="terminal-mgmt-input"
+              type="text"
+              id="terminal-field-name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Front Counter"
+              autoComplete="off"
+            />
+          </Localized>
+        </label>
 
-              <div className="terminal-mgmt-modal-body">
-                {/* Name */}
-                <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-name" aria-label={l10n.getString('terminal-field-name-aria')}>
-                  <Localized id="terminal-name-label">
-                    <span className="terminal-mgmt-label">Terminal name</span>
-                  </Localized>
-                  <Localized id="terminal-name-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="terminal-mgmt-input"
-                      type="text"
-                      id="terminal-field-name"
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g. Front Counter"
-                      autoComplete="off"
-                    />
-                  </Localized>
-                </label>
+        {/* Device ID */}
+        <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-device-id" aria-label={l10n.getString('terminal-field-device-id-aria')}>
+          <Localized id="terminal-device-id-label">
+            <span className="terminal-mgmt-label">Device identifier</span>
+          </Localized>
+          <Localized id="terminal-device-id-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="terminal-mgmt-input"
+              type="text"
+              id="terminal-field-device-id"
+              value={form.deviceId}
+              onChange={(e) => setForm({ ...form, deviceId: e.target.value })}
+              placeholder="e.g. hostname or MAC address"
+              autoComplete="off"
+            />
+          </Localized>
+        </label>
 
-                {/* Device ID */}
-                <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-device-id" aria-label={l10n.getString('terminal-field-device-id-aria')}>
-                  <Localized id="terminal-device-id-label">
-                    <span className="terminal-mgmt-label">Device identifier</span>
-                  </Localized>
-                  <Localized id="terminal-device-id-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="terminal-mgmt-input"
-                      type="text"
-                      id="terminal-field-device-id"
-                      value={form.deviceId}
-                      onChange={(e) => setForm({ ...form, deviceId: e.target.value })}
-                      placeholder="e.g. hostname or MAC address"
-                      autoComplete="off"
-                    />
-                  </Localized>
-                </label>
+        {/* Secret — only for register */}
+        {!isEditing && (
+          <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-secret" aria-label={l10n.getString('terminal-field-secret-aria')}>
+            <Localized id="terminal-secret-label">
+              <span className="terminal-mgmt-label">Optional shared secret for sync authentication</span>
+            </Localized>
+            <input
+              className="terminal-mgmt-input"
+              type="password"
+              id="terminal-field-secret"
+              value={form.terminalSecret}
+              onChange={(e) => setForm({ ...form, terminalSecret: e.target.value })}
+              autoComplete="off"
+            />
+          </label>
+        )}
 
-                {/* Secret — only for register */}
-                {!isEditing && (
-                  <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-secret" aria-label={l10n.getString('terminal-field-secret-aria')}>
-                    <Localized id="terminal-secret-label">
-                      <span className="terminal-mgmt-label">Optional shared secret for sync authentication</span>
-                    </Localized>
-                    <input
-                      className="terminal-mgmt-input"
-                      type="password"
-                      id="terminal-field-secret"
-                      value={form.terminalSecret}
-                      onChange={(e) => setForm({ ...form, terminalSecret: e.target.value })}
-                      autoComplete="off"
-                    />
-                  </label>
-                )}
+        {/* Metadata */}
+        <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-metadata" aria-label={l10n.getString('terminal-field-metadata-aria')}>
+          <Localized id="terminal-metadata-label">
+            <span className="terminal-mgmt-label">Optional JSON metadata</span>
+          </Localized>
+          <textarea
+            className="terminal-mgmt-input terminal-mgmt-textarea"
+            id="terminal-field-metadata"
+            value={form.metadata}
+            onChange={(e) => setForm({ ...form, metadata: e.target.value })}
+            rows={3}
+          />
+        </label>
 
-                {/* Metadata */}
-                <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="terminal-field-metadata" aria-label={l10n.getString('terminal-field-metadata-aria')}>
-                  <Localized id="terminal-metadata-label">
-                    <span className="terminal-mgmt-label">Optional JSON metadata</span>
-                  </Localized>
-                  <textarea
-                    className="terminal-mgmt-input terminal-mgmt-textarea"
-                    id="terminal-field-metadata"
-                    value={form.metadata}
-                    onChange={(e) => setForm({ ...form, metadata: e.target.value })}
-                    rows={3}
-                  />
-                </label>
+        {/* Active toggle — only for edit */}
+        {isEditing && (
+          <div className="terminal-mgmt-checkbox-wrap">
+            <input
+              className="terminal-mgmt-checkbox"
+              type="checkbox"
+              id="terminal-field-active"
+              checked={form.isActive}
+              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+            />
+            <Localized id="terminal-is-active">
+              <label className="terminal-mgmt-checkbox-label" htmlFor="terminal-field-active">
+                Active
+              </label>
+            </Localized>
+          </div>
+        )}
 
-                {/* Active toggle — only for edit */}
-                {isEditing && (
-                  <div className="terminal-mgmt-checkbox-wrap">
-                    <input
-                      className="terminal-mgmt-checkbox"
-                      type="checkbox"
-                      id="terminal-field-active"
-                      checked={form.isActive}
-                      onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                    />
-                    <Localized id="terminal-is-active">
-                      <label className="terminal-mgmt-checkbox-label" htmlFor="terminal-field-active">
-                        Active
-                      </label>
-                    </Localized>
-                  </div>
-                )}
-
-                {/* Feature Overrides — edit mode only */}
-                {isEditing && (
-                  <div className="terminal-mgmt-feature-overrides">
-                    <Localized id="terminal-feature-overrides">
-                      <h3 className="terminal-mgmt-feature-overrides-title">
-                        Feature Overrides
-                      </h3>
-                    </Localized>
-                    {overridesLoading ? (
-                      <Localized id="terminal-loading-overrides">
-                        <p className="terminal-mgmt-loading">Loading overrides…</p>
-                      </Localized>
-                    ) : (
-                      <div className="terminal-mgmt-feature-groups">
-                        {FEATURE_GROUPS.map((group) => {
-                          const groupOverrides = group.keys.filter((k) =>
-                            overrideEnabled(k) !== undefined,
-                          );
+        {/* Feature Overrides — edit mode only */}
+        {isEditing && (
+          <div className="terminal-mgmt-feature-overrides">
+            <Localized id="terminal-feature-overrides">
+              <h3 className="terminal-mgmt-feature-overrides-title">
+                Feature Overrides
+              </h3>
+            </Localized>
+            {overridesLoading ? (
+              <Localized id="terminal-loading-overrides">
+                <p className="terminal-mgmt-loading">Loading overrides…</p>
+              </Localized>
+            ) : (
+              <div className="terminal-mgmt-feature-groups">
+                {FEATURE_GROUPS.map((group) => {
+                  const groupOverrides = group.keys.filter((k) =>
+                    overrideEnabled(k) !== undefined,
+                  );
+                  return (
+                    <div key={group.label} className="terminal-mgmt-feature-group">
+                      <div className="terminal-mgmt-feature-group-header">
+                        <span className="terminal-mgmt-feature-group-label">
+                          {group.label}
+                        </span>
+                        {groupOverrides.length > 0 && (
+                          <span className="terminal-mgmt-feature-group-count">
+                            {groupOverrides.length} override
+                            {groupOverrides.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="terminal-mgmt-feature-group-items">
+                        {group.keys.map((featureKey) => {
+                          const ov = overrideEnabled(featureKey);
+                          const isOverridden = ov !== undefined;
+                          const checked = ov ?? false;
+                          const toggleId = `toggle-${featureKey}`;
                           return (
-                            <div key={group.label} className="terminal-mgmt-feature-group">
-                              <div className="terminal-mgmt-feature-group-header">
-                                <span className="terminal-mgmt-feature-group-label">
-                                  {group.label}
+                            <label
+                              key={featureKey}
+                              htmlFor={toggleId}
+                              className={
+                                'terminal-mgmt-toggle-row' +
+                                (isOverridden
+                                  ? ' terminal-mgmt-toggle-row--overridden'
+                                  : '')
+                              }
+                            >
+                              <span className="terminal-mgmt-toggle-label">
+                                <span className="terminal-mgmt-toggle-name">
+                                  {featureLabel(featureKey)}
                                 </span>
-                                {groupOverrides.length > 0 && (
-                                  <span className="terminal-mgmt-feature-group-count">
-                                    {groupOverrides.length} override
-                                    {groupOverrides.length !== 1 ? 's' : ''}
+                                {isOverridden && (
+                                  <span className="terminal-mgmt-toggle-badge">
+                                    overridden
                                   </span>
                                 )}
-                              </div>
-                              <div className="terminal-mgmt-feature-group-items">
-                                {group.keys.map((featureKey) => {
-                                  const ov = overrideEnabled(featureKey);
-                                  const isOverridden = ov !== undefined;
-                                  const checked = ov ?? false;
-                                  const toggleId = `toggle-${featureKey}`;
-                                  return (
-                                    <label
-                                      key={featureKey}
-                                      htmlFor={toggleId}
-                                      className={
-                                        'terminal-mgmt-toggle-row' +
-                                        (isOverridden
-                                          ? ' terminal-mgmt-toggle-row--overridden'
-                                          : '')
-                                      }
-                                    >
-                                      <span className="terminal-mgmt-toggle-label">
-                                        <span className="terminal-mgmt-toggle-name">
-                                          {featureLabel(featureKey)}
-                                        </span>
-                                        {isOverridden && (
-                                          <span className="terminal-mgmt-toggle-badge">
-                                            overridden
-                                          </span>
-                                        )}
-                                      </span>
-                                      <span className="terminal-mgmt-toggle-switch">
-                                        <input
-                                          type="checkbox"
-                                          id={toggleId}
-                                          className="terminal-mgmt-toggle-input"
-                                          checked={checked}
-                                          onChange={() =>
-                                            handleToggleOverride(
-                                              featureKey,
-                                              checked,
-                                            )
-                                          }
-                                          aria-label={l10n.getString(
-                                            'terminal-override-aria',
-                                            {
-                                              feature:
-                                                featureLabel(featureKey),
-                                            },
-                                          )}
-                                        />
-                                        <span className="terminal-mgmt-toggle-track">
-                                          <span className="terminal-mgmt-toggle-thumb" />
-                                        </span>
-                                      </span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                              </span>
+                              <span className="terminal-mgmt-toggle-switch">
+                                <input
+                                  type="checkbox"
+                                  id={toggleId}
+                                  className="terminal-mgmt-toggle-input"
+                                  checked={checked}
+                                  onChange={() =>
+                                    handleToggleOverride(
+                                      featureKey,
+                                      checked,
+                                    )
+                                  }
+                                  aria-label={l10n.getString(
+                                    'terminal-override-aria',
+                                    {
+                                      feature:
+                                        featureLabel(featureKey),
+                                    },
+                                  )}
+                                />
+                                <span className="terminal-mgmt-toggle-track">
+                                  <span className="terminal-mgmt-toggle-thumb" />
+                                </span>
+                              </span>
+                            </label>
                           );
                         })}
                       </div>
-                    )}
-                    {overridesError && (
-                      <div className="terminal-mgmt-error" role="alert">
-                        <span>{overridesError}</span>
-                      </div>
-                    )}
-                    {overrides.length > 0 && (
-                      <div className="terminal-mgmt-reset-overrides">
-                        <Localized id="terminal-reset-overrides">
-                          <Button variant="ghost" size="sm" onClick={handleResetOverrides}>
-                            Reset all overrides
-                          </Button>
-                        </Localized>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Device Binding (ADR #4 Phase 3) — edit mode only */}
-                {isEditing && (
-                  <div className="terminal-mgmt-feature-overrides">
-                    <h3 className="terminal-mgmt-feature-overrides-title">
-                      Device Binding
-                    </h3>
-                    {bindingLoading ? (
-                      <p className="terminal-mgmt-loading">Loading binding…</p>
-                    ) : (
-                      <>
-                        {binding?.bounded && (
-                          <div className="terminal-mgmt-binding-info">
-                            <p>
-                              Bound to store: <strong>{binding.boundStoreId}</strong>
-                              {binding.boundInstanceId && (<> &middot; instance: <strong>{binding.boundInstanceId}</strong></>)}
-                            </p>
-                            <p className={binding.signatureValid ? 'terminal-mgmt-status-active' : 'terminal-mgmt-status-inactive'}>
-                              Signature: {binding.signatureValid ? 'Valid' : 'Invalid / Tampered'}
-                            </p>
-                          </div>
-                        )}
-                        <div className="terminal-mgmt-binding-fields">
-                          <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-store">
-                            <span className="terminal-mgmt-label">Store</span>
-                            <select
-                              id="bind-store"
-                              className="terminal-mgmt-input"
-                              value={selectedStoreId}
-                              onChange={(e) => setSelectedStoreId(e.target.value)}
-                            >
-                              <option value="">-- Select store --</option>
-                              {bindingStores.map((s) => (
-                                <option key={s.id} value={s.id}>{s.name}{s.is_primary ? ' (Primary)' : ''}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-instance">
-                            <span className="terminal-mgmt-label">Workspace Instance</span>
-                            <select
-                              id="bind-instance"
-                              className="terminal-mgmt-input"
-                              value={selectedInstanceId}
-                              onChange={(e) => setSelectedInstanceId(e.target.value)}
-                              disabled={!selectedStoreId}
-                            >
-                              <option value="">-- Select instance --</option>
-                              {bindingInstances.map((i) => (
-                                <option key={i.instance_id} value={i.instance_id}>{i.name} ({i.type_key})</option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                        <div className="terminal-mgmt-binding-actions">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            loading={bindingSaving}
-                            disabled={!selectedStoreId || !selectedInstanceId}
-                            onClick={handleBind}
-                          >
-                            {binding?.bounded ? 'Update Binding' : 'Bind Terminal'}
-                          </Button>
-                          {binding?.bounded && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={bindingSaving}
-                              onClick={handleClearBinding}
-                            >
-                              Clear Binding
-                            </Button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    {bindingError && (
-                      <div className="terminal-mgmt-error" role="alert">
-                        <span>{bindingError}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Error */}
-                {error && (
-                  <div className="terminal-mgmt-error" role="alert">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="15" y1="9" x2="9" y2="15" />
-                      <line x1="9" y1="9" x2="15" y2="15" />
-                    </svg>
-                    <span>{error}</span>
-                  </div>
-                )}
+                    </div>
+                  );
+                })}
               </div>
-
-              <div className="terminal-mgmt-modal-actions">
-                <Localized id="terminal-cancel">
-                  <Button variant="ghost" onClick={closeModal} disabled={saving}>
-                    Cancel
+            )}
+            {overridesError && (
+              <div className="terminal-mgmt-error" role="alert">
+                <span>{overridesError}</span>
+              </div>
+            )}
+            {overrides.length > 0 && (
+              <div className="terminal-mgmt-reset-overrides">
+                <Localized id="terminal-reset-overrides">
+                  <Button variant="ghost" size="sm" onClick={handleResetOverrides}>
+                    Reset all overrides
                   </Button>
                 </Localized>
-                <Button
-                  variant="primary"
-                  loading={saving}
-                  disabled={!form.name.trim() || !form.deviceId.trim()}
-                  onClick={handleSave}
-                >
-                  <Localized id={isEditing ? 'terminal-save' : 'terminal-register-action'}>
-                    <span>{isEditing ? 'Save' : 'Register'}</span>
-                  </Localized>
-                </Button>
               </div>
-            </div>
+            )}
           </div>
-      )}
+        )}
+
+        {/* Device Binding (ADR #4 Phase 3) — edit mode only */}
+        {isEditing && (
+          <div className="terminal-mgmt-feature-overrides">
+            <h3 className="terminal-mgmt-feature-overrides-title">
+              Device Binding
+            </h3>
+            {bindingLoading ? (
+              <p className="terminal-mgmt-loading">Loading binding…</p>
+            ) : (
+              <>
+                {binding?.bounded && (
+                  <div className="terminal-mgmt-binding-info">
+                    <p>
+                      Bound to store: <strong>{binding.boundStoreId}</strong>
+                      {binding.boundInstanceId && (<> &middot; instance: <strong>{binding.boundInstanceId}</strong></>)}
+                    </p>
+                    <p className={binding.signatureValid ? 'terminal-mgmt-status-active' : 'terminal-mgmt-status-inactive'}>
+                      Signature: {binding.signatureValid ? 'Valid' : 'Invalid / Tampered'}
+                    </p>
+                  </div>
+                )}
+                <div className="terminal-mgmt-binding-fields">
+                  <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-store">
+                    <span className="terminal-mgmt-label">Store</span>
+                    <select
+                      id="bind-store"
+                      className="terminal-mgmt-input"
+                      value={selectedStoreId}
+                      onChange={(e) => setSelectedStoreId(e.target.value)}
+                    >
+                      <option value="">-- Select store --</option>
+                      {bindingStores.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}{s.is_primary ? ' (Primary)' : ''}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-instance">
+                    <span className="terminal-mgmt-label">Workspace Instance</span>
+                    <select
+                      id="bind-instance"
+                      className="terminal-mgmt-input"
+                      value={selectedInstanceId}
+                      onChange={(e) => setSelectedInstanceId(e.target.value)}
+                      disabled={!selectedStoreId}
+                    >
+                      <option value="">-- Select instance --</option>
+                      {bindingInstances.map((i) => (
+                        <option key={i.instance_id} value={i.instance_id}>{i.name} ({i.type_key})</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="terminal-mgmt-binding-actions">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={bindingSaving}
+                    disabled={!selectedStoreId || !selectedInstanceId}
+                    onClick={handleBind}
+                  >
+                    {binding?.bounded ? 'Update Binding' : 'Bind Terminal'}
+                  </Button>
+                  {binding?.bounded && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={bindingSaving}
+                      onClick={handleClearBinding}
+                    >
+                      Clear Binding
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+            {bindingError && (
+              <div className="terminal-mgmt-error" role="alert">
+                <span>{bindingError}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </SettingsPopup>
 
       {/* ── Delete Confirmation Modal ────────────────────────────── */}
-      {deleteTarget && (
-        <div className="terminal-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('terminal-delete-aria')}>
-            <div className="terminal-mgmt-modal">
-              <div className="terminal-mgmt-modal-header">
-              <Localized id="terminal-delete-title">
-                <h2>Delete Terminal</h2>
-              </Localized>
-              <Localized id="terminal-modal-close" attrs={{ "aria-label": true }}>
-                <button
-                  type="button"
-                  className="terminal-mgmt-modal-close"
-                  onClick={closeDelete}
-                  aria-label="Close"
-                >
-                &times;
-              </button>
-              </Localized>
-            </div>
-
-            <div className="terminal-mgmt-modal-body">
-              <Localized id="terminal-delete-confirm" vars={{ name: deleteTarget.name }}>
-                <p>Are you sure you want to delete terminal &quot;{deleteTarget.name}&quot;? This action cannot be undone.</p>
-              </Localized>
-            </div>
-
-            <div className="terminal-mgmt-modal-actions">
-              <Localized id="terminal-cancel">
-                <Button variant="ghost" onClick={closeDelete} disabled={deleting}>
-                  Cancel
-                </Button>
-              </Localized>
-              <Button
-                variant="danger"
-                loading={deleting}
-                onClick={handleDelete}
-              >
-                <Localized id="terminal-delete">
-                  <span>Delete</span>
-                </Localized>
+      <SettingsPopup
+        open={deleteTarget !== null}
+        onClose={closeDelete}
+        title={l10n.getString('terminal-delete-title')}
+        onSave={handleDelete}
+        saveLabel={l10n.getString('terminal-delete')}
+        cancelLabel={l10n.getString('terminal-cancel')}
+        saving={deleting}
+        size="sm"
+        footer={
+          <>
+            <Localized id="terminal-cancel">
+              <Button variant="ghost" onClick={closeDelete} disabled={deleting}>
+                Cancel
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </Localized>
+            <Button variant="danger" loading={deleting} onClick={handleDelete}>
+              <Localized id="terminal-delete"><span>Delete</span></Localized>
+            </Button>
+          </>
+        }
+      >
+        <Localized id="terminal-delete-confirm" vars={{ name: deleteTarget?.name ?? '' }}>
+          <p>Are you sure you want to delete terminal &quot;{deleteTarget?.name ?? ''}&quot;? This action cannot be undone.</p>
+        </Localized>
+      </SettingsPopup>
     </div>
   );
 }

@@ -1595,25 +1595,30 @@ export default function SettingsPage() {
             {today} {clock}
           </span>
           <div className="settings-save-bar">
-            {isDirty && !saving && !saved && <span className="settings-save-dot" aria-hidden="true" />}
-            {isDirty && !saving && !saved && (
-              <Localized id="settings-btn-revert-aria" attrs={{ 'aria-label': true }}>
-                <button
-                  type="button"
-                  className="settings-btn-revert"
-                  onClick={handleRevert}
-                  aria-label="Revert changes"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-                    <polyline points="1 4 1 10 7 10" />
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                  </svg>
-                  <Localized id="settings-btn-revert">
-                    <span>Revert</span>
-                  </Localized>
-                </button>
-              </Localized>
-            )}
+            {/* Revert button is always rendered but invisible when not dirty.
+                This reserves layout space and prevents the clock and save
+                button from shifting on appearance/disappearance. */}
+            <span
+              className={`settings-save-dot${isDirty && !saving && !saved ? '' : ' settings-save-dot--hidden'}`}
+              aria-hidden="true"
+            />
+            <Localized id="settings-btn-revert-aria" attrs={{ 'aria-label': true }}>
+              <button
+                type="button"
+                className={`settings-btn-revert${isDirty && !saving && !saved ? '' : ' settings-btn-revert--hidden'}`}
+                onClick={handleRevert}
+                aria-label="Revert changes"
+                tabIndex={isDirty && !saving && !saved ? undefined : -1}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                <Localized id="settings-btn-revert">
+                  <span>Revert</span>
+                </Localized>
+              </button>
+            </Localized>
             <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
               <Button
                 variant="primary"

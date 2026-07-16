@@ -503,6 +503,12 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .settings-sidebar-section-items {
+    animation: none;
+  }
+}
+
 /* ── Sidebar nav list ─────────────────────────────────── */
 
 .settings-sidebar-nav {
@@ -575,6 +581,7 @@
   justify-content: center;
   flex-shrink: 0;
   color: var(--color-fg-tertiary);
+  transition: color var(--duration-200) var(--ease-out);
 }
 
 .settings-nav-item--active .settings-nav-icon {
@@ -897,6 +904,10 @@
 
 /* ── Section content transition ───────────────────────────── */
 
+.settings-section-content {
+  animation: settings-section-fade-in 0.2s var(--ease-out) both;
+}
+
 .settings-section-content > .card {
   animation: settings-card-stagger-in 0.3s var(--ease-out) both;
 }
@@ -920,6 +931,15 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-section-content {
+    animation: none;
+  }
+  .settings-section-content > .card {
+    animation: none;
   }
 }
 
@@ -1131,6 +1151,16 @@
     color var(--duration-100) var(--ease-out),
     background-color var(--duration-100) var(--ease-out),
     border-color var(--duration-100) var(--ease-out);
+}
+
+/* Hidden state — preserves layout space but prevents interaction. */
+.settings-btn-revert--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.settings-save-dot--hidden {
+  visibility: hidden;
 }
 
 .settings-btn-revert:hover {

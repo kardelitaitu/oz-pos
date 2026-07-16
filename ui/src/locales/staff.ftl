@@ -60,6 +60,12 @@ staff-field-name-aria = Display Name
 staff-field-pin-aria = PIN
 staff-error-generic = { $message }
 
+# ── Toast Notifications ───────────────────────────────────────────────────
+staff-toast-created = { $name } created successfully
+staff-toast-updated = { $name } updated successfully
+staff-toast-deactivated = { $name } deactivated
+staff-toast-restored = { $name } restored
+
 # ── Workspace Access ──────────────────────────────────────────────────────
 staff-ws-section-label = Workspace Access
 staff-ws-role-defaults = Use role defaults
@@ -93,6 +99,9 @@ staff-login-digit-aria =
 staff-login-submit = Login
 staff-login-submitting = Logging in…
 staff-login-verifying = Verifying...
+staff-login-error-deactivated = Account is deactivated
+staff-login-error-not-found = User not found
+staff-login-error-connection = Could not verify username. Check your connection.
 staff-login-back = ← Back
 staff-login-copyright = © 2026 OZ-POS. All rights reserved.
 

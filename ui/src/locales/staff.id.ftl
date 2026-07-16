@@ -24,6 +24,9 @@ staff-login-submitting = Memasuki sistem…
 
 # Restaurant Menu
 staff-login-verifying = Memverifikasi…
+staff-login-error-deactivated = Akun dinonaktifkan
+staff-login-error-not-found = Pengguna tidak ditemukan
+staff-login-error-connection = Tidak dapat memverifikasi nama pengguna. Periksa koneksi Anda.
 staff-login-back = ← Kembali
 staff-login-copyright = © 2026 OZ-POS. Seluruh hak cipta dilindungi.
 
@@ -84,6 +87,12 @@ staff-field-username-aria = Nama Pengguna
 staff-field-name-aria = Nama Tampilan
 staff-field-pin-aria = PIN
 staff-error-generic = { $message }
+
+# ── Toast Notifications ───────────────────────────────────────────────────
+staff-toast-created = { $name } berhasil dibuat
+staff-toast-updated = { $name } berhasil diperbarui
+staff-toast-deactivated = { $name } dinonaktifkan
+staff-toast-restored = { $name } diaktifkan kembali
 
 # ── Staff Login (remaining) ──
 staff-login-subtitle = Login Staf

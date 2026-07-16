@@ -73,26 +73,6 @@
 
 /* ── Cell styles ──────────────────────────────────────────────────── */
 
-.staff-mgmt-cell-name {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.staff-mgmt-avatar {
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-full);
-  background: var(--color-accent);
-  color: var(--color-accent-fg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-  flex-shrink: 0;
-}
-
 .staff-mgmt-role-badge-content {
   display: inline-flex;
   align-items: center;
@@ -208,38 +188,6 @@
 
 .staff-mgmt-input:disabled {
   opacity: 0.5;
-}
-
-.staff-mgmt-select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 0.5rem center;
-  background-repeat: no-repeat;
-  background-size: 1.5em 1.5em;
-  padding-right: 2.5rem;
-}
-
-[data-theme="dark"] .staff-mgmt-select {
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23d1d5db' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-}
-
-/* ── Error ────────────────────────────────────────────────────────── */
-
-.staff-mgmt-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-dim);
-  border-radius: var(--radius-md);
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.staff-mgmt-error svg {
-  flex-shrink: 0;
 }
 
 /* ── Workspace Access ──────────────────────────────────────────────── */

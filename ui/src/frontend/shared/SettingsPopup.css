@@ -1,0 +1,150 @@
+/* ── SettingsPopup ────────────────────────────────────────
+ * Shared popup/modal for settings CRUD operations.
+ * Fully self-contained — overlay + panel via createPortal.
+ * ──────────────────────────────────────────────────────── */
+
+/* ── Overlay ────────────────────────────────────────────── */
+.settings-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
+  animation: settings-popup-fade-in var(--duration-250) var(--ease-out);
+}
+
+@keyframes settings-popup-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Panel ──────────────────────────────────────────────── */
+.settings-popup {
+  display: flex;
+  flex-direction: column;
+  width: 90%;
+  max-height: 85vh;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-2xl);
+  animation: settings-popup-slide-up var(--duration-200) var(--ease-out);
+}
+
+@keyframes settings-popup-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Sizes ─────────────────────────────────────────────── */
+.settings-popup--sm { max-width: 480px; }
+.settings-popup--md { max-width: 560px; }
+.settings-popup--lg { max-width: 640px; }
+
+/* ── Header ────────────────────────────────────────────── */
+.settings-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6) 0;
+  flex-shrink: 0;
+}
+
+.settings-popup-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  margin: 0;
+  line-height: var(--leading-normal);
+}
+
+.settings-popup-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  color: var(--color-fg-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out);
+}
+
+.settings-popup-close:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
+.settings-popup-close:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Body ──────────────────────────────────────────────── */
+.settings-popup-body {
+  padding: var(--space-5) var(--space-6);
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Error ──────────────────────────────────────────────── */
+.settings-popup-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.08));
+  border: 1px solid var(--color-danger, #ef4444);
+  color: var(--color-danger, #ef4444);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  flex-shrink: 0;
+}
+
+.settings-popup-error svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Footer ────────────────────────────────────────────── */
+.settings-popup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+/* ── Reduced motion — disable animations only, preserve visual styling ── */
+@media (prefers-reduced-motion: reduce) {
+  .settings-popup-overlay {
+    animation: none;
+  }
+  .settings-popup {
+    animation: none;
+  }
+}

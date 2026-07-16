@@ -92,7 +92,7 @@
   /* Blue-tinted glass surfaces — hue resonance with the background */
   --color-bg-elevated:     rgba(43, 92, 143, 0.08);
   --color-bg-surface:      rgba(43, 92, 143, 0.05);
-  --color-bg-overlay:      rgba(4, 10, 18, 0.80);
+  --color-bg-overlay:      rgba(0, 0, 0, 0.55);
   --color-bg-input:        rgba(0, 0, 0, 0.25);
 
   --color-fg:              #f0f6ff;
@@ -257,7 +257,7 @@
   --color-bg:              linear-gradient(160deg, #eef4fb 0%, #e2ecf7 50%, #d8e8f5 100%);
   --color-bg-elevated:     #ffffff;
   --color-bg-surface:      rgba(255, 255, 255, 0.7);
-  --color-bg-overlay:      rgba(15, 23, 42, 0.45);
+  --color-bg-overlay:      rgba(0, 0, 0, 0.45);
   --color-bg-input:        #ffffff;
 
   --color-fg:              var(--neutral-800);
@@ -350,7 +350,7 @@
   --color-bg:              var(--neutral-50);
   --color-bg-elevated:     var(--neutral-100);
   --color-bg-surface:      var(--neutral-200);
-  --color-bg-overlay:      rgba(8, 14, 22, 0.80);
+  --color-bg-overlay:      rgba(0, 0, 0, 0.55);
   --color-bg-input:        var(--neutral-100);
 
   --color-fg:              var(--neutral-800);

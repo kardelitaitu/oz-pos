@@ -84,6 +84,9 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
   HardwareAccelProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
+// scrollIntoView is not implemented in jsdom — mock it for SettingsSelect usage.
+Element.prototype.scrollIntoView = vi.fn();
+
 beforeEach(() => {
   cleanup();
   failCommands.clear();
@@ -276,9 +279,11 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /currency/i })).toBeInTheDocument();
     });
-    const currencySelect = screen.getByLabelText(/default currency/i);
-    expect((currencySelect as HTMLSelectElement).value).toBe('USD');
-    expect(screen.getByText(/USD . US Dollar/)).toBeInTheDocument();
+    // Currency select is now a custom SettingsSelect (button, not native <select>).
+    const currencyTrigger = screen.getByLabelText(/default currency/i);
+    expect(currencyTrigger).toBeInTheDocument();
+    // The selected value is shown in the trigger button text.
+    expect(currencyTrigger).toHaveTextContent(/USD/);
   });
 
   it('changes default currency via select', async () => {
@@ -286,9 +291,14 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/default currency/i)).toBeInTheDocument();
     });
-    const currencySelect = screen.getByLabelText(/default currency/i) as HTMLSelectElement;
-    await userEvent.selectOptions(currencySelect, 'EUR');
-    expect(currencySelect.value).toBe('EUR');
+    // Custom SettingsSelect: click the trigger to open the dropdown.
+    const currencyTrigger = screen.getByLabelText(/default currency/i);
+    await userEvent.click(currencyTrigger);
+    // Click the EUR option in the portal dropdown.
+    const eurOption = screen.getByRole('option', { name: /EUR/ });
+    await userEvent.click(eurOption);
+    // Verify the trigger now shows EUR.
+    expect(currencyTrigger).toHaveTextContent(/EUR/);
   });
 
   // ── Display section ──────────────────────────────────────────
@@ -372,8 +382,14 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/decimal separator/i)).toBeInTheDocument();
     });
-    await userEvent.selectOptions(screen.getByLabelText(/decimal separator/i) as HTMLSelectElement, 'comma');
-    expect((screen.getByLabelText(/decimal separator/i) as HTMLSelectElement).value).toBe('comma');
+    // Custom SettingsSelect: click the trigger to open the dropdown.
+    const separatorTrigger = screen.getByLabelText(/decimal separator/i);
+    await userEvent.click(separatorTrigger);
+    // Click the 'comma' option in the portal dropdown.
+    const commaOption = screen.getByRole('option', { name: /comma/i });
+    await userEvent.click(commaOption);
+    // Verify the trigger now shows comma.
+    expect(separatorTrigger).toHaveTextContent(/comma/i);
     const footer = screen.getByPlaceholderText(/thank you/i);
     await userEvent.clear(footer);
     await userEvent.type(footer, 'Come again!');

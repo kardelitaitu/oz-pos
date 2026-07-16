@@ -4,10 +4,21 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.0.9] — 2026-07-15
+## [0.0.9] — 2026-07-16
 
 ### Added
 - **Hardware Acceleration toggle (Appearance settings)**: New `HardwareAccelContext` + `useHardwareAccel` hook that manages a `data-hw-accel="disabled"` attribute on `<html>`, persisted to localStorage. When disabled, all CSS `backdrop-filter`, `will-change`, and `transform: translateZ(0)` hints are overridden via a dedicated `HardwareAccel.css` file — covers 10 selectors across 7 CSS files (modal-overlay, workspace cards, dropdown, QRIS/FastPIN/license/PIN overlays). Toggle uses `role="switch"` with proper ARIA attributes. Added 5 Fluent keys in both EN and ID locales. Test mocks added for `HardwareAccelContext` in `AppearanceSettings.test.tsx` and `SettingsPage.test.tsx`.
+- **Updater UI (About settings)**: State machine (idle → checking → up-to-date/available/error → installing) with `@tauri-apps/plugin-updater`. Check for updates button, install button with loading states, version display, and localized status hints. 7 Fluent keys in both EN and ID locales.
+- **ConfirmDialog shared component**: Extracted from inline WorkspaceHome LogoutModal. Reusable `ConfirmDialog` with `variant` prop (info/warning/danger), icon SVG, title, message, confirm/cancel labels, and configurable confirm button variant. Exported through `@/frontend/shared`.
+- **Row flash animation**: Brief green background pulse (`@keyframes data-mgmt-flash-updated`, 1.2s) on DataManagement backup/import/export sections after successful operations. Same pattern (`@keyframes license-flash-updated`/`@keyframes license-section-flash`) for LicenseSettings server-status row after poll or manual refresh.
+- **Visual toggle feedback**: Row flash + checkmark overlay + count badge pop animations on FeatureToggleScreen.
+- **Real-time activation status polling**: 30-second polling interval in LicenseSettings with exponential backoff on failure, last-checked timestamp display, manual refresh button with loading state.
+- **Settings page UX passes 2–5**: Toggle switches, password eye toggle, revert-to-saved snapshot, scroll-to-top on section navigation, sticky content header, count badges with pop animation, stagger card entrance animation (60ms per card, up to 5), improved empty search state, collapsed tooltips for sidebar, save dirty dot indicator with pulse, saved checkmark animation with SVG stroke-draw.
+- **Settings footer keyboard shortcut hint**: KBD element showing Ctrl+S with localized label.
+- **Sidebar search result count badge**: Number pill showing matching items count.
+- **Auto-expand category on navigation**: Clicking a section in the breadcrumb or navigating via keyboard auto-expands the parent accordion category.
+- **Section content fade-in animation**: `.settings-section-content` now fades in on navigation (0.2s), repurposing the previously dead `settings-section-fade-in` keyframe. `prefers-reduced-motion` guards added for card stagger, section content, and sidebar section animations.
+- **Sidebar nav icon color transition**: Smooth 0.2s transition when switching active section.
 
 ### Changed
 - **Version bump**: Codebase version bumped from 0.0.8 to 0.0.9 across 5 files (Cargo.toml, Cargo.lock, tauri.conf.json ×2, package.json).
@@ -55,6 +66,27 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   - Tier badge hover: Added `transition` on opacity + box-shadow; hover shows 85% opacity + inset `currentColor` border.
   - CSS cleanup: Removed redundant `.settings-license-value--medium` class, converted hardcoded hex → `rgb()` values.
 
+- **Horizontal layout conversion — ALL settings pages**: Every form field across all settings pages now uses a consistent label-left/control-right pattern via `.xxx-field--horizontal` CSS variants.
+  - **General (Business)**: Store name, address, tax ID, language, default currency — all label left, input/select right.
+  - **Appearance (Business)**: Display card (card size, font size, font smoothing), Interface (zoom select, HW accel toggle), Branding (colour picker, logo, store name).
+  - **Receipt (Operations)**: Show currency (toggle), decimal separator (select), show tax (toggle), paper width (select), footer (input), show table number (toggle).
+  - **Cloud Sync (Operations)**: Server URL (input), API key (password), enable cloud sync (toggle).
+  - **Data Management (System)**: Export password, confirm password, import decryption password.
+  - **Staff Management**: Username, display name, PIN, role.
+  - **Terminal Management**: Name, device ID, secret, metadata, bind store, bind instance.
+  - **Shift Management**: Opening balance, payout amount, payout reason, close balance, close notes (textarea).
+  - **Tax Configuration**: Tax name, rate (w/ hint below), tax type (radio group).
+  - **Exchange Rates**: From currency, to currency, rate, source, effective date.
+  - **Promotion Management**: Name, type, value, min qty, trigger SKU, reward SKU, reward qty, starts at, ends at, min order, category.
+  - All fields have proper `htmlFor`/`id` pairing, consistent `min-width: 7–8rem` label widths, and `flex-direction: row` layout.
+- **Custom SettingsSelect dropdown**: Replaces native `<select>` with fully theme-styled button + portal-based popover list. Supports keyboard navigation (Enter/Space/Arrow/Home/End/Escape/Tab) and touchscreen. Dropdown renders via `createPortal` to `<body>` to avoid z-index clipping by parent containers. Now self-contains its CSS (`SettingsSelect.css` import).
+- **Appearance layout → card-based**: Appearance page now uses `<div className="card card--padding-md card--shadow-sm">` with `<div className="card-header">` for each section (Display, Interface, Branding).
+- **Input validation**: `maxLength`, `pattern`, `required`, and `onBlur` validation with inline error hints for store name, address, and tax ID fields in General settings.
+- **Currency dropdown guard**: Empty currencies array now shows a disabled placeholder option instead of an empty select.
+- **Toggle switch redesign**: When OFF — accent color with transparency background. When ON — accent color solid background. Slider thumb animates left/right with 0.3s ease-out. Uses `role="switch"` with proper ARIA.
+- **Textarea alignment fix**: `:has(textarea)` selector applied in both Terminal Management and Shift Management horizontal fields to keep labels top-aligned with multi-row textareas (`align-items: flex-start`).
+- **Tax rate field style**: Replaced inline styles with `.tax-config-field-input-wrap` CSS class.
+
 ### Fixed
 - **Clippy — `MutexGuard` held across `await`**: Replaced `std::sync::Mutex` with `tokio::sync::Mutex` for `ENV_LOCK` in `apps/cloud-server/src/redirect.rs` test module. The `Send`-safe guard can be held across `.await` points, preventing race conditions on process-global env vars between concurrent tests.
 - **Clippy — unused import**: Removed unused `response::IntoResponse` import from `platform/sync/src/daemon.rs`.
@@ -64,7 +96,24 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **AppearanceSettings tests (28 failures)**: Added `useToast` mock. Changed 3 hex-input tests from `user.type` to `fireEvent.change` because `normaliseHex()` rejects leading `#` on character-by-character typing.
 - **LicenseSettings tests (2 failures)**: Updated loading test to check for `.settings-license-skeleton` CSS class instead of "Loading…" text. Updated empty-state test to match new `div[role="status"]` structure with lock icon.
 - **screenExtraction test (2 failures)**: Removed dead `.settings-section-header-subtitle` CSS class (removed from TSX during breadcrumb refactoring). Added `mobile-open` and `visible` as `externalClasses` — these are template-literal constructed classes that the static extraction utility can't parse.
-- **Dead CSS class**: Removed `.settings-section-header-subtitle` from SettingsPage.css (was defined but never referenced in TSX after breadcrumb refactoring).
+- **Dead CSS classes removed**:
+  - `.settings-section-header-subtitle` from SettingsPage.css.
+  - `.settings-select` standalone block (native `<select>` styling — no longer used).
+  - `.ssel-*` custom dropdown classes from SettingsPage.css (moved to `SettingsSelect.css`).
+  - `.settings-select` theme overrides (dark/light/prefers-color-scheme).
+  - `.appearance-preview-heading` from AppearanceSettings.css.
+  - `.staff-mgmt-cell-name`, `.staff-mgmt-avatar`, `.staff-mgmt-select` + dark theme variant from StaffManagementScreen.css.
+- **CSS class integrity tests**: Added `knownDynamicFragments` for SettingsPage (`store-name`, `address`, `tax-id`) and AppearanceSettings (`card--padding-md`, `card--shadow-sm`, `card-header`) to suppress false-positive class name extractions from template literals.
+- **HW accel toggle clickability**: Restored by moving text from `<span>` to `<label htmlFor="hw-accel-checkbox">` and adding `id` to the hidden checkbox input.
+- **Dropdown z-index clipping**: Changed from relative-positioned child to portal-rendered overlay to avoid being clipped by parent `overflow: hidden`.
+- **Dropdown broken after CSS cleanup**: `.ssel-*` CSS removed from SettingsPage.css broke the dropdown. Fixed by creating dedicated `SettingsSelect.css` and importing it from the component.
+- **Double focus outline on search input**: Removed redundant `outline: none` conflict.
+- **Missing `id`/`name` on inputs**: Fixed "form field has neither an id nor a name" warnings across all settings inputs (store name, address, tax ID, colour hex, search, and 30+ other fields). Added `autoComplete="off"` consistently.
+- **Duplicate 'Language' label**: Removed parent `<span>` wrapper, `LanguageSelector` now controls its own label.
+- **ScreenExtraction test (2 failures)**: Added `settings-btn-revert--hidden` and `settings-save-dot--hidden` to `externalClasses` for the `SettingsPage` entry — these template-literal constructed classes were falsely flagged as dead by the static CSS parser.
+- **Shared SettingsPopup component**: New `SettingsPopup` component (`ui/src/frontend/shared/SettingsPopup.tsx`) that standardises settings CRUD modals across all pages. Self-contained overlay + panel via `createPortal` with keyboard trap (Escape/Tab), focus management, body scroll lock, error display with SVG icon, default Cancel/Save footer with loading state, and size variants (sm/md/lg). Migrated StaffManagementScreen and TerminalManagementScreen (both add/edit + delete modals) from inline overlay/Modal implementations to `SettingsPopup`. Removed ~150 lines of dead modal CSS (`staff-mgmt-error`, `terminal-mgmt-overlay`, `terminal-mgmt-modal`, `terminal-mgmt-modal-header`, `terminal-mgmt-modal-close`, `terminal-mgmt-modal-body`, `terminal-mgmt-modal-actions`).
+- **SettingsPage tests (3 failures)**: Added `Element.prototype.scrollIntoView = vi.fn()` mock for jsdom compatibility (used by `SettingsSelect`). Updated 3 tests (`renders Currency section`, `changes default currency`, `changes decimal separator`) to interact with the custom `SettingsSelect` component (click trigger button → click `role="option"` in portal) instead of native `<select>` API.
+
 
 ## [0.0.8] — 2026-07-15
 

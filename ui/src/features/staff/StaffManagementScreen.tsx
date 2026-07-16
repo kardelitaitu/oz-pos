@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listStaff,
@@ -19,7 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
-import { Modal } from '@/frontend/shared';
+import { SettingsPopup } from '@/frontend/shared';
 import { RoleIcon } from '@/components/RoleIcon';
 import { useToast } from '@/frontend/shared/Toast';
 import SettingsSelect from '@/features/settings/SettingsSelect';
@@ -246,6 +245,12 @@ export default function StaffManagementScreen() {
       }
 
       closeModal();
+      addToast({
+        type: 'success',
+        message: editingId
+          ? l10n.getString('staff-toast-updated', { name: displayName })
+          : l10n.getString('staff-toast-created', { name: displayName }),
+      });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : l10n.getString('staff-error-save-failed'));
@@ -265,6 +270,12 @@ export default function StaffManagementScreen() {
         role_id: member.role_id,
         is_active: !member.is_active,
         caller_user_id: callerUserId,
+      });
+      addToast({
+        type: 'success',
+        message: member.is_active
+          ? l10n.getString('staff-toast-deactivated', { name: member.display_name })
+          : l10n.getString('staff-toast-restored', { name: member.display_name }),
       });
       await load();
     } catch {
@@ -412,36 +423,22 @@ export default function StaffManagementScreen() {
       )}
 
       {/* ── Add/Edit Modal ──────────────────────────────────────── */}
-      {showModal && createPortal(
-      <Modal
+      <SettingsPopup
         open={showModal}
         onClose={closeModal}
         title={l10n.getString(isEditing ? 'staff-modal-edit-title' : 'staff-modal-add-title')}
-        footer={
-          <>
-            <Localized id="staff-btn-cancel">
-              <Button variant="ghost" onClick={closeModal} disabled={saving}>
-                Cancel
-              </Button>
-            </Localized>
-            <Button
-              variant="primary"
-              loading={saving}
-              disabled={
-                !form.username.trim() ||
-                !form.displayName.trim() ||
-                !form.roleId ||
-                (!isEditing && (!form.pin || form.pin.length < 4)) ||
-                (isEditing && form.wsMode === 'custom' && allWorkspaces.length > 0 && form.wsKeys.length === 0)
-              }
-              onClick={handleSave}
-            >
-              <Localized id={isEditing ? 'staff-btn-update' : 'staff-btn-create'}>
-                <span>{isEditing ? 'Update' : 'Create'}</span>
-              </Localized>
-            </Button>
-          </>
+        error={error}
+        saving={saving}
+        onSave={handleSave}
+        saveLabel={l10n.getString(isEditing ? 'staff-btn-update' : 'staff-btn-create')}
+        saveDisabled={
+          !form.username.trim() ||
+          !form.displayName.trim() ||
+          !form.roleId ||
+          (!isEditing && (!form.pin || form.pin.length < 4)) ||
+          (isEditing && form.wsMode === 'custom' && allWorkspaces.length > 0 && form.wsKeys.length === 0)
         }
+        cancelLabel={l10n.getString('staff-btn-cancel')}
       >
         {/* Username */}
         <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-username" aria-label={l10n.getString('staff-field-username-aria')}>
@@ -585,23 +582,7 @@ export default function StaffManagementScreen() {
             )}
           </fieldset>
         )}
-
-        {/* Error */}
-        {error && (
-          <div className="staff-mgmt-error" role="alert">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="15" y1="9" x2="9" y2="15" />
-              <line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
-            <Localized id="staff-error-generic" vars={{ message: error }}>
-              <span>{error}</span>
-            </Localized>
-          </div>
-        )}
-      </Modal>,
-      document.body,
-      )}
+      </SettingsPopup>
     </div>
   );
 }

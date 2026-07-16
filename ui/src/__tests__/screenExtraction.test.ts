@@ -197,6 +197,11 @@ const SCREENS: ScreenEntry[] = [
       'promo-mgmt',
       'mobile-open',
       'visible',
+      // Visibility-hidden modifier classes for revert button & save-dot.
+      // These are constructed via template-literal class toggling in
+      // SettingsPage.tsx, so the static parser can't extract them.
+      'settings-btn-revert--hidden',
+      'settings-save-dot--hidden',
     ],
     knownDynamicFragments: [
       // Object-key strings inside template-literal interpolations that

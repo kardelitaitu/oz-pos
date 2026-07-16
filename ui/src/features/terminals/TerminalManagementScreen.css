@@ -134,69 +134,7 @@
   background: var(--color-danger-bg);
 }
 
-/* ── Modal ────────────────────────────────────────────────────────── */
-
-.terminal-mgmt-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-overlay);
-}
-
-.terminal-mgmt-modal {
-  width: 27.5rem;
-  max-width: 92vw;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-}
-
-.terminal-mgmt-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.terminal-mgmt-modal-header h2 {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-fg);
-}
-
-.terminal-mgmt-modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--color-fg-tertiary);
-  padding: 0;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-}
-
-.terminal-mgmt-modal-close:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
-}
-
-.terminal-mgmt-modal-body {
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
+/* ── Field layout ─────────────────────────────────────────────────── */
 
 .terminal-mgmt-field {
   display: flex;
@@ -470,16 +408,6 @@
 
 .terminal-mgmt-error svg {
   flex-shrink: 0;
-}
-
-/* ── Modal actions ────────────────────────────────────────────────── */
-
-.terminal-mgmt-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--color-border);
 }
 
 /* ── Binding info ─────────────────────────────────────────────────── */

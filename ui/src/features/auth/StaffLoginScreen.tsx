@@ -211,20 +211,20 @@ export default function StaffLoginScreen() {
     try {
       const result = await checkUsername({ username: trimmed });
       if (!result.found) {
-        addToast({ type: 'error', message: 'User not found' });
+        addToast({ type: 'error', message: l10n.getString('staff-login-error-not-found') });
         return;
       }
       if (!result.is_active) {
-        addToast({ type: 'error', message: 'Account is deactivated' });
+        addToast({ type: 'error', message: l10n.getString('staff-login-error-deactivated') });
         return;
       }
       setStep('pin');
     } catch {
-      addToast({ type: 'error', message: 'Could not verify username. Check your connection.' });
+      addToast({ type: 'error', message: l10n.getString('staff-login-error-connection') });
     } finally {
       setUsernameChecking(false);
     }
-  }, [username, clearError]);
+  }, [username, clearError, addToast, l10n]);
 
   const handleUsernameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value);
