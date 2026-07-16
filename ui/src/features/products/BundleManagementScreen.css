@@ -123,67 +123,6 @@
   color: var(--color-fg-secondary);
   border-color: var(--color-border);
 }
-
-/* ── Overlay / Modal ─────────────────────────────── */
-
-.bundle-mgmt-overlay {
-  position: fixed;
-  inset: 0;
-  background-color: var(--color-bg-overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-}
-
-.bundle-mgmt-modal {
-  background-color: var(--color-bg);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 90%;
-  max-width: 37.5rem;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.bundle-mgmt-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.bundle-mgmt-modal-header h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-fg);
-}
-
-.bundle-mgmt-modal-close {
-  background: none;
-  border: none;
-  font-size: var(--text-xl);
-  cursor: pointer;
-  color: var(--color-fg-tertiary);
-  line-height: 1;
-}
-
-.bundle-mgmt-modal-close:hover {
-  color: var(--color-fg);
-}
-
-.bundle-mgmt-modal-body {
-  padding: var(--space-4) var(--space-6);
-  overflow-y: auto;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
 .bundle-mgmt-field {
   display: flex;
   flex-direction: column;
@@ -252,14 +191,6 @@
   color: var(--color-danger);
   line-height: 1;
   padding: var(--space-1);
-}
-
-.bundle-mgmt-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--color-border);
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -12,7 +12,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { Localized, useLocalization } from '@fluent/react';
-import { useToast } from '@/frontend/shared/Toast';
+import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import './FeatureToggleScreen.css';
 
@@ -126,6 +126,14 @@ export default function FeatureToggleScreen() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [togglingBatch, setTogglingBatch] = useState<string | null>(null);
   const { addToast } = useToast();
+  const cm = useContextMenu();
+  const cmInput = useMemo(() => ({
+    autoComplete: 'off' as const,
+    autoCorrect: 'off' as const,
+    spellCheck: false as const,
+    'data-gramm': 'false' as const,
+    onContextMenu: (e: React.MouseEvent<HTMLInputElement>) => cm.open(e, e.currentTarget),
+  }), [cm]);
 
   // Track recently-toggled features for row flash + checkmark animation.
   // Map<featureKey, 'enabled' | 'disabled'>
@@ -276,6 +284,15 @@ export default function FeatureToggleScreen() {
 
   return (
     <div className="feature-toggle">
+      {cm.menu && (
+        <ContextMenu
+          menu={cm.menu}
+          menuRef={cm.menuRef}
+          onCopy={cm.handleCopy}
+          onPaste={cm.handlePaste}
+          onClose={cm.close}
+        />
+      )}
       <div className="feature-toggle-header">
         <Localized id="feature-toggle-title"><h1 className="feature-toggle-title">Feature Toggles</h1></Localized>
         {features.length > 0 && (
@@ -319,7 +336,7 @@ export default function FeatureToggleScreen() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={l10n.getString('feature-toggle-search-aria')}
-              autoComplete="off"
+              {...cmInput}
             />
           </Localized>
           {searchQuery && (

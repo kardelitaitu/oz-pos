@@ -4,7 +4,6 @@
  * Layout:
  *   .cat-mgmt           → page wrapper
  *   .cat-mgmt-grid      → responsive card grid
- *   .cat-mgmt-modal     → create category dialog
  * ============================================================ */
 
 .cat-mgmt {
@@ -175,81 +174,7 @@
   cursor: not-allowed;
 }
 
-/* ── Modal ──────────────────────────────────────────── */
-.cat-mgmt-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-overlay);
-  animation: cat-fade-in var(--duration-200) var(--ease-out);
-}
-
-@keyframes cat-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.cat-mgmt-modal {
-  width: 26.25rem;
-  max-width: 92vw;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-  animation: cat-slide-up var(--duration-200) var(--ease-out);
-}
-
-@keyframes cat-slide-up {
-  from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.cat-mgmt-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.cat-mgmt-modal-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-fg);
-}
-
-.cat-mgmt-modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--color-fg-tertiary);
-  padding: 0;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-}
-
-.cat-mgmt-modal-close:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
-}
-
-.cat-mgmt-modal-body {
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
+/* ── Form fields (inside SettingsPopup) ───────────── */
 .cat-mgmt-field {
   display: flex;
   flex-direction: column;
@@ -390,27 +315,10 @@
   align-self: flex-start;
 }
 
-/* ── Error ──────────────────────────────────────────── */
-.cat-mgmt-error {
-  font-size: var(--text-sm);
-  color: var(--color-danger);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-danger-bg);
-  border-radius: var(--radius-lg);
-}
-
-/* ── Actions ────────────────────────────────────────── */
+/* ── Delete warning text ──────────────────────────── */
 .cat-mgmt-delete-warning {
   font-size: var(--text-sm);
   color: var(--color-fg-secondary);
   line-height: var(--leading-relaxed);
   margin: 0;
-}
-
-.cat-mgmt-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--color-border);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getBrandSettings,
@@ -13,7 +13,7 @@ import { Button } from '@/components/Button';
 import { useAppZoom } from '@/contexts/ZoomContext';
 import type { ZoomLevel } from '@/contexts/ZoomContext';
 import { useHardwareAccel } from '@/contexts/HardwareAccelContext';
-import { useToast } from '@/frontend/shared/Toast';
+import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
 import SettingsSelect from './SettingsSelect';
 import './AppearanceSettings.css';
 
@@ -63,6 +63,14 @@ export function AppearanceSettings({
   const { zoomLevel, setZoomLevel } = useAppZoom();
   const { enabled: hwAccelEnabled, setEnabled: setHwAccelEnabled } = useHardwareAccel();
   const { addToast } = useToast();
+  const cm = useContextMenu();
+  const cmInput = useMemo(() => ({
+    autoComplete: 'off' as const,
+    autoCorrect: 'off' as const,
+    spellCheck: false as const,
+    'data-gramm': 'false' as const,
+    onContextMenu: (e: React.MouseEvent<HTMLInputElement>) => cm.open(e, e.currentTarget),
+  }), [cm]);
 
   useEffect(() => {
     if (embedded) return;
@@ -184,8 +192,8 @@ export function AppearanceSettings({
                   if (normalised) updateColour(normalised);
                 }}
                 className="appearance-colour-hex settings-input"
-                autoComplete="off"
                 aria-label="Colour hex value"
+                {...cmInput}
               />
             </Localized>
             <Localized id="appearance-reset-colour-aria" attrs={{ 'aria-label': true }}>
@@ -242,7 +250,7 @@ export function AppearanceSettings({
             value={activeStoreName}
             onChange={(e) => updateStoreName(e.target.value)}
             className="settings-input"
-            autoComplete="off"
+            {...cmInput}
           />
         </span>
       </div>
@@ -340,6 +348,15 @@ export function AppearanceSettings({
 
   return (
     <>
+      {cm.menu && (
+        <ContextMenu
+          menu={cm.menu}
+          menuRef={cm.menuRef}
+          onCopy={cm.handleCopy}
+          onPaste={cm.handlePaste}
+          onClose={cm.close}
+        />
+      )}
       <div className="card card--padding-md card--shadow-sm">
         <div className="card-header">
           <h2 className="settings-section-title">

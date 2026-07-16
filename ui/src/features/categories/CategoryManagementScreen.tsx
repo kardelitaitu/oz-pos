@@ -9,6 +9,7 @@ import {
 } from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { SettingsPopup } from '@/frontend/shared';
 import './CategoryManagementScreen.css';
 
 // ── Predefined colour palette for the colour picker ──────────────────
@@ -185,6 +186,10 @@ export default function CategoryManagementScreen() {
   // ── Delete modal state ──────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+
+  const closeCreate = useCallback(() => setShowModal(false), []);
+  const closeEdit = useCallback(() => setEditTarget(null), []);
+  const closeDelete = useCallback(() => setDeleteTarget(null), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -368,318 +373,233 @@ export default function CategoryManagementScreen() {
         </div>
       )}
 
-      {/* ── Delete confirmation modal ──────────────────────── */}
-      {deleteTarget && (
-        <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('category-delete-dialog-aria')}>
-            <div className="cat-mgmt-modal">
-              <div className="cat-mgmt-modal-header">
-                <Localized id="categories-delete-confirm" vars={{ name: deleteTarget.name }}>
-                  <h2 className="cat-mgmt-modal-title">Delete Category</h2>
-                </Localized>
-                <Localized id="close" attrs={{ 'aria-label': true }}>
+      <SettingsPopup
+        open={!!deleteTarget}
+        onClose={closeDelete}
+        title={l10n.getString('categories-delete-confirm', { name: deleteTarget?.name ?? '' })}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting !== null}>
+              <Localized id="cancel"><span>Cancel</span></Localized>
+            </Button>
+            <Button variant="danger" loading={deleting !== null} onClick={confirmDelete}>
+              <Localized id="delete"><span>Delete</span></Localized>
+            </Button>
+          </>
+        }
+      >
+        <Localized id="categories-delete-warning">
+          <p className="cat-mgmt-delete-warning">Are you sure you want to delete this category?</p>
+        </Localized>
+      </SettingsPopup>
+
+      <SettingsPopup
+        open={showModal}
+        onClose={closeCreate}
+        title={l10n.getString('categories-add')}
+        saving={saving}
+        error={createError}
+        onSave={handleCreate}
+        saveLabel={l10n.getString('categories-create')}
+        saveDisabled={!newName.trim()}
+        cancelLabel={l10n.getString('cancel')}
+      >
+        {/* Name input */}
+        <div className="cat-mgmt-field">
+          <label htmlFor="cat-new-name" className="cat-mgmt-label">
+            <Localized id="categories-name">
+              <span>Name</span>
+            </Localized>
+          </label>
+          <Localized id="categories-name-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="cat-mgmt-input"
+              type="text"
+              id="cat-new-name"
+              name="cat-new-name"
+              placeholder="e.g. Bakery, Merchandise"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              ref={inputRef}
+              aria-label="Category Name"
+            />
+          </Localized>
+          <span className="cat-mgmt-hint">
+            <Localized id="categories-id-preview">
+              <span>Category ID will be:</span>
+            </Localized>{' '}
+            <code>{newName.trim() ? colourToId(newName.trim()) : '…'}</code>
+          </span>
+        </div>
+
+        {/* Icon picker */}
+        <div className="cat-mgmt-field">
+          <Localized id="categories-icon">
+            <span className="cat-mgmt-label">Icon</span>
+          </Localized>
+          <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label="Pick an icon">
+            {ICON_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                role="radio"
+                aria-checked={newIcon === opt.id}
+                aria-label={opt.label}
+                className={
+                  newIcon === opt.id
+                    ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
+                    : 'cat-mgmt-icon-btn'
+                }
+                style={newIcon === opt.id ? { background: newColour, color: '#fff' } : undefined}
+                onClick={() => setNewIcon(opt.id)}
+              >
+                <CategoryIconSvg icon={opt.id} size={20} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Colour swatch picker */}
+        <div className="cat-mgmt-field">
+          <Localized id="categories-colour">
+            <span className="cat-mgmt-label">Colour</span>
+          </Localized>
+          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('category-colour-picker-aria')}>
+              {COLOURS.map((colour) => (
+                <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
                   <button
                     type="button"
-                    className="cat-mgmt-modal-close"
-                    onClick={() => setDeleteTarget(null)}
-                    aria-label="Close"
-                  >
-                    &times;
-                  </button>
-                </Localized>
-              </div>
-              <div className="cat-mgmt-modal-body">
-                <Localized id="categories-delete-warning">
-                  <p className="cat-mgmt-delete-warning">Are you sure you want to delete this category?</p>
-                </Localized>
-              </div>
-              <div className="cat-mgmt-modal-actions">
-                <Localized id="cancel">
-                  <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting !== null}>Cancel</Button>
-                </Localized>
-                <Localized id="delete">
-                  <Button
-                    variant="danger"
-                    loading={deleting !== null}
-                    onClick={confirmDelete}
-                  >Delete</Button>
-                </Localized>
-              </div>
-            </div>
-          </div>
-      )}
-
-      {/* ── Create modal ──────────────────────────────── */}
-      {showModal && (
-        <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Add category">
-          <div className="cat-mgmt-modal">
-            <div className="cat-mgmt-modal-header">
-              <Localized id="categories-add">
-                <h2 className="cat-mgmt-modal-title">Add Category</h2>
-              </Localized>
-              <Localized id="close" attrs={{ 'aria-label': true }}>
-                <button
-                  type="button"
-                  className="cat-mgmt-modal-close"
-                  onClick={() => setShowModal(false)}
-                  aria-label="Close"
-                >
-                  &times;
-                </button>
-              </Localized>
-            </div>
-
-            <div className="cat-mgmt-modal-body">
-              {/* Name input */}
-              <div className="cat-mgmt-field">
-                <Localized id="categories-name">
-                  <span className="cat-mgmt-label">Name</span>
-                </Localized>
-                <Localized id="categories-name-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="cat-mgmt-input"
-                    type="text"
-                    id="cat-new-name"
-                    name="cat-new-name"
-                    placeholder="e.g. Bakery, Merchandise"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    ref={inputRef}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreate();
-                    }}
-                    aria-label="Category Name"
+                    role="radio"
+                    aria-checked={newColour === colour}
+                    className={
+                      newColour === colour
+                        ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
+                        : 'cat-mgmt-colour-swatch'
+                    }
+                    style={{ background: colour }}
+                    onClick={() => setNewColour(colour)}
+                    aria-label={`Select colour ${colour}`}
                   />
                 </Localized>
-                <span className="cat-mgmt-hint">
-                  <Localized id="categories-id-preview">
-                    <span>Category ID will be:</span>
-                  </Localized>{' '}
-                  <code>{newName.trim() ? colourToId(newName.trim()) : '…'}</code>
-                </span>
-              </div>
-
-              {/* Icon picker */}
-              <div className="cat-mgmt-field">
-                <Localized id="categories-icon">
-                  <span className="cat-mgmt-label">Icon</span>
-                </Localized>
-                <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label="Pick an icon">
-                  {ICON_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={newIcon === opt.id}
-                      aria-label={opt.label}
-                      className={
-                        newIcon === opt.id
-                          ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
-                          : 'cat-mgmt-icon-btn'
-                      }
-                      style={newIcon === opt.id ? { background: newColour, color: '#fff' } : undefined}
-                      onClick={() => setNewIcon(opt.id)}
-                    >
-                      <CategoryIconSvg icon={opt.id} size={20} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Colour swatch picker */}
-              <div className="cat-mgmt-field">
-                <Localized id="categories-colour">
-                  <span className="cat-mgmt-label">Colour</span>
-                </Localized>
-                <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('category-colour-picker-aria')}>
-                    {COLOURS.map((colour) => (
-                      <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={newColour === colour}
-                          className={
-                            newColour === colour
-                              ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
-                              : 'cat-mgmt-colour-swatch'
-                          }
-                          style={{ background: colour }}
-                          onClick={() => setNewColour(colour)}
-                          aria-label={`Select colour ${colour}`}
-                        />
-                      </Localized>
-                    ))}
-                  </div>
-              </div>
-
-              {/* Preview */}
-              <div className="cat-mgmt-preview">
-                <Localized id="categories-preview">
-                  <span className="cat-mgmt-label">Preview</span>
-                </Localized>
-                <span
-                  className="cat-mgmt-preview-chip"
-                  style={{
-                    background: newColour,
-                    color: '#fff',
-                  }}
-                >
-                  <CategoryIconSvg icon={newIcon} size={14} />
-                  {newName.trim() || <Localized id="category-name-fallback"><span>Category Name</span></Localized>}
-                </span>
-              </div>
-
-              {createError && (
-                <div className="cat-mgmt-error" role="alert">
-                  {createError}
-                </div>
-              )}
+              ))}
             </div>
-
-            <div className="cat-mgmt-modal-actions">
-              <Localized id="cancel">
-                <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancel</Button>
-              </Localized>
-              <Localized id="categories-create">
-                <Button
-                  variant="primary"
-                  loading={saving}
-                  disabled={!newName.trim()}
-                  onClick={handleCreate}
-                >Create</Button>
-              </Localized>
-            </div>
-          </div>
         </div>
-      )}
 
-      {/* ── Edit modal ────────────────────────────────── */}
-      {editTarget && (
-        <div className="cat-mgmt-overlay" role="dialog" aria-modal="true" aria-label="Edit category">
-          <div className="cat-mgmt-modal">
-            <div className="cat-mgmt-modal-header">
-              <h2 className="cat-mgmt-modal-title">
-                <Localized id="categories-edit"><span>Edit Category</span></Localized>
-              </h2>
+        {/* Preview */}
+        <div className="cat-mgmt-preview">
+          <Localized id="categories-preview">
+            <span className="cat-mgmt-label">Preview</span>
+          </Localized>
+          <span
+            className="cat-mgmt-preview-chip"
+            style={{
+              background: newColour,
+              color: '#fff',
+            }}
+          >
+            <CategoryIconSvg icon={newIcon} size={14} />
+            {newName.trim() || <Localized id="category-name-fallback"><span>Category Name</span></Localized>}
+          </span>
+        </div>
+      </SettingsPopup>
+
+      <SettingsPopup
+        open={!!editTarget}
+        onClose={closeEdit}
+        title={l10n.getString('categories-edit')}
+        saving={editSaving}
+        error={editError}
+        onSave={handleEdit}
+        saveLabel={l10n.getString('categories-save')}
+        saveDisabled={!editName.trim()}
+        cancelLabel={l10n.getString('cancel')}
+      >
+        {/* Name input */}
+        <div className="cat-mgmt-field">
+          <label htmlFor="cat-edit-name" className="cat-mgmt-label">
+            <Localized id="categories-name">
+              <span>Name</span>
+            </Localized>
+          </label>
+          <input
+            className="cat-mgmt-input"
+            type="text"
+            id="cat-edit-name"
+            name="cat-edit-name"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            ref={editInputRef}
+            aria-label="Category Name"
+          />
+        </div>
+
+        {/* Icon picker */}
+        <div className="cat-mgmt-field">
+          <Localized id="categories-icon">
+            <span className="cat-mgmt-label">Icon</span>
+          </Localized>
+          <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label="Pick an icon">
+            {ICON_OPTIONS.map((opt) => (
               <button
+                key={opt.id}
                 type="button"
-                className="cat-mgmt-modal-close"
-                onClick={() => setEditTarget(null)}
-                aria-label="Close"
+                role="radio"
+                aria-checked={editIcon === opt.id}
+                aria-label={opt.label}
+                className={
+                  editIcon === opt.id
+                    ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
+                    : 'cat-mgmt-icon-btn'
+                }
+                style={editIcon === opt.id ? { background: editColour, color: '#fff' } : undefined}
+                onClick={() => setEditIcon(opt.id)}
               >
-                &times;
+                <CategoryIconSvg icon={opt.id} size={20} />
               </button>
-            </div>
-
-            <div className="cat-mgmt-modal-body">
-              {/* Name input */}
-              <div className="cat-mgmt-field">
-                <Localized id="categories-name">
-                  <span className="cat-mgmt-label">Name</span>
-                </Localized>
-                <input
-                  className="cat-mgmt-input"
-                  type="text"
-                  id="cat-edit-name"
-                  name="cat-edit-name"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  ref={editInputRef}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleEdit();
-                  }}
-                  aria-label="Category Name"
-                />
-              </div>
-
-              {/* Icon picker */}
-              <div className="cat-mgmt-field">
-                <Localized id="categories-icon">
-                  <span className="cat-mgmt-label">Icon</span>
-                </Localized>
-                <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label="Pick an icon">
-                  {ICON_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={editIcon === opt.id}
-                      aria-label={opt.label}
-                      className={
-                        editIcon === opt.id
-                          ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
-                          : 'cat-mgmt-icon-btn'
-                      }
-                      style={editIcon === opt.id ? { background: editColour, color: '#fff' } : undefined}
-                      onClick={() => setEditIcon(opt.id)}
-                    >
-                      <CategoryIconSvg icon={opt.id} size={20} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Colour swatch picker */}
-              <div className="cat-mgmt-field">
-                <Localized id="categories-colour">
-                  <span className="cat-mgmt-label">Colour</span>
-                </Localized>
-                <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label="Pick a colour">
-                  {COLOURS.map((colour) => (
-                    <button
-                      key={colour}
-                      type="button"
-                      role="radio"
-                      aria-checked={editColour === colour}
-                      className={
-                        editColour === colour
-                          ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
-                          : 'cat-mgmt-colour-swatch'
-                      }
-                      style={{ background: colour }}
-                      onClick={() => setEditColour(colour)}
-                      aria-label={`Select colour ${colour}`}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Preview */}
-              <div className="cat-mgmt-preview">
-                <Localized id="categories-preview">
-                  <span className="cat-mgmt-label">Preview</span>
-                </Localized>
-                <span
-                  className="cat-mgmt-preview-chip"
-                  style={{ background: editColour, color: '#fff' }}
-                >
-                  <CategoryIconSvg icon={editIcon} size={14} />
-                  {editName.trim() || editTarget.name}
-                </span>
-              </div>
-
-              {editError && (
-                <div className="cat-mgmt-error" role="alert">
-                  {editError}
-                </div>
-              )}
-            </div>
-
-            <div className="cat-mgmt-modal-actions">
-              <Localized id="cancel">
-                <Button variant="ghost" onClick={() => setEditTarget(null)} disabled={editSaving}>Cancel</Button>
-              </Localized>
-              <Button
-                variant="primary"
-                loading={editSaving}
-                disabled={!editName.trim()}
-                onClick={handleEdit}
-              >
-                <Localized id="categories-save"><span>Save</span></Localized>
-              </Button>
-            </div>
+            ))}
           </div>
         </div>
-      )}
+
+        {/* Colour swatch picker */}
+        <div className="cat-mgmt-field">
+          <Localized id="categories-colour">
+            <span className="cat-mgmt-label">Colour</span>
+          </Localized>
+          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label="Pick a colour">
+            {COLOURS.map((colour) => (
+              <button
+                key={colour}
+                type="button"
+                role="radio"
+                aria-checked={editColour === colour}
+                className={
+                  editColour === colour
+                    ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
+                    : 'cat-mgmt-colour-swatch'
+                }
+                style={{ background: colour }}
+                onClick={() => setEditColour(colour)}
+                aria-label={`Select colour ${colour}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="cat-mgmt-preview">
+          <Localized id="categories-preview">
+            <span className="cat-mgmt-label">Preview</span>
+          </Localized>
+          <span
+            className="cat-mgmt-preview-chip"
+            style={{ background: editColour, color: '#fff' }}
+          >
+            <CategoryIconSvg icon={editIcon} size={14} />
+            {editName.trim() || editTarget?.name || ''}
+          </span>
+        </div>
+      </SettingsPopup>
     </div>
   );
 }

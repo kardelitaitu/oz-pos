@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getReceiptSettings,
@@ -54,6 +54,7 @@ import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import LicenseSettings from './LicenseSettings';
+import { useContextMenu, ContextMenu } from '@/frontend/shared';
 import './SettingsPage.css';
 
 // ── Sidebar nav item type ─────────────────────────────────────────
@@ -441,6 +442,16 @@ export default function SettingsPage() {
   const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
   const [brandColour, setBrandColour] = useState('#10b981');
   const [brandStoreName, setBrandStoreName] = useState('');
+
+  const cm = useContextMenu();
+
+  const cmInput = useMemo(() => ({
+    autoComplete: 'off' as const,
+    autoCorrect: 'off' as const,
+    spellCheck: false as const,
+    'data-gramm': 'false' as const,
+    onContextMenu: (e: React.MouseEvent<HTMLInputElement>) => cm.open(e, e.currentTarget),
+  }), [cm]);
 
   // ── Sidebar navigation state ─────────────────────────────────
   const [activeSection, setActiveSection] = useState('general');
@@ -839,7 +850,7 @@ export default function SettingsPage() {
                   <span className="settings-field-input-wrap">
                     <Localized id="settings-store-name-placeholder" attrs={{ placeholder: true }}>
                       <input
-                        className={`settings-input${fieldErrors['store-name'] ? ' settings-input--error' : ''}`} autoComplete="off"
+                        className={`settings-input${fieldErrors['store-name'] ? ' settings-input--error' : ''}`} {...cmInput}
                         type="text"
                         id="settings-field-store-name"
                         required
@@ -863,7 +874,7 @@ export default function SettingsPage() {
                   <span className="settings-field-input-wrap">
                     <Localized id="settings-address-placeholder" attrs={{ placeholder: true }}>
                       <input
-                        className={`settings-input${fieldErrors['address'] ? ' settings-input--error' : ''}`} autoComplete="off"
+                        className={`settings-input${fieldErrors['address'] ? ' settings-input--error' : ''}`} {...cmInput}
                         type="text"
                         id="settings-field-address"
                         maxLength={200}
@@ -885,7 +896,7 @@ export default function SettingsPage() {
                   <span className="settings-field-input-wrap">
                     <Localized id="settings-tax-id-placeholder" attrs={{ placeholder: true }}>
                       <input
-                        className={`settings-input${fieldErrors['tax-id'] ? ' settings-input--error' : ''}`} autoComplete="off"
+                        className={`settings-input${fieldErrors['tax-id'] ? ' settings-input--error' : ''}`} {...cmInput}
                         type="text"
                         id="settings-field-tax-id"
                         maxLength={20}
@@ -1170,7 +1181,7 @@ export default function SettingsPage() {
                 <span className="settings-field-input-wrap">
                   <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input" autoComplete="off"
+                      className="settings-input" {...cmInput}
                       type="text"
                       id="settings-field-receipt-footer"
                       placeholder="Thank you for shopping!"
@@ -1231,7 +1242,7 @@ export default function SettingsPage() {
                 <span className="settings-field-input-wrap">
                   <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
                     <input
-                      className="settings-input" autoComplete="off"
+                      className="settings-input" {...cmInput}
                       type="url"
                       id="settings-field-server-url"
                       placeholder="https://api.example.com"
@@ -1250,7 +1261,7 @@ export default function SettingsPage() {
                   <div className="settings-input-wrap">
                     <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
                       <input
-                        className="settings-input" autoComplete="off"
+                        className="settings-input" {...cmInput}
                         type={syncApiKeyVisible ? 'text' : 'password'}
                         id="settings-field-api-key"
                         placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
@@ -1523,7 +1534,16 @@ export default function SettingsPage() {
   // ── Main render ──────────────────────────────────────────────
 
   return (
-    <div className="settings-page">
+    <div className="settings-page" onContextMenu={(e) => e.preventDefault()}>
+      {cm.menu && (
+        <ContextMenu
+          menu={cm.menu}
+          menuRef={cm.menuRef}
+          onCopy={cm.handleCopy}
+          onPaste={cm.handlePaste}
+          onClose={cm.close}
+        />
+      )}
       {/* ── Top bar ────────────────────────────────────── */}
       <header className="settings-topbar">
         <div className="settings-topbar-left">
@@ -1573,7 +1593,7 @@ export default function SettingsPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={l10n.getString('settings-sidebar-search-aria')}
-              autoComplete="off"
+              {...cmInput}
             />
             {searchQuery && (
               <button
