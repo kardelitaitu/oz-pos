@@ -237,7 +237,7 @@ export default function PaymentModal({
   }, [selectedCustomer]);
 
   useEffect(() => {
-    if (loyaltyAccount && loyaltyAccount.account.points > 0) {
+    if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
       getPointsValue(loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
         .catch(() => setPointsWorthMinor(null));
