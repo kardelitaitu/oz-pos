@@ -9,6 +9,7 @@
   font-size: 0.75rem;
   color: var(--color-fg);
   opacity: 1;
+  appearance: none;
   transition: all var(--duration-200);
   user-select: none;
 }
