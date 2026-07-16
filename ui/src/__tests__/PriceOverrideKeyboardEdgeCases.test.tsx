@@ -113,6 +113,70 @@ describe('PriceOverrideModal — keyboard and edge cases', () => {
     });
   });
 
+  // ── PIN step: hardware keyboard ────────────────────────────
+
+  it('accepts digit keys from hardware keyboard on PIN step', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    // Advance to PIN step
+    await user.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByPlaceholderText('Username')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Username'), 'manager');
+    await user.click(screen.getAllByText('Next').at(-1)!);
+    await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
+
+    // Type digits via hardware keyboard
+    await user.keyboard('123');
+
+    await waitFor(() => {
+      const filledDots = document.querySelectorAll('.price-override-pin-dot--filled');
+      expect(filledDots.length).toBe(3);
+    });
+  });
+
+  it('handles Backspace key on PIN step via keyboard', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByPlaceholderText('Username')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Username'), 'manager');
+    await user.click(screen.getAllByText('Next').at(-1)!);
+    await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
+
+    // Type two digits via keyboard
+    await user.keyboard('12');
+    expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(2);
+
+    // Backspace
+    await user.keyboard('{Backspace}');
+    expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(1);
+  });
+
+  it('fills PIN on the price-override-pin-step element focus', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByPlaceholderText('Username')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Username'), 'manager');
+    await user.click(screen.getAllByText('Next').at(-1)!);
+    await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
+
+    // The pin step should have focus (auto-focused via useEffect)
+    const pinStep = document.querySelector('.price-override-pin-step');
+    expect(pinStep).toBe(document.activeElement);
+
+    // Type digits directly on the focused element
+    await user.keyboard('789');
+
+    await waitFor(() => {
+      const filledDots = document.querySelectorAll('.price-override-pin-dot--filled');
+      expect(filledDots.length).toBe(3);
+    });
+  });
+
   // ── PIN step: Escape key (handled by focus trap) ────────────
 
   it('closes modal when Escape is pressed on PIN step', async () => {

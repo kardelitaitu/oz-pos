@@ -52,6 +52,7 @@ export default function PriceOverrideModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const usernameInputRef = useRef<HTMLInputElement>(null);
+  const pinWrapRef = useRef<HTMLDivElement>(null);
   const pinSubmitted = useRef(false);
 
   const MAX_PIN_LENGTH = 4;
@@ -59,6 +60,8 @@ export default function PriceOverrideModal({
   useEffect(() => {
     if (step === 'username') {
       usernameInputRef.current?.focus();
+    } else if (step === 'pin') {
+      pinWrapRef.current?.focus();
     }
   }, [step]);
 
@@ -122,6 +125,26 @@ export default function PriceOverrideModal({
     pinSubmitted.current = false;
   }, []);
 
+
+  // ── Hardware keyboard handler for PIN step ──────────────────
+
+  const handlePinKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (loading) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handlePinDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handlePinBackspace();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (pin.length >= 1 && !pinSubmitted.current) attemptVerify();
+      }
+    },
+    [loading, handlePinDigit, handlePinBackspace, attemptVerify, pin.length],
+  );
 
   const handleGoBack = useCallback(() => {
     setError(null);
@@ -244,7 +267,15 @@ export default function PriceOverrideModal({
         )}
 
         {step === 'pin' && (
-          <div className="price-override-pin-step">
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+          <div
+            className="price-override-pin-step"
+            ref={pinWrapRef}
+            tabIndex={-1}
+            onKeyDown={handlePinKeyDown}
+            role="application"
+            aria-label="PIN entry"
+          >
             <p className="price-override-step-label">Enter manager PIN</p>
             {renderPinDots(pin.length)}
             {renderPinPad()}
