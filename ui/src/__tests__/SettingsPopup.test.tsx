@@ -3,6 +3,12 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsPopup } from '@/frontend/shared/SettingsPopup';
 
+vi.mock('@fluent/react', () => ({
+  useLocalization: () => ({
+    l10n: { getString: (id: string) => id === 'close' ? 'Close' : id },
+  }),
+}));
+
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('SettingsPopup', () => {

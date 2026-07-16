@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocalization } from '@fluent/react';
 import { Button } from '@/components/Button';
 import './SettingsPopup.css';
 
@@ -80,6 +81,7 @@ export function SettingsPopup({
   cancelLabel,
   size = 'md',
 }: SettingsPopupProps) {
+  const { l10n } = useLocalization();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // ── Keyboard trap + Escape handler ──────────────────────────
@@ -161,7 +163,7 @@ export function SettingsPopup({
             type="button"
             className="settings-popup-close"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={l10n.getString('close')}
           >
             <svg
               width="16"
