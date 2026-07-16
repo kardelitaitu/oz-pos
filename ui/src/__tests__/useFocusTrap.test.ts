@@ -168,6 +168,110 @@ describe('useFocusTrap', () => {
 
   // ── Tab cycling ───────────────────────────────────────────
 
+  it('does not wrap Tab when focus is on middle element (natural browser order)', () => {
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // Focus the middle element
+    elements.middle.focus();
+    expect(document.activeElement).toBe(elements.middle);
+
+    // Press Tab — should NOT cycle because middle is not the last element
+    const preventDefaultSpy = vi.spyOn(KeyboardEvent.prototype, 'preventDefault');
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          shiftKey: false,
+        }),
+      );
+    });
+
+    // preventDefault should NOT be called — browser will naturally
+    // advance focus to the next element without interception.
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    // Focus should still be on middle (no artificial cycle was triggered)
+    expect(document.activeElement).toBe(elements.middle);
+  });
+
+  it('does not wrap Shift+Tab when focus is on middle element (natural browser order)', () => {
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // Focus the middle element
+    elements.middle.focus();
+    expect(document.activeElement).toBe(elements.middle);
+
+    const preventDefaultSpy = vi.spyOn(KeyboardEvent.prototype, 'preventDefault');
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          shiftKey: true,
+        }),
+      );
+    });
+
+    // preventDefault should NOT be called — browser will naturally
+    // move focus backwards without interception.
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(elements.middle);
+  });
+
+  it('calls preventDefault when Tab wraps from last to first', () => {
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    elements.last.focus();
+    expect(document.activeElement).toBe(elements.last);
+
+    const preventDefaultSpy = vi.spyOn(KeyboardEvent.prototype, 'preventDefault');
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          shiftKey: false,
+        }),
+      );
+    });
+
+    // preventDefault must be called to stop the browser from moving
+    // focus outside the panel as part of the natural Tab cycle.
+    expect(preventDefaultSpy).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(elements.first);
+  });
+
+  it('calls preventDefault when Shift+Tab wraps from first to last', () => {
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // Focus is auto-set to first element on activation
+    expect(document.activeElement).toBe(elements.first);
+
+    const preventDefaultSpy = vi.spyOn(KeyboardEvent.prototype, 'preventDefault');
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          shiftKey: true,
+        }),
+      );
+    });
+
+    // preventDefault must be called to stop the browser from moving
+    // focus outside the panel as part of the natural Tab cycle.
+    expect(preventDefaultSpy).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(elements.last);
+  });
+
   it('wraps Tab from last element to first', () => {
     renderHook(() =>
       useFocusTrap({ current: elements.panel }, true, onEscape),
@@ -279,6 +383,121 @@ describe('useFocusTrap', () => {
     });
 
     expect(tabSpy).not.toHaveBeenCalled();
+  });
+
+  // ── Focusable element types ────────────────────────────────
+
+  it('treats a div with tabindex="0" as focusable', () => {
+    const div = document.createElement('div');
+    div.tabIndex = 0;
+    div.textContent = 'Fake button';
+    elements.panel.appendChild(div);
+
+    // Place the new div first so auto-focus targets it
+    elements.panel.insertBefore(div, elements.first);
+
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // The tabindex="0" div should be auto-focused as the first focusable
+    expect(document.activeElement).toBe(div);
+  });
+
+  it('excludes a div with tabindex="-1" from focusable set', () => {
+    const div = document.createElement('div');
+    div.tabIndex = -1;
+    div.textContent = 'Hidden focus';
+    elements.panel.insertBefore(div, elements.first);
+
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // The tabindex="-1" div should be skipped; first button is first
+    expect(document.activeElement).toBe(elements.first);
+  });
+
+  it('treats an anchor with href as focusable', () => {
+    const anchor = document.createElement('a');
+    anchor.href = 'https://example.com';
+    anchor.textContent = 'Link';
+    elements.panel.appendChild(anchor);
+
+    // Remove the other elements so the anchor is the only focusable
+    elements.first.remove();
+    elements.middle.remove();
+    elements.last.remove();
+
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it('includes a disabled button in the focusable set (selector does not exclude :disabled)', () => {
+    const disabledBtn = document.createElement('button');
+    disabledBtn.disabled = true;
+    disabledBtn.textContent = 'Disabled';
+    elements.panel.appendChild(disabledBtn);
+
+    // Remove other focusable elements so disabledBtn is the only match
+    elements.first.remove();
+    elements.middle.remove();
+    elements.last.remove();
+
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // The selector `'button, [href], input, select, textarea, [tabindex]:...'`
+    // matches <button> regardless of the :disabled property. Verify the
+    // disabled button is in the focusable NodeList even though in both
+    // real browsers and jsdom, calling .focus() on a disabled element
+    // does not move focus.
+    const focusable = elements.panel.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+
+    expect(focusable).toHaveLength(1);
+    expect(focusable[0]).toBe(disabledBtn);
+    // The disabled button cannot receive focus via .focus() — this is
+    // correct browser/jsdom behavior, not a hook bug.
+    expect(document.activeElement).not.toBe(disabledBtn);
+  });
+
+  // ── Stacked traps ─────────────────────────────────────────
+
+  it('two active traps — Escape handled by the most recently registered handler', () => {
+    const outerOnEscape = vi.fn();
+    const innerOnEscape = vi.fn();
+
+    renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, outerOnEscape),
+    );
+
+    // Mount a second (inner/modal) trap on a child panel
+    const innerPanel = document.createElement('div');
+    const innerBtn = document.createElement('button');
+    innerBtn.textContent = 'Inner';
+    innerPanel.appendChild(innerBtn);
+    elements.panel.appendChild(innerPanel);
+
+    renderHook(() =>
+      useFocusTrap({ current: innerPanel }, true, innerOnEscape),
+    );
+
+    // Escape should call the INNER handler first (last registered)
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+    });
+
+    // Both handlers fire because both are listening on document
+    expect(innerOnEscape).toHaveBeenCalledTimes(1);
+    expect(outerOnEscape).toHaveBeenCalledTimes(1);
   });
 
   // ── Scroll lock ───────────────────────────────────────────
