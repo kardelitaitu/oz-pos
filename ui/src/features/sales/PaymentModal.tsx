@@ -17,6 +17,7 @@ import {
 import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAccountWithDetails } from '@/api/loyalty';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { animDuration } from '@/utils/animation';
 import './PaymentModal.css';
 
@@ -93,6 +94,7 @@ export default function PaymentModal({
   const allCustomersRef = useRef<CustomerDto[]>([]);
   const [leaving, setLeaving] = useState(false);
   const leaveCb = useRef<(() => void) | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const MS_200 = animDuration(200);
 
@@ -688,17 +690,10 @@ export default function PaymentModal({
     return () => clearTimeout(timer);
   }, [leaving, handleLeaveEnd, MS_200]);
 
-  // ── Escape key closes ───────────────────────────────────────
-  useEffect(() => {
-    if (!open || leaving || processing) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !showCustomerSearch && !showQr) {
-        animateLeave(onClose);
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, leaving, processing, showCustomerSearch, showQr, animateLeave, onClose]);
+  // ── Focus trap (Escape + Tab cycling) ─────────────────────
+  useFocusTrap(panelRef, open && !leaving && !processing && !done, () => {
+    if (!showCustomerSearch && !showQr) animateLeave(onClose);
+  });
 
   if (!open && !leaving) return null;
 
@@ -717,7 +712,7 @@ export default function PaymentModal({
         onPaymentConfirmed={handleQrConfirmed}
       />
 
-      <div className={`payment-modal ${modalStateClass}`}>
+      <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
         {done ? (
           <div className="payment-done">
             <svg className="payment-done-checkmark" viewBox="0 0 64 64" aria-hidden="true">

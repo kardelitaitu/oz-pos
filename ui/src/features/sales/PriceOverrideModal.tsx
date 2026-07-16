@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { animDuration } from '@/utils/animation';
 import { staffLogin } from '@/api/staff';
 import { formatMoney, type Money } from '@/types/domain';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './PriceOverrideModal.css';
 
 /** Props for the PriceOverrideModal — requires staff PIN verification before applying a manual price change. */
@@ -24,6 +25,7 @@ export default function PriceOverrideModal({
   const ANIM_MS = animDuration(200);
   const [exiting, setExiting] = useState(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return () => {
@@ -131,17 +133,8 @@ export default function PriceOverrideModal({
     }
   }, [step]);
 
-  // ── Escape key closes ───────────────────────────────────────
-  useEffect(() => {
-    if (!open || exiting || loading) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleClose();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, exiting, loading, handleClose]);
+  // ── Focus trap (Escape + Tab cycling) ─────────────────────
+  useFocusTrap(panelRef, open && !exiting && !loading, handleClose);
 
   if (!open && !exiting) return null;
 
@@ -176,7 +169,7 @@ export default function PriceOverrideModal({
 
   return (
     <div className={`price-override-overlay${exiting ? ' price-override-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Price override">
-      <div className={`price-override-modal${exiting ? ' price-override-modal--exiting' : ''}`}>
+      <div className={`price-override-modal${exiting ? ' price-override-modal--exiting' : ''}`} ref={panelRef}>
         <button
           type="button"
           className="price-override-close"
