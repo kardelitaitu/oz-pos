@@ -347,6 +347,7 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-name-placeholder" attrs={{ placeholder: true }}>
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- label has htmlFor above */}
             <input
               className="customer-mgmt-input"
               type="text"
@@ -367,6 +368,7 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-email-placeholder" attrs={{ placeholder: true }}>
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- label has htmlFor above */}
             <input
               className="customer-mgmt-input"
               type="email"
@@ -387,6 +389,7 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-phone-placeholder" attrs={{ placeholder: true }}>
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- label has htmlFor above */}
             <input
               className="customer-mgmt-input"
               type="tel"
@@ -407,6 +410,7 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-notes-placeholder" attrs={{ placeholder: true }}>
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- label has htmlFor above */}
             <textarea
               className="customer-mgmt-input customer-mgmt-textarea"
               id="customer-field-notes"
