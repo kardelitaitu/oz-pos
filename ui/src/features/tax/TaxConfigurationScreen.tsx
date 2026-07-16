@@ -398,6 +398,7 @@ export default function TaxConfigurationScreen() {
         cancelLabel={l10n.getString('tax-config-btn-cancel')}
       >
         <div className="tax-config-field tax-config-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
           <label htmlFor="tax-field-name" className="tax-config-label">
             <Localized id="tax-config-field-name">
               <span>Tax Name</span>
@@ -414,6 +415,7 @@ export default function TaxConfigurationScreen() {
         </div>
 
         <div className="tax-config-field tax-config-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
           <label htmlFor="tax-field-rate" className="tax-config-label">
             <Localized id="tax-config-field-rate">
               <span>Rate (BPS)</span>

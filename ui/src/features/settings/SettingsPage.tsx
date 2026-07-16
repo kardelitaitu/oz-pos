@@ -916,6 +916,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="settings-field settings-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- LanguageSelector component */}
                   <label htmlFor="language-select" className="settings-label">
                     <Localized id="settings-field-language">
                       <span>Language</span>
@@ -935,6 +936,7 @@ export default function SettingsPage() {
             >
               <div className="settings-form">
                 <div className="settings-field settings-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component has hidden native select */}
                   <label htmlFor="settings-field-default-currency" className="settings-label">
                     <Localized id="settings-field-default-currency">
                       <span>Default currency</span>
@@ -1039,6 +1041,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="settings-field settings-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component has hidden native select */}
                   <label htmlFor="settings-field-font-smoothing" className="settings-label">
                     <Localized id="settings-field-font-smoothing">
                       <span>Font Smoothing</span>
@@ -1085,13 +1088,14 @@ export default function SettingsPage() {
             <div className="settings-form">
               {/* Show currency */}
               <div className="settings-field settings-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
                 <label htmlFor="receipt-show-currency" className="settings-label">
                   <Localized id="settings-toggle-show-currency">
                     <span>Show currency symbol on amounts</span>
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <label className="settings-toggle">
+                  <div className="settings-toggle">
                     <span className="settings-toggle-switch">
                       <Localized id="settings-toggle-show-currency-aria" attrs={{ 'aria-label': true }}>
                         <input
@@ -1106,12 +1110,13 @@ export default function SettingsPage() {
                       </Localized>
                       <span className="settings-toggle-slider" />
                     </span>
-                  </label>
+                  </div>
                 </span>
               </div>
 
               {/* Decimal separator */}
               <div className="settings-field settings-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component */}
                 <label htmlFor="settings-field-decimal-separator" className="settings-label">
                   {l10n.getString('settings-field-decimal-separator')}
                 </label>
@@ -1135,13 +1140,14 @@ export default function SettingsPage() {
 
               {/* Show tax */}
               <div className="settings-field settings-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
                 <label htmlFor="receipt-show-tax" className="settings-label">
                   <Localized id="settings-toggle-show-tax">
                     <span>Show tax line on receipts</span>
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <label className="settings-toggle">
+                  <div className="settings-toggle">
                     <span className="settings-toggle-switch">
                       <Localized id="settings-toggle-show-tax-aria" attrs={{ 'aria-label': true }}>
                         <input
@@ -1156,12 +1162,13 @@ export default function SettingsPage() {
                       </Localized>
                       <span className="settings-toggle-slider" />
                     </span>
-                  </label>
+                  </div>
                 </span>
               </div>
 
               {/* Paper width */}
               <div className="settings-field settings-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component */}
                 <label htmlFor="settings-field-paper-width" className="settings-label">
                   {l10n.getString('settings-field-paper-width')}
                 </label>
@@ -1203,13 +1210,14 @@ export default function SettingsPage() {
 
               {/* Show table number */}
               <div className="settings-field settings-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
                 <label htmlFor="receipt-show-table-number" className="settings-label">
                   <Localized id="settings-toggle-show-table-number">
                     <span>Show table number on cart and receipts</span>
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <label className="settings-toggle">
+                  <div className="settings-toggle">
                     <span className="settings-toggle-switch">
                       <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
                         <input
@@ -1224,7 +1232,7 @@ export default function SettingsPage() {
                       </Localized>
                       <span className="settings-toggle-slider" />
                     </span>
-                  </label>
+                  </div>
                 </span>
               </div>
             </div>
@@ -1305,13 +1313,14 @@ export default function SettingsPage() {
               </div>
 
               <div className="settings-field settings-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
                 <label htmlFor="sync-enabled" className="settings-label">
                   <Localized id="settings-sync-enabled">
                     <span>Enable Cloud Sync</span>
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <label className="settings-toggle">
+                  <div className="settings-toggle">
                     <span className="settings-toggle-switch">
                       <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
                         <input
@@ -1326,7 +1335,7 @@ export default function SettingsPage() {
                       </Localized>
                       <span className="settings-toggle-slider" />
                     </span>
-                  </label>
+                  </div>
                 </span>
               </div>
 
