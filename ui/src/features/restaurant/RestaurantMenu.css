@@ -199,8 +199,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   margin-right: var(--space-2);
   border: none;
@@ -532,8 +532,8 @@
 }
 
 .restaurant-context-swatch {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: var(--radius-full);
   border: 2px solid transparent;
   cursor: pointer;
@@ -583,8 +583,8 @@
 }
 
 .restaurant-size-btn {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2rem;
+  height: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
