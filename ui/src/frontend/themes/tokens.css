@@ -100,7 +100,7 @@
   --color-fg-primary:      #ffffff;
   --color-fg-secondary:    #a8c4e0;
   --color-fg-tertiary:     #6b92b4;
-  --color-fg-disabled:     #3d5a72;
+  --color-fg-disabled:     #6b92b4;
   --color-fg-inverse:      #07111d;
 
   /* Luminous accent — lighter steel blue pops on dark backgrounds */
@@ -108,10 +108,10 @@
   --color-accent-hover:    #73b2e0;
   --color-accent-active:   #3d88c4;
   --color-accent-subtle:   rgba(16, 82, 188, 0.18);
-  --color-accent-fg:       #ffffff;
-  --color-accent-hover-fg: #ffffff;
-  --color-accent-active-fg:#ffffff;
-  --color-accent-subtle-fg:#0a0a0a;
+  --color-accent-fg:       #07111d;
+  --color-accent-hover-fg: #07111d;
+  --color-accent-active-fg:#07111d;
+  --color-accent-subtle-fg:#f0f6ff;
 
   /* Blue-tinted borders for hue resonance */
   --color-border:          rgba(90, 159, 212, 0.12);
@@ -125,12 +125,12 @@
   --color-success-dim:     #86efac;
   --color-warning:         #fbbf24;
   --color-warning-bg:      rgba(251, 191, 36, 0.08);
-  --color-danger:          #f87171;
-  --color-danger-hover:    #fca5a5;
-  --color-danger-700:      #dc2626;
-  --color-danger-bg:       rgba(239, 68, 68, 0.08);
-  --color-danger-dim:      #fecaca;
-  --color-danger-fg:       #ef4444;
+  --color-danger:          #dc2626;
+  --color-danger-hover:    #b91c1c;
+  --color-danger-700:      #991b1b;
+  --color-danger-bg:       rgba(220, 38, 38, 0.12);
+  --color-danger-dim:      #fca5a5;
+  --color-danger-fg:       #ffffff;
   --color-info:            #60a5fa;
   --color-info-bg:         rgba(96, 165, 250, 0.08);
 
@@ -278,8 +278,8 @@
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);
   --color-fg-secondary:    var(--neutral-600);
-  --color-fg-tertiary:     var(--neutral-400);
-  --color-fg-disabled:     var(--neutral-300);
+  --color-fg-tertiary:     var(--neutral-500);
+  --color-fg-disabled:     var(--neutral-500);
   --color-fg-inverse:      #ffffff;
 
   --color-accent:          var(--primary-500);
@@ -289,7 +289,7 @@
   --color-accent-fg:       #ffffff;
   --color-accent-hover-fg: #ffffff;
   --color-accent-active-fg:#ffffff;
-  --color-accent-subtle-fg:#0a0a0a;
+  --color-accent-subtle-fg:var(--neutral-800);
 
   --color-border:          rgba(16, 82, 188, 0.12);
   --color-border-hover:    rgba(16, 82, 188, 0.22);
@@ -297,10 +297,10 @@
   --color-border-focus:    var(--primary-500);
   --color-border-subtle:   rgba(16, 82, 188, 0.06);
 
-  --color-success:         #16a34a;
+  --color-success:         #15803d;
   --color-success-bg:      #f0fdf4;
   --color-success-dim:     #86efac;
-  --color-warning:         #d97706;
+  --color-warning:         #b45309;
   --color-warning-bg:      #fffbeb;
   --color-danger:          #dc2626;
   --color-danger-hover:    #b91c1c;
@@ -375,18 +375,18 @@
   --color-fg-primary:      var(--neutral-900);
   --color-fg-secondary:    var(--neutral-700);
   --color-fg-tertiary:     var(--neutral-600);
-  --color-fg-disabled:     var(--neutral-400);
-  --color-fg-inverse:      var(--neutral-950);
+  --color-fg-disabled:     var(--neutral-600);
+  --color-fg-inverse:      #07111d;
 
   /* Luminous accent for dark surfaces */
   --color-accent:          #5a9fd4;
   --color-accent-hover:    #73b2e0;
   --color-accent-active:   #3d88c4;
   --color-accent-subtle:   rgba(16, 82, 188, 0.2);
-  --color-accent-fg:       #ffffff;
-  --color-accent-hover-fg: #ffffff;
-  --color-accent-active-fg:#ffffff;
-  --color-accent-subtle-fg:#0a0a0a;
+  --color-accent-fg:       #07111d;
+  --color-accent-hover-fg: #07111d;
+  --color-accent-active-fg:#07111d;
+  --color-accent-subtle-fg:var(--neutral-800);
 
   --color-border:          rgba(90, 159, 212, 0.12);
   --color-border-hover:    rgba(90, 159, 212, 0.22);
@@ -398,9 +398,9 @@
   --color-success-bg:      rgba(74, 222, 128, 0.08);
   --color-warning:         #fbbf24;
   --color-warning-bg:      rgba(251, 191, 36, 0.08);
-  --color-danger:          #f87171;
-  --color-danger-hover:    #fca5a5;
-  --color-danger-bg:       rgba(239, 68, 68, 0.08);
+  --color-danger:          #dc2626;
+  --color-danger-hover:    #b91c1c;
+  --color-danger-bg:       rgba(220, 38, 38, 0.12);
   --color-danger-fg:       #ffffff;
   --color-info:            #60a5fa;
   --color-info-bg:         rgba(96, 165, 250, 0.08);
