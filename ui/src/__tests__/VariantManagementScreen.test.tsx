@@ -22,6 +22,23 @@ vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
     l10n: {
       getString: (key: string, vars?: Record<string, string>) => {
+        // Map variant-mgmt modal keys to expected test text.
+        const keyMap: Record<string, string> = {
+          'variant-mgmt-modal-add-title': 'Add Variant',
+          'variant-mgmt-modal-edit-title': 'Edit Variant',
+          'variant-mgmt-modal-delete-title': 'Delete Variant',
+          'variant-mgmt-btn-update': 'Update',
+          'variant-mgmt-btn-create': 'Create',
+          'variant-mgmt-delete-confirm-title': 'Delete Variant',
+          'variant-mgmt-btn-cancel': 'Cancel',
+          'variant-mgmt-add-variant': 'Add Variant',
+          'variant-mgmt-loading': 'Loading variants…',
+          'variant-mgmt-no-variants': 'No variants yet.',
+          'variant-mgmt-add-first': 'Add a variant',
+          'variant-mgmt-edit': 'Edit',
+          'variant-mgmt-delete': 'Delete',
+        };
+        if (keyMap[key]) return keyMap[key];
         if (vars?.['name']) return `aria-${key}-${vars['name']}`;
         return key;
       },
