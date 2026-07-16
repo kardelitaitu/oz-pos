@@ -155,20 +155,26 @@ describe("FastPINOverlay", () => {
       expect(nextBtn).toBeDisabled();
     });
 
-    it("closes when overlay backdrop is clicked", () => {
+    it("closes when overlay backdrop is clicked", async () => {
       const onClose = vi.fn();
       renderOverlay(true, onClose);
       // Click the backdrop (the outer div)
       const overlay = screen.getByRole("presentation");
       fireEvent.click(overlay);
-      expect(onClose).toHaveBeenCalled();
+      // Component uses 200ms exit animation before calling onClose
+      await waitFor(() => {
+        expect(onClose).toHaveBeenCalled();
+      });
     });
 
-    it("closes when close button is clicked", () => {
+    it("closes when close button is clicked", async () => {
       const onClose = vi.fn();
       renderOverlay(true, onClose);
       fireEvent.click(screen.getByLabelText("modal-close-aria"));
-      expect(onClose).toHaveBeenCalled();
+      // Component uses 200ms exit animation before calling onClose
+      await waitFor(() => {
+        expect(onClose).toHaveBeenCalled();
+      });
     });
   });
 

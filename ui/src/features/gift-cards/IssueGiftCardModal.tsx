@@ -99,7 +99,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   };
 
   return (
-    <div className={`gift-cards-modal-overlay${exiting ? ' gift-cards-modal-overlay--exiting' : ''}`} role="button" tabIndex={-1} onClick={handleClose} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}>
+    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- Escape key handled at document level */}
+    <div className={`gift-cards-modal-overlay${exiting ? ' gift-cards-modal-overlay--exiting' : ''}`} role="presentation" onClick={handleClose}>
       <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Localized id="gift-cards-issue-title">
           <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
