@@ -243,9 +243,26 @@ export default function SettingsSelect({
 
   return (
     <div className="ssel-container" ref={containerRef}>
+      {/* Hidden native select for label association via htmlFor.
+          Mirrors the custom button's value so screen readers and
+          label elements can associate correctly via the id prop. */}
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="sr-only"
+        tabIndex={-1}
+        onMouseDown={(e) => e.preventDefault()}
+        onKeyDown={(e) => e.preventDefault()}
+      >
+        {placeholder && <option value="" disabled>{placeholder}</option>}
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
       <button
         ref={triggerRef}
-        id={id}
         type="button"
         className="ssel-trigger"
         onClick={handleTriggerClick}
