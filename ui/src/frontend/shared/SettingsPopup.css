@@ -139,10 +139,14 @@
   flex-shrink: 0;
 }
 
-/* ── Reduced motion — disable animations only, preserve visual styling ── */
+/* ── Reduced motion — disable animations & blur, preserve visual styling ── */
 @media (prefers-reduced-motion: reduce) {
   .settings-popup-overlay {
     animation: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    will-change: auto;
+    transform: none;
   }
   .settings-popup {
     animation: none;
