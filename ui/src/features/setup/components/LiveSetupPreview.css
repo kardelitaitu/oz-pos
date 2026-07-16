@@ -159,17 +159,22 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   line-height: 1;
-  animation: lsp-chip-in 0.2s var(--ease-out) both;
 }
 
-@keyframes lsp-chip-in {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
+@media (prefers-reduced-motion: no-preference) {
+  .lsp-nav-chip {
+    animation: lsp-chip-in 0.2s var(--ease-out) both;
   }
-  to {
-    opacity: 1;
-    transform: scale(1);
+
+  @keyframes lsp-chip-in {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 }
 

@@ -264,15 +264,25 @@
   stroke-dashoffset: 24;
 }
 
-@keyframes data-mgmt-pop {
-  0% { transform: scale(0.8); opacity: 0; }
-  60% { transform: scale(1.1); }
-  100% { transform: scale(1); opacity: 1; }
-}
+@media (prefers-reduced-motion: no-preference) {
+  .data-mgmt-progress-done {
+    animation: data-mgmt-pop 0.35s var(--ease-out) both;
+  }
 
-@keyframes data-mgmt-checkmark-draw {
-  0% { stroke-dashoffset: 24; }
-  100% { stroke-dashoffset: 0; }
+  .data-mgmt-progress-done svg {
+    animation: data-mgmt-checkmark-draw 0.4s var(--ease-out) both;
+  }
+
+  @keyframes data-mgmt-pop {
+    0% { transform: scale(0.8); opacity: 0; }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes data-mgmt-checkmark-draw {
+    0% { stroke-dashoffset: 24; }
+    100% { stroke-dashoffset: 0; }
+  }
 }
 
 /* ── Done state ──────────────────────────────────────────────────── */
@@ -412,12 +422,17 @@
   padding: var(--space-4);
   background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
-  animation: data-mgmt-backup-fade-in var(--duration-300) var(--ease-out);
 }
 
-@keyframes data-mgmt-backup-fade-in {
-  from { opacity: 0; transform: translateY(0.25rem); }
-  to { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: no-preference) {
+  .data-mgmt-backup-status {
+    animation: data-mgmt-backup-fade-in var(--duration-300) var(--ease-out);
+  }
+
+  @keyframes data-mgmt-backup-fade-in {
+    from { opacity: 0; transform: translateY(0.25rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
 .data-mgmt-backup-row {
@@ -473,35 +488,39 @@
 
 /* ── Tab panel fade-in ──────────────────────────────────────────── */
 
-@keyframes data-mgmt-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.25rem);
+@media (prefers-reduced-motion: no-preference) {
+  .data-mgmt-tabpanel {
+    animation: data-mgmt-fade-in var(--duration-200) var(--ease-out);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
-.data-mgmt-tabpanel {
-  animation: data-mgmt-fade-in var(--duration-200) var(--ease-out);
+  @keyframes data-mgmt-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.25rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 /* ── Row flash animation ───────────────────────────────────────────
  * Brief green background pulse on updated data rows. */
 
-@keyframes data-mgmt-flash-updated {
-  0%, 100% { background-color: transparent; }
-  20% { background-color: rgba(34, 197, 94, 0.10); }
-  50% { background-color: rgba(34, 197, 94, 0.06); }
-}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes data-mgmt-flash-updated {
+    0%, 100% { background-color: transparent; }
+    20% { background-color: rgba(34, 197, 94, 0.10); }
+    50% { background-color: rgba(34, 197, 94, 0.06); }
+  }
 
-.data-mgmt-backup-status--flash,
-.data-mgmt-meta--flash,
-.data-mgmt-dry-run--flash {
-  animation: data-mgmt-flash-updated var(--duration-1200) var(--ease-out) forwards;
-  border-radius: var(--radius-sm);
+  .data-mgmt-backup-status--flash,
+  .data-mgmt-meta--flash,
+  .data-mgmt-dry-run--flash {
+    animation: data-mgmt-flash-updated var(--duration-1200) var(--ease-out) forwards;
+    border-radius: var(--radius-sm);
+  }
 }
 
 
