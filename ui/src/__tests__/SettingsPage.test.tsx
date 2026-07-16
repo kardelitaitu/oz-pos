@@ -8,6 +8,7 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { BrandProvider } from '@/contexts/BrandContext';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { getAvailableLocales, getLocaleLabel } from '@/i18n';
 
@@ -84,11 +85,6 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
   HardwareAccelProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
-vi.mock('@/contexts/CurrencyContext', () => ({
-  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn().mockResolvedValue(undefined), loading: false }),
-  CurrencyProvider: ({ children }: { children: ReactNode }) => children,
-}));
-
 // scrollIntoView is not implemented in jsdom — mock it for SettingsSelect usage.
 Element.prototype.scrollIntoView = vi.fn();
 
@@ -125,7 +121,9 @@ function TestWrapper({ children }: { children: ReactNode }) {
       }}
     >
       <BrandProvider>
-        <AuthProvider>{children}</AuthProvider>
+        <CurrencyProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </CurrencyProvider>
       </BrandProvider>
     </LocaleContext.Provider>
   );
@@ -244,7 +242,7 @@ describe('SettingsPage', () => {
     });
   });
 
-  it('shows save-error toast when all saves fail', async () => {
+  it('shows save-partial toast when all non-currency saves fail', async () => {
     failCommands.add('set_receipt_settings');
     failCommands.add('set_store_settings');
     failCommands.add('set_default_currency');
@@ -257,8 +255,13 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    // Currency save has .catch(() => {}) so at least one promise resolves;
+    // the page shows "Saved!" and a partial-failure toast.
     await waitFor(() => {
-      expect(screen.getByText(/failed to save settings/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/some settings could not be saved/i)).toBeInTheDocument();
     });
   });
 

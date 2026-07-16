@@ -1406,7 +1406,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               onChange={(e) => setOpeningBalance(e.target.value)}
             />
             <div className="retail-shift-modal-actions">
-              <button onClick={() => retailOpenShiftExit.requestClose()} disabled={openingShift}>{l10n.getString('cancel')}</button>
+              <button type="button" onClick={() => retailOpenShiftExit.requestClose()} disabled={openingShift}>{l10n.getString('cancel')}</button>
               <button className="retail-shift-confirm-btn" onClick={handleOpenShift} disabled={openingShift}>
                 {openingShift ? l10n.getString('retail-open-shift-opening') : l10n.getString('pos-shift-open-btn')}
               </button>
@@ -1447,7 +1447,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               onChange={(e) => setShiftNotes(e.target.value)}
             />
             <div className="retail-shift-modal-actions">
-              <button onClick={() => retailCloseShiftExit.requestClose()} disabled={closingShift}>{l10n.getString('cancel')}</button>
+              <button type="button" onClick={() => retailCloseShiftExit.requestClose()} disabled={closingShift}>{l10n.getString('cancel')}</button>
               <button className="retail-shift-confirm-btn" onClick={handleCloseShift} disabled={closingShift}>
                 {closingShift ? l10n.getString('loading') : l10n.getString('pos-shift-close-btn')}
               </button>
@@ -1551,7 +1551,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               {l10n.getString('retail-clear-cart-confirm', { count: lineCount }) || `Remove all ${lineCount} item${lineCount !== 1 ? 's' : ''} from the cart?`}
             </p>
             <div className="retail-shift-modal-actions">
-              <button onClick={retailClearConfirmExit.requestClose}>{l10n.getString('cancel')}</button>
+              <button type="button" onClick={retailClearConfirmExit.requestClose}>{l10n.getString('cancel')}</button>
               <button className="retail-shift-confirm-btn" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
             </div>
           </div>
@@ -1611,11 +1611,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               </>
             )}
             <div className="retail-discount-actions">
-              <button onClick={() => { retailDiscountExit.requestClose(); setDiscountInput(''); setDiscountRpInput(''); }}>{l10n.getString('cancel')}</button>
+              <button type="button" onClick={() => { retailDiscountExit.requestClose(); setDiscountInput(''); setDiscountRpInput(''); }}>{l10n.getString('cancel')}</button>
               {discountTab === 'pct' ? (
-                <button onClick={handleApplyDiscount}>{l10n.getString('pos-cart-apply')}</button>
+                <button type="button" onClick={handleApplyDiscount}>{l10n.getString('pos-cart-apply')}</button>
               ) : (
-                <button onClick={handleApplyDiscountRp}>{l10n.getString('pos-cart-apply')}</button>
+                <button type="button" onClick={handleApplyDiscountRp}>{l10n.getString('pos-cart-apply')}</button>
               )}
             </div>
           </div>
@@ -1781,7 +1781,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               </div>
             )}
             <div className="retail-held-carts-actions">
-              <button onClick={retailHeldCartsExit.requestClose}>{l10n.getString('close')}</button>
+              <button type="button" onClick={retailHeldCartsExit.requestClose}>{l10n.getString('close')}</button>
             </div>
           </div>
         </div>
@@ -1857,7 +1857,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               aria-label={l10n.getString('retail-quick-return-aria') || 'Receipt barcode input'}
             />
             <div className="retail-shift-modal-actions">
-              <button onClick={retailQuickReturnExit.requestClose} disabled={quickReturnLoading}>
+              <button type="button" onClick={retailQuickReturnExit.requestClose} disabled={quickReturnLoading}>
                 {l10n.getString('cancel')}
               </button>
               <button className="retail-shift-confirm-btn" onClick={handleQuickReturnSubmit} disabled={quickReturnLoading || !quickReturnBarcode.trim()}>
