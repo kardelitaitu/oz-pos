@@ -48,12 +48,14 @@ const sampleFeaturesResult = { features: sampleFeatures };
 describe('FeatureToggleScreen', () => {
   // ── Loading state ────────────────────────────────────────────
 
-  it('renders loading spinner while fetching features', async () => {
+  it('renders loading skeleton while fetching features', async () => {
     mockInvoke.mockReturnValue(new Promise(() => {}));
 
     await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
-    expect(screen.getByText(/loading features/i)).toBeInTheDocument();
+    // Skeleton container should render instead of text
+    expect(document.querySelector('.feature-toggle-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/loading features/i)).not.toBeInTheDocument();
   });
 
   // ── Error state ──────────────────────────────────────────────

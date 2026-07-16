@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { Spinner } from '@/components/Spinner';
+import { Skeleton } from '@/components/Skeleton';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
@@ -306,9 +306,48 @@ export default function FeatureToggleScreen() {
       </div>
 
       {loading && (
-        <div className="feature-toggle-loading">
-          <Spinner size="md" />
-          <Localized id="feature-toggle-loading"><p>Loading features…</p></Localized>
+        <div className="feature-toggle-loading-skeleton" aria-hidden="true">
+          {/* Header skeleton: title + subtitle */}
+          <div className="feature-toggle-header">
+            <Skeleton variant="block" width="14rem" height="1.75rem" />
+            <Skeleton variant="text" width="6rem" height="1rem" />
+          </div>
+
+          {/* Search bar skeleton */}
+          <div className="feature-toggle-skeleton-search">
+            <Skeleton variant="text" width="1rem" height="1rem" />
+            <Skeleton variant="text" width="100%" height="1.25rem" />
+          </div>
+
+          {/* Group card skeletons */}
+          {[0, 1, 2].map((g) => (
+            <div key={g} className="feature-toggle-group">
+              <div className="feature-toggle-group-header">
+                <div className="feature-toggle-group-title">
+                  <Skeleton variant="circle" width="1.25rem" height="1.25rem" />
+                  <Skeleton variant="text" width="8rem" height="1.25rem" />
+                  <Skeleton variant="text" width="3rem" height="1.125rem" />
+                </div>
+                <div className="feature-toggle-bulk-actions">
+                  <Skeleton variant="block" width="5rem" height="1.5rem" />
+                  <Skeleton variant="block" width="5rem" height="1.5rem" />
+                </div>
+              </div>
+              <Card shadow="xs">
+                <div className="feature-toggle-list">
+                  {[0, 1, 2, 3].map((r) => (
+                    <div key={r} className="feature-toggle-item">
+                      <div className="feature-toggle-item-info">
+                        <Skeleton variant="text" width="8rem" height="0.875rem" />
+                        <Skeleton variant="text" width="14rem" height="0.75rem" />
+                      </div>
+                      <Skeleton variant="block" width="2.75rem" height="1.5rem" style={{ borderRadius: '1.5rem' }} />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          ))}
         </div>
       )}
 
