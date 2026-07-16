@@ -336,6 +336,7 @@ export default function ItemModifierModal({
             </div>
           </div>
           <div className="modifier-actions">
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside <Localized> wrapper */}
             <button
               type="button"
               className="modifier-cancel-btn"
@@ -345,6 +346,7 @@ export default function ItemModifierModal({
                 <span>Cancel</span>
               </Localized>
             </button>
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside <Localized> wrapper */}
             <button
               type="button"
               className="modifier-confirm-btn"
