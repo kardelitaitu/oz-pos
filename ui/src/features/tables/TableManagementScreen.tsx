@@ -67,10 +67,11 @@ export default function TableManagementScreen() {
           <p><Localized id="tables-status-label" vars={{ status: selected.status }}><span>Status: {selected.status}</span></Localized></p>
           <p><Localized id="tables-section-label" vars={{ section: selected.section || '—' }}><span>Section: {selected.section || '—'}</span></Localized></p>
           <div className="tables-detail-actions">
-            <button onClick={() => { statusAction(selected); setSelected(null); }}>
+            <button type="button" onClick={() => { statusAction(selected); setSelected(null); }}>
               <Localized id={selected.status === 'occupied' ? 'tables-release' : 'tables-mark-available'}>{selected.status === 'occupied' ? 'Release' : 'Mark Available'}</Localized>
-            </button>
-            <button onClick={() => setSelected(null)}><Localized id="close">Close</Localized></button>
+            </button><button type="button" onClick={() => setSelected(null)}>
+                <Localized id="close">Close</Localized>
+              </button>
           </div>
         </div>
       )}

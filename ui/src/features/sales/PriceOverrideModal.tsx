@@ -148,17 +148,17 @@ export default function PriceOverrideModal({
   const renderPinPad = () => (
     <div className="price-override-pin-pad" role="group" aria-label="Numeric keypad">
       {[7, 8, 9].map((d) => (
-        <button key={d} className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
+        <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
       {[4, 5, 6].map((d) => (
-        <button key={d} className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
+        <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
       {[1, 2, 3].map((d) => (
-        <button key={d} className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
+        <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
-      <button className="price-override-pin-key price-override-pin-key--clear" onClick={handlePinClear} disabled={loading || pin.length === 0}>Clear</button>
-      <button className="price-override-pin-key" onClick={() => handlePinDigit('0')} disabled={loading}>0</button>
-      <button className="price-override-pin-key price-override-pin-key--backspace" onClick={handlePinBackspace} disabled={loading || pin.length === 0}>⌫</button>
+      <button type="button" className="price-override-pin-key price-override-pin-key--clear" onClick={handlePinClear} disabled={loading || pin.length === 0}>Clear</button>
+      <button type="button" className="price-override-pin-key" onClick={() => handlePinDigit('0')} disabled={loading}>0</button>
+      <button type="button" className="price-override-pin-key price-override-pin-key--backspace" onClick={handlePinBackspace} disabled={loading || pin.length === 0}>⌫</button>
     </div>
   );
 

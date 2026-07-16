@@ -1056,7 +1056,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               placeholder={l10n.getString('retail-search-placeholder')}
             />
             {searchQuery && (
-              <button className="retail-search-clear" onClick={() => setSearchQuery('')} aria-label={l10n.getString('retail-search-clear-aria')}>
+              <button type="button" className="retail-search-clear" onClick={() => setSearchQuery('')} aria-label={l10n.getString('retail-search-clear-aria')}>
                 &times;
               </button>
             )}
@@ -1109,9 +1109,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           )}
           {totalPages > 1 && (
             <div className="retail-page-nav" role="navigation" aria-label={l10n.getString('retail-page-nav-aria') || 'Product pages'}>
-              <button className="retail-page-btn" disabled={productPage === 0} onClick={() => setProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>{'<'}</button>
+              <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => setProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>{'<'}</button>
               <span className="retail-page-info" aria-current="true">{productPage + 1} / {totalPages}</span>
-              <button className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => setProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>{'>'}</button>
+              <button type="button" className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => setProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>{'>'}</button>
             </div>
           )}
           <div className="retail-sku-bar">
@@ -1250,7 +1250,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                   aria-live="polite"
                 >
                   <span className="retail-undo-bar-label">{l10n.getString('retail-undo-items-removed', { count: undoStack.length }) || `${undoStack.length} item${undoStack.length > 1 ? 's' : ''} removed`}</span>
-                  <button className="retail-undo-bar-btn" onClick={handleUndoRemove}>{l10n.getString('pos-cart-undo')}</button>
+                  <button type="button" className="retail-undo-bar-btn" onClick={handleUndoRemove}>{l10n.getString('pos-cart-undo')}</button>
                   <button type="button" className="retail-undo-bar-dismiss" onClick={handleDismissUndo} aria-label={l10n.getString('pos-cart-undo-dismiss-aria')}>&times;</button>
                 </div>
               )}
@@ -1287,6 +1287,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               )}
               <div className="retail-cart-actions">
                 <button
+                  type="button"
                   className="retail-cart-action-btn retail-cart-action-btn--pay"
                   onClick={handlePay}
                   disabled={lines.length === 0 || !activeShift}
@@ -1295,6 +1296,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                   {l10n.getString('sale-pay-button')}
                 </button>
                 <button
+                  type="button"
                   className="retail-cart-action-btn retail-cart-action-btn--discount"
                   onClick={() => setShowDiscount(true)}
                   disabled={lines.length === 0}
@@ -1303,6 +1305,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                   {l10n.getString('retail-discount-button')}
                 </button>
                 <button
+                  type="button"
                   className="retail-cart-action-btn retail-cart-action-btn--hold"
                   onClick={heldCartId ? handleResume : handleHold}
                   disabled={!heldCartId && lines.length === 0}
@@ -1311,6 +1314,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                   {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
                 </button>
                 <button
+                  type="button"
                   className="retail-cart-action-btn retail-cart-action-btn--void"
                   onClick={handleRequestClear}
                   disabled={lines.length === 0}
@@ -1337,49 +1341,50 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
       {/* ── Function bar (bottom) ──────────── */}
       <div className="retail-fn-bar" role="toolbar" aria-label={l10n.getString('retail-fn-bar-aria') || 'Function bar'}>
-        <button className="retail-fn-btn" onClick={handlePay} disabled={lines.length === 0}>
+        <button type="button" className="retail-fn-btn" onClick={handlePay} disabled={lines.length === 0}>
           <span className="retail-fn-key">F1</span> {l10n.getString('sale-pay-button')}
         </button>
-        <button className="retail-fn-btn" onClick={handleRequestClear} disabled={lines.length === 0}>
+        <button type="button" className="retail-fn-btn" onClick={handleRequestClear} disabled={lines.length === 0}>
           <span className="retail-fn-key">F2</span> {l10n.getString('retail-fn-void')}
         </button>
-        <button className="retail-fn-btn" onClick={() => setShowDiscount(true)} disabled={lines.length === 0}>
+        <button type="button" className="retail-fn-btn" onClick={() => setShowDiscount(true)} disabled={lines.length === 0}>
           <span className="retail-fn-key">F3</span> {l10n.getString('retail-fn-diskon')}
         </button>
-        <button className="retail-fn-btn" onClick={heldCartId ? handleResume : handleHold} disabled={!heldCartId && lines.length === 0}>
+        <button type="button" className="retail-fn-btn" onClick={heldCartId ? handleResume : handleHold} disabled={!heldCartId && lines.length === 0}>
           <span className="retail-fn-key">F4</span> {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
         </button>
-        <button className="retail-fn-btn" onClick={() => skuInputRef.current?.focus()}>
+        <button type="button" className="retail-fn-btn" onClick={() => skuInputRef.current?.focus()}>
           <span className="retail-fn-key">F5</span> {l10n.getString('retail-fn-cari')}
         </button>
-        <button className="retail-fn-btn" onClick={() => setShowSalesHistory(true)}>
+        <button type="button" className="retail-fn-btn" onClick={() => setShowSalesHistory(true)}>
           <span className="retail-fn-key">F6</span> {l10n.getString('retail-fn-history')}
         </button>
-        <button className="retail-fn-btn" onClick={() => setShowCustomerSearch(true)}>
+        <button type="button" className="retail-fn-btn" onClick={() => setShowCustomerSearch(true)}>
           <span className="retail-fn-key">F7</span> {l10n.getString('retail-fn-pelanggan')}
         </button>
-        <button className="retail-fn-btn" onClick={() => setShowStockInquiry(true)}>
+        <button type="button" className="retail-fn-btn" onClick={() => setShowStockInquiry(true)}>
           <span className="retail-fn-key">F8</span> {l10n.getString('retail-fn-stok')}
         </button>
         <button
+          type="button"
           className="retail-fn-btn"
           onClick={() => activeShift ? setShowCloseShift(true) : setShowOpenShift(true)}
         >
           <span className="retail-fn-key">F9</span> {activeShift ? l10n.getString('pos-shift-close-btn') : l10n.getString('pos-shift-open-btn')} {l10n.getString('retail-fn-shift')}
         </button>
-        <button className="retail-fn-btn" onClick={() => setShowOptions(true)} disabled={session?.role_name === 'cashier'} style={session?.role_name === 'cashier' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
+        <button type="button" className="retail-fn-btn" onClick={() => setShowOptions(true)} disabled={session?.role_name === 'cashier'} style={session?.role_name === 'cashier' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
           <span className="retail-fn-key">F10</span> {l10n.getString('retail-fn-options')}
         </button>
         {isEnabled(FEATURES.QUICK_RETURN) && (
-          <button className="retail-fn-btn" onClick={() => setShowQuickReturn(true)}>
+          <button type="button" className="retail-fn-btn" onClick={() => setShowQuickReturn(true)}>
             {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
           </button>
         )}
-        <button className="retail-fn-btn" onClick={() => onNavigate?.('kds')}>
+        <button type="button" className="retail-fn-btn" onClick={() => onNavigate?.('kds')}>
           <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
         </button>
         {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
-          <button className="retail-fn-btn" onClick={() => setShowTables(true)}>
+          <button type="button" className="retail-fn-btn" onClick={() => setShowTables(true)}>
             🪑 {l10n.getString('tables-title') || 'Tables'}
           </button>
         )}
@@ -1407,7 +1412,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             />
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={() => retailOpenShiftExit.requestClose()} disabled={openingShift}>{l10n.getString('cancel')}</button>
-              <button className="retail-shift-confirm-btn" onClick={handleOpenShift} disabled={openingShift}>
+              <button type="button" className="retail-shift-confirm-btn" onClick={handleOpenShift} disabled={openingShift}>
                 {openingShift ? l10n.getString('retail-open-shift-opening') : l10n.getString('pos-shift-open-btn')}
               </button>
             </div>
@@ -1448,7 +1453,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             />
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={() => retailCloseShiftExit.requestClose()} disabled={closingShift}>{l10n.getString('cancel')}</button>
-              <button className="retail-shift-confirm-btn" onClick={handleCloseShift} disabled={closingShift}>
+              <button type="button" className="retail-shift-confirm-btn" onClick={handleCloseShift} disabled={closingShift}>
                 {closingShift ? l10n.getString('loading') : l10n.getString('pos-shift-close-btn')}
               </button>
             </div>
@@ -1469,6 +1474,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             </div>
             <div className="retail-shift-modal-actions">
               <button
+                type="button"
                 className="retail-shift-confirm-btn"
                 onClick={() => retailShiftSummaryExit.requestClose()}
               >{l10n.getString('pos-shift-summary-done')}</button>
@@ -1529,7 +1535,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               </table>
             )}
             <div className="retail-shift-modal-actions">
-              <button className="retail-shift-confirm-btn" onClick={retailCreditListExit.requestClose}>{l10n.getString('close')}</button>
+              <button type="button" className="retail-shift-confirm-btn" onClick={retailCreditListExit.requestClose}>{l10n.getString('close')}</button>
             </div>
           </div>
         </div>
@@ -1552,7 +1558,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             </p>
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={retailClearConfirmExit.requestClose}>{l10n.getString('cancel')}</button>
-              <button className="retail-shift-confirm-btn" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
+              <button type="button" className="retail-shift-confirm-btn" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
             </div>
           </div>
         </div>
@@ -1678,7 +1684,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                   {l10n.getString('retail-customer-clear')}
                 </button>
               )}
-              <button className="retail-customer-close-btn" onClick={retailCustomerExit.requestClose}>{l10n.getString('close')}</button>
+              <button type="button" className="retail-customer-close-btn" onClick={retailCustomerExit.requestClose}>{l10n.getString('close')}</button>
             </div>
           </div>
         </div>
@@ -1742,8 +1748,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               })}
             </div>
             <div className="retail-qty-actions">
-              <button className="retail-qty-cancel" onClick={retailQtyExit.requestClose}>{l10n.getString('cancel')}</button>
-              <button className="retail-qty-confirm" onClick={handleConfirmQty}>{l10n.getString('retail-qty-add')}</button>
+              <button type="button" className="retail-qty-cancel" onClick={retailQtyExit.requestClose}>{l10n.getString('cancel')}</button>
+              <button type="button" className="retail-qty-confirm" onClick={handleConfirmQty}>{l10n.getString('retail-qty-add')}</button>
             </div>
           </div>
         </div>
@@ -1815,7 +1821,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
               <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
             </div>
-            <button className="retail-shortcuts-close" onClick={retailShortcutsExit.requestClose}>{l10n.getString('close')}</button>
+            <button type="button" className="retail-shortcuts-close" onClick={retailShortcutsExit.requestClose}>{l10n.getString('close')}</button>
           </div>
         </div>
       )}
@@ -1860,7 +1866,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <button type="button" onClick={retailQuickReturnExit.requestClose} disabled={quickReturnLoading}>
                 {l10n.getString('cancel')}
               </button>
-              <button className="retail-shift-confirm-btn" onClick={handleQuickReturnSubmit} disabled={quickReturnLoading || !quickReturnBarcode.trim()}>
+              <button type="button" className="retail-shift-confirm-btn" onClick={handleQuickReturnSubmit} disabled={quickReturnLoading || !quickReturnBarcode.trim()}>
                 {quickReturnLoading ? l10n.getString('loading') : (l10n.getString('retail-quick-return-lookup') || 'Look Up')}
               </button>
             </div>

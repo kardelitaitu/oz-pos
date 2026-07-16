@@ -495,6 +495,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         <div className="retail-options-sidebar">
           {TABS.map((tab) => (
             <button
+              type="button"
               key={tab.id}
               className={`retail-options-tab${activeTab === tab.id ? ' retail-options-tab--active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
@@ -504,6 +505,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
           ))}
           <div style={{ flex: 1 }} />
           <button
+            type="button"
             className="retail-options-tab retail-options-tab--danger"
             onClick={onClose}
           >
@@ -655,10 +657,10 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </div>
               </div>
             </div>
-              <div className="retail-options-preview" role="button" tabIndex={0} onClick={() => setShowPreview(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(true); } }}>
+              <button type="button" className="retail-options-preview" onClick={() => setShowPreview(true)}>
                 <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={taxRates} />
                 <span className="retail-options-preview-hint">{l10n.getString('settings-click-preview')}</span>
-              </div>
+              </button>
             </div>
           )}
 
@@ -1196,10 +1198,10 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
           {/* ── Save / Close buttons ────────────── */}
           <div className="retail-options-footer">
-            <button className="retail-options-btn retail-options-btn--primary" onClick={handleSave} disabled={saving}>
+            <button type="button" className="retail-options-btn retail-options-btn--primary" onClick={handleSave} disabled={saving}>
               {saving ? l10n.getString('settings-saving-btn') : l10n.getString('save')}
             </button>
-            <button className="retail-options-btn" onClick={onClose}>
+            <button type="button" className="retail-options-btn" onClick={onClose}>
               {l10n.getString('close')}
             </button>
           </div>
@@ -1208,13 +1210,11 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       {showPreview && (
         <div
           className="retail-preview-overlay"
-          role="button"
-          tabIndex={0}
+          role="presentation"
           onClick={(e) => { if (e.target === e.currentTarget) setShowPreview(false); }}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(false); } }}
         >
           <div className="retail-preview-modal" role="dialog" aria-modal="true" aria-label={l10n.getString('settings-receipt-heading')}>
-            <button className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
+            <button type="button" className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
             <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={[]} scale={SCALE} />
           </div>
         </div>
