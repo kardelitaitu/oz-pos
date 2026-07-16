@@ -541,6 +541,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 type="button"
                 className="restaurant-hamburger-item"
                 role="menuitem"
+                aria-label={l10n.getString(theme === 'dark' ? 'restaurant-theme-light' : 'restaurant-theme-dark')}
                 onClick={() => { toggleTheme(); setMenuOpen(false); }}
               >
                 <Localized id={theme === 'dark' ? 'restaurant-theme-light' : 'restaurant-theme-dark'}>
@@ -551,6 +552,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 type="button"
                 className="restaurant-hamburger-item"
                 role="menuitem"
+                aria-label={l10n.getString('restaurant-lock-terminal')}
                 onClick={() => { logout(); setMenuOpen(false); }}
               >
                 <Localized id="restaurant-lock-terminal"><span>Lock Terminal</span></Localized>
@@ -559,6 +561,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 type="button"
                 className="restaurant-hamburger-item"
                 role="menuitem"
+                aria-label={l10n.getString('restaurant-toggle-fullscreen')}
                 onClick={() => { toggleFullscreen(); setMenuOpen(false); }}
               >
                 <Localized id="restaurant-toggle-fullscreen"><span>Toggle Fullscreen</span></Localized>
@@ -682,6 +685,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <button
             type="button"
             className="restaurant-context-item"
+            aria-label={l10n.getString(contextMenu.isPinned ? 'restaurant-context-unpin' : 'restaurant-context-pin')}
             onClick={() => togglePin(contextMenu.sku)}
             role="menuitem"
           >
@@ -692,6 +696,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <button
             type="button"
             className="restaurant-context-item"
+            aria-label={l10n.getString(contextMenu.isUnavailable ? 'restaurant-context-available' : 'restaurant-context-unavailable')}
             onClick={() => toggleUnavailable(contextMenu.sku)}
             role="menuitem"
           >

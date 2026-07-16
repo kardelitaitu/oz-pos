@@ -974,6 +974,7 @@ export default function PaymentModal({
                       <button
                         type="button"
                         className="payment-quick-btn"
+                        aria-label={l10n.getString('payment-tender-exact')}
                         onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
                       >
                         <Localized id="payment-tender-exact">
@@ -1007,10 +1008,10 @@ export default function PaymentModal({
                         Generate a QRIS QR code for the customer to scan with their payment app.
                       </p>
                     </Localized>
-                    <Localized id="payment-qris-btn-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-qris-btn"
+                      aria-label={l10n.getString('payment-qris-pay')}
                       onClick={handleQrPay}
                       disabled={processing}
                     >
@@ -1018,7 +1019,6 @@ export default function PaymentModal({
                         <span>Pay with QR</span>
                       </Localized>
                     </button>
-                    </Localized>
                   </div>
                 )}
               </>
@@ -1031,28 +1031,26 @@ export default function PaymentModal({
                     <span className="payment-section-title">Split Payments</span>
                   </Localized>
                   <div className="payment-split-actions">
-                    <Localized id="payment-split-evenly-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-split-btn"
+                      aria-label={l10n.getString('payment-split-evenly')}
                       onClick={autoSplitEvenly}
                     >
                       <Localized id="payment-split-evenly">
                         <span>Split Evenly</span>
                       </Localized>
                     </button>
-                    </Localized>
-                    <Localized id="payment-split-add-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-split-btn"
+                      aria-label={l10n.getString('payment-split-add')}
                       onClick={addSplit}
                     >
                       <Localized id="payment-split-add">
                         <span>+ Add Split</span>
                       </Localized>
                     </button>
-                    </Localized>
                   </div>
                 </div>
 
@@ -1085,6 +1083,7 @@ export default function PaymentModal({
                             <input
                               type="text"
                               className="payment-split-other-input"
+                              aria-label="Payment method name"
                               placeholder="Other"
                               value={s.otherLabel}
                               onChange={(e) => updateSplit(s.id, { otherLabel: e.target.value })}
@@ -1109,16 +1108,15 @@ export default function PaymentModal({
                         </Localized>
                         </Localized>
                       </div>
-                      <Localized id="payment-split-remove-aria" attrs={{ 'aria-label': true }}>
                       <button
                         type="button"
                         className="payment-split-remove"
+                        aria-label={l10n.getString('payment-split-remove-aria')}
                         onClick={() => removeSplit(s.id)}
                         disabled={splits.length <= 1}
                       >
                         &times;
                       </button>
-                      </Localized>
                     </div>
                   ))}
                 </div>
@@ -1142,8 +1140,9 @@ export default function PaymentModal({
             )}
 
             <div className="payment-split-toggle">
-              <label className="payment-split-toggle-label">
+              <label className="payment-split-toggle-label" htmlFor="payment-split-toggle-cb">
                 <input
+                  id="payment-split-toggle-cb"
                   type="checkbox"
                   checked={splitMode}
                   onChange={(e) => setSplitMode(e.target.checked)}
@@ -1270,6 +1269,7 @@ export default function PaymentModal({
                   <input
                     className="payment-customer-search-input"
                     type="text"
+                    aria-label="Search customers"
                     placeholder="Search by name, phone, or email..."
                     value={customerSearchQuery}
                     onChange={(e) => setCustomerSearchQuery(e.target.value)}

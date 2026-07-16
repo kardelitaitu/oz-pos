@@ -310,6 +310,7 @@ export default function StockTransfersScreen() {
             type="button"
             role="tab"
             aria-selected={statusFilter === s}
+            aria-label={l10n.getString(`stock-transfers-status-${s}`)}
             className={`stock-transfers-filter-btn${statusFilter === s ? ' active' : ''}`}
             onClick={() => setStatusFilter(s)}
           >
@@ -425,6 +426,7 @@ export default function StockTransfersScreen() {
                         type="button"
                         className="stock-transfers-action-btn stock-transfers-action-btn--danger"
                         disabled={cancelling === t.id}
+                        aria-label={l10n.getString('stock-transfers-cancel')}
                         onClick={() => handleCancel(t.id)}
                       >
                         <Localized id="stock-transfers-cancel">
@@ -657,6 +659,7 @@ export default function StockTransfersScreen() {
                   </div>
                 ))}
                 <datalist id="product-skus">
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- <option> inside <datalist>; false positive */}
                   {products.map((p) => <option key={p.sku} value={p.sku} />)}
                 </datalist>
               </div>
