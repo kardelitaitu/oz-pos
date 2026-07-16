@@ -59,10 +59,6 @@ vi.mock('@/components/Button', () => ({
   ),
 }));
 
-vi.mock('@/components/Spinner', () => ({
-  Spinner: (props: Record<string, unknown>) => <div data-testid="spinner" aria-label={props['aria-label'] as string} />,
-}));
-
 vi.mock('@/features/reports/InventoryReportScreen.css', () => ({}));
 
 // ── helpers ────────────────────────────────────────────────────────────
@@ -104,10 +100,11 @@ describe('InventoryReportScreen', () => {
   });
 
   // ── Loading state ──────────────────────────────────────────────────
-  it('shows loading spinner initially', () => {
+  it('shows loading skeleton initially', () => {
     renderScreen();
-    expect(screen.getByTestId('spinner')).toBeTruthy();
-    expect(screen.getByTestId('spinner').getAttribute('aria-label')).toBe('Loading inventory report');
+    const skeleton = document.querySelector('.inventory-report-loading-skeleton');
+    expect(skeleton).toBeTruthy();
+    expect(skeleton?.getAttribute('aria-hidden')).toBe('true');
   });
 
   // ── Error state ────────────────────────────────────────────────────

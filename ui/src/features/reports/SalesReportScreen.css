@@ -215,6 +215,13 @@
   }
 }
 
+/* ── Loading skeleton ─────────────────────────────────────────── */
+
+.sales-report-loading-skeleton {
+  padding: var(--space-4);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .sales-report-input {
     transition: border-color 0.15s, box-shadow 0.15s;

@@ -4,7 +4,7 @@ import { printSalesReceipt } from '@/api/sales';
 import { getLowStockAlerts, type LowStockAlert } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { Spinner } from '@/components/Spinner';
+import { Skeleton } from '@/components/Skeleton';
 import './InventoryReportScreen.css';
 
 /** Inventory report screen — view and export low-stock alerts with configurable threshold, CSV download, and print support. */
@@ -61,8 +61,31 @@ export default function InventoryReportScreen() {
 
   if (loading) {
     return (
-      <div className="inventory-report">
-        <Spinner aria-label={l10n.getString('inv-report-loading-aria')} />
+      <div className="inventory-report-loading-skeleton" aria-hidden="true">
+        {/* Header: title + controls */}
+        <div className="inventory-report-header">
+          <Skeleton width="10rem" height="1.75rem" />
+          <div className="inventory-report-controls">
+            <Skeleton width="4rem" height="2rem" />
+            <Skeleton width="4rem" height="2rem" />
+            <Skeleton width="6rem" height="2rem" />
+          </div>
+        </div>
+        {/* Table card */}
+        <Card shadow="sm" className="inventory-report-table-card">
+          <div className="inventory-report-table-header">
+            <Skeleton width="5rem" height="0.75rem" />
+            <Skeleton width="4rem" height="0.75rem" />
+            <Skeleton width="3rem" height="0.75rem" />
+          </div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="inventory-report-row">
+              <Skeleton width="4rem" height="0.875rem" />
+              <Skeleton width="7rem" height="0.875rem" />
+              <Skeleton width="2rem" height="0.875rem" />
+            </div>
+          ))}
+        </Card>
       </div>
     );
   }

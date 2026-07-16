@@ -29,7 +29,7 @@ import {
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { Spinner } from '@/components/Spinner';
+import { Skeleton } from '@/components/Skeleton';
 import './SalesReportScreen.css';
 
 const PIE_COLORS = [
@@ -186,9 +186,57 @@ export default function SalesReportScreen() {
   };
 
   if (loading) {
-  return (
-      <div className="sales-report">
-        <Spinner aria-label="Loading sales report" />
+    return (
+      <div className="sales-report-loading-skeleton" aria-hidden="true">
+        {/* Header: title + controls */}
+        <div className="sales-report-header">
+          <Skeleton width="10rem" height="1.75rem" />
+          <div className="sales-report-controls">
+            <Skeleton width="5rem" height="2rem" />
+            <Skeleton width="5rem" height="2rem" />
+            <Skeleton width="8rem" height="2rem" />
+            <Skeleton width="4rem" height="2rem" />
+            <Skeleton width="6rem" height="2rem" />
+          </div>
+        </div>
+        {/* Revenue chart card */}
+        <Card shadow="sm" className="sales-report-chart-card">
+          <Skeleton width="5rem" height="1.25rem" />
+          <Skeleton variant="block" width="100%" height="300px" style={{ borderRadius: 'var(--radius-lg)', marginTop: 'var(--space-3)' }} />
+          <div className="sales-report-totals" style={{ marginTop: 'var(--space-3)' }}>
+            <Skeleton width="6rem" height="1rem" />
+            <Skeleton width="4rem" height="1rem" />
+          </div>
+        </Card>
+        {/* Two-column layout */}
+        <div className="sales-report-columns">
+          <Card shadow="sm" className="sales-report-chart-card">
+            <Skeleton width="6rem" height="1.25rem" />
+            <Skeleton variant="block" width="100%" height="250px" style={{ borderRadius: 'var(--radius-lg)', marginTop: 'var(--space-3)' }} />
+          </Card>
+          <Card shadow="sm" className="sales-report-chart-card">
+            <Skeleton width="6rem" height="1.25rem" />
+            {/* 4-column table header + 4 skeleton rows */}
+            <div className="sales-report-top-header">
+              <Skeleton width="1rem" height="0.75rem" />
+              <Skeleton width="3rem" height="0.75rem" />
+              <Skeleton width="2rem" height="0.75rem" />
+              <Skeleton width="3rem" height="0.75rem" />
+            </div>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="sales-report-top-row">
+                <Skeleton width="1rem" height="0.875rem" />
+                <Skeleton width="5rem" height="0.875rem" />
+                <Skeleton width="2rem" height="0.875rem" />
+                <Skeleton width="4rem" height="0.875rem" />
+              </div>
+            ))}
+          </Card>
+        </div>
+        {/* Heatmap card */}
+        <Card shadow="sm" className="sales-report-chart-card">
+          <Skeleton width="6rem" height="1.25rem" />
+        </Card>
       </div>
     );
   }

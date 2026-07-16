@@ -2,6 +2,13 @@
   padding: var(--space-4);
 }
 
+/* ── Loading skeleton ───────────────────────────────────────── */
+
+.inventory-report-loading-skeleton {
+  padding: var(--space-4);
+  pointer-events: none;
+}
+
 .inventory-report-header {
   display: flex;
   flex-wrap: wrap;
