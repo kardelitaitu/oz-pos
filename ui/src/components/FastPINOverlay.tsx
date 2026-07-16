@@ -406,10 +406,12 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
 
   if (!open && !exiting) return null;
 
+  // Escape key is handled via document-level keydown listener
+  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
   return (
     <div
       className={`fastpin-overlay${exiting ? ' fastpin-overlay--exiting' : ''}`}
-      role="presentation"
+      aria-hidden="true"
       onClick={(e) => {
         if (e.target === e.currentTarget && !loading) handleClose();
       }}
