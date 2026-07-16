@@ -112,7 +112,24 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **Duplicate 'Language' label**: Removed parent `<span>` wrapper, `LanguageSelector` now controls its own label.
 - **ScreenExtraction test (2 failures)**: Added `settings-btn-revert--hidden` and `settings-save-dot--hidden` to `externalClasses` for the `SettingsPage` entry — these template-literal constructed classes were falsely flagged as dead by the static CSS parser.
 - **Shared SettingsPopup component**: New `SettingsPopup` component (`ui/src/frontend/shared/SettingsPopup.tsx`) that standardises settings CRUD modals across all pages. Self-contained overlay + panel via `createPortal` with keyboard trap (Escape/Tab), focus management, body scroll lock, error display with SVG icon, default Cancel/Save footer with loading state, and size variants (sm/md/lg). Migrated StaffManagementScreen and TerminalManagementScreen (both add/edit + delete modals) from inline overlay/Modal implementations to `SettingsPopup`. Removed ~150 lines of dead modal CSS (`staff-mgmt-error`, `terminal-mgmt-overlay`, `terminal-mgmt-modal`, `terminal-mgmt-modal-header`, `terminal-mgmt-modal-close`, `terminal-mgmt-modal-body`, `terminal-mgmt-modal-actions`).
-- **TaxConfigurationScreen → SettingsPopup**: Migrated both add/edit tax rate modal and category tax rates modal from inline overlay implementation to `SettingsPopup`. Removed dead CSS classes (`tax-config-overlay`, `tax-config-modal`, etc.). All 6 TaxConfiguration tests passing.
+- **CustomerManagementScreen → SettingsPopup**: Migrated inline modal to SettingsPopup. Removed 6 dead CSS classes (overlay, modal, header, close, body, actions, error). 15/15 tests pass.
+- **SuppliersScreen → SettingsPopup**: Migrated inline modal to SettingsPopup. Added 5 new FTL keys (EN + ID). Removed dead CSS. 16/16 tests pass.
+- **VariantManagementScreen → SettingsPopup**: Migrated nested add/edit + delete confirmation modals to SettingsPopup.
+- **BundleManagementScreen → SettingsPopup**: Migrated add/edit modal with dynamic bundle item rows to SettingsPopup `size=lg`.
+- **CategoryManagementScreen → SettingsPopup**: Migrated all 3 modals (create, edit, delete) to SettingsPopup. Memoized `onClose` handlers to prevent focus-trap effect re-runs.
+- **TaxConfigurationScreen → SettingsPopup**: Migrated both add/edit tax rate modal and category tax rates modal from inline overlay implementation to SettingsPopup. Removed dead CSS classes. All 6 tests passing.
+- **ShiftManagementScreen overlay backdrop**: Upgraded all 5 modal overlays from plain `var(--color-bg-overlay)` to `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)`, matching Modal/SettingsPopup pattern. Added reduced-motion blur disable. Exit animations preserved.
+- **SettingsPopup reduced-motion cleanup**: Added `backdrop-filter: none` to reduced-motion media query, matching `components.css` pattern.
+- **SettingsSelect dropdown background**: Fixed from `var(--color-bg)` to `var(--color-bg-elevated)` to match Modal/SettingsPopup pattern and avoid subtle color mismatch with trigger.
+- **Skeleton loading (4 screens)**: Replaced plain text loading messages with proper skeleton structures matching real layout:
+  - **AuditLogScreen**: Filters skeleton (search bar + outcome chips) + 6-row table skeleton with column-matching widths.
+  - **OfflineQueueScreen**: Header skeleton (title + Sync All button) + 5-row table skeleton (7 columns).
+  - **ShiftManagementScreen**: Active shift card skeleton (header + 6 stat rows) + 4-row table skeleton (9 columns).
+  - **MultiStoreDashboardScreen**: 4 stat card skeletons + section title + 3 store card skeletons.
+- **Receipt footer textarea**: Changed from single-line `<input>` to `<textarea rows=3 maxLength=500>` with character count hint.
+- **MultiStoreDashboardScreen hover polish**: Added `transition` + `:hover` border-color/shadow to stat cards.
+- **OfflineQueueScreen table polish**: Wrapped table in bordered/rounded container with thead styling (uppercase, bg-secondary), row hover states, last-row border cleanup.
+- **Responsive mobile layout**: Settings form fields now stack vertically at ≤768px (`.settings-field--horizontal` → `flex-direction: column`) to prevent label/input overflow on small screens.
 - **SettingsPage tests (3 failures)**: Added `Element.prototype.scrollIntoView = vi.fn()` mock for jsdom compatibility (used by `SettingsSelect`). Updated 3 tests (`renders Currency section`, `changes default currency`, `changes decimal separator`) to interact with the custom `SettingsSelect` component (click trigger button → click `role="option"` in portal) instead of native `<select>` API.
 
 

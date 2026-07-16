@@ -729,6 +729,16 @@
     padding: var(--space-4);
   }
 
+  .settings-field--horizontal {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .settings-field--horizontal .settings-label {
+    min-width: 0;
+    padding-top: 0;
+  }
+
   .settings-sidebar {
     position: fixed;
     top: 0;
