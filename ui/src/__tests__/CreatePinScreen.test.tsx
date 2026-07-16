@@ -1,6 +1,13 @@
+// ── CreatePinScreen interaction tests ──────────────────────────────
+//
+// Covers: form validation, API interaction, form input behavior.
+// Uses fireEvent.change for form fields (saves ~20ms/char vs
+// userEvent.type — the component only reads values on submit)
+// and fireEvent.click for the submit button.
+// 10 tests (2 sync render tests moved to CreatePinScreenRender.test.tsx).
+
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import CreatePinScreen from '@/features/auth/CreatePinScreen';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -45,56 +52,69 @@ function renderScreen() {
   return renderWithProvidersSync(<CreatePinScreen onCreated={onCreated} />, sharedFtl);
 }
 
+// ── Field helpers (fireEvent.change ~1ms vs userEvent.type ~20ms/char) ─
+
+function fillField(label: string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+}
+
+function fillAllFields(overrides: Partial<Record<string, string>> = {}) {
+  fillField('Display Name', overrides['Display Name'] ?? 'Store Owner');
+  fillField('Username', overrides['Username'] ?? 'admin');
+  fillField('PIN', overrides['PIN'] ?? '1234');
+  fillField('Confirm PIN', overrides['Confirm PIN'] ?? '1234');
+}
+
+function clickSubmit() {
+  fireEvent.click(screen.getByRole('button', { name: /create owner account/i }));
+}
+
 describe('CreatePinScreen', () => {
   describe('validation', () => {
-    it('shows error when all fields are whitespace-only', async () => {
+    it('shows error when all fields are whitespace-only', () => {
       renderScreen();
-      const user = userEvent.setup();
 
-      await user.type(screen.getByLabelText('Display Name'), '   ');
-      await user.type(screen.getByLabelText('Username'), '   ');
-      await user.type(screen.getByLabelText('PIN'), '    ');
-      await user.type(screen.getByLabelText('Confirm PIN'), '    ');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillField('Display Name', '   ');
+      fillField('Username', '   ');
+      fillField('PIN', '    ');
+      fillField('Confirm PIN', '    ');
+      clickSubmit();
 
       expect(screen.getByRole('alert')).toHaveTextContent('All fields are required.');
     });
 
-    it('shows error when display name is whitespace-only', async () => {
+    it('shows error when display name is whitespace-only', () => {
       renderScreen();
-      const user = userEvent.setup();
 
-      await user.type(screen.getByLabelText('Display Name'), '   ');
-      await user.type(screen.getByLabelText('Username'), 'owner');
-      await user.type(screen.getByLabelText('PIN'), '1234');
-      await user.type(screen.getByLabelText('Confirm PIN'), '1234');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillField('Display Name', '   ');
+      fillField('Username', 'owner');
+      fillField('PIN', '1234');
+      fillField('Confirm PIN', '1234');
+      clickSubmit();
 
       expect(screen.getByRole('alert')).toHaveTextContent('All fields are required.');
     });
 
-    it('shows error when PIN is too short', async () => {
+    it('shows error when PIN is too short', () => {
       renderScreen();
-      const user = userEvent.setup();
 
-      await user.type(screen.getByLabelText('Display Name'), 'Owner');
-      await user.type(screen.getByLabelText('Username'), 'owner');
-      await user.type(screen.getByLabelText('PIN'), '12');
-      await user.type(screen.getByLabelText('Confirm PIN'), '12');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillField('Display Name', 'Owner');
+      fillField('Username', 'owner');
+      fillField('PIN', '12');
+      fillField('Confirm PIN', '12');
+      clickSubmit();
 
       expect(screen.getByRole('alert')).toHaveTextContent('PIN must be at least 4 characters.');
     });
 
-    it('shows error when PINs do not match', async () => {
+    it('shows error when PINs do not match', () => {
       renderScreen();
-      const user = userEvent.setup();
 
-      await user.type(screen.getByLabelText('Display Name'), 'Owner');
-      await user.type(screen.getByLabelText('Username'), 'owner');
-      await user.type(screen.getByLabelText('PIN'), '1234');
-      await user.type(screen.getByLabelText('Confirm PIN'), '5678');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillField('Display Name', 'Owner');
+      fillField('Username', 'owner');
+      fillField('PIN', '1234');
+      fillField('Confirm PIN', '5678');
+      clickSubmit();
 
       expect(screen.getByRole('alert')).toHaveTextContent('PINs do not match.');
     });
@@ -107,13 +127,8 @@ describe('CreatePinScreen', () => {
       });
 
       renderScreen();
-      const user = userEvent.setup();
-
-      await user.type(screen.getByLabelText('Display Name'), 'Store Owner');
-      await user.type(screen.getByLabelText('Username'), 'admin');
-      await user.type(screen.getByLabelText('PIN'), '1234');
-      await user.type(screen.getByLabelText('Confirm PIN'), '1234');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillAllFields();
+      clickSubmit();
 
       await waitFor(() => {
         expect(mockBootstrapOwner).toHaveBeenCalledWith({
@@ -134,13 +149,8 @@ describe('CreatePinScreen', () => {
       mockBootstrapOwner.mockRejectedValue(new Error('Staff already exist'));
 
       renderScreen();
-      const user = userEvent.setup();
-
-      await user.type(screen.getByLabelText('Display Name'), 'Store Owner');
-      await user.type(screen.getByLabelText('Username'), 'admin');
-      await user.type(screen.getByLabelText('PIN'), '1234');
-      await user.type(screen.getByLabelText('Confirm PIN'), '1234');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillAllFields();
+      clickSubmit();
 
       await waitFor(() => {
         expect(onCreated).toHaveBeenCalled();
@@ -151,13 +161,8 @@ describe('CreatePinScreen', () => {
       mockBootstrapOwner.mockRejectedValue(new Error('Network error'));
 
       renderScreen();
-      const user = userEvent.setup();
-
-      await user.type(screen.getByLabelText('Display Name'), 'Store Owner');
-      await user.type(screen.getByLabelText('Username'), 'admin');
-      await user.type(screen.getByLabelText('PIN'), '1234');
-      await user.type(screen.getByLabelText('Confirm PIN'), '1234');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillAllFields();
+      clickSubmit();
 
       await waitFor(() => {
         expect(screen.getByRole('alert')).toHaveTextContent('Network error');
@@ -168,13 +173,8 @@ describe('CreatePinScreen', () => {
       mockBootstrapOwner.mockRejectedValue('string error');
 
       renderScreen();
-      const user = userEvent.setup();
-
-      await user.type(screen.getByLabelText('Display Name'), 'Store Owner');
-      await user.type(screen.getByLabelText('Username'), 'admin');
-      await user.type(screen.getByLabelText('PIN'), '1234');
-      await user.type(screen.getByLabelText('Confirm PIN'), '1234');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillAllFields();
+      clickSubmit();
 
       await waitFor(() => {
         expect(screen.getByRole('alert')).toHaveTextContent('string error');
@@ -183,26 +183,12 @@ describe('CreatePinScreen', () => {
   });
 
   describe('form inputs', () => {
-    it('renders all form fields', () => {
-      renderScreen();
-
-      expect(screen.getByLabelText('Display Name')).toBeTruthy();
-      expect(screen.getByLabelText('Username')).toBeTruthy();
-      expect(screen.getByLabelText('PIN')).toBeTruthy();
-      expect(screen.getByLabelText('Confirm PIN')).toBeTruthy();
-    });
-
     it('disables inputs while loading', async () => {
       mockBootstrapOwner.mockImplementation(() => new Promise(() => {}));
 
       renderScreen();
-      const user = userEvent.setup();
-
-      await user.type(screen.getByLabelText('Display Name'), 'Store Owner');
-      await user.type(screen.getByLabelText('Username'), 'admin');
-      await user.type(screen.getByLabelText('PIN'), '1234');
-      await user.type(screen.getByLabelText('Confirm PIN'), '1234');
-      await user.click(screen.getByRole('button', { name: /create owner account/i }));
+      fillAllFields();
+      clickSubmit();
 
       await waitFor(() => {
         expect(screen.getByLabelText('Display Name')).toBeDisabled();
@@ -212,30 +198,13 @@ describe('CreatePinScreen', () => {
       });
     });
 
-    it('converts username to lowercase', async () => {
+    it('converts username to lowercase', () => {
       renderScreen();
-      const user = userEvent.setup();
 
       const input = screen.getByLabelText('Username') as HTMLInputElement;
-      await user.type(input, 'ADMIN');
+      fireEvent.change(input, { target: { value: 'ADMIN' } });
 
       expect(input.value).toBe('admin');
-    });
-  });
-
-  describe('form labels', () => {
-    it('uses placeholder attributes on inputs', () => {
-      renderScreen();
-
-      const displayName = screen.getByLabelText('Display Name') as HTMLInputElement;
-      const username = screen.getByLabelText('Username') as HTMLInputElement;
-      const pin = screen.getByLabelText('PIN') as HTMLInputElement;
-      const confirmPin = screen.getByLabelText('Confirm PIN') as HTMLInputElement;
-
-      expect(displayName.placeholder).toBe('Store Owner');
-      expect(username.placeholder).toBe('owner');
-      expect(pin.placeholder).toBe('At least 4 digits');
-      expect(confirmPin.placeholder).toBe('Re-enter PIN');
     });
   });
 });
