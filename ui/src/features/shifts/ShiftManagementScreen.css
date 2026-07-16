@@ -511,6 +511,7 @@
 
 .shift-mgmt-input:focus {
   border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .shift-mgmt-input:disabled {
@@ -534,6 +535,7 @@
 
 .shift-mgmt-textarea:focus {
   border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .shift-mgmt-textarea:disabled {

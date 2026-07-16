@@ -180,6 +180,7 @@
 
 .fastpin-input:focus {
   border-color: var(--color-border-focus);
+  box-shadow: inset 0 0 0 1px var(--color-accent-subtle);
 }
 
 .fastpin-input:disabled {
