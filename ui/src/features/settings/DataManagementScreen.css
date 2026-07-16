@@ -300,6 +300,8 @@
   background: var(--color-accent-subtle);
 }
 
+
+
 .data-mgmt-file-dropzone p {
   font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
@@ -396,6 +398,12 @@
   padding: var(--space-4);
   background: var(--color-bg-surface);
   border-radius: var(--radius-sm);
+  animation: data-mgmt-backup-fade-in var(--duration-300) var(--ease-out);
+}
+
+@keyframes data-mgmt-backup-fade-in {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .data-mgmt-backup-row {
