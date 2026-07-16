@@ -1678,6 +1678,7 @@
 .retail-receipt-item {
   display: flex;
   padding: 2px 0;
+  min-width: 0;
 }
 
 .retail-receipt-item-name {
