@@ -120,22 +120,35 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **TaxConfigurationScreen → SettingsPopup**: Migrated both add/edit tax rate modal and category tax rates modal from inline overlay implementation to SettingsPopup. Removed dead CSS classes. All 6 tests passing.
 - **ShiftManagementScreen overlay backdrop**: Upgraded all 5 modal overlays from plain `var(--color-bg-overlay)` to `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)`, matching Modal/SettingsPopup pattern. Added reduced-motion blur disable. Exit animations preserved.
 - **SettingsPopup reduced-motion cleanup**: Added `backdrop-filter: none` to reduced-motion media query, matching `components.css` pattern.
+- **About page polish**: Migrated System & License Ownership card from old `.settings-license-row` pattern to the standard `.settings-field--horizontal` layout for visual consistency with General/Receipt/Sync sections. Updates card now shows inline status states (Up to date, version available, Check failed, Checking…, Not checked) with color-coded modifiers (`--active` green, `--inactive` muted, `--warning` orange). Removed dead CSS classes (`.settings-license-section`, `.settings-license-row`, `.settings-license-row--last`, `.settings-license-label`). Added `settings-update-status-label` and `settings-update-not-checked` Fluent keys to both EN/ID locales.
 - **SettingsSelect dropdown background**: Fixed from `var(--color-bg)` to `var(--color-bg-elevated)` to match Modal/SettingsPopup pattern and avoid subtle color mismatch with trigger.
-- **Skeleton loading (14 screens)**: Replaced plain text loading messages with proper skeleton structures matching real layout:
-  - **AuditLogScreen**: Filters skeleton (search bar + outcome chips) + 6-row table skeleton with column-matching widths.
-  - **OfflineQueueScreen**: Header skeleton (title + Sync All button) + 5-row table skeleton (7 columns).
-  - **ShiftManagementScreen**: Active shift card skeleton (header + 6 stat rows) + 4-row table skeleton (9 columns).
-  - **MultiStoreDashboardScreen**: 4 stat card skeletons + section title + 3 store card skeletons.
-  - **FeatureToggleScreen**: Header + search bar + 3 group card skeletons (each with header + 4 feature rows).
-  - **TaxConfigurationScreen**: Header + 5-column table (Name, Rate, Type, Default, Actions) with 4 skeleton rows.
-  - **CustomerManagementScreen**: Header + search bar + 5-column table (Name with avatar, Email, Phone, Notes, Actions) with 4 skeleton rows.
-  - **SuppliersScreen**: Header + search bar + 7-column table (Code, Name, Contact, Phone, Email, Status, Actions) with 4 skeleton rows.
+- **Skeleton loading (24 screens)**: Replaced plain text loading messages with proper skeleton structures matching real layout across all settings-adjacent screens:
+  - **AuditLogScreen**: Filters skeleton (search bar + outcome chips) + 6-row table skeleton.
+  - **OfflineQueueScreen**: Header skeleton + 5-row table skeleton (7 columns).
+  - **ShiftManagementScreen**: Shift card skeleton + 4-row table skeleton (9 columns).
+  - **MultiStoreDashboardScreen**: 4 stat card skeletons + 3 store card skeletons.
+  - **FeatureToggleScreen**: Header + search bar + 3 group card skeletons.
+  - **TaxConfigurationScreen**: Header + 5-column table with 4 skeleton rows.
+  - **CustomerManagementScreen**: Header + search bar + 5-column table with 4 skeleton rows.
+  - **SuppliersScreen**: Header + search bar + 7-column table with 4 skeleton rows.
   - **PromotionManagementScreen**: Header + 7-column table (Name, Type, Value, Active, Starts, Ends, Actions) with 4 skeleton rows.
-  - **TerminalManagementScreen**: Header + 6-column table (Name, Device ID, Status, Last Seen, Created, Actions) with 4 skeleton rows.
-  - **LoyaltyManagementScreen**: Header with Accounts/Tiers tabs + 7-column table (Customer, Tier, Points, Lifetime, Next Tier, Points to Next, expand) with 4 skeleton rows.
-  - **CategoryManagementScreen**: Header + 6 card grid skeletons (circle icon + name/id/colour text + edit/delete buttons).
-  - **ProductManagementScreen**: Header + 8-column table (SKU, Name, Category, Price, Barcode, Type, Stock, 3 action buttons) with 4 skeleton rows.
-  - **PurchaseOrdersScreen**: Header + 6 filter pill skeletons + 8-column table (PO#, Supplier, Status, Order Date, Expected, Total, Items, Actions) with 4 skeleton rows.
+  - **TerminalManagementScreen**: Header + 6-column table with 4 skeleton rows.
+  - **LoyaltyManagementScreen**: Header with tabs + 7-column table with 4 skeleton rows.
+  - **CategoryManagementScreen**: Header + 6 card grid skeletons.
+  - **ProductManagementScreen**: Header + 8-column table with 4 skeleton rows.
+  - **PurchaseOrdersScreen**: Header + 6 filter pill skeletons + 8-column table with 4 skeleton rows.
+  - **VariantManagementScreen**: Inline skeleton inside modal — 6-column table (Name, SKU, Price, Barcode, Status, Actions) with 4 rows, using existing product-mgmt-table CSS.
+  - **StockCountsScreen**: Header + 5 filter buttons + 4 card skeletons (number+status badge, type+date, view link).
+  - **StockTransfersScreen**: Header + 6 filter tab pills + 6-column table (Transfer#, Status, Source, Destination, Created, Actions) with 4 rows.
+  - **InventoryAdjustmentScreen**: 5 product-item skeletons inside search area replacing 'Loading products…' text.
+  - **StockCountDetail**: Full layout skeleton — back button, title, meta row (badge, type, date), actions button, 6-column lines table with 4 skeleton rows.
+  - **StockCountHistory**: Header + 4 list item skeletons + detail panel with 5-column table and 4 skeleton rows.
+  - **ExchangeRateScreen**: Header + 6-column table (From, To, Rate, Source, Effective Date, Actions) with 4 skeleton rows.
+  - **BundleManagementScreen**: Header + 6-column table (Name, SKU, Price, Items, Active pill, Actions) with 4 skeleton rows.
+  - **GiftCardsScreen**: Header + toolbar (search+filter) + 3 card skeletons with status badge pills via Card component.
+  - **StaffManagementScreen**: Header + 6-column table (Role pill, Workspace, Name, Username, Status, Actions) with 4 skeleton rows.
+  - All skeletons use `aria-hidden="true"` parent containers, `pointer-events: none`, and mirror real table/grid layouts.
+  - Removed dead CSS classes (`-loading` variants) from all converted screens.
 - **Receipt footer textarea**: Changed from single-line `<input>` to `<textarea rows=3 maxLength=500>` with character count hint.
 - **MultiStoreDashboardScreen hover polish**: Added `transition` + `:hover` border-color/shadow to stat cards.
 - **OfflineQueueScreen table polish**: Wrapped table in bordered/rounded container with thead styling (uppercase, bg-secondary), row hover states, last-row border cleanup.
