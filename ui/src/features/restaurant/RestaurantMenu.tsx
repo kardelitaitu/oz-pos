@@ -758,13 +758,12 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
   if (added) cardClass += ' restaurant-card--added';
 
   return (
-    <div
+    <button
+      type="button"
       className={cardClass}
-      role="button"
-      tabIndex={product.inStock ? 0 : undefined}
+      tabIndex={product.inStock ? 0 : -1}
       onClick={handleClick}
       onContextMenu={handleContext}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
       style={{ '--btn-color': color ?? 'var(--color-accent)', animationDelay: `${(index ?? 0) * 35}ms` } as React.CSSProperties}
     >
       <div className="restaurant-card-body">
@@ -783,6 +782,6 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
           <span>Add</span>
         </Localized>
       </span>
-    </div>
+    </button>
   );
 }
