@@ -87,9 +87,12 @@ describe('RetailOptionsScreen', () => {
     const { getStoreSettings } = await import('@/api/settings');
     vi.mocked(getStoreSettings).mockImplementationOnce(() => new Promise(() => {}));
 
-    render(wrap());
+    const { container } = render(wrap());
 
-    expect(screen.getByText('Loading\u2026')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(container.querySelector('.retail-options-loading-skeleton')).toBeInTheDocument();
+    });
+    expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
   });
 
   it('renders the General tab by default', async () => {

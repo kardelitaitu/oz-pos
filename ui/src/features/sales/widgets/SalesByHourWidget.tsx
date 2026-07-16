@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Localized } from '@fluent/react';
 import { exportSalesByHour, type SalesByHourRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
+import { Skeleton } from '@/components/Skeleton';
 /**
  * Sales by Hour Widget — shows a bar chart of sales broken down
  * by hour of the day. Registered with the WidgetRegistry.
@@ -32,11 +33,20 @@ export default function SalesByHourWidget() {
 
   if (loading) {
     return (
-      <div className="reporting-widget">
-        <div className="reporting-widget-loading">
-          <Localized id="sales-dashboard-loading">
-            <span>Loading&hellip;</span>
-          </Localized>
+      <div className="reporting-widget" aria-hidden="true">
+        <div className="reporting-widget-header">
+          <Skeleton width="6rem" height="0.875rem" />
+        </div>
+        <div className="reporting-widget-hourly-chart">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="reporting-widget-hour-bar-row">
+              <Skeleton width="1.5rem" height="0.75rem" />
+              <div className="reporting-widget-hour-bar-track">
+                <Skeleton width={`${[60, 40, 80, 30, 70, 50, 90, 45][i]!}%`} height="0.75rem" style={{ borderRadius: 'var(--radius-sm)' }} />
+              </div>
+              <Skeleton width="3rem" height="0.75rem" />
+            </div>
+          ))}
         </div>
       </div>
     );

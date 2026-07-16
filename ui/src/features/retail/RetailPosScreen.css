@@ -1326,6 +1326,31 @@
   border-top: 1px solid var(--color-border-hover);
 }
 
+/* ── RetailOptionsScreen skeleton loading ──────────────────── */
+
+.retail-options-loading-skeleton {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.retail-options-skeleton-tab {
+  padding: 8px 12px;
+}
+
+.retail-options-skeleton-field {
+  margin-bottom: 12px;
+}
+
+.retail-options-skeleton-footer {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-hover);
+  margin-top: 16px;
+}
+
 /* ── Options Full-Screen Page ────────────────────────────────── */
 
 .retail-options-body {

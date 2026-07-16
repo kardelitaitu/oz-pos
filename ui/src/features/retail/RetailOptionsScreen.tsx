@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Skeleton } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
@@ -427,8 +428,50 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   if (!storeLoaded || !receiptLoaded || !creditLoaded || !hardwareLoaded) {
     return (
       <div className="retail-pos">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--color-fg-tertiary)', fontSize: 14 }}>
-          {l10n.getString('loading')}
+        {/* ── Header skeleton ── */}
+        <header className="retail-header">
+          <div className="retail-header-store">
+            <Skeleton width="12rem" height="0.9375rem" />
+          </div>
+          <div className="retail-header-right">
+            <Skeleton width="5rem" height="0.75rem" />
+          </div>
+        </header>
+
+        {/* ── Body skeleton ── */}
+        <div className="retail-options-loading-skeleton" aria-hidden="true">
+          {/* Sidebar tabs */}
+          <div className="retail-options-sidebar">
+            {Array.from({ length: 11 }, (_, i) => (
+              <div key={i} className="retail-options-skeleton-tab">
+                <Skeleton width="80%" height="0.75rem" />
+              </div>
+            ))}
+            <div style={{ flex: 1 }} />
+            <div className="retail-options-skeleton-tab">
+              <Skeleton width="50%" height="0.75rem" />
+            </div>
+          </div>
+
+          {/* Content area */}
+          <div className="retail-options-content">
+            <div className="retail-options-section">
+              <Skeleton width="12rem" height="0.9375rem" style={{ marginBottom: '1rem' }} />
+              {/* Form field skeletons */}
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="retail-options-skeleton-field">
+                  <Skeleton width="6rem" height="0.6875rem" style={{ marginBottom: '0.1875rem' }} />
+                  <Skeleton width="22.5rem" height="2rem" />
+                </div>
+              ))}
+            </div>
+
+            {/* Footer buttons */}
+            <div className="retail-options-skeleton-footer">
+              <Skeleton width="6rem" height="2rem" />
+              <Skeleton width="6rem" height="2rem" />
+            </div>
+          </div>
         </div>
       </div>
     );
