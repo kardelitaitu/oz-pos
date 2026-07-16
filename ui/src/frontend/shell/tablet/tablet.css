@@ -58,7 +58,7 @@
   min-height: var(--tablet-tap-target);
   padding: 4px 12px;
   border-radius: var(--tablet-radius);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--font-weight-medium);
   color: var(--color-fg-tertiary);
   background: transparent;
