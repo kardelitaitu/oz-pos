@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   createPurchaseOrder,
   listSuppliers,
@@ -6,6 +6,7 @@ import {
   type CreatePurchaseOrderArgs,
 } from '@/api/purchasing';
 import { Button } from '@/components/Button';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './PurchaseOrderForm.css';
 
 interface LineItem {
@@ -33,6 +34,9 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(panelRef, !saving, onClose);
 
   useEffect(() => {
     listSuppliers().then(setSuppliers).catch(() => {});
@@ -86,7 +90,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
 
   return (
     <div className="po-form-overlay" role="dialog" aria-modal="true" aria-label="Purchase Order Form">
-      <div className="po-form-modal">
+      <div className="po-form-modal" ref={panelRef}>
         <div className="po-form-header">
           <h2>{editingId ? 'Edit Purchase Order' : 'New Purchase Order'}</h2>
           <button type="button" className="po-form-close" onClick={onClose} aria-label="Close">&times;</button>
