@@ -1006,10 +1006,10 @@
 
 .settings-toggle-slider {
   position: absolute;
-  cursor: pointer;
   inset: 0;
   background: var(--color-accent-alpha);
   border-radius: var(--radius-full);
+  pointer-events: none;
   transition: background var(--duration-200) var(--ease-out);
 }
 
