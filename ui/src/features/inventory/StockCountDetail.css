@@ -209,10 +209,26 @@
 .sc-diff-pos { color: var(--color-success, #16a34a); }
 
 .sc-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
   background: none;
   border: none;
+  border-radius: var(--radius-md);
   color: var(--color-danger, #dc2626);
   cursor: pointer;
   font-size: 1.1rem;
-  padding: 0.125rem 0.375rem;
+  padding: 0 0.25rem;
+  transition: background var(--duration-100) var(--ease-out);
+}
+
+.sc-remove-btn:hover {
+  background: var(--color-danger-bg, rgba(220, 38, 38, 0.1));
+}
+
+.sc-remove-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }

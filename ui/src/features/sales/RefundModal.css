@@ -33,6 +33,11 @@
 }
 
 .refund-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
   background: none;
   border: none;
   font-size: 1.5rem;
