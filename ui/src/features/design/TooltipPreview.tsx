@@ -319,7 +319,8 @@ export default function TooltipPreview() {
             </Tooltip>
 
             <Tooltip content="Small badge with tooltip" position="bottom">
-              <span
+              <button
+                type="button"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -330,10 +331,11 @@ export default function TooltipPreview() {
                   color: 'var(--color-accent-fg)',
                   background: 'var(--color-accent)',
                   borderRadius: 'var(--radius-full)',
+                  border: 'none',
                   cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  lineHeight: 'inherit',
                 }}
-                tabIndex={0}
-                role="button"
                 aria-label="Badge with tooltip"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -342,7 +344,7 @@ export default function TooltipPreview() {
                   <line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
                 Beta
-              </span>
+              </button>
             </Tooltip>
           </div>
 
