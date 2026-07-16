@@ -706,3 +706,378 @@ fn store_namespace_isolation() {
         Some("Store B".into())
     );
 }
+
+// ── Global Currency display settings ───────────────────────────────────
+
+#[test]
+fn currency_format_default_is_symbol() {
+    let conn = setup();
+    assert_eq!(Settings::get_currency_format(&conn).unwrap(), "symbol");
+}
+
+#[test]
+fn currency_format_roundtrip() {
+    let conn = setup();
+    Settings::set_currency_format(&conn, "code").unwrap();
+    assert_eq!(Settings::get_currency_format(&conn).unwrap(), "code");
+
+    Settings::set_currency_format(&conn, "symbol").unwrap();
+    assert_eq!(Settings::get_currency_format(&conn).unwrap(), "symbol");
+}
+
+#[test]
+fn currency_symbol_position_default_is_prefix() {
+    let conn = setup();
+    assert_eq!(
+        Settings::get_currency_symbol_position(&conn).unwrap(),
+        "prefix"
+    );
+}
+
+#[test]
+fn currency_symbol_position_roundtrip() {
+    let conn = setup();
+    Settings::set_currency_symbol_position(&conn, "suffix").unwrap();
+    assert_eq!(
+        Settings::get_currency_symbol_position(&conn).unwrap(),
+        "suffix"
+    );
+
+    Settings::set_currency_symbol_position(&conn, "prefix").unwrap();
+    assert_eq!(
+        Settings::get_currency_symbol_position(&conn).unwrap(),
+        "prefix"
+    );
+}
+
+#[test]
+fn currency_decimal_separator_default_is_dot() {
+    let conn = setup();
+    assert_eq!(
+        Settings::get_currency_decimal_separator(&conn).unwrap(),
+        "dot"
+    );
+}
+
+#[test]
+fn currency_decimal_separator_roundtrip() {
+    let conn = setup();
+    Settings::set_currency_decimal_separator(&conn, "comma").unwrap();
+    assert_eq!(
+        Settings::get_currency_decimal_separator(&conn).unwrap(),
+        "comma"
+    );
+
+    Settings::set_currency_decimal_separator(&conn, "dot").unwrap();
+    assert_eq!(
+        Settings::get_currency_decimal_separator(&conn).unwrap(),
+        "dot"
+    );
+}
+
+#[test]
+fn currency_thousands_separator_default_is_comma() {
+    let conn = setup();
+    assert_eq!(
+        Settings::get_currency_thousands_separator(&conn).unwrap(),
+        "comma"
+    );
+}
+
+#[test]
+fn currency_thousands_separator_roundtrip() {
+    let conn = setup();
+    Settings::set_currency_thousands_separator(&conn, "space").unwrap();
+    assert_eq!(
+        Settings::get_currency_thousands_separator(&conn).unwrap(),
+        "space"
+    );
+
+    Settings::set_currency_thousands_separator(&conn, "none").unwrap();
+    assert_eq!(
+        Settings::get_currency_thousands_separator(&conn).unwrap(),
+        "none"
+    );
+
+    Settings::set_currency_thousands_separator(&conn, "comma").unwrap();
+    assert_eq!(
+        Settings::get_currency_thousands_separator(&conn).unwrap(),
+        "comma"
+    );
+}
+
+#[test]
+fn all_global_currency_settings_coexist() {
+    let conn = setup();
+    Settings::set_currency_format(&conn, "code").unwrap();
+    Settings::set_currency_symbol_position(&conn, "suffix").unwrap();
+    Settings::set_currency_decimal_separator(&conn, "comma").unwrap();
+    Settings::set_currency_thousands_separator(&conn, "space").unwrap();
+
+    assert_eq!(Settings::get_currency_format(&conn).unwrap(), "code");
+    assert_eq!(
+        Settings::get_currency_symbol_position(&conn).unwrap(),
+        "suffix"
+    );
+    assert_eq!(
+        Settings::get_currency_decimal_separator(&conn).unwrap(),
+        "comma"
+    );
+    assert_eq!(
+        Settings::get_currency_thousands_separator(&conn).unwrap(),
+        "space"
+    );
+}
+
+// ── Default currency backward compatibility ────────────────────────────
+
+#[test]
+fn get_default_currency_falls_back_to_old_key() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Write only the old key, new key absent.
+    s.set_setting("store.default_currency", "JPY").unwrap();
+    assert_eq!(
+        Settings::get_default_currency(&conn).unwrap(),
+        Some("JPY".into())
+    );
+}
+
+#[test]
+fn get_default_currency_prefers_new_key() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Write both old and new keys.
+    s.set_setting("currency.default", "EUR").unwrap();
+    s.set_setting("store.default_currency", "JPY").unwrap();
+    // New key must take precedence.
+    assert_eq!(
+        Settings::get_default_currency(&conn).unwrap(),
+        Some("EUR".into())
+    );
+}
+
+#[test]
+fn set_default_currency_writes_new_key_and_cleans_up_old_key() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Set old key, then set via the typed API.
+    s.set_setting("store.default_currency", "GBP").unwrap();
+    Settings::set_default_currency(&conn, "USD").unwrap();
+
+    // New key should be written.
+    assert_eq!(
+        Settings::get_default_currency(&conn).unwrap(),
+        Some("USD".into())
+    );
+    assert_eq!(
+        Settings::get(&conn, "currency.default").unwrap(),
+        Some("USD".into())
+    );
+    // Old key must be cleaned up.
+    assert_eq!(
+        Settings::get(&conn, "store.default_currency").unwrap(),
+        None
+    );
+}
+
+#[test]
+fn default_currency_roundtrip_via_store_api() {
+    let conn = setup();
+    let s = store(&conn);
+
+    assert_eq!(s.get_default_currency().unwrap(), None);
+    s.set_default_currency("CAD").unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("CAD".into()));
+}
+
+// ── Global currency settings via Store API ─────────────────────────────
+
+#[test]
+fn currency_settings_via_store_api() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Defaults.
+    assert_eq!(s.get_currency_format().unwrap(), "symbol");
+    assert_eq!(s.get_currency_symbol_position().unwrap(), "prefix");
+    assert_eq!(s.get_currency_decimal_separator().unwrap(), "dot");
+    assert_eq!(s.get_currency_thousands_separator().unwrap(), "comma");
+
+    // Set all via Store.
+    s.set_currency_format("code").unwrap();
+    s.set_currency_symbol_position("suffix").unwrap();
+    s.set_currency_decimal_separator("comma").unwrap();
+    s.set_currency_thousands_separator("space").unwrap();
+
+    // Verify.
+    assert_eq!(s.get_currency_format().unwrap(), "code");
+    assert_eq!(s.get_currency_symbol_position().unwrap(), "suffix");
+    assert_eq!(s.get_currency_decimal_separator().unwrap(), "comma");
+    assert_eq!(s.get_currency_thousands_separator().unwrap(), "space");
+}
+
+// ── Currency settings coexistence with store settings ──────────────────
+
+#[test]
+fn currency_settings_independent_of_store_settings() {
+    let conn = setup();
+    let s = store(&conn);
+
+    // Mix store and global currency settings.
+    s.set_store_name("Shop One").unwrap();
+    s.set_default_currency("GBP").unwrap();
+    s.set_currency_format("code").unwrap();
+    s.set_currency_symbol_position("suffix").unwrap();
+    s.set_store_address("10 High St").unwrap();
+
+    // Store settings preserved.
+    assert_eq!(s.get_store_name().unwrap(), Some("Shop One".into()));
+    assert_eq!(s.get_store_address().unwrap(), Some("10 High St".into()));
+
+    // Currency settings preserved.
+    assert_eq!(s.get_default_currency().unwrap(), Some("GBP".into()));
+    assert_eq!(s.get_currency_format().unwrap(), "code");
+    assert_eq!(s.get_currency_symbol_position().unwrap(), "suffix");
+}
+
+// ── Currency settings with shift lifecycle ─────────────────────────────
+
+fn seed_users_for_shift(conn: &rusqlite::Connection) {
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-cashier', 'Cashier', 'Cashier role', '[]',
+             '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id,
+                           created_at, updated_at) VALUES
+            ('user-alice', 'alice', 'hash1', 'Alice', 'role-cashier',
+             '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+    )
+    .unwrap();
+}
+
+#[test]
+fn currency_settings_accessible_before_shift_open() {
+    let conn = setup();
+    seed_users_for_shift(&conn);
+    let s = store(&conn);
+
+    // Set global currency settings before opening a shift.
+    s.set_default_currency("EUR").unwrap();
+    s.set_currency_format("code").unwrap();
+    s.set_currency_decimal_separator("comma").unwrap();
+
+    // Open shift.
+    let shift = s.open_shift("user-alice", None, 500).unwrap();
+    assert_eq!(shift.status, "open");
+
+    // Currency settings must remain accessible and unchanged during the shift.
+    assert_eq!(s.get_default_currency().unwrap(), Some("EUR".into()));
+    assert_eq!(s.get_currency_format().unwrap(), "code");
+    assert_eq!(s.get_currency_decimal_separator().unwrap(), "comma");
+
+    // Close shift.
+    let closed = s.close_shift(&shift.id, 800, None).unwrap();
+    assert!(closed.is_closed());
+
+    // Currency settings must survive after closing the shift.
+    assert_eq!(s.get_default_currency().unwrap(), Some("EUR".into()));
+    assert_eq!(s.get_currency_format().unwrap(), "code");
+}
+
+#[test]
+fn change_currency_setting_during_open_shift() {
+    let conn = setup();
+    seed_users_for_shift(&conn);
+    let s = store(&conn);
+
+    s.set_default_currency("USD").unwrap();
+
+    // Open shift.
+    let shift = s.open_shift("user-alice", None, 1000).unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("USD".into()));
+
+    // Change the default currency mid-shift (e.g. switch to IDR).
+    s.set_default_currency("IDR").unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("IDR".into()));
+
+    // Other currency formatting settings remain independent.
+    s.set_currency_symbol_position("suffix").unwrap();
+    assert_eq!(s.get_currency_symbol_position().unwrap(), "suffix");
+    assert_eq!(s.get_currency_format().unwrap(), "symbol"); // still default
+
+    // Close shift.
+    let closed = s.close_shift(&shift.id, 1500, None).unwrap();
+    assert!(closed.is_closed());
+
+    // Changes must persist after close.
+    assert_eq!(s.get_default_currency().unwrap(), Some("IDR".into()));
+    assert_eq!(s.get_currency_symbol_position().unwrap(), "suffix");
+}
+
+#[test]
+fn multiple_shifts_preserve_currency_settings() {
+    let conn = setup();
+    seed_users_for_shift(&conn);
+    let s = store(&conn);
+
+    // Set currency at the start.
+    s.set_default_currency("GBP").unwrap();
+
+    // ── Shift 1 ──────────────────────────────────────────────────
+    let s1 = s.open_shift("user-alice", None, 100).unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("GBP".into()));
+    let c1 = s.close_shift(&s1.id, 200, None).unwrap();
+    assert!(c1.is_closed());
+
+    // Currency setting survives shift 1.
+    assert_eq!(s.get_default_currency().unwrap(), Some("GBP".into()));
+
+    // ── Shift 2 ──────────────────────────────────────────────────
+    let s2 = s.open_shift("user-alice", None, 300).unwrap();
+    assert_eq!(s.get_default_currency().unwrap(), Some("GBP".into()));
+    let c2 = s.close_shift(&s2.id, 400, None).unwrap();
+    assert!(c2.is_closed());
+
+    // Currency setting survives shift 2.
+    assert_eq!(s.get_default_currency().unwrap(), Some("GBP".into()));
+}
+
+#[test]
+fn currency_settings_survive_load_all_across_shift_ops() {
+    let conn = setup();
+    seed_users_for_shift(&conn);
+    let s = store(&conn);
+
+    // Set a mix of store + global currency settings.
+    s.set_store_name("Currency Shop").unwrap();
+    s.set_default_currency("JPY").unwrap();
+    s.set_currency_format("code").unwrap();
+    s.set_currency_thousands_separator("none").unwrap();
+
+    // Open + close a shift.
+    let shift = s.open_shift("user-alice", None, 5000).unwrap();
+    s.close_shift(&shift.id, 5000, None).unwrap();
+
+    // load_all must contain both store settings and currency settings.
+    let all = Settings::load_all(&conn).unwrap();
+    assert!(
+        all.iter().any(|(k, _)| k == "store.name"),
+        "load_all must include store.name"
+    );
+    assert!(
+        all.iter().any(|(k, _)| k == "currency.default"),
+        "load_all must include currency.default"
+    );
+    assert!(
+        all.iter().any(|(k, _)| k == "currency.format"),
+        "load_all must include currency.format"
+    );
+    assert!(
+        all.iter().any(|(k, _)| k == "currency.thousands_separator"),
+        "load_all must include currency.thousands_separator"
+    );
+}

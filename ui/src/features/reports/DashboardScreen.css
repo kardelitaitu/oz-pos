@@ -129,6 +129,6 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .dashboard-weekly-bar {
-    transition: width var(--duration-300) var(--ease-out);
+    transition: width var(--duration-400) var(--ease-out);
   }
 }
