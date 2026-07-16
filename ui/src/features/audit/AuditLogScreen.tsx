@@ -138,11 +138,15 @@ export default function AuditLogScreen() {
         <Localized id="audit-log-title">
           <h1 className="audit-log-title"><span>Audit Log</span></h1>
         </Localized>
-        <Localized id="audit-log-refresh">
-          <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+        <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+          </svg>
+          <Localized id="audit-log-refresh">
             <span>Refresh</span>
-          </Button>
-        </Localized>
+          </Localized>
+        </Button>
       </div>
 
       {/* Filters */}

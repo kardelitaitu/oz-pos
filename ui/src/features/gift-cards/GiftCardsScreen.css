@@ -325,6 +325,54 @@
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal);
+  animation: gift-overlay-in var(--duration-200) var(--ease-out);
+}
+
+.gift-cards-modal-overlay--exiting {
+  animation: gift-overlay-out var(--duration-200) var(--ease-out) both;
+  pointer-events: none;
+}
+
+.gift-cards-modal--exiting {
+  animation: gift-modal-out var(--duration-200) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes gift-overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes gift-overlay-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  .gift-cards-modal {
+    animation: gift-modal-in var(--duration-200) var(--ease-out) both;
+  }
+
+  @keyframes gift-modal-in {
+    from { opacity: 0; transform: translateY(0.5rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes gift-modal-out {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(0.5rem); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gift-cards-modal-overlay {
+    animation: none;
+  }
+  .gift-cards-modal-overlay--exiting {
+    animation: none;
+  }
+  .gift-cards-modal--exiting {
+    animation: none;
+  }
 }
 
 .gift-cards-modal {

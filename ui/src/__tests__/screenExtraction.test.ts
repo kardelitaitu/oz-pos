@@ -351,7 +351,9 @@ const SCREENS: ScreenEntry[] = [
     dynamicClassPrefixes: ['gift-card-status--', 'gift-card-txn-type--'],
     externalClasses: [
       'gift-cards-modal-overlay',
+      'gift-cards-modal-overlay--exiting',
       'gift-cards-modal',
+      'gift-cards-modal--exiting',
       'gift-cards-modal-title',
       'gift-cards-modal-form',
       'gift-cards-modal-field',

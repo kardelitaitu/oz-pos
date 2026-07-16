@@ -230,6 +230,28 @@
   }
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  /* Exit: mirror of entry keyframes */
+  @keyframes stock-overlay-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+
+  @keyframes stock-modal-out {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(0.5rem); }
+  }
+
+  .stock-transfers-overlay--exiting {
+    animation: stock-overlay-fade-out var(--duration-200) var(--ease-out) both;
+    pointer-events: none;
+  }
+
+  .stock-transfers-modal--exiting {
+    animation: stock-modal-out var(--duration-200) var(--ease-out) both;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stock-transfers-overlay {
     backdrop-filter: none;

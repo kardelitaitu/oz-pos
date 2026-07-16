@@ -68,6 +68,7 @@
 .audit-log-outcome-filters {
   display: flex;
   gap: var(--space-1);
+  margin-left: auto;
 }
 
 .audit-log-chip {

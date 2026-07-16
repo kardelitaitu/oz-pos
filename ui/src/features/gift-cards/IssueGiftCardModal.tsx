@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { animDuration } from '@/utils/animation';
 import { Localized, useLocalization } from '@fluent/react';
 import { issueGiftCard, type IssueGiftCardInput } from '@/api/giftCards';
 import { Button } from '@/components/Button';
@@ -15,6 +16,28 @@ export interface IssueGiftCardModalProps {
 /** Issue gift card modal dialog — form for creating a new gift card with number, initial amount, PIN, and recipient details. */
 export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardModalProps) {
   const { l10n } = useLocalization();
+  const ANIM_MS = animDuration(200);
+  const [exiting, setExiting] = useState(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current !== null) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setExiting(true);
+    exitTimerRef.current = setTimeout(() => {
+      setExiting(false);
+      exitTimerRef.current = null;
+      onClose();
+    }, ANIM_MS);
+  }, [onClose, ANIM_MS]);
+
   const [cardNumber, setCardNumber] = useState(generateGiftCardNumber());
   const [amount, setAmount] = useState('');
   const [issuedTo, setIssuedTo] = useState('');
@@ -55,8 +78,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   };
 
   return (
-    <div className="gift-cards-modal-overlay" role="button" tabIndex={0} aria-label="Close" onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}>
-      <div className="gift-cards-modal" role="presentation" onClick={(e) => e.stopPropagation()}>
+    <div className={`gift-cards-modal-overlay${exiting ? ' gift-cards-modal-overlay--exiting' : ''}`} role="button" tabIndex={0} aria-label="Close" onClick={handleClose} onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}>
+      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
         <Localized id="gift-cards-issue-title">
           <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
         </Localized>
@@ -128,7 +151,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
           {error && <div className="gift-cards-modal-error" role="alert">{error}</div>}
 
           <div className="gift-cards-modal-actions">
-            <Button variant="ghost" onClick={onClose} disabled={processing}>
+            <Button variant="ghost" onClick={handleClose} disabled={processing}>
               <Localized id="cancel">Cancel</Localized>
             </Button>
             <Button variant="primary" loading={processing} onClick={handleSubmit}>
