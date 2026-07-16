@@ -104,6 +104,7 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase())}
               disabled={loading}
+              autoComplete="username"
             />
           </div>
 
@@ -117,6 +118,7 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               disabled={loading}
+              autoComplete="new-password"
               inputMode="numeric"
               maxLength={8}
             />
@@ -132,6 +134,7 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
               value={confirmPin}
               onChange={(e) => setConfirmPin(e.target.value)}
               disabled={loading}
+              autoComplete="new-password"
               inputMode="numeric"
               maxLength={8}
             />
