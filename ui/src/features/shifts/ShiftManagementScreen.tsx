@@ -759,7 +759,7 @@ export default function ShiftManagementScreen() {
       )}
 
       {/* ── Closed Shift Summary ──────────────────────── */}
-      {mClosedSum && (
+      {mClosedSum && closedShiftSummary && (
         <div className={`shift-mgmt-overlay${eClosedSum ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-closed-label')}>
           <div className={`shift-mgmt-modal${eClosedSum ? ' shift-modal-exit' : ''}`}>
             <div className="shift-mgmt-modal-header">
@@ -854,7 +854,7 @@ export default function ShiftManagementScreen() {
       )}
 
       {/* ── Shift Detail Modal ────────────────────────── */}
-      {mDetail && (() => {
+      {mDetail && showDetailModal && (() => {
         const s = showDetailModal!;
         return (
         <div className={`shift-mgmt-overlay${eDetail ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-detail-label')}>

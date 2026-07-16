@@ -12,6 +12,7 @@ import {
 } from '@/api/settings';
 import { setDecimalSep } from '@/utils/storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import {
   listCurrencies,
   getDefaultCurrency,
@@ -420,8 +421,12 @@ export default function SettingsPage() {
     branch: '',
   });
 
+  const { currency: ctxCurrency, setCurrency: setCtxCurrency } = useCurrency();
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
-  const [defaultCurrency, setDefaultCurrencyState] = useState<string>('USD');
+  const [defaultCurrency, setDefaultCurrencyState] = useState<string>(ctxCurrency);
+
+  // Sync local state when context currency changes externally.
+  useEffect(() => { setDefaultCurrencyState(ctxCurrency); }, [ctxCurrency]);
 
   const [sync, setSync] = useState<SyncSettingsDto>({
     serverUrl: null,
@@ -580,13 +585,12 @@ export default function SettingsPage() {
       getReceiptSettings(),
       getStoreSettings(),
       listCurrencies(),
-      getDefaultCurrency(),
       getSyncSettings(),
       getUserPreferences(userId),
       getBrandSettings(),
       getVersion(),
     ]);
-    const [rR, sR, cR, dcR, syncR, prefsR, brandR, verR] = results;
+    const [rR, sR, cR, syncR, prefsR, brandR, verR] = results;
 
     // Local variables capture the newly-loaded values for the snapshot
     // (avoid reading React state, which would add deps and cause loops).
@@ -601,7 +605,6 @@ export default function SettingsPage() {
       if (rR.status === 'fulfilled') { snapReceipt = rR.value; setReceipt(rR.value); setDecimalSep(rR.value.decimalSeparator); }
       if (sR.status === 'fulfilled') setStore(sR.value);
       if (cR.status === 'fulfilled') setCurrencies(cR.value);
-      if (dcR.status === 'fulfilled') setDefaultCurrencyState(dcR.value ?? 'USD');
       if (syncR.status === 'fulfilled') { setSync(syncR.value); setSyncServerUrl(syncR.value.serverUrl ?? ''); }
       if (prefsR.status === 'fulfilled') {
         const p = prefsR.value;

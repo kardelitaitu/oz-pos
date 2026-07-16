@@ -212,6 +212,7 @@ registerNavItem({ route: 'stock-transfers', label: 'Stock Transfers', feature: '
  * them dynamically from the page-registry instead of a hardcoded switch.
  */
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 
 export default function App() {
@@ -222,13 +223,15 @@ export default function App() {
           <ZoomProvider>
             <HardwareAccelProvider>
               <ThemeProvider>
+              <CurrencyProvider>
               <AuthProvider>
                 <ToastProvider>
                   <WorkspaceProvider>
                     <AppShell />
                   </WorkspaceProvider>
                 </ToastProvider>
-              </AuthProvider>              </ThemeProvider>
+              </AuthProvider>
+              </CurrencyProvider>              </ThemeProvider>
             </HardwareAccelProvider>
           </ZoomProvider>
         </BrandProvider>
