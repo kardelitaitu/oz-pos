@@ -1,5 +1,6 @@
-import { useEffect, useRef, useCallback, useId, type ReactNode } from 'react';
+import { useRef, useId, type ReactNode } from 'react';
 import { useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -55,63 +56,8 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  // ── Focus trap ──────────────────────────────────────────────
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab' || !panelRef.current) return;
-
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-
-      if (e.shiftKey) {
-        if (document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    },
-    [onClose],
-  );
-
-  // ── Side effects ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!open) return;
-
-    const panel = panelRef.current;
-    if (!panel) return;
-
-    // Focus the first focusable element inside the panel.
-    const focusable = panel.querySelector<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    focusable?.focus();
-
-    // Lock body scroll.
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    // Listen for keyboard events.
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open, handleKeyDown]);
+  // ── Focus trap (Escape + Tab cycling + auto-focus + scroll lock) ──
+  useFocusTrap(panelRef, open, onClose);
 
   if (!open) return null;
 
