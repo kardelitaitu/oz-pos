@@ -141,7 +141,6 @@
 
 .tp-trigger:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .tp-trigger--primary {
@@ -262,7 +261,6 @@
 
 .tp-sidebar-item:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .tp-sidebar-item--active {

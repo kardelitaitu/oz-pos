@@ -75,7 +75,6 @@
 
 .modifier-close-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus, #60a5fa);
-  outline: none;
 }
 
 /* ── Body (scrollable) ────────────────────────────── */
@@ -169,7 +168,6 @@
 
 .modifier-option:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus, #60a5fa);
-  outline: none;
 }
 
 .modifier-option--selected {

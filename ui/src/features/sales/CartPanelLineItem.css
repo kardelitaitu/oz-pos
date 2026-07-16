@@ -115,7 +115,6 @@
 /* Focused cart line (keyboard navigation ring) */
 .pos-cart-line:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -177,7 +176,7 @@
 }
 
 .pos-cart-line-price {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--color-fg-secondary);
   white-space: nowrap;
 }
@@ -262,7 +261,8 @@
 }
 
 .pos-cart-qty-btn:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
 }
 
 .pos-cart-qty-value {
@@ -310,7 +310,6 @@
 
 .pos-cart-line-remove:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* ── Revealed swipe-action (background delete button) ── */
@@ -357,7 +356,6 @@
 
 .pos-cart-line-swipe-remove:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* ── Price override button (inside cart line) ───────────────── */
@@ -366,7 +364,7 @@
   display: inline-block;
   padding: 0.125rem 0.5rem;
   margin-top: 0.25rem;
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   font-weight: var(--font-weight-medium);
   color: var(--color-accent);
   background: var(--color-accent-subtle);

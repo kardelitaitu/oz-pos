@@ -44,7 +44,6 @@
 .pos-resize-handle:hover,
 .pos-resize-handle:focus-visible {
   background: var(--color-accent-dim);
-  outline: none;
 }
 
 /* A thin accent line in the middle appears on hover for affordance. */
@@ -128,7 +127,6 @@
 
 .pos-cart-lock-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* ── Cart line count badge ───────────────────────────── */
@@ -339,7 +337,6 @@
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
   text-align: center;
-  outline: none;
 }
 
 .pos-cart-table-input:focus-visible {

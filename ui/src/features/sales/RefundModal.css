@@ -274,12 +274,10 @@
 }
 .refund-qty-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* ── Input focus-visible + transition ────────────────────── */
 .refund-input {
-  outline: none;
   transition: border-color var(--duration-150, 150ms) var(--ease-out),
     box-shadow var(--duration-150, 150ms) var(--ease-out);
 }
@@ -300,5 +298,4 @@
 }
 .refund-close:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }

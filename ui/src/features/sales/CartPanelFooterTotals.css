@@ -75,7 +75,6 @@
 
 .pos-cart-discount-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .pos-cart-discount-row {
@@ -150,7 +149,6 @@
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
   text-align: center;
-  outline: none;
 }
 
 .pos-cart-discount-pct:focus-visible {
@@ -166,7 +164,6 @@
   background: var(--color-bg-primary);
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
-  outline: none;
 }
 
 .pos-cart-discount-name:focus-visible {
@@ -273,7 +270,6 @@
 
 .pos-cart-tip-segment:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .pos-cart-tip-segment[aria-pressed='true'] {
@@ -326,7 +322,6 @@
 
 .pos-cart-service-toggle:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* iOS-style switch knob. */
@@ -395,7 +390,6 @@
 
 .pos-cart-options-toggle:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .pos-cart-options-toggle .pos-cart-subtotal-label {

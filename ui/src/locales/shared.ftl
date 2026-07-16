@@ -126,6 +126,9 @@ language-selector-select-aria = Select language
 locale-en = English
 locale-id = Bahasa Indonesia
 
+# Accessibility
+a11y-skip-to-content = Skip to main content
+
 # Navigation section labels
 nav-section-operations = Operations
 nav-section-sales = Sales

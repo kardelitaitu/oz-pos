@@ -4,7 +4,7 @@
   gap: 6px;
   padding: 4px 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   background: var(--color-bg-surface);
 }
 .gateway-badge__dot {

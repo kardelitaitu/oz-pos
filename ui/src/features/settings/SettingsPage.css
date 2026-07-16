@@ -117,7 +117,6 @@
 
 .settings-mobile-menu-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-mobile-menu-btn svg {
@@ -224,7 +223,6 @@
 
 .settings-sidebar-toggle:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* ── Sidebar collapse-all ───────────────────────── */
@@ -254,7 +252,6 @@
 
 .settings-sidebar-collapse-all:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-sidebar.collapsed .settings-sidebar-collapse-all {
@@ -299,7 +296,6 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  outline: none;
   transition:
     border-color var(--duration-150) var(--ease-out),
     box-shadow var(--duration-150) var(--ease-out);
@@ -313,7 +309,6 @@
 .settings-topbar-search-input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-topbar-search-clear {
@@ -424,7 +419,6 @@
 
 .settings-sidebar-section-header:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-sidebar-section-header--active {
@@ -547,7 +541,6 @@
 
 .settings-nav-item:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-nav-item--active {
@@ -705,7 +698,6 @@
 
 .settings-footer-theme-toggle:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* ── Mobile sidebar backdrop ───────────────────────────────── */
@@ -885,7 +877,6 @@
 
 .settings-section-header-category:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-section-header-category::after {
@@ -1048,7 +1039,6 @@
 
 .settings-toggle-switch input:focus-visible + .settings-toggle-slider {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-field {
@@ -1109,7 +1099,6 @@
 }
 
 .settings-input:focus-visible {
-  outline: none;
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
@@ -1196,7 +1185,6 @@
 
 .settings-btn-revert:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .settings-btn-revert svg {
@@ -1363,7 +1351,6 @@
 
 .settings-input-toggle:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {

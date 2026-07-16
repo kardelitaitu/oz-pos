@@ -256,7 +256,6 @@
   background: var(--color-bg-input);
   color: var(--color-fg);
   text-align: center;
-  outline: none;
   transition:
     border-color var(--duration-150) var(--ease-out),
     box-shadow   var(--duration-150) var(--ease-out);
@@ -265,7 +264,6 @@
 .staff-login-input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 .staff-login-input::placeholder {
@@ -352,12 +350,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  outline: none;
 }
 
 .staff-login-pin-wrap:focus-visible,
 .staff-login-pin-wrap:focus-visible {
-  outline: none;
 }
 
 /* ── PIN dots ────────────────────────────────────────────────────── */

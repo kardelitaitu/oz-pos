@@ -111,7 +111,6 @@
 
 .shift-mgmt-close-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .shift-mgmt-active-details {
@@ -319,7 +318,6 @@
 
 .shift-mgmt-view-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 /* ── Modals (shared) ────────────────────────────────── */
@@ -505,7 +503,6 @@
   color: var(--color-fg-primary);
   font-size: var(--text-base);
   font-family: var(--font-mono);
-  outline: none;
   box-sizing: border-box;
 }
 
@@ -528,7 +525,6 @@
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
   font-family: var(--font-sans);
-  outline: none;
   resize: vertical;
   box-sizing: border-box;
 }
@@ -729,7 +725,6 @@
 
 .shift-mgmt-payout-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 /* ── Payout modal hint ─────────────────────────────── */

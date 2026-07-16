@@ -31,8 +31,8 @@
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
-  width: 32px;
-  height: 32px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -40,7 +40,7 @@
   border-radius: var(--radius-full);
   background: transparent;
   color: var(--color-fg-tertiary);
-  font-size: 22px;
+  font-size: var(--text-lg);
   line-height: 1;
   cursor: pointer;
   transition: all var(--duration-100) var(--ease-out);

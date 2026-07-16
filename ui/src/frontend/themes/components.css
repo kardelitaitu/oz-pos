@@ -140,8 +140,9 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-3);
-  outline: none;
   width: 100%;
+  /* outline suppressed — focus ring provided by box-shadow on :focus-visible */
+  outline: none;
   transition:
     border-color var(--duration-150) var(--ease-out),
     box-shadow var(--duration-150) var(--ease-out);
@@ -274,8 +275,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   border-radius: var(--radius-md);
   color: var(--color-fg-secondary);
   background: transparent;
@@ -528,8 +529,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   border-radius: var(--radius-sm);
   color: var(--color-fg-tertiary);
   background: transparent;

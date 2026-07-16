@@ -891,7 +891,6 @@
   color: var(--color-fg);
   font-family: inherit;
   cursor: pointer;
-  outline: none;
   transition: color var(--duration-150), border-color var(--duration-150), background var(--duration-150);
 }
 

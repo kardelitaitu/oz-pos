@@ -126,7 +126,6 @@
 .retail-resize-handle:hover,
 .retail-resize-handle:focus-visible {
   background: color-mix(in srgb, var(--color-primary-pos) 10%, transparent);
-  outline: none;
 }
 
 .retail-resize-handle::after {
@@ -182,7 +181,6 @@
   font-size: 0.75rem;
   font-family: inherit;
   color: var(--color-fg);
-  outline: none;
   padding: 0.25rem 0;
 }
 
@@ -423,7 +421,6 @@
   border: 1px solid var(--color-border-strong);
   background: var(--color-bg-elevated);
   color: var(--color-fg);
-  outline: none;
   min-height: 26px;
   border-radius: var(--radius-sm);
   transition:
@@ -1215,7 +1212,6 @@
 
 .retail-discount-modal input:focus-visible {
   border-color: var(--color-primary-pos);
-  outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-pos) 20%, transparent);
 }
 
@@ -1477,7 +1473,6 @@
 .retail-options-field textarea:focus-visible {
   border-color: var(--color-primary-pos);
   background: var(--color-primary-pos-light);
-  outline: none;
 }
 
 .retail-options-field--row {

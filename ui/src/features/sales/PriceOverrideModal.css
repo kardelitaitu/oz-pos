@@ -101,7 +101,6 @@
 
 .price-override-close:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .price-override-title {
@@ -162,7 +161,6 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   text-align: center;
-  outline: none;
   transition: border-color var(--duration-150) var(--ease-out),
     box-shadow var(--duration-150) var(--ease-out);
 }
@@ -202,7 +200,6 @@
 
 .price-override-cancel-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .price-override-cancel-btn:disabled {
@@ -229,7 +226,6 @@
 
 .price-override-next-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .price-override-next-btn:disabled {
@@ -258,7 +254,6 @@
   background: var(--color-bg-input);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  outline: none;
   transition: border-color var(--duration-150) var(--ease-out),
     box-shadow var(--duration-150) var(--ease-out);
 }
@@ -349,7 +344,6 @@
 
 .price-override-pin-key:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .price-override-pin-key:disabled {

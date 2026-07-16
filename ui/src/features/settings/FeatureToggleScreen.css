@@ -49,7 +49,6 @@
   background: transparent;
   font-size: var(--text-base);
   color: var(--color-fg-primary);
-  outline: none;
   padding: var(--space-1) 0;
   font-family: var(--font-sans);
 }
@@ -399,7 +398,6 @@
 
 .feature-toggle-switch input:focus-visible + .feature-toggle-slider {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  outline: none;
 }
 
 /* ── Dark mode overrides ─────────────────────────────────────────── */

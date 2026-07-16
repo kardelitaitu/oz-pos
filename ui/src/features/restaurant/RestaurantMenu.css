@@ -130,7 +130,6 @@
 }
 
 .restaurant-back-btn:focus-visible {
-  outline: none;
 }
 
 .restaurant-back-btn:hover {
@@ -151,7 +150,6 @@
   border-radius: var(--radius-lg);
   background: var(--color-bg-input);
   flex-shrink: 0;
-  outline: none;
   transition: border-color var(--duration-150) var(--ease-out);
 }
 
@@ -168,7 +166,6 @@
 }
 
 .restaurant-search:focus-within {
-  outline: none;
 }
 
 .restaurant-search-icon {
@@ -186,14 +183,12 @@
   color: var(--color-fg);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  outline: none;
 }
 
 .restaurant-search-input:focus-visible,
 .restaurant-search-input:focus-visible {
   border-color: transparent;
   box-shadow: none;
-  outline: none;
 }
 
 .restaurant-search-input::placeholder {
@@ -281,7 +276,6 @@
 
 .restaurant-category-pill:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 /* Icon SVG before the label */
@@ -387,7 +381,6 @@
 
 .restaurant-card:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
-  outline: none;
 }
 
 .restaurant-card:focus-within {
