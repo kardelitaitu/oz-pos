@@ -8,7 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-
+import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import type { ReactNode } from 'react';
@@ -68,10 +68,18 @@ function getCheckboxes(): HTMLInputElement[] {
   return screen.getAllByRole('checkbox') as HTMLInputElement[];
 }
 
-/** Toggle a feature by clicking its checkbox directly. */
-function toggleFeature(label: string) {
-  const cb = screen.getByRole('checkbox', { name: new RegExp(`Toggle ${label}`, 'i') });
-  fireEvent.click(cb);
+/**
+ * Toggle a feature by clicking its label row.
+ * Uses userEvent.click because Fluent's <Localized> overrides the
+ * checkbox aria-label, making getByRole('checkbox', {name: ...})
+ * unreliable. fireEvent.click on a <label> doesn't forward to the
+ * nested input in React's synthetic event system.
+ */
+async function toggleFeature(label: string) {
+  const row = screen.getByText(label).closest('label');
+  if (!row) throw new Error(`Feature row "${label}" not found`);
+  const user = userEvent.setup();
+  await user.click(row);
 }
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -163,7 +171,7 @@ describe('SetupWizard — interactions', () => {
 
   // ── Feature toggling ────────────────────────────────────────────
 
-  it('toggles a feature on and off', () => {
+  it('toggles a feature on and off', async () => {
     render(<SetupWizard />, { wrapper: FluentWrapper });
 
     selectPreset(0);
@@ -171,10 +179,10 @@ describe('SetupWizard — interactions', () => {
     const checkboxes = getCheckboxes();
     expect(checkboxes[0]).toBeChecked();
 
-    toggleFeature('Cash');
+    await toggleFeature('Cash');
     expect(checkboxes[0]).not.toBeChecked();
 
-    toggleFeature('Cash');
+    await toggleFeature('Cash');
     expect(checkboxes[0]).toBeChecked();
   });
 
@@ -348,16 +356,16 @@ describe('SetupWizard — interactions', () => {
     expect(Object.values(state.features).filter(Boolean).length).toBe(23);
   });
 
-  it('toggle state persists across steps into review', () => {
+  it('toggle state persists across steps into review', async () => {
     const onComplete = vi.fn();
     render(<SetupWizard onComplete={onComplete} />, { wrapper: FluentWrapper });
 
     selectPreset(5);
 
-    toggleFeature('Cash');
+    await toggleFeature('Cash');
 
     clickNext();
-    toggleFeature('Inventory Tracking');
+    await toggleFeature('Inventory Tracking');
 
     for (let i = 0; i < 5; i++) {
       clickNext();
