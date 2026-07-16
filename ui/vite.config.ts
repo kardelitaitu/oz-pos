@@ -42,8 +42,18 @@ export default defineConfig({
   },
 
   test: {
-    // Vitest 4 removed tinypool entirely — the native pool architecture
-    // replaces vmThreads/threads/forks. No pool setting needed.
+    // ── Pool ─────────────────────────────────────────────────────────────
+    // worker_threads instead of child_process forks: lower process overhead,
+    // better CPU utilization on high-core-count machines (32-thread host).
+    // maxConcurrency controls parallel tests per-worker, helping files with
+    // many tests (DataManagementScreen: 55) finish faster.
+    pool: 'threads',
+    minThreads: 8,
+    maxThreads: 28,
+    singleThread: false,
+    maxConcurrency: 15,
+    fileParallelism: true,
+
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],

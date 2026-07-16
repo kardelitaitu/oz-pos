@@ -112,11 +112,15 @@ export function AppearanceSettings({
   }, [embedded, onStoreNameChange]);
 
   const handlePickLogo = useCallback(async () => {
-    const path = await pickLogoFile();
-    if (path) {
-      setLogoPath(path);
-      await setBrandLogoPath(path);
-      refreshBrandSettings();
+    try {
+      const path = await pickLogoFile();
+      if (path) {
+        setLogoPath(path);
+        await setBrandLogoPath(path);
+        refreshBrandSettings();
+      }
+    } catch {
+      // File picker dialog was dismissed or failed — no action needed.
     }
   }, [refreshBrandSettings]);
 
@@ -127,10 +131,15 @@ export function AppearanceSettings({
 
   const save = useCallback(async () => {
     setSaving(true);
-    await setBrandPrimaryColour(colourRef.current);
-    await setBrandStoreName(nameRef.current);
-    refreshBrandSettings();
-    setSaving(false);
+    try {
+      await setBrandPrimaryColour(colourRef.current);
+      await setBrandStoreName(nameRef.current);
+      refreshBrandSettings();
+    } catch {
+      // API call failed — state remains unchanged.
+    } finally {
+      setSaving(false);
+    }
   }, [refreshBrandSettings]);
 
   const handleResetAll = useCallback(async () => {

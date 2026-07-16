@@ -564,6 +564,7 @@ export default function SettingsPage() {
     setBrandColour(snap.brandColour);
     setBrandStoreName(snap.brandStoreName);
     setIsDirty(false);
+    setFieldErrors({});
     setSyncResult(null);
     setSyncApiKey('');
     setSyncApiKeyVisible(false);
@@ -666,7 +667,7 @@ export default function SettingsPage() {
     const results = await Promise.allSettled([
       setReceiptSettings(receipt, session?.user_id ?? ''),
       setStoreSettings(store, session?.user_id ?? ''),
-      setCtxCurrency(defaultCurrency).catch(() => {}),
+      setCtxCurrency(defaultCurrency),
       setUserPreferences(userId, [
         { key: 'cardsize', value: String(displayCardSize) },
         { key: 'fontsize', value: String(displayFontSize) },
@@ -735,6 +736,11 @@ export default function SettingsPage() {
 
   // ── Keyboard shortcuts ────────────────────────────────────
 
+  // Keep a ref to the latest handleSave so the keyboard listener
+  // never calls a stale closure (avoids re-binding on every render).
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+
   useEffect(() => {
     // Use filtered categories so arrow nav respects the search query
     const flatKeys = filteredCategories.flatMap((c) => c.keys);
@@ -743,7 +749,7 @@ export default function SettingsPage() {
       // Ctrl+S / Cmd+S → save (guarded by saving flag)
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        if (!saving) handleSave();
+        if (!saving) handleSaveRef.current();
         return;
       }
 
@@ -773,9 +779,6 @@ export default function SettingsPage() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-    // Re-attach on searchQuery changes so arrow nav always uses the
-    // current filtered list.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, mobileSidebarOpen, saving, searchQuery]);
 
   // ── Loading / Error states ───────────────────────────────────

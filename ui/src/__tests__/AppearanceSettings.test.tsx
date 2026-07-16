@@ -332,6 +332,21 @@ describe('AppearanceSettings', () => {
     expect(screen.getByLabelText('Save appearance')).toBeDisabled();
   });
 
+  it('re-enables save button when API call fails', async () => {
+    const user = userEvent.setup();
+    mockSetBrandPrimaryColour.mockRejectedValue(new Error('network error'));
+    render(<AppearanceSettings />);
+    await waitFor(() => {
+      expect(screen.getByLabelText('Save appearance')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Save appearance'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Save appearance')).not.toBeDisabled();
+    });
+  });
+
   it('calls setBrandPrimaryColour and setBrandStoreName with updated values on save', async () => {
     const user = userEvent.setup();
     render(<AppearanceSettings />);

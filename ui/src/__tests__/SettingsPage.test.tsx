@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, cleanup } from '@testing-library/react';
+import { screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
@@ -242,7 +242,7 @@ describe('SettingsPage', () => {
     });
   });
 
-  it('shows save-partial toast when all non-currency saves fail', async () => {
+  it('shows full save-error toast when every save API call fails', async () => {
     failCommands.add('set_receipt_settings');
     failCommands.add('set_store_settings');
     failCommands.add('set_default_currency');
@@ -255,13 +255,8 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('button', { name: /save settings/i }));
-    // Currency save has .catch(() => {}) so at least one promise resolves;
-    // the page shows "Saved!" and a partial-failure toast.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
-    });
-    await waitFor(() => {
-      expect(screen.getByText(/some settings could not be saved/i)).toBeInTheDocument();
+      expect(screen.getByText(/failed to save settings/i)).toBeInTheDocument();
     });
   });
 
@@ -520,4 +515,140 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: /switch to light/i })).toBeInTheDocument();
     expect(screen.getByText(/0\.0\.4/)).toBeInTheDocument();
   });
+
+  // ── Keyboard shortcut ─────────────────────────────────────────
+
+  it('saves latest form values when Ctrl+S is pressed after editing', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Ctrl+S Store');
+
+    const addressInput = screen.getByRole('textbox', { name: 'Address' });
+    await userEvent.clear(addressInput);
+    await userEvent.type(addressInput, '456 Keyboard Blvd');
+
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith(
+        'set_store_settings',
+        expect.objectContaining({
+          args: expect.objectContaining({
+            name: 'Ctrl+S Store',
+            address: '456 Keyboard Blvd',
+          }),
+        }),
+      );
+    });
+  });
+
+  // ── Field validation ──────────────────────────────────────────
+
+  it('shows "store name is required" when store name is empty on blur', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
+    await userEvent.clear(nameInput);
+    await userEvent.tab();
+
+    await waitFor(() => {
+      expect(screen.getByText('Store name is required')).toBeInTheDocument();
+    });
+    expect(nameInput.className).toContain('settings-input--error');
+  });
+
+  it('clears store-name error when user starts typing', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
+    await userEvent.clear(nameInput);
+    await userEvent.tab();
+    await waitFor(() => {
+      expect(screen.getByText('Store name is required')).toBeInTheDocument();
+    });
+
+    await userEvent.type(nameInput, 'A');
+    expect(screen.queryByText('Store name is required')).not.toBeInTheDocument();
+  });
+
+  it('shows tax-id pattern error for invalid characters', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: /tax.*id/i })).toBeInTheDocument();
+    });
+
+    const taxInput = screen.getByRole('textbox', { name: /tax.*id/i });
+    await userEvent.clear(taxInput);
+    await userEvent.type(taxInput, '12-345@#');
+    await userEvent.tab();
+
+    await waitFor(() => {
+      expect(screen.getByText(/only letters, numbers, dashes, dots, and slashes allowed/i)).toBeInTheDocument();
+    });
+    expect(taxInput.className).toContain('settings-input--error');
+  });
+
+  it('does not show tax-id error for valid characters', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: /tax.*id/i })).toBeInTheDocument();
+    });
+
+    const taxInput = screen.getByRole('textbox', { name: /tax.*id/i });
+    await userEvent.clear(taxInput);
+    await userEvent.type(taxInput, '12-345.67/89');
+    await userEvent.tab();
+
+    expect(screen.queryByText(/only letters, numbers, dashes, dots, and slashes allowed/i)).not.toBeInTheDocument();
+  });
+
+  // ── Revert button ─────────────────────────────────────────────
+
+  it('clears field validation errors when Revert is clicked', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
+    await userEvent.clear(nameInput);
+    await userEvent.tab();
+    await waitFor(() => {
+      expect(screen.getByText('Store name is required')).toBeInTheDocument();
+    });
+
+    const revertBtn = document.querySelector('.settings-btn-revert') as HTMLElement;
+    expect(revertBtn).toBeInTheDocument();
+    await userEvent.click(revertBtn);
+
+    expect(screen.queryByText('Store name is required')).not.toBeInTheDocument();
+  });
+
+  it('shows Revert button only when form is dirty', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    const revertBtn = document.querySelector('.settings-btn-revert') as HTMLElement;
+    expect(revertBtn.className).toContain('settings-btn-revert--hidden');
+
+    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
+    await userEvent.type(nameInput, 'x');
+    expect(revertBtn.className).not.toContain('settings-btn-revert--hidden');
+  });
+
+  // ── Full save failure ─────────────────────────────────────────
+
 });
