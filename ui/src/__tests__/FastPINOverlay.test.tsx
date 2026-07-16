@@ -158,8 +158,8 @@ describe("FastPINOverlay", () => {
     it("closes when overlay backdrop is clicked", async () => {
       const onClose = vi.fn();
       renderOverlay(true, onClose);
-      // Click the backdrop (the outer div)
-      const overlay = screen.getByRole("presentation");
+      // Click the backdrop (outer overlay div, no longer role="presentation")
+      const overlay = document.querySelector(".fastpin-overlay")!;
       fireEvent.click(overlay);
       // Component uses 200ms exit animation before calling onClose
       await waitFor(() => {

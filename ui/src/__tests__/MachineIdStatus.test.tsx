@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, act } from '@testing-library/react';
+import { screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import MachineIdStatus from '@/components/MachineIdStatus';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -83,10 +83,10 @@ describe('MachineIdStatus', () => {
 
     renderWithProvidersSync(<MachineIdStatus />, sharedFtl);
 
+    // <button> natively fires click on Enter keydown;
+    // simulate the click directly as jsdom doesn't auto-fire it.
     const chip = await screen.findByRole('button');
-    await act(async () => {
-      chip.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
+    fireEvent.click(chip);
 
     expect(writeText).toHaveBeenCalledWith('abc-123-def');
   });
@@ -99,9 +99,7 @@ describe('MachineIdStatus', () => {
     renderWithProvidersSync(<MachineIdStatus />, sharedFtl);
 
     const chip = await screen.findByRole('button');
-    await act(async () => {
-      chip.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-    });
+    fireEvent.click(chip);
 
     expect(writeText).toHaveBeenCalledWith('abc-123-def');
   });

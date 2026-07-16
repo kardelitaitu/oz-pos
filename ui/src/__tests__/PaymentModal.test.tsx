@@ -522,7 +522,7 @@ describe('PaymentModal', () => {
 
     await userEvent.click(screen.getByLabelText(/QRIS/));
 
-    expect(screen.getByRole('button', { name: /generate qris/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pay with qr/i })).toBeInTheDocument();
   });
 
   // ── Close button ──

@@ -165,7 +165,7 @@ describe('RestaurantMenu', () => {
 
   it('shows context menu on right-click', async () => {
     renderMenu();
-    const card = screen.getByText('Nasi Goreng').closest('[role="button"]')!;
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
 
     await act(async () => {
       card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 200 }));
@@ -184,7 +184,7 @@ describe('RestaurantMenu', () => {
 
   it('hides out-of-stock products when marked unavailable via context menu', async () => {
     renderMenu();
-    const card = screen.getByText('Nasi Goreng').closest('[role="button"]')!;
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
 
     await act(async () => {
       card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 200 }));
