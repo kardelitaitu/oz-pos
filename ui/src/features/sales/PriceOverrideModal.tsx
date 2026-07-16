@@ -131,6 +131,18 @@ export default function PriceOverrideModal({
     }
   }, [step]);
 
+  // ── Escape key closes ───────────────────────────────────────
+  useEffect(() => {
+    if (!open || exiting || loading) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, exiting, loading, handleClose]);
+
   if (!open && !exiting) return null;
 
   const renderPinDots = (length: number) => (

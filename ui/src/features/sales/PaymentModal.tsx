@@ -688,6 +688,18 @@ export default function PaymentModal({
     return () => clearTimeout(timer);
   }, [leaving, handleLeaveEnd, MS_200]);
 
+  // ── Escape key closes ───────────────────────────────────────
+  useEffect(() => {
+    if (!open || leaving || processing) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showCustomerSearch && !showQr) {
+        animateLeave(onClose);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, leaving, processing, showCustomerSearch, showQr, animateLeave, onClose]);
+
   if (!open && !leaving) return null;
 
   const stateClass = leaving ? 'payment-overlay--exit' : 'payment-overlay--enter';

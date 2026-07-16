@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLocalization } from '@fluent/react';
 import { Localized } from '@/frontend/shared/Localized';
 import { processRefund, type SaleDetail } from '@/api/sales';
@@ -110,6 +110,17 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
     exit.requestClose();
   }, [onRefunded, exit]);
 
+  // ── Escape key closes ───────────────────────────────────────
+  useEffect(() => {
+    if (!open || exit.exiting || processing) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        exit.requestClose();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, exit.exiting, exit.requestClose, processing]);
 
   if (!exit.shouldRender) return null;
 
