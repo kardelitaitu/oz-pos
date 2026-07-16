@@ -447,6 +447,7 @@ export default function TaxConfigurationScreen() {
               type="button"
               role="radio"
               aria-checked={!form.isInclusive}
+              aria-label={l10n.getString('tax-config-type-exclusive-label')}
               className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
               onClick={() => setForm({ ...form, isInclusive: false })}
             >
@@ -461,6 +462,7 @@ export default function TaxConfigurationScreen() {
               type="button"
               role="radio"
               aria-checked={form.isInclusive}
+              aria-label={l10n.getString('tax-config-type-inclusive-label')}
               className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
               onClick={() => setForm({ ...form, isInclusive: true })}
             >
