@@ -125,7 +125,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **StockTransfersScreen overlay backdrop**: Upgraded from plain `var(--color-bg-overlay)` to `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)` with will-change hint, matching ShiftManagementScreen and SettingsPopup dark blur pattern. Added fade-in animation for overlay and slide-up animation for modal with `prefers-reduced-motion` guard. Modal background upgraded from `var(--color-bg)` to `var(--color-bg-elevated)` and border-radius from `radius-lg` to `radius-xl`.
 - **ProductManagementScreen overlay backdrop**: Same dark blur upgrade for `.product-mgmt-overlay` — `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)` with fade-in/slide-up animations and reduced-motion guard.
 - **PromotionManagementScreen overlay backdrop**: Same dark blur upgrade for `.promo-mgmt-overlay` — `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)` with fade-in/slide-up animations and reduced-motion guard.
-- **Skeleton loading (25 screens)**: Replaced plain text loading messages with proper skeleton structures matching real layout across all settings-adjacent screens:
+- **Skeleton loading (28 screens + 3 secondary states)**: Replaced plain text loading messages with proper skeleton structures matching real layout across all settings-adjacent and sales screens:
   - **AuditLogScreen**: Filters skeleton (search bar + outcome chips) + 6-row table skeleton.
   - **OfflineQueueScreen**: Header skeleton + 5-row table skeleton (7 columns).
   - **ShiftManagementScreen**: Shift card skeleton + 4-row table skeleton (9 columns).
@@ -151,9 +151,12 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   - **GiftCardsScreen**: Header + toolbar (search+filter) + 3 card skeletons with status badge pills via Card component.
   - **StaffManagementScreen**: Header + 6-column table (Role pill, Workspace, Name, Username, Status, Actions) with 4 skeleton rows.
   - **TerminalStatusPanel**: Header (title + count skeleton) + 4 rows mimicking real list items — circle dot (0.625rem), name (80% width), device (60% width), time (2.5rem).
-  - **TerminalManagementScreen (secondary — overrides **+** binding)**: 3 feature group sections with header + 2 toggle rows each replacing 'Loading overrides…' plus binding info area + 2 select field skeletons + button skeleton replacing 'Loading binding…'.
+  - **TerminalManagementScreen (secondary — overrides + binding)**: 3 feature group sections with header + 2 toggle rows each replacing 'Loading overrides…' plus binding info area + 2 select field skeletons + button skeleton replacing 'Loading binding…'.
   - **StockTransfersScreen (secondary — detail modal)**: 6 info field skeletons (2-column grid) + 4-column lines table (SKU, Product, Qty, Received) with 4 skeleton rows + actions button replacing 'Loading…'.
   - **ShiftManagementScreen (secondary — report modal)**: Title skeleton + 4 flex rows (flex space-between) replacing 'Loading report…'.
+  - **SalesHistoryScreen (primary + detail)**: Header (title + export btn) + filter bar (search input, 4 status chips, 3 date/cashier fields) + 8-column table (Sale ID, Date, Total, Items, Status pill, Payment, Cashier, Actions) with 5 skeleton rows. Detail modal: 6 meta info fields grid + 5-column lines table (SKU, Name, Qty, Unit Price, Total) with 4 skeleton rows. Replaced 'Loading sales…' and 'Loading…' text.
+  - **VoidOrdersScreen (list + detail)**: Header + filter bar (search input + 5 status chips) + 7-column table (Order ID, Date, Status pill, Total, Items, Payment, Actions) with 5 skeleton rows. Detail view: back button + summary card (heading + badge pill + 4 meta items grid) + line items card (5-column SKU/Name/Qty/Unit Price/Total table) with 4 skeleton rows. Replaced 'Loading orders…' and 'Loading order details…' text.
+  - **EodReportScreen (full report)**: 4 KPI card skeletons (label + large value + sub each) + two-column layout (left: Payment Breakdown card with 3 method rows with bar track + amount; right: Hourly Sales card with 8 bar rows using fixed alternating widths) + summary grid (6 items). Replaced spinner + 'Loading report…' text.
   - All skeletons use `aria-hidden="true"` parent containers, `pointer-events: none`, and mirror real table/grid layouts.
   - Removed dead CSS classes (`-loading` variants) from all converted screens.
 - **Receipt footer textarea**: Changed from single-line `<input>` to `<textarea rows=3 maxLength=500>` with character count hint.
