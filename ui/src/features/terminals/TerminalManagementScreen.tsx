@@ -700,9 +700,24 @@ export default function TerminalManagementScreen() {
               </h3>
             </Localized>
             {overridesLoading ? (
-              <Localized id="terminal-loading-overrides">
-                <p className="terminal-mgmt-loading">Loading overrides…</p>
-              </Localized>
+              <div className="terminal-mgmt-overrides-skeleton" aria-hidden="true">
+                {[0, 1, 2].map((groupIdx) => (
+                  <div key={groupIdx} className="terminal-mgmt-skeleton-group">
+                    <div className="terminal-mgmt-feature-group-header">
+                      <Skeleton width="4rem" height="0.75rem" />
+                      <Skeleton width="3rem" height="0.75rem" />
+                    </div>
+                    <div className="terminal-mgmt-feature-group-items">
+                      {[0, 1].map((rowIdx) => (
+                        <div key={rowIdx} className="terminal-mgmt-skeleton-toggle-row">
+                          <Skeleton width="60%" height="0.875rem" />
+                          <Skeleton variant="block" width="2.25rem" height="1.375rem" style={{ borderRadius: '0.6875rem' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="terminal-mgmt-feature-groups">
                 {FEATURE_GROUPS.map((group) => {
@@ -806,7 +821,25 @@ export default function TerminalManagementScreen() {
               Device Binding
             </h3>
             {bindingLoading ? (
-              <p className="terminal-mgmt-loading">Loading binding…</p>
+              <div className="terminal-mgmt-binding-skeleton" aria-hidden="true">
+                <div className="terminal-mgmt-skeleton-binding-info">
+                  <Skeleton width="70%" height="0.875rem" />
+                  <Skeleton width="50%" height="0.75rem" style={{ marginTop: '0.25rem' }} />
+                </div>
+                <div className="terminal-mgmt-binding-fields">
+                  <div className="terminal-mgmt-skeleton-field">
+                    <Skeleton width="3rem" height="0.875rem" />
+                    <Skeleton variant="block" width="100%" height="2.375rem" style={{ borderRadius: 'var(--radius-lg)' }} />
+                  </div>
+                  <div className="terminal-mgmt-skeleton-field">
+                    <Skeleton width="5rem" height="0.875rem" />
+                    <Skeleton variant="block" width="100%" height="2.375rem" style={{ borderRadius: 'var(--radius-lg)' }} />
+                  </div>
+                </div>
+                <div className="terminal-mgmt-binding-actions">
+                  <Skeleton variant="block" width="7rem" height="2rem" style={{ borderRadius: 'var(--radius-lg)' }} />
+                </div>
+              </div>
             ) : (
               <>
                 {binding?.bounded && (
