@@ -195,11 +195,18 @@
   cursor: pointer;
   font-size: 0.875rem;
   line-height: 1;
-  padding: 0 0.125rem;
+  padding: 0 0.25rem;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
 }
 
 .retail-search-clear:hover {
   color: var(--color-fg);
+}
+
+.retail-search-clear:focus-visible {
+  outline: 2px solid var(--color-primary-pos);
+  outline-offset: 2px;
 }
 
 /* ── Main area: product grid (left) + cart (right) ────────── */
@@ -578,6 +585,11 @@
 
 .retail-cart-remove-btn:hover {
   color: var(--color-danger-hover);
+}
+
+.retail-cart-remove-btn:focus-visible {
+  outline: 2px solid var(--color-primary-pos);
+  outline-offset: 2px;
 }
 
 /* Totals section */
