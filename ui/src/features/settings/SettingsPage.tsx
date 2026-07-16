@@ -1096,7 +1096,9 @@ export default function SettingsPage() {
                         <input
                           id="receipt-show-currency"
                           type="checkbox"
+                          role="switch"
                           checked={receipt.showCurrency}
+                          aria-checked={receipt.showCurrency}
                           onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
                           aria-label="Show currency symbol on amounts"
                         />
@@ -1144,7 +1146,9 @@ export default function SettingsPage() {
                         <input
                           id="receipt-show-tax"
                           type="checkbox"
+                          role="switch"
                           checked={receipt.showTax}
+                          aria-checked={receipt.showTax}
                           onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
                           aria-label="Show tax line on receipts"
                         />
@@ -1210,7 +1214,9 @@ export default function SettingsPage() {
                         <input
                           id="receipt-show-table-number"
                           type="checkbox"
+                          role="switch"
                           checked={receipt.showTableNumber}
+                          aria-checked={receipt.showTableNumber}
                           onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
                           aria-label="Show table number on cart and receipts"
                         />
@@ -1310,7 +1316,9 @@ export default function SettingsPage() {
                         <input
                           id="sync-enabled"
                           type="checkbox"
+                          role="switch"
                           checked={sync.enabled}
+                          aria-checked={sync.enabled}
                           onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
                           aria-label="Enable Cloud Sync"
                         />

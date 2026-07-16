@@ -289,7 +289,9 @@ export function AppearanceSettings({
               <input
                 id="hw-accel-checkbox"
                 type="checkbox"
+                role="switch"
                 checked={hwAccelEnabled}
+                aria-checked={hwAccelEnabled}
                 onChange={(e) => setHwAccelEnabled(e.target.checked)}
               />
               <span className="settings-toggle-slider" />
