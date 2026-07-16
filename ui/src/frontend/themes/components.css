@@ -609,10 +609,13 @@
 
 /* ── Touch-friendly sizing ─────────────────────────── */
 @media (pointer: coarse) {
-  button, a, [role="button"], input, select, textarea {
+  button, a, [role="button"], input, select, textarea,
+  [role="tab"], [role="radio"], [role="switch"],
+  summary, label {
     min-height: var(--touch-target-min);
   }
-  .btn, .card-clickable, .nav-item {
+  .btn, .card-clickable, .nav-item,
+  [role="tablist"] [role="tab"] {
     min-height: var(--touch-target-comfortable);
   }
 }
