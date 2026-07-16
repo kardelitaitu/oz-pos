@@ -584,6 +584,8 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         <input
           type="text"
           className="restaurant-search-input"
+          id="restaurant-menu-search"
+          name="restaurant-menu-search"
           ref={searchInputRef}
           placeholder={l10n.getString('restaurant-menu-search-placeholder')}
           value={searchQuery}

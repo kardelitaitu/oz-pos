@@ -26,12 +26,10 @@ settings-sidebar-nav-aria = Navigasi pengaturan
 settings-sidebar-expand-aria = Buka bilah sisi pengaturan
 settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
 settings-sidebar-collapse-all-aria = Tutup semua kategori
-settings-sidebar-search-placeholder = Cari pengaturan…
-settings-sidebar-clear-results = Hapus pencarian
 settings-sidebar-search-clear-aria =
     .aria-label = Hapus pencarian
 settings-sidebar-no-results = Tidak ada bagian yang cocok
-settings-sidebar-recent = Terbaru
+settings-sidebar-clear-results = Hapus pencarian
 settings-theme-toggle-dark-aria = Alihkan ke mode gelap
 settings-theme-toggle-light-aria = Alihkan ke mode terang
 settings-store-name = Nama Toko
@@ -209,6 +207,7 @@ settings-load-failed = Gagal memuat pengaturan
 settings-load-partial = Sebagian pengaturan gagal dimuat. Coba lagi.
 settings-section-store = Toko
 settings-section-currency = Mata Uang
+settings-currency-loading = Memuat mata uang…
 settings-section-display = Tampilan
 settings-section-receipt = Nota
 settings-field-store-name = Nama toko
@@ -217,7 +216,6 @@ settings-field-tax-id = NPWP
 settings-field-default-currency = Mata uang default
 settings-field-decimal-separator = Pemisah desimal
 settings-field-paper-width = Lebar kertas
-settings-field-language = Bahasa
 settings-field-footer = Kaki nota
 
 # ── Tampilan ──
@@ -713,5 +711,11 @@ settings-installing-update = Memasang…
 settings-update-check-error = Pemeriksaan pembaruan gagal
 settings-update-retry = Coba Lagi
 settings-toast-failed-displays = Gagal memuat layar
+settings-field-language = Bahasa
+
+# ── Field validation ──
+settings-store-name-required = Nama toko wajib diisi
+settings-tax-id-pattern-error = Hanya huruf, angka, garis, titik, dan garis miring yang diizinkan
+settings-tax-id-pattern-hint = Hanya huruf, angka, garis, titik, dan garis miring, maks 20 karakter
 settings-toast-saved = Pengaturan tersimpan
 settings-toast-failed-save = Gagal menyimpan pengaturan

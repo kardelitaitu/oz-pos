@@ -427,6 +427,8 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
                     ref={usernameInputRef}
                     type="text"
                     className="fastpin-input"
+                    id="fastpin-username"
+                    name="fastpin-username"
                     placeholder="Username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}

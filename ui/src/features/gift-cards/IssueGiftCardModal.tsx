@@ -69,6 +69,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
             <input
               type="text"
               className="gift-cards-modal-input"
+              id="gift-card-number"
+              name="gift-card-number"
               value={cardNumber}
               onChange={(e) => { setCardNumber(e.target.value); setError(''); }}
               aria-label={l10n.getString('gift-cards-issue-number-aria')}
@@ -82,6 +84,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
             <input
               type="number"
               className="gift-cards-modal-input"
+              id="gift-card-amount"
+              name="gift-card-amount"
               placeholder="e.g. 50000"
               value={amount}
               onChange={(e) => { setAmount(e.target.value); setError(''); }}
@@ -96,6 +100,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
             <input
               type="text"
               className="gift-cards-modal-input"
+              id="gift-card-issued-to"
+              name="gift-card-issued-to"
               placeholder="Customer name"
               value={issuedTo}
               onChange={(e) => setIssuedTo(e.target.value)}
@@ -110,6 +116,8 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
             <input
               type="text"
               className="gift-cards-modal-input"
+              id="gift-card-pin"
+              name="gift-card-pin"
               placeholder="For balance checks"
               value={pin}
               onChange={(e) => setPin(e.target.value)}

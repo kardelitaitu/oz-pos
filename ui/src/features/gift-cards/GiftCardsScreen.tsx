@@ -101,15 +101,16 @@ export default function GiftCardsScreen() {
         </Button>
       </div>
 
-      <div className="gift-cards-toolbar">
-        <input
-          type="text"
-          className="gift-cards-search"
-          placeholder={l10n.getString('gift-cards-search-placeholder')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label={l10n.getString('gift-cards-search-aria')}
-        />
+      <div className="gift-cards-toolbar">          <input
+            type="text"
+            className="gift-cards-search"
+            id="gift-cards-search"
+            name="gift-cards-search"
+            placeholder={l10n.getString('gift-cards-search-placeholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label={l10n.getString('gift-cards-search-aria')}
+          />
         <select
           className="gift-cards-status-filter"
           value={statusFilter}
@@ -208,6 +209,8 @@ export default function GiftCardsScreen() {
                       <input
                         type="number"
                         className="gift-card-topup-input"
+                        id="gift-card-topup-amount"
+                        name="gift-card-topup-amount"
                         placeholder="Amount (minor units)"
                         value={topUpAmount}
                         onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}

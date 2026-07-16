@@ -438,6 +438,8 @@ export default function CategoryManagementScreen() {
                   <input
                     className="cat-mgmt-input"
                     type="text"
+                    id="cat-new-name"
+                    name="cat-new-name"
                     placeholder="e.g. Bakery, Merchandise"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
@@ -577,6 +579,8 @@ export default function CategoryManagementScreen() {
                 <input
                   className="cat-mgmt-input"
                   type="text"
+                  id="cat-edit-name"
+                  name="cat-edit-name"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   ref={editInputRef}

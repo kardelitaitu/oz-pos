@@ -169,6 +169,8 @@ export function AppearanceSettings({
           </Localized>
           <Localized id="appearance-colour-hex-aria" attrs={{ 'aria-label': true }}>
             <input
+              id="appearance-colour-hex"
+              name="appearance-colour-hex"
               type="text"
               value={activeColour}
               onChange={(e) => {

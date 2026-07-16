@@ -450,31 +450,38 @@ export default function SettingsPage() {
   const [sectionKey, setSectionKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // ── Recently visited sections (max 3, persisted to localStorage) ──
-  const [recentSections, setRecentSections] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('settings-recent-sections');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.every((s: unknown) => typeof s === 'string')) {
-          return parsed.slice(0, 3);
-        }
+  // ── Field validation state ────────────────────────────────
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const validateField = useCallback((field: string, value: string) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (field === 'store-name' && !value.trim()) {
+        next[field] = l10n.getString('settings-store-name-required');
+      } else if (field === 'tax-id' && value.trim() && !/^[A-Za-z0-9-./]*$/.test(value.trim())) {
+        next[field] = l10n.getString('settings-tax-id-pattern-error');
+      } else {
+        delete next[field];
       }
-    } catch { /* malformed JSON — start fresh */ }
-    return [];
-  });
+      return next;
+    });
+  }, [l10n]);
+
+  const clearFieldError = useCallback((field: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }, []);
 
   /** Navigate to a section and record it as recently used. */
   const navigateToSection = useCallback((key: string) => {
     setActiveSection(key);
     setMobileSidebarOpen(false);
     setSectionKey((k) => k + 1);
-    setRecentSections((prev) => {
-      // Move `key` to front, deduplicate, keep max 3
-      const next = [key, ...prev.filter((k) => k !== key)].slice(0, 3);
-      localStorage.setItem('settings-recent-sections', JSON.stringify(next));
-      return next;
-    });
+
     // Auto-expand the category containing this section
     const cat = CATEGORIES.find((c) => c.keys.includes(key));
     if (cat?.label) setExpandedCategory(cat.label);
@@ -824,53 +831,86 @@ export default function SettingsPage() {
               header={<Localized id="settings-section-store"><h2 className="settings-section-title">Store</h2></Localized>}
             >
               <div className="settings-form">
-                <label className="settings-field" htmlFor="settings-field-store-name">
-                  {l10n.getString('settings-field-store-name')}
-                  <Localized id="settings-store-name-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="settings-input" autoComplete="off"
-                      type="text"
-                      id="settings-field-store-name"
-                      placeholder="OZ-POS Store"
-                      value={store.name}
-                      onChange={(e) => { setStore({ ...store, name: e.target.value }); markDirty(); }}
-                    />
-                  </Localized>
-                </label>
+                <div className="settings-field settings-field--horizontal">
+                  <label htmlFor="settings-field-store-name" className="settings-label">
+                    {l10n.getString('settings-field-store-name')}
+                  </label>
+                  <span className="settings-field-input-wrap">
+                    <Localized id="settings-store-name-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className={`settings-input${fieldErrors['store-name'] ? ' settings-input--error' : ''}`} autoComplete="off"
+                        type="text"
+                        id="settings-field-store-name"
+                        required
+                        maxLength={100}
+                        placeholder="OZ-POS Store"
+                        value={store.name}
+                        onChange={(e) => { setStore({ ...store, name: e.target.value }); clearFieldError('store-name'); markDirty(); }}
+                        onBlur={() => validateField('store-name', store.name)}
+                      />
+                    </Localized>
+                    {fieldErrors['store-name'] && (
+                      <p className="settings-hint settings-hint--error">{fieldErrors['store-name']}</p>
+                    )}
+                  </span>
+                </div>
 
-                <label className="settings-field" htmlFor="settings-field-address">
-                  {l10n.getString('settings-field-address')}
-                  <Localized id="settings-address-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="settings-input" autoComplete="off"
-                      type="text"
-                      id="settings-field-address"
-                      placeholder="123 Main Street"
-                      value={store.address}
-                      onChange={(e) => { setStore({ ...store, address: e.target.value }); markDirty(); }}
-                    />
-                  </Localized>
-                </label>
+                <div className="settings-field settings-field--horizontal">
+                  <label htmlFor="settings-field-address" className="settings-label">
+                    {l10n.getString('settings-field-address')}
+                  </label>
+                  <span className="settings-field-input-wrap">
+                    <Localized id="settings-address-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className={`settings-input${fieldErrors['address'] ? ' settings-input--error' : ''}`} autoComplete="off"
+                        type="text"
+                        id="settings-field-address"
+                        maxLength={200}
+                        placeholder="123 Main Street"
+                        value={store.address}
+                        onChange={(e) => { setStore({ ...store, address: e.target.value }); clearFieldError('address'); markDirty(); }}
+                      />
+                    </Localized>
+                    {fieldErrors['address'] && (
+                      <p className="settings-hint settings-hint--error">{fieldErrors['address']}</p>
+                    )}
+                  </span>
+                </div>
 
-                <label className="settings-field" htmlFor="settings-field-tax-id">
-                  {l10n.getString('settings-field-tax-id')}
-                  <Localized id="settings-tax-id-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="settings-input" autoComplete="off"
-                      type="text"
-                      id="settings-field-tax-id"
-                      placeholder="12-3456789"
-                      value={store.taxId}
-                      onChange={(e) => { setStore({ ...store, taxId: e.target.value }); markDirty(); }}
-                    />
-                  </Localized>
-                </label>
+                <div className="settings-field settings-field--horizontal">
+                  <label htmlFor="settings-field-tax-id" className="settings-label">
+                    {l10n.getString('settings-field-tax-id')}
+                  </label>
+                  <span className="settings-field-input-wrap">
+                    <Localized id="settings-tax-id-placeholder" attrs={{ placeholder: true }}>
+                      <input
+                        className={`settings-input${fieldErrors['tax-id'] ? ' settings-input--error' : ''}`} autoComplete="off"
+                        type="text"
+                        id="settings-field-tax-id"
+                        maxLength={20}
+                        pattern="[A-Za-z0-9\-./]*"
+                        placeholder="12-3456789"
+                        title={l10n.getString('settings-tax-id-pattern-hint')}
+                        value={store.taxId}
+                        onChange={(e) => { setStore({ ...store, taxId: e.target.value }); clearFieldError('tax-id'); markDirty(); }}
+                        onBlur={() => validateField('tax-id', store.taxId)}
+                      />
+                    </Localized>
+                    {fieldErrors['tax-id'] && (
+                      <p className="settings-hint settings-hint--error">{fieldErrors['tax-id']}</p>
+                    )}
+                  </span>
+                </div>
 
-                <div className="settings-field">
-                  <Localized id="settings-field-language">
-                    <span className="settings-label"><span>Language</span></span>
-                  </Localized>
-                  <LanguageSelector />
+                <div className="settings-field settings-field--horizontal">
+                  <label htmlFor="language-select" className="settings-label">
+                    <Localized id="settings-field-language">
+                      <span>Language</span>
+                    </Localized>
+                  </label>
+                  <span className="settings-field-input-wrap">
+                    <LanguageSelector hideLabel />
+                  </span>
                 </div>
               </div>
             </Card>
@@ -881,23 +921,35 @@ export default function SettingsPage() {
               header={<Localized id="settings-section-currency"><h2 className="settings-section-title">Currency</h2></Localized>}
             >
               <div className="settings-form">
-                <label className="settings-field" htmlFor="settings-field-default-currency">
-                  <Localized id="settings-field-default-currency">
-                    <span className="settings-label">Default currency</span>
-                  </Localized>
-                  <select
-                    className="settings-select"
-                    id="settings-field-default-currency"
-                    value={defaultCurrency}
-                    onChange={(e) => { setDefaultCurrencyState(e.target.value); markDirty(); }}
-                  >
-                    {currencies.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.code} — {c.name} ({c.symbol})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="settings-field settings-field--horizontal">
+                  <label htmlFor="settings-field-default-currency" className="settings-label">
+                    <Localized id="settings-field-default-currency">
+                      <span>Default currency</span>
+                    </Localized>
+                  </label>
+                  <span className="settings-field-input-wrap">
+                    <select
+                      className="settings-select"
+                      id="settings-field-default-currency"
+                      value={currencies.length > 0 ? defaultCurrency : ''}
+                      onChange={(e) => { setDefaultCurrencyState(e.target.value); markDirty(); }}
+                      disabled={currencies.length === 0}
+                      aria-label={l10n.getString('settings-field-default-currency')}
+                    >
+                      {currencies.length === 0 ? (
+                        <Localized id="settings-currency-loading">
+                          <option value="" disabled>Loading currencies…</option>
+                        </Localized>
+                      ) : (
+                        currencies.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.code} — {c.name} ({c.symbol})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </span>
+                </div>
               </div>
             </Card>
           </>
@@ -1468,6 +1520,38 @@ export default function SettingsPage() {
             <Localized id="settings-title">Settings</Localized>
           </span>
         </div>
+        <div className="settings-topbar-center">
+          <div className="settings-topbar-search">
+            <svg className="settings-topbar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              id="settings-search-input"
+              name="settings-search"
+              className="settings-topbar-search-input"
+              type="text"
+              placeholder="Search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label={l10n.getString('settings-sidebar-search-aria')}
+              autoComplete="off"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="settings-topbar-search-clear"
+                onClick={() => setSearchQuery('')}
+                aria-label={l10n.getString('settings-sidebar-search-clear-aria')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
         <div className="settings-topbar-right">
           <span className="settings-topbar-clock" aria-label={`${today}, ${clock}`}>
             {today} {clock}
@@ -1566,72 +1650,7 @@ export default function SettingsPage() {
             </button>
           </div>
 
-          {/* ── Sidebar search ──────────────── */}
-          {!sidebarCollapsed && (
-            <div className="settings-sidebar-search">
-              <svg className="settings-sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                className="settings-sidebar-search-input"
-                type="text"
-                placeholder={l10n.getString('settings-sidebar-search-placeholder')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label={l10n.getString('settings-sidebar-search-aria')}
-              />
-              {q && (
-                <span className="settings-sidebar-search-count">
-                  {filteredCategories.reduce((sum, cat) => sum + cat.keys.length, 0)}
-                </span>
-              )}
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="settings-sidebar-search-clear"
-                  onClick={() => setSearchQuery('')}
-                  aria-label={l10n.getString('settings-sidebar-search-clear-aria')}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          )}
-
           <nav className="settings-sidebar-nav">
-            {/* ── Recently used (only when not searching) ── */}
-            {!q && recentSections.length > 0 && !sidebarCollapsed && (
-              <div className="settings-recent-section">
-                <span className="settings-recent-section-label">
-                  <Localized id="settings-sidebar-recent">Recent</Localized>
-                </span>
-                {recentSections.map((key) => {
-                  const item = NAV_ITEMS.find((n) => n.key === key);
-                  if (!item) return null;
-                  return (
-                    <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
-                      <button
-                        type="button"
-                        className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
-                        onClick={() => navigateToSection(key)}
-                        aria-current={activeSection === key ? 'page' : undefined}
-                        aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
-                      >
-                        <span className="settings-nav-icon">{item.icon}</span>
-                        <span className="settings-nav-label">
-                          <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
-                        </span>
-                      </button>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            )}
-
             {q && filteredCategories.length === 0 ? (
               <div className="settings-sidebar-empty-search">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="1.75rem" height="1.75rem" aria-hidden="true">
@@ -1721,33 +1740,35 @@ export default function SettingsPage() {
 
         {/* ── Main content ──────────────────────────────── */}
         <main className="settings-content">
-          {/* ── Section breadcrumb header ───────── */}
-          {currentNavItem && (
-            <header className="settings-section-header">
-              <div className="settings-section-header-icon" aria-hidden="true">
-                {currentNavItem.icon}
-              </div>
-              <div className="settings-section-header-text">
-                {currentCategory && (
-                  <button
-                    type="button"
-                    className="settings-section-header-category"
-                    onClick={() => setExpandedCategory(currentCategory.label)}
-                    aria-label={l10n.getString(CATEGORY_I18N_KEYS[currentCategory.label] ?? '')}
-                  >
-                    <Localized id={CATEGORY_I18N_KEYS[currentCategory.label] ?? ''}>
-                      {currentCategory.label}
-                    </Localized>
-                  </button>
-                )}
-                <h1 className="settings-section-header-title">
-                  <Localized id={NAV_L10N_KEYS[currentNavItem.key] ?? ''}>{currentNavItem.label}</Localized>
-                </h1>
-              </div>
-            </header>
-          )}
+          <div className="settings-content-header">
+            {/* ── Section breadcrumb header ───────── */}
+            {currentNavItem && (
+              <header className="settings-section-header">
+                <div className="settings-section-header-icon" aria-hidden="true">
+                  {currentNavItem.icon}
+                </div>
+                <div className="settings-section-header-text">
+                  {currentCategory && (
+                    <button
+                      type="button"
+                      className="settings-section-header-category"
+                      onClick={() => setExpandedCategory(currentCategory.label)}
+                      aria-label={l10n.getString(CATEGORY_I18N_KEYS[currentCategory.label] ?? '')}
+                    >
+                      <Localized id={CATEGORY_I18N_KEYS[currentCategory.label] ?? ''}>
+                        {currentCategory.label}
+                      </Localized>
+                    </button>
+                  )}
+                  <h1 className="settings-section-header-title">
+                    <Localized id={NAV_L10N_KEYS[currentNavItem.key] ?? ''}>{currentNavItem.label}</Localized>
+                  </h1>
+                </div>
+              </header>
+            )}
+          </div>
           <div className="settings-section-content" key={sectionKey}>
-            <div className="settings-section-content" key={activeSection}>
+            <div key={activeSection}>
             {renderSection(activeSection)}
           </div>
           </div>

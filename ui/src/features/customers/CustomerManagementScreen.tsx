@@ -173,6 +173,8 @@ export default function CustomerManagementScreen() {
           <input
             type="search"
             className="customer-mgmt-search"
+            id="customer-mgmt-search"
+            name="customer-mgmt-search"
             placeholder="Search by name, email, or phone…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

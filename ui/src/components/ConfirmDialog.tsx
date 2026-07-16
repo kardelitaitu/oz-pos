@@ -118,7 +118,7 @@ export function ConfirmDialog({
         className="btn btn--ghost btn--md"
         onClick={onCancel}
         disabled={loading}
-        aria-label={l10n.getString('cancel')}
+        aria-label={cancelLabel ?? l10n.getString('cancel')}
       >
         {cancelLabel ? (
           cancelLabel
@@ -132,6 +132,7 @@ export function ConfirmDialog({
         onClick={onConfirm}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
+        aria-label={confirmLabel ?? l10n.getString('confirm')}
       >
         {loading ? (
           <span className="btn__spinner" aria-hidden="true" />

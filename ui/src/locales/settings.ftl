@@ -206,12 +206,10 @@ settings-sidebar-nav-aria = Settings navigation
 settings-sidebar-expand-aria = Expand settings sidebar
 settings-sidebar-collapse-aria = Collapse settings sidebar
 settings-sidebar-collapse-all-aria = Collapse all categories
-settings-sidebar-search-placeholder = Search settings…
-settings-sidebar-clear-results = Clear search
 settings-sidebar-search-clear-aria =
     .aria-label = Clear search
 settings-sidebar-no-results = No matching sections
-settings-sidebar-recent = Recent
+settings-sidebar-clear-results = Clear search
 settings-theme-toggle-dark-aria = Switch to dark mode
 settings-theme-toggle-light-aria = Switch to light mode
 settings-loading = Loading settings…
@@ -219,6 +217,7 @@ settings-load-failed = Failed to load settings
 settings-load-partial = Some settings could not be loaded. Try again.
 settings-section-store = Store
 settings-section-currency = Currency
+settings-currency-loading = Loading currencies…
 settings-section-display = Display
 settings-section-receipt = Receipt
 settings-field-store-name = Store name
@@ -227,7 +226,6 @@ settings-field-tax-id = Tax / VAT ID
 settings-field-default-currency = Default currency
 settings-field-decimal-separator = Decimal separator
 settings-field-paper-width = Paper width
-settings-field-language = Language
 settings-field-footer = Receipt footer
 
 # ── Display sub-section fields ──
@@ -725,6 +723,12 @@ settings-sync-pull-toast-success = Pulled { $products } products, { $tax_rates }
 settings-sync-pull-toast-empty = Server snapshot was empty — nothing to pull
 settings-sync-pull-toast-fail = Pull failed — check server URL and token
 settings-toast-failed-sync = Failed to load sync settings
+settings-field-language = Language
+
+# ── Field validation ──
+settings-store-name-required = Store name is required
+settings-tax-id-pattern-error = Only letters, numbers, dashes, dots, and slashes allowed
+settings-tax-id-pattern-hint = Letters, numbers, dashes, dots, and slashes only, max 20 characters
 
 # ── Updates ──
 settings-updates-heading = Updates

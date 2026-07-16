@@ -154,6 +154,8 @@ export default function AuditLogScreen() {
           <input
             type="search"
             className="audit-log-search"
+            id="audit-log-search"
+            name="audit-log-search"
             placeholder={l10n.getString('audit-log-search-placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
