@@ -866,13 +866,21 @@
  * none on overlays blocks stale clicks. Source-ordered after the
  * entry rules for equal-specificity win. */
 .retail-shift-overlay--exiting,
-.retail-discount-overlay--exiting {
+.retail-discount-overlay--exiting,
+.retail-qty-overlay--exiting,
+.retail-customer-overlay--exiting,
+.retail-held-carts-overlay--exiting,
+.retail-shortcuts-overlay--exiting {
   animation: retail-modal-fade-out var(--duration-200) var(--ease-out) both;
   pointer-events: none;
 }
 
 .retail-shift-modal--exiting,
-.retail-discount-modal--exiting {
+.retail-discount-modal--exiting,
+.retail-qty-modal--exiting,
+.retail-customer-modal--exiting,
+.retail-held-carts-modal--exiting,
+.retail-shortcuts-modal--exiting {
   animation: retail-modal-slide-down var(--duration-200) var(--ease-out) both;
 }
 
@@ -895,8 +903,16 @@
   .retail-shortcuts-modal,
   .retail-shift-overlay--exiting,
   .retail-discount-overlay--exiting,
+  .retail-qty-overlay--exiting,
+  .retail-customer-overlay--exiting,
+  .retail-held-carts-overlay--exiting,
+  .retail-shortcuts-overlay--exiting,
   .retail-shift-modal--exiting,
   .retail-discount-modal--exiting,
+  .retail-qty-modal--exiting,
+  .retail-customer-modal--exiting,
+  .retail-held-carts-modal--exiting,
+  .retail-shortcuts-modal--exiting,
   .retail-undo-bar--exiting {
     animation: none;
   }

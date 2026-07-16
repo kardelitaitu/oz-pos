@@ -26,6 +26,7 @@
 
 .settings-license-value {
   font-size: var(--text-sm);
+  line-height: 1.4;
   color: var(--color-fg-primary);
   font-weight: 500;
 }

@@ -118,7 +118,7 @@
 .multi-store-card-badge {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-accent-active);
+  color: var(--color-accent-subtle-fg, var(--color-accent-active));
   background: var(--color-accent-subtle);
   padding: var(--space-0_5) var(--space-2);
   border-radius: var(--radius-full);

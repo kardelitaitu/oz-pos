@@ -108,6 +108,9 @@
   --color-accent-active:   #3d88c4;
   --color-accent-subtle:   rgba(16, 82, 188, 0.18);
   --color-accent-fg:       #ffffff;
+  --color-accent-hover-fg: #ffffff;
+  --color-accent-active-fg:#ffffff;
+  --color-accent-subtle-fg:#0a0a0a;
 
   /* Blue-tinted borders for hue resonance */
   --color-border:          rgba(90, 159, 212, 0.12);
@@ -272,6 +275,9 @@
   --color-accent-active:   var(--primary-700);
   --color-accent-subtle:   var(--primary-100);
   --color-accent-fg:       #ffffff;
+  --color-accent-hover-fg: #ffffff;
+  --color-accent-active-fg:#ffffff;
+  --color-accent-subtle-fg:#0a0a0a;
 
   --color-border:          rgba(16, 82, 188, 0.12);
   --color-border-hover:    rgba(16, 82, 188, 0.22);
@@ -366,6 +372,9 @@
   --color-accent-active:   #3d88c4;
   --color-accent-subtle:   rgba(16, 82, 188, 0.2);
   --color-accent-fg:       #ffffff;
+  --color-accent-hover-fg: #ffffff;
+  --color-accent-active-fg:#ffffff;
+  --color-accent-subtle-fg:#0a0a0a;
 
   --color-border:          rgba(90, 159, 212, 0.12);
   --color-border-hover:    rgba(90, 159, 212, 0.22);

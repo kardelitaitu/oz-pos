@@ -4,9 +4,10 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.0.9] — 2026-07-16
+## [0.0.10] — 2026-07-16
 
 ### Added
+- **Smart foreground colour system** (`contrastFg` / `applyThemeContrasts` in `color.ts`): Every accent and semantic colour token now has a companion `--*-fg` variable that automatically flips between `#0a0a0a` and `#ffffff` based on WCAG-compatible luminance calculation. Wired into `ThemeProvider` on mount and on every theme / brand-colour change. Badge and alert consumers fall back to the legacy colour when the companion var is absent.
 - **Hardware Acceleration toggle (Appearance settings)**: New `HardwareAccelContext` + `useHardwareAccel` hook that manages a `data-hw-accel="disabled"` attribute on `<html>`, persisted to localStorage. When disabled, all CSS `backdrop-filter`, `will-change`, and `transform: translateZ(0)` hints are overridden via a dedicated `HardwareAccel.css` file — covers 10 selectors across 7 CSS files (modal-overlay, workspace cards, dropdown, QRIS/FastPIN/license/PIN overlays). Toggle uses `role="switch"` with proper ARIA attributes. Added 5 Fluent keys in both EN and ID locales. Test mocks added for `HardwareAccelContext` in `AppearanceSettings.test.tsx` and `SettingsPage.test.tsx`.
 - **Updater UI (About settings)**: State machine (idle → checking → up-to-date/available/error → installing) with `@tauri-apps/plugin-updater`. Check for updates button, install button with loading states, version display, and localized status hints. 7 Fluent keys in both EN and ID locales.
 - **ConfirmDialog shared component**: Extracted from inline WorkspaceHome LogoutModal. Reusable `ConfirmDialog` with `variant` prop (info/warning/danger), icon SVG, title, message, confirm/cancel labels, and configurable confirm button variant. Exported through `@/frontend/shared`.
