@@ -21,3 +21,5 @@ export type { LocalizedProps } from './Localized';
 export { ToastProvider, useToast } from './Toast';
 export type { ToastType } from './Toast';
 export { default as PermissionDenied } from './PermissionDenied';
+export { ConfirmDialog } from '@/components/ConfirmDialog';
+export type { ConfirmDialogProps, ConfirmVariant } from '@/components/ConfirmDialog';

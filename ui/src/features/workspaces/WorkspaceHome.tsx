@@ -3,7 +3,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { Localized, useLocalization } from '@fluent/react';
-import { Modal } from '@/components/Modal';
+import { ConfirmDialog } from '@/frontend/shared';
 import { WorkspaceIcon } from '@/components/WorkspaceIcon';
 import { RoleIcon } from '@/components/RoleIcon';
 import type { LoginSessionDto } from '@/api/staff';
@@ -95,58 +95,6 @@ const COMING_SOON_CARDS = [
   { name: 'Online Orders', description: 'Coming soon' },
   { name: 'Analytics', description: 'Coming soon' },
 ];
-
-// ── LogoutModal ───────────────────────────────────────────────────
-
-function LogoutModal({
-  open,
-  onCancel,
-  onConfirm,
-}: {
-  open: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const { l10n } = useLocalization();
-
-  return (
-    <Modal
-      open={open}
-      onClose={onCancel}
-      title={l10n.getString('workspace-home-logout-confirm-title')}
-      footer={
-        <div className="logout-confirm-actions">
-          <button
-            type="button"
-            className="logout-confirm-cancel"
-            onClick={onCancel}
-          >
-            <Localized id="workspace-home-logout-confirm-cancel">
-              <span>Cancel</span>
-            </Localized>
-          </button>
-          <button
-            type="button"
-            className="logout-confirm-confirm"
-            onClick={onConfirm}
-          >
-            <Localized id="workspace-home-logout-confirm-confirm">
-              <span>Logout</span>
-            </Localized>
-          </button>
-        </div>
-      }
-    >
-      <p className="logout-confirm-desc">
-        <Localized id="workspace-home-logout-confirm-desc">
-          <span>You will be returned to the login screen. Any unsaved work will be lost.</span>
-        </Localized>
-      </p>
-    </Modal>
-  );
-}
-
-
 
 // ── Role color map ────────────────────────────────────────────────
 
@@ -354,7 +302,6 @@ export default function WorkspaceHome() {
   const handleCardClick = useCallback(
     (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
       if (!canAccess(key)) return;
-      if (error) return;
       if (exitingWorkspace) return;
       const card = e.currentTarget;
       const rect = card.getBoundingClientRect();
@@ -387,7 +334,7 @@ export default function WorkspaceHome() {
       setExitingWorkspace(key);
       setActiveWorkspace(key);
     },
-    [canAccess, setActiveWorkspace, error, exitingWorkspace],
+    [canAccess, setActiveWorkspace, exitingWorkspace],
   );
 
   // ── Keyboard navigation ──────────────────────────────────────
@@ -475,7 +422,7 @@ export default function WorkspaceHome() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedWorkspaces, setActiveWorkspace, canAccess, error]);
+  }, [sortedWorkspaces, setActiveWorkspace, canAccess]);
 
 
 
@@ -530,10 +477,15 @@ export default function WorkspaceHome() {
         </span>
 
         {/* Layer 5: Overlays */}
-        <LogoutModal
+        <ConfirmDialog
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
           onConfirm={handleLogoutConfirm}
+          title={l10n.getString('workspace-home-logout-confirm-title')}
+          message={l10n.getString('workspace-home-logout-confirm-desc')}
+          variant="warning"
+          confirmLabel={l10n.getString('workspace-home-logout-confirm-confirm')}
+          cancelLabel={l10n.getString('workspace-home-logout-confirm-cancel')}
         />
       </div>
     );
@@ -590,10 +542,15 @@ export default function WorkspaceHome() {
         </div>
 
         {/* Layer 5: Overlays */}
-        <LogoutModal
+        <ConfirmDialog
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
           onConfirm={handleLogoutConfirm}
+          title={l10n.getString('workspace-home-logout-confirm-title')}
+          message={l10n.getString('workspace-home-logout-confirm-desc')}
+          variant="warning"
+          confirmLabel={l10n.getString('workspace-home-logout-confirm-confirm')}
+          cancelLabel={l10n.getString('workspace-home-logout-confirm-cancel')}
         />
       </div>
     );
@@ -682,7 +639,6 @@ export default function WorkspaceHome() {
                     aria-current={isActive ? 'true' : undefined}
                     className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
                     onClick={(e) => handleCardClick(ws.type_key, e)}
-                    disabled={error !== null}
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
                   >
                     <div className="workspace-card-key-hint">{idx + 1}</div>
@@ -773,10 +729,15 @@ export default function WorkspaceHome() {
       </div>
 
       {/* Layer 5: Overlays */}
-      <LogoutModal
+      <ConfirmDialog
         open={showLogoutModal}
         onCancel={handleLogoutCancel}
         onConfirm={handleLogoutConfirm}
+        title={l10n.getString('workspace-home-logout-confirm-title')}
+        message={l10n.getString('workspace-home-logout-confirm-desc')}
+        variant="warning"
+        confirmLabel={l10n.getString('workspace-home-logout-confirm-confirm')}
+        cancelLabel={l10n.getString('workspace-home-logout-confirm-cancel')}
       />
     </div>
   );
