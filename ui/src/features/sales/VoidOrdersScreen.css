@@ -12,6 +12,43 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* ── Primary list skeleton ───────────────────────────────────────── */
+
+.void-orders-loading-skeleton {
+  pointer-events: none;
+}
+
+.void-orders-loading-skeleton .void-orders-table tbody tr td {
+  border-bottom: none;
+}
+
+.void-orders-loading-skeleton .void-orders-filters {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.void-orders-loading-skeleton .void-orders-header {
+  margin-bottom: var(--space-3);
+}
+
+/* ── Detail skeleton ─────────────────────────────────────────────── */
+
+.void-orders-detail-skeleton {
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.void-orders-detail-skeleton .void-orders-lines-table tbody tr td {
+  border-bottom: none;
+}
+
+.void-orders-detail-skeleton .void-orders-section-title {
+  margin-bottom: var(--space-3);
+}
+
 /* ── Back button ──────────────────────────────────────────────────── */
 
 .void-orders-back-btn {
@@ -109,12 +146,6 @@
 }
 
 /* ── Loading / Empty / Error ──────────────────────────────────────── */
-
-.void-orders-loading {
-  text-align: center;
-  padding: var(--space-12) var(--space-4);
-  color: var(--color-fg-secondary);
-}
 
 .void-orders-empty {
   text-align: center;

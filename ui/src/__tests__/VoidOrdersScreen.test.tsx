@@ -65,10 +65,12 @@ describe('VoidOrdersScreen', () => {
     expect(screen.getByText('Orders')).toBeInTheDocument();
   });
 
-  it('renders loading state initially', async () => {
+  it('renders loading skeleton initially', async () => {
     mockListSales.mockReturnValue(new Promise(() => {}));
-    await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
-    expect(screen.getByText(/loading orders/i)).toBeInTheDocument();
+    const { container } = await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
+    const skeleton = container.querySelector('.void-orders-loading-skeleton');
+    expect(skeleton).toBeInTheDocument();
+    expect(skeleton?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('renders empty state when no orders', async () => {

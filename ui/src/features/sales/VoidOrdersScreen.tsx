@@ -13,6 +13,7 @@ import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { Skeleton } from '@/components/Skeleton';
 import './VoidOrdersScreen.css';
 
 // ── Reason options ──────────────────────────────────────────────────
@@ -280,9 +281,54 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
 
         {/* Content */}
         {loading ? (
-          <Localized id="void-orders-loading">
-            <div className="void-orders-loading">Loading orders…</div>
-          </Localized>
+          <div className="void-orders-loading-skeleton" aria-hidden="true">
+            {/* Header */}
+            <div className="void-orders-header">
+              <Skeleton width="8rem" height="1.75rem" />
+            </div>
+            {/* Filter bar: search + status chips */}
+            <div className="void-orders-filters">
+              <div className="void-orders-search-wrap">
+                <Skeleton width="100%" height="2.25rem" style={{ borderRadius: 'var(--radius-lg)' }} />
+              </div>
+              <div className="void-orders-status-filters">
+                <Skeleton width="3rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+                <Skeleton width="4rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+                <Skeleton width="4.5rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+                <Skeleton width="3.5rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+                <Skeleton width="4rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+              </div>
+            </div>
+            {/* 7-column table with 5 skeleton rows */}
+            <div className="void-orders-table-wrap">
+              <table className="void-orders-table">
+                <thead>
+                  <tr>
+                    <Localized id="void-orders-col-order-id"><th>Order ID</th></Localized>
+                    <Localized id="void-orders-col-date"><th>Date</th></Localized>
+                    <Localized id="void-orders-col-status"><th>Status</th></Localized>
+                    <Localized id="void-orders-col-total"><th>Total</th></Localized>
+                    <Localized id="void-orders-col-items"><th>Items</th></Localized>
+                    <Localized id="void-orders-col-payment"><th>Payment</th></Localized>
+                    <Localized id="void-orders-col-actions-aria" attrs={{ 'aria-label': true }}><th aria-label="Actions"> </th></Localized>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      <td><Skeleton width="5rem" height="1rem" /></td>
+                      <td><Skeleton width="8rem" height="1rem" /></td>
+                      <td><Skeleton width="4.5rem" height="1.25rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                      <td><Skeleton width="5rem" height="1rem" /></td>
+                      <td><Skeleton width="2rem" height="1rem" /></td>
+                      <td><Skeleton width="5rem" height="1rem" /></td>
+                      <td><Skeleton width="3rem" height="1.25rem" style={{ borderRadius: 'var(--radius-md)' }} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : error ? (
           <Card shadow="sm">
             <div className="void-orders-error">
@@ -415,9 +461,65 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
       </div>
 
       {detailLoading ? (
-        <Localized id="void-orders-loading-detail">
-          <div className="void-orders-loading">Loading order details…</div>
-        </Localized>
+        <div className="void-orders-detail-skeleton" aria-hidden="true">
+          {/* Back button skeleton */}
+          <div className="void-orders-header">
+            <Skeleton width="7rem" height="1.5rem" />
+          </div>
+          {/* Summary card */}
+          <Card shadow="sm">
+            <div className="void-orders-detail-summary">
+              <div className="void-orders-detail-header">
+                <Skeleton width="8rem" height="1.5rem" />
+                <Skeleton width="4rem" height="1.25rem" style={{ borderRadius: 'var(--radius-full)' }} />
+              </div>
+              <div className="void-orders-detail-meta">
+                <div className="void-orders-meta-item">
+                  <span className="void-orders-meta-label"><Skeleton width="3rem" height="0.75rem" /></span>
+                  <Skeleton width="7rem" height="1rem" />
+                </div>
+                <div className="void-orders-meta-item">
+                  <span className="void-orders-meta-label"><Skeleton width="4rem" height="0.75rem" /></span>
+                  <Skeleton width="5rem" height="1rem" />
+                </div>
+                <div className="void-orders-meta-item">
+                  <span className="void-orders-meta-label"><Skeleton width="3rem" height="0.75rem" /></span>
+                  <Skeleton width="5rem" height="1rem" />
+                </div>
+                <div className="void-orders-meta-item">
+                  <span className="void-orders-meta-label"><Skeleton width="3rem" height="0.75rem" /></span>
+                  <Skeleton width="2rem" height="1rem" />
+                </div>
+              </div>
+            </div>
+          </Card>
+          {/* Line items card */}
+          <Card shadow="sm" className="void-orders-section">
+            <Skeleton width="6rem" height="1.25rem" />
+            <table className="void-orders-lines-table">
+              <thead>
+                <tr>
+                  <Localized id="void-orders-line-sku"><th>SKU</th></Localized>
+                  <Localized id="void-orders-line-name"><th>Name</th></Localized>
+                  <Localized id="void-orders-line-qty"><th>Qty</th></Localized>
+                  <Localized id="void-orders-line-unit-price"><th>Unit Price</th></Localized>
+                  <Localized id="void-orders-line-total"><th>Total</th></Localized>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i}>
+                    <td><Skeleton width="4rem" height="1rem" /></td>
+                    <td><Skeleton width="8rem" height="1rem" /></td>
+                    <td><Skeleton width="2rem" height="1rem" /></td>
+                    <td><Skeleton width="4rem" height="1rem" /></td>
+                    <td><Skeleton width="4rem" height="1rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
       ) : !detail ? (
         <Card shadow="sm">
           <div className="void-orders-error">
