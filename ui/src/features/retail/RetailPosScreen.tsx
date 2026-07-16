@@ -1392,13 +1392,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
       {/* ── Open Shift modal ────────────────── */}
       {retailOpenShiftExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-shift-overlay${retailOpenShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={() => retailOpenShiftExit.requestClose()}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailOpenShiftExit.requestClose(); } }}
         >
           <div className={`retail-shift-modal${retailOpenShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('pos-open-shift-title')}</h3>
@@ -1417,18 +1415,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               </button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Close Shift modal ───────────────── */}
       {retailCloseShiftExit.shouldRender && activeShift && (
-        <div
+        <button
+          type="button"
           className={`retail-shift-overlay${retailCloseShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={() => retailCloseShiftExit.requestClose()}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailCloseShiftExit.requestClose(); } }}
         >
           <div className={`retail-shift-modal${retailCloseShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
@@ -1458,7 +1454,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               </button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Closed Shift Summary ────────────── */}
@@ -1485,13 +1481,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
       {/* ── Credit list overlay ─────────────── */}
       {retailCreditListExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-shift-overlay${retailCreditListExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={retailCreditListExit.requestClose}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailCreditListExit.requestClose(); } }}
         >
           <div className={`retail-shift-modal${retailCreditListExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
             <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
@@ -1538,18 +1532,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <button type="button" className="retail-shift-confirm-btn" onClick={retailCreditListExit.requestClose}>{l10n.getString('close')}</button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Clear confirm modal ────────────── */}
       {retailClearConfirmExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-shift-overlay${retailClearConfirmExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={retailClearConfirmExit.requestClose}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailClearConfirmExit.requestClose(); } }}
         >
           <div className={`retail-shift-modal${retailClearConfirmExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>
@@ -1561,18 +1553,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <button type="button" className="retail-shift-confirm-btn" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Discount modal ──────────────────── */}
       {retailDiscountExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-discount-overlay${retailDiscountExit.exiting ? ' retail-discount-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={() => retailDiscountExit.requestClose()}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailDiscountExit.requestClose(); } }}
         >
           <div className={`retail-discount-modal${retailDiscountExit.exiting ? ' retail-discount-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-discount-title')}</h3>
@@ -1625,18 +1615,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               )}
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Customer search modal ──────────── */}
       {retailCustomerExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-customer-overlay${retailCustomerExit.exiting ? ' retail-customer-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={retailCustomerExit.requestClose}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailCustomerExit.requestClose(); } }}
         >
           <div className={`retail-customer-modal${retailCustomerExit.exiting ? ' retail-customer-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-customer-search-title')}</h3>
@@ -1687,18 +1675,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <button type="button" className="retail-customer-close-btn" onClick={retailCustomerExit.requestClose}>{l10n.getString('close')}</button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Quantity picker modal ──────────── */}
       {retailQtyExit.shouldRender && pendingProduct && (
-        <div
+        <button
+          type="button"
           className={`retail-qty-overlay${retailQtyExit.exiting ? ' retail-qty-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={retailQtyExit.requestClose}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailQtyExit.requestClose(); } }}
         >
           <div className={`retail-qty-modal${retailQtyExit.exiting ? ' retail-qty-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3 className="retail-qty-heading">{pendingProduct.name}</h3>
@@ -1752,18 +1738,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <button type="button" className="retail-qty-confirm" onClick={handleConfirmQty}>{l10n.getString('retail-qty-add')}</button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Held carts list modal ──────────── */}
       {retailHeldCartsExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-held-carts-overlay${retailHeldCartsExit.exiting ? ' retail-held-carts-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={retailHeldCartsExit.requestClose}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailHeldCartsExit.requestClose(); } }}
         >
           <div className={`retail-held-carts-modal${retailHeldCartsExit.exiting ? ' retail-held-carts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-held-carts-title')}</h3>
@@ -1773,12 +1757,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <div className="retail-held-carts-list">
                 {heldCartsList.map((c) => (
                   <div key={c.id} className="retail-held-cart-row">
-                    <div className="retail-held-cart-info" role="button" tabIndex={0} aria-label="Resume cart" onClick={() => handleResumeCart(c.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResumeCart(c.id); } }}>
+                    <button type="button" className="retail-held-cart-info" aria-label="Resume cart" onClick={() => handleResumeCart(c.id)}>
                       <span className="retail-held-cart-label">{c.label}</span>
                       <span className="retail-held-cart-meta">
                         {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
                       </span>
-                    </div>
+                    </button>
                     <button type="button" className="retail-held-cart-delete" onClick={() => handleDeleteHeldCart(c.id)} aria-label={l10n.getString('retail-held-cart-delete-aria')}>
                       &times;
                     </button>
@@ -1790,18 +1774,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <button type="button" onClick={retailHeldCartsExit.requestClose}>{l10n.getString('close')}</button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Shortcuts overlay ──────────────── */}
       {retailShortcutsExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-shortcuts-overlay${retailShortcutsExit.exiting ? ' retail-shortcuts-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={retailShortcutsExit.requestClose}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailShortcutsExit.requestClose(); } }}
         >
           <div className={`retail-shortcuts-modal${retailShortcutsExit.exiting ? ' retail-shortcuts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
@@ -1823,7 +1805,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             </div>
             <button type="button" className="retail-shortcuts-close" onClick={retailShortcutsExit.requestClose}>{l10n.getString('close')}</button>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Price Override modal ───────────── */}
@@ -1839,13 +1821,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
       {/* ── Quick Return modal ──────────────── */}
       {retailQuickReturnExit.shouldRender && (
-        <div
+        <button
+          type="button"
           className={`retail-shift-overlay${retailQuickReturnExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          role="button"
-          tabIndex={0}
           aria-label="Close"
           onClick={retailQuickReturnExit.requestClose}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retailQuickReturnExit.requestClose(); } }}
         >
           <div className={`retail-shift-modal${retailQuickReturnExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
@@ -1871,7 +1851,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               </button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* ── Quick Return Refund modal ───────── */}
@@ -1949,17 +1929,14 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
       <span className="retail-product-name">{product.name}</span>
       <span className="retail-product-price">{formatMoney(product.price)}</span>
       {scaleEnabled && (
-        <span
+        <button
+          type="button"
           className="retail-product-weigh-btn"
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); } }}
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
           aria-label={`Weigh ${product.name}`}
         >
           ⚖
-        </span>
+        </button>
       )}
     </button>
   );
