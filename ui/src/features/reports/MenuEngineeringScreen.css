@@ -101,7 +101,7 @@
   padding: var(--space-4);
   border-radius: var(--radius-lg);
   border-left: 4px solid;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform var(--duration-150), box-shadow var(--duration-150);
   cursor: default;
 }
 
@@ -164,7 +164,7 @@
 
 /* Scatter dot hover */
 .menu-eng-scatter-dot {
-  transition: r 0.15s, opacity 0.15s;
+  transition: r var(--duration-150), opacity var(--duration-150);
   cursor: pointer;
 }
 
@@ -338,14 +338,14 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .menu-eng-input {
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color var(--duration-150), box-shadow var(--duration-150);
   }
 
   .menu-eng-quadrant-card {
-    transition: transform 0.15s, box-shadow 0.15s;
+    transition: transform var(--duration-150), box-shadow var(--duration-150);
   }
 
   .menu-eng-table-row {
-    transition: background 0.12s;
+    transition: background var(--duration-150);
   }
 }

@@ -4,7 +4,7 @@
   gap: 0.4rem;
   font-family: var(--font-mono);
   letter-spacing: 0.01em;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: background var(--duration-150), border-color var(--duration-150), box-shadow var(--duration-150);
 }
 .machine-id-value {
   letter-spacing: 0.06em;
@@ -20,7 +20,7 @@
   opacity: 0;
   color: var(--color-fg-secondary);
   flex-shrink: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--duration-150);
 }
 
 .machine-id-chip--ready:hover .machine-id-copy-icon {

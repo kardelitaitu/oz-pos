@@ -95,7 +95,7 @@
   padding: 1rem 3rem 1rem 1rem;
   color: var(--color-fg);
   font-size: 1rem;
-  transition: all 0.2s ease;
+  transition: all var(--duration-200) var(--ease-out);
   font-family: var(--font-mono);
   letter-spacing: 0.0625rem;
 }
@@ -118,7 +118,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s;
+  transition: color var(--duration-200);
 }
 
 .license-input-clear:hover {
@@ -159,7 +159,7 @@
   font-size: 1.125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--duration-200) var(--ease-out);
   margin-top: 1rem;
   display: flex;
   align-items: center;

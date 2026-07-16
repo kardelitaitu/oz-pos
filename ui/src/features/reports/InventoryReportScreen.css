@@ -44,7 +44,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   width: 4.5rem;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--duration-150), box-shadow var(--duration-150);
 }
 
 .inventory-report-input:focus-visible {
@@ -91,7 +91,7 @@
   font-size: var(--text-sm);
   color: var(--color-fg);
   border-bottom: 1px solid var(--color-border);
-  transition: background 0.15s;
+  transition: background var(--duration-150);
 }
 
 .inventory-report-row:last-child {

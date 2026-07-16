@@ -59,7 +59,7 @@
   background: var(--color-bg);
   color: var(--color-fg);
   font-size: var(--text-sm);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--duration-150), box-shadow var(--duration-150);
   box-sizing: border-box;
 }
 

@@ -94,7 +94,7 @@
   background: var(--color-bg-secondary);
   cursor: pointer;
   min-height: 7.5rem;
-  transition: transform 0.1s, box-shadow 0.1s;
+  transition: transform var(--duration-100), box-shadow var(--duration-100);
 }
 
 .kiosk-product-card:active {

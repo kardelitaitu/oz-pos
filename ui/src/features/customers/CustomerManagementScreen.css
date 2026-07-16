@@ -237,7 +237,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .customer-mgmt-search {
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color var(--duration-150), box-shadow var(--duration-150);
   }
   .customer-mgmt-action-btn {
     transition: all var(--duration-150) var(--ease-out);

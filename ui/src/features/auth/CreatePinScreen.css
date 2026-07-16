@@ -62,7 +62,7 @@
   padding: 1rem;
   color: #fff;
   font-size: 1rem;
-  transition: all 0.2s ease;
+  transition: all var(--duration-200) var(--ease-out);
   font-family: var(--font-mono);
   letter-spacing: 0.0625rem;
 }
@@ -88,7 +88,7 @@
   font-size: 1.125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--duration-200) var(--ease-out);
   margin-top: 1rem;
   display: flex;
   align-items: center;

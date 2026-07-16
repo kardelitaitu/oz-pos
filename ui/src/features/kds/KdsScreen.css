@@ -175,7 +175,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .kds-ticket {
-    transition: transform 0.1s, box-shadow 0.1s, border-color 0.15s;
+    transition: transform var(--duration-100), box-shadow var(--duration-100), border-color var(--duration-150);
   }
 }
 
@@ -327,7 +327,7 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 0.375rem;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--duration-150);
 }
 
 .kds-workspace-back:hover {

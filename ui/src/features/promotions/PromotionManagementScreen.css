@@ -280,12 +280,12 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .promo-mgmt-btn {
-    transition: background 0.15s;
+    transition: background var(--duration-150);
   }
   .promo-mgmt-toggle-slider {
-    transition: background 0.2s;
+    transition: background var(--duration-200);
   }
   .promo-mgmt-toggle-slider::before {
-    transition: transform 0.2s;
+    transition: transform var(--duration-200);
   }
 }

@@ -56,7 +56,7 @@
   background: var(--color-bg-primary);
   color: var(--color-fg-primary);
   font-size: var(--text-md);
-  transition: border-color 0.15s ease;
+  transition: border-color var(--duration-150) var(--ease-out);
 }
 
 .audit-log-search:focus-visible,
@@ -175,7 +175,7 @@
 
 .audit-log-table tbody tr:hover {
   background: var(--color-bg-secondary);
-  transition: background 0.1s ease;
+  transition: background var(--duration-100) var(--ease-out);
 }
 
 /* ── Cell styles ──────────────────────────────────────────── */
@@ -308,7 +308,7 @@
   cursor: pointer;
   font-size: var(--text-sm);
   color: var(--color-link);
-  transition: background 0.15s;
+  transition: background var(--duration-150);
 }
 
 .audit-log-load-more:hover {
