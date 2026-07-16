@@ -166,12 +166,10 @@ export default function GiftCardsScreen() {
         <div className="gift-cards-list">
           {cards.map((gc) => (
             <Card key={gc.card.id} shadow="sm" className="gift-card-card">
-              <div
+              <button
+                type="button"
                 className="gift-card-summary"
-                role="button"
-                tabIndex={0}
                 onClick={() => setExpandedId(expandedId === gc.card.id ? null : gc.card.id)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === gc.card.id ? null : gc.card.id); } }}
               >
                 <div className="gift-card-summary-left">
                   <span className="gift-card-number">{gc.card.card_number}</span>
@@ -190,7 +188,7 @@ export default function GiftCardsScreen() {
                     &#9660;
                   </span>
                 </div>
-              </div>
+              </button>
 
               {expandedId === gc.card.id && (
                 <div className="gift-card-detail">

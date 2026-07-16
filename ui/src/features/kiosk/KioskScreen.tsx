@@ -90,12 +90,12 @@ export default function KioskScreen() {
 
   if (idle) {
     return (
-      <div className="kiosk-attract" role="button" aria-label={l10n.getString('kiosk-attract-label')} tabIndex={0} onClick={resetIdle} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') resetIdle(); }}>
+      <button type="button" className="kiosk-attract" aria-label={l10n.getString('kiosk-attract-label')} onClick={resetIdle}>
         <div className="kiosk-attract-content">
           <h1 className="kiosk-attract-title">OZ-POS</h1>
           <p className="kiosk-attract-subtitle"><Localized id="kiosk-tap-to-start">Tap to start</Localized></p>
         </div>
-      </div>
+      </button>
     );
   }
 

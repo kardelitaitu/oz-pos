@@ -64,10 +64,13 @@ button {
   font-family: inherit;
   font-size: inherit;
   font-weight: var(--font-weight-medium, 500);
+  line-height: inherit;
   cursor: pointer;
+  appearance: none;
   border: none;
   background: none;
   color: inherit;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
