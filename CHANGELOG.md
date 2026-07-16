@@ -122,7 +122,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **SettingsPopup reduced-motion cleanup**: Added `backdrop-filter: none` to reduced-motion media query, matching `components.css` pattern.
 - **About page polish**: Migrated System & License Ownership card from old `.settings-license-row` pattern to the standard `.settings-field--horizontal` layout for visual consistency with General/Receipt/Sync sections. Updates card now shows inline status states (Up to date, version available, Check failed, Checking…, Not checked) with color-coded modifiers (`--active` green, `--inactive` muted, `--warning` orange). Removed dead CSS classes (`.settings-license-section`, `.settings-license-row`, `.settings-license-row--last`, `.settings-license-label`). Added `settings-update-status-label` and `settings-update-not-checked` Fluent keys to both EN/ID locales.
 - **SettingsSelect dropdown background**: Fixed from `var(--color-bg)` to `var(--color-bg-elevated)` to match Modal/SettingsPopup pattern and avoid subtle color mismatch with trigger.
-- **Skeleton loading (24 screens)**: Replaced plain text loading messages with proper skeleton structures matching real layout across all settings-adjacent screens:
+- **Skeleton loading (25 screens)**: Replaced plain text loading messages with proper skeleton structures matching real layout across all settings-adjacent screens:
   - **AuditLogScreen**: Filters skeleton (search bar + outcome chips) + 6-row table skeleton.
   - **OfflineQueueScreen**: Header skeleton + 5-row table skeleton (7 columns).
   - **ShiftManagementScreen**: Shift card skeleton + 4-row table skeleton (9 columns).
@@ -147,6 +147,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   - **BundleManagementScreen**: Header + 6-column table (Name, SKU, Price, Items, Active pill, Actions) with 4 skeleton rows.
   - **GiftCardsScreen**: Header + toolbar (search+filter) + 3 card skeletons with status badge pills via Card component.
   - **StaffManagementScreen**: Header + 6-column table (Role pill, Workspace, Name, Username, Status, Actions) with 4 skeleton rows.
+  - **TerminalStatusPanel**: Header (title + count skeleton) + 4 rows mimicking real list items — circle dot (0.625rem), name (80% width), device (60% width), time (2.5rem).
   - All skeletons use `aria-hidden="true"` parent containers, `pointer-events: none`, and mirror real table/grid layouts.
   - Removed dead CSS classes (`-loading` variants) from all converted screens.
 - **Receipt footer textarea**: Changed from single-line `<input>` to `<textarea rows=3 maxLength=500>` with character count hint.
