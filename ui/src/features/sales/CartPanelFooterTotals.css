@@ -100,8 +100,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.125rem;
-  height: 1.125rem;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -115,6 +115,11 @@
 .pos-cart-discount-clear:hover {
   background: var(--color-danger-bg);
   color: var(--color-danger);
+}
+
+.pos-cart-discount-clear:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .pos-cart-discount-form {
