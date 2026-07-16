@@ -17,6 +17,7 @@ import {
 import { listProducts, type ProductDto } from '@/api/products';
 import { listTerminals, type TerminalDto } from '@/api/terminals';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -72,6 +73,7 @@ export default function StockTransfersScreen() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ transfer: StockTransfer; lines: StockTransferLine[] } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const detailPanelRef = useRef<HTMLDivElement>(null);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
@@ -83,11 +85,13 @@ export default function StockTransfersScreen() {
   const [createLines, setCreateLines] = useState<LineFormEntry[]>([]);
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const createPanelRef = useRef<HTMLDivElement>(null);
 
   // Receive modal
   const [receiveTransferId, setReceiveTransferId] = useState<string | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<string, string>>({});
   const [receiveSaving, setReceiveSaving] = useState(false);
+  const receivePanelRef = useRef<HTMLDivElement>(null);
 
   // Cancel state
   const [cancelling, setCancelling] = useState<string | null>(null);
@@ -288,6 +292,11 @@ export default function StockTransfersScreen() {
     }, ANIM_MS);
   }, [showCreate, resetCreateForm, ANIM_MS]);
 
+  // ── Focus traps for modals ─────────────────────────────────────
+  useFocusTrap(detailPanelRef, detailId !== null && !detailExiting && !detailLoading, closeDetail);
+  useFocusTrap(createPanelRef, showCreate && !createExiting && !createSaving, closeCreate);
+  useFocusTrap(receivePanelRef, receiveTransferId !== null && !receiveExiting && !receiveSaving, closeReceive);
+
   const filtered = statusFilter === 'all'
     ? transfers
     : transfers.filter((t) => t.status === statusFilter);
@@ -445,7 +454,7 @@ export default function StockTransfersScreen() {
       {/* ── Detail Modal ─────────────────────────────────────────── */}
       {(detailId || detailExiting) && (
         <div className={`stock-transfers-overlay${detailExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-detail-aria')}>
-          <div className={`stock-transfers-modal stock-transfers-modal--wide${detailExiting ? ' stock-transfers-modal--exiting' : ''}`}>
+          <div className={`stock-transfers-modal stock-transfers-modal--wide${detailExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={detailPanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-detail-title">
                 <h2>Transfer Details</h2>
@@ -580,7 +589,7 @@ export default function StockTransfersScreen() {
       {/* ── Create Modal ─────────────────────────────────────────── */}
       {(showCreate || createExiting) && (
         <div className={`stock-transfers-overlay${createExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-create-aria')}>
-          <div className={`stock-transfers-modal stock-transfers-modal--wide${createExiting ? ' stock-transfers-modal--exiting' : ''}`}>
+          <div className={`stock-transfers-modal stock-transfers-modal--wide${createExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={createPanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-create-title">
                 <h2>New Stock Transfer</h2>
@@ -681,7 +690,7 @@ export default function StockTransfersScreen() {
       {/* ── Receive Modal ────────────────────────────────────────── */}
       {(receiveTransferId || receiveExiting) && detail && (
         <div className={`stock-transfers-overlay${receiveExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-receive-aria')}>
-          <div className={`stock-transfers-modal${receiveExiting ? ' stock-transfers-modal--exiting' : ''}`}>
+          <div className={`stock-transfers-modal${receiveExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={receivePanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-receive-title">
                 <h2>Receive Transfer</h2>
