@@ -59,33 +59,10 @@
   cursor: not-allowed;
 }
 
-/* ── Loading ──────────────────────────────── */
+/* ── Loading skeleton ──────────────────────── */
 
-.eod-report-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-12) 0;
-  color: var(--color-fg-secondary);
-}
-
-.eod-report-spinner {
-  width: 1.5rem;
-  height: 1.5rem;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .eod-report-spinner {
-    animation: eod-spin 0.8s linear infinite;
-  }
-
-  @keyframes eod-spin {
-    to { transform: rotate(360deg); }
-  }
+.eod-report-loading-skeleton {
+  pointer-events: none;
 }
 
 .eod-report-error {
