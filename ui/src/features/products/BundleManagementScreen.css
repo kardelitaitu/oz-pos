@@ -158,7 +158,7 @@
   background-color: var(--color-bg);
 }
 
-.bundle-mgmt-input:focus {
+.bundle-mgmt-input:focus-visible {
   outline: none;
   border-color: var(--color-border-focus);
   box-shadow: inset 0 0 0 1px var(--color-accent-subtle);

@@ -117,8 +117,6 @@ pub mod keys {
     pub const RECEIPT_MARGIN_RIGHT: &str = "receipt.margin_right";
 
     // ── Global Currency settings ─────────────────────────────────
-    /// Default ISO-4217 currency code. Default: `"USD"`.
-    pub const CURRENCY_DEFAULT: &str = "currency.default";
     /// Currency display format: `"symbol"` (use symbol like $) or `"code"` (use code like USD). Default `"symbol"`.
     pub const CURRENCY_FORMAT: &str = "currency.format";
     /// Currency symbol position: `"prefix"` ($10) or `"suffix"` (10$). Default `"prefix"`.
@@ -1272,7 +1270,6 @@ mod tests {
         assert!(!keys::STORE_TAX_ID.is_empty());
         assert!(!keys::DEFAULT_CURRENCY.is_empty());
         assert!(!keys::OLD_DEFAULT_CURRENCY.is_empty());
-        assert!(!keys::CURRENCY_DEFAULT.is_empty());
         assert!(!keys::CURRENCY_FORMAT.is_empty());
         assert!(!keys::CURRENCY_SYMBOL_POSITION.is_empty());
         assert!(!keys::CURRENCY_DECIMAL_SEPARATOR.is_empty());

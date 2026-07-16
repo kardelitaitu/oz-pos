@@ -262,7 +262,7 @@
     box-shadow   var(--duration-150) var(--ease-out);
 }
 
-.staff-login-input:focus {
+.staff-login-input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
   outline: none;
@@ -280,7 +280,7 @@
 /* Prevent browser autofill background colour override */
 .staff-login-input:-webkit-autofill,
 .staff-login-input:-webkit-autofill:hover,
-.staff-login-input:-webkit-autofill:focus,
+.staff-login-input:-webkit-autofill:focus-visible,
 .staff-login-input:-webkit-autofill:active {
   -webkit-box-shadow: 0 0 0 1000px var(--color-bg-input) inset !important;
   -webkit-text-fill-color: var(--color-fg) !important;
@@ -355,7 +355,7 @@
   outline: none;
 }
 
-.staff-login-pin-wrap:focus,
+.staff-login-pin-wrap:focus-visible,
 .staff-login-pin-wrap:focus-visible {
   outline: none;
 }

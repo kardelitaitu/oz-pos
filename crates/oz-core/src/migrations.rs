@@ -295,6 +295,10 @@ pub const ALL: &[Migration] = &[
         id: "074_login_attempts.sql",
         sql: include_str!("../migrations/074_login_attempts.sql"),
     },
+    Migration {
+        id: "075_global_currency_settings.sql",
+        sql: include_str!("../migrations/075_global_currency_settings.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -306,7 +310,7 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
 /// Create a fresh in-memory database with all migrations already applied.
 ///
 /// Uses a [`std::sync::LazyLock`]ed pre-migrated snapshot connection.
-/// The first call runs all 74 migrations once; subsequent calls clone the
+/// The first call runs all 75 migrations once; subsequent calls clone the
 /// snapshot via SQLite's page-level [`rusqlite::backup::Backup`] API —
 /// orders of magnitude faster than re-running `execute_batch` per test.
 ///

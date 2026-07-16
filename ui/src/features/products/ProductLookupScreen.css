@@ -59,7 +59,7 @@
   color: var(--color-fg-tertiary);
 }
 
-.product-search-input:focus {
+.product-search-input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
@@ -92,7 +92,7 @@
   font-family: var(--font-sans);
 }
 
-.product-barcode-input:focus {
+.product-barcode-input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }

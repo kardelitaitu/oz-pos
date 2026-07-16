@@ -59,7 +59,7 @@
   transition: border-color 0.15s ease;
 }
 
-.audit-log-search:focus,
+.audit-log-search:focus-visible,
 .audit-log-search:focus-visible {
   outline: none;
   border-color: var(--color-accent);

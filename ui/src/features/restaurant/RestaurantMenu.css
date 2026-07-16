@@ -189,7 +189,7 @@
   outline: none;
 }
 
-.restaurant-search-input:focus,
+.restaurant-search-input:focus-visible,
 .restaurant-search-input:focus-visible {
   border-color: transparent;
   box-shadow: none;

@@ -63,7 +63,7 @@
   box-sizing: border-box;
 }
 
-.inv-adjust-search:focus {
+.inv-adjust-search:focus-visible {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
@@ -299,7 +299,7 @@
   width: 100%;
 }
 
-.inv-adjust-input:focus {
+.inv-adjust-input:focus-visible {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);

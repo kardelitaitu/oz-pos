@@ -71,6 +71,46 @@ impl Store<'_> {
         Settings::set_default_currency(self.conn, code)
     }
 
+    /// Get the currency display format: `"symbol"` or `"code"`.
+    pub fn get_currency_format(&self) -> Result<String, CoreError> {
+        Settings::get_currency_format(self.conn)
+    }
+
+    /// Set the currency display format.
+    pub fn set_currency_format(&self, fmt: &str) -> Result<(), CoreError> {
+        Settings::set_currency_format(self.conn, fmt)
+    }
+
+    /// Get the currency symbol position: `"prefix"` or `"suffix"`.
+    pub fn get_currency_symbol_position(&self) -> Result<String, CoreError> {
+        Settings::get_currency_symbol_position(self.conn)
+    }
+
+    /// Set the currency symbol position.
+    pub fn set_currency_symbol_position(&self, pos: &str) -> Result<(), CoreError> {
+        Settings::set_currency_symbol_position(self.conn, pos)
+    }
+
+    /// Get the decimal separator: `"dot"` or `"comma"`.
+    pub fn get_currency_decimal_separator(&self) -> Result<String, CoreError> {
+        Settings::get_currency_decimal_separator(self.conn)
+    }
+
+    /// Set the decimal separator.
+    pub fn set_currency_decimal_separator(&self, sep: &str) -> Result<(), CoreError> {
+        Settings::set_currency_decimal_separator(self.conn, sep)
+    }
+
+    /// Get the thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`.
+    pub fn get_currency_thousands_separator(&self) -> Result<String, CoreError> {
+        Settings::get_currency_thousands_separator(self.conn)
+    }
+
+    /// Set the thousands separator.
+    pub fn set_currency_thousands_separator(&self, sep: &str) -> Result<(), CoreError> {
+        Settings::set_currency_thousands_separator(self.conn, sep)
+    }
+
     /// List all currencies from the ISO-4217 table.
     pub fn list_currencies(&self) -> Result<Vec<(String, String, u32, String)>, CoreError> {
         let mut stmt = self

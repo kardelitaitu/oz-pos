@@ -91,9 +91,9 @@
   outline: none;
 }
 
-.sales-history-filter-input:focus,
-.sales-history-filter-date:focus,
-.sales-history-filter-select:focus {
+.sales-history-filter-input:focus-visible,
+.sales-history-filter-date:focus-visible,
+.sales-history-filter-select:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
   outline: none;
@@ -513,7 +513,7 @@
   outline: none;
 }
 
-.sales-history-page-size-select:focus {
+.sales-history-page-size-select:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
   outline: none;

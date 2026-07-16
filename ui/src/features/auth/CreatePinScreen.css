@@ -67,7 +67,7 @@
   letter-spacing: 0.0625rem;
 }
 
-.create-pin-input:focus {
+.create-pin-input:focus-visible {
   outline: none;
   border-color: var(--color-border-focus);
   background: rgba(0, 0, 0, 0.4);

@@ -149,7 +149,7 @@
 .input-field::placeholder {
   color: var(--color-fg-tertiary);
 }
-.input-field:focus {
+.input-field:focus-visible {
   border-color: var(--color-border-focus);
   box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
@@ -161,7 +161,7 @@
 .input-field[aria-invalid='true'] {
   border-color: var(--color-danger);
 }
-.input-field[aria-invalid='true']:focus {
+.input-field[aria-invalid='true']:focus-visible {
   box-shadow: 0 0 0 3px var(--color-danger-bg);
 }
 

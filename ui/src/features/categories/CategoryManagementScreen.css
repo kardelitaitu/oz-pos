@@ -209,7 +209,7 @@
     box-shadow var(--duration-150) var(--ease-out);
 }
 
-.cat-mgmt-input:focus {
+.cat-mgmt-input:focus-visible {
   border-color: var(--color-border-focus);
   box-shadow: inset 0 0 0 1px var(--color-accent-subtle);
 }

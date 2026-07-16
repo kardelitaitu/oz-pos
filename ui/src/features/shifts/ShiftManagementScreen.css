@@ -509,7 +509,7 @@
   box-sizing: border-box;
 }
 
-.shift-mgmt-input:focus {
+.shift-mgmt-input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
@@ -533,7 +533,7 @@
   box-sizing: border-box;
 }
 
-.shift-mgmt-textarea:focus {
+.shift-mgmt-textarea:focus-visible {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }

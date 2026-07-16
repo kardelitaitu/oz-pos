@@ -432,7 +432,7 @@
     box-shadow var(--duration-150) var(--ease-out);
 }
 
-.retail-sku-input:focus {
+.retail-sku-input:focus-visible {
   border-color: var(--color-primary-pos);
   background: var(--color-primary-pos-light);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-pos) 20%, transparent);
@@ -1213,7 +1213,7 @@
     box-shadow var(--duration-150) var(--ease-out);
 }
 
-.retail-discount-modal input:focus {
+.retail-discount-modal input:focus-visible {
   border-color: var(--color-primary-pos);
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-pos) 20%, transparent);
@@ -1472,9 +1472,9 @@
   border-radius: 0;
 }
 
-.retail-options-field input:focus,
-.retail-options-field select:focus,
-.retail-options-field textarea:focus {
+.retail-options-field input:focus-visible,
+.retail-options-field select:focus-visible,
+.retail-options-field textarea:focus-visible {
   border-color: var(--color-primary-pos);
   background: var(--color-primary-pos-light);
   outline: none;
