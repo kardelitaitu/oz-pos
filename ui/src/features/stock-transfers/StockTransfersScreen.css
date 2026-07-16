@@ -69,6 +69,11 @@
   border-color: var(--color-accent);
 }
 
+.stock-transfers-filter-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 .stock-transfers-filter-btn.active {
   background: var(--color-accent);
   color: var(--color-accent-fg);
@@ -122,6 +127,12 @@
   text-decoration: underline;
 }
 
+.stock-transfers-link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 .stock-transfers-cell-date {
   white-space: nowrap;
   color: var(--color-fg-tertiary);
@@ -146,6 +157,11 @@
 
 .stock-transfers-action-btn:hover {
   background: var(--color-bg-surface);
+}
+
+.stock-transfers-action-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .stock-transfers-action-btn--danger {
@@ -301,6 +317,12 @@
 
 .stock-transfers-modal-close:hover {
   color: var(--color-fg);
+}
+
+.stock-transfers-modal-close:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .stock-transfers-modal-body {
@@ -472,6 +494,16 @@
   cursor: pointer;
   padding: var(--space-1);
   line-height: 1;
+}
+
+.stock-transfers-line-remove:hover {
+  opacity: 0.8;
+}
+
+.stock-transfers-line-remove:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 /* ── Error ────────────────────────────────────────────────────────── */

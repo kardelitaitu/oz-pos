@@ -400,6 +400,11 @@
   color: var(--color-fg);
 }
 
+.fastpin-back-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 .fastpin-back-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -447,6 +452,11 @@
 .fastpin-cancel-btn:hover:not(:disabled) {
   color: var(--color-fg);
   background: var(--color-bg-surface);
+}
+
+.fastpin-cancel-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .fastpin-cancel-btn:disabled {
