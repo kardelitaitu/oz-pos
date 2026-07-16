@@ -144,6 +144,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                       <input
                         className="po-form-input po-form-input--sm"
                         type="text"
+                        aria-label="SKU"
                         value={line.sku}
                         onChange={(e) => updateLine(idx, 'sku', e.target.value)}
                         placeholder="SKU"
@@ -153,6 +154,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                       <input
                         className="po-form-input po-form-input--sm"
                         type="text"
+                        aria-label="Product name"
                         value={line.product_name}
                         onChange={(e) => updateLine(idx, 'product_name', e.target.value)}
                         placeholder="Product name"
@@ -163,6 +165,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         className="po-form-input po-form-input--sm po-form-input--num"
                         type="number"
                         min={0}
+                        aria-label="Quantity"
                         value={line.qty}
                         onChange={(e) => updateLine(idx, 'qty', parseInt(e.target.value) || 0)}
                       />
@@ -172,6 +175,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         className="po-form-input po-form-input--sm po-form-input--num"
                         type="number"
                         min={0}
+                        aria-label="Unit cost"
                         value={line.unit_cost_minor}
                         onChange={(e) => updateLine(idx, 'unit_cost_minor', parseInt(e.target.value) || 0)}
                         placeholder="in cents"
