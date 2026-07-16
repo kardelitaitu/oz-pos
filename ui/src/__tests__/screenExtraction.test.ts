@@ -325,6 +325,12 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'sales/RefundModal.tsx',
     css: ['sales/RefundModal.css'],
   },
+  {
+    name: 'PriceOverrideModal',
+    tsx: 'sales/PriceOverrideModal.tsx',
+    css: ['sales/PriceOverrideModal.css'],
+    dynamicClassPrefixes: ['price-override-pin-dot--'],
+  },
 
   // ── Reports ───────────────────────────────────────────
   {

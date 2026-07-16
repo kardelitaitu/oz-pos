@@ -61,14 +61,14 @@
 }
 
 .multi-store-stat-value {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   font-weight: var(--font-weight-bold);
   color: var(--color-accent);
   line-height: 1;
 }
 
 .multi-store-stat-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-fg-tertiary);
   text-transform: uppercase;
@@ -110,13 +110,13 @@
 }
 
 .multi-store-card-name {
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
 }
 
 .multi-store-card-badge {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-accent-active);
   background: var(--color-accent-subtle);
@@ -137,13 +137,13 @@
 }
 
 .multi-store-card-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
   font-weight: var(--font-weight-medium);
 }
 
 .multi-store-card-value {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--color-fg);
   font-weight: var(--font-weight-medium);
   text-align: right;
