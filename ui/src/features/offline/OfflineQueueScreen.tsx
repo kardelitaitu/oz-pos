@@ -10,6 +10,7 @@ import {
 } from '@/api/offline';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './OfflineQueueScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -179,9 +180,42 @@ export default function OfflineQueueScreen() {
       )}
 
       {loading ? (
-        <Localized id="offline-queue-loading">
-          <p className="offline-queue-loading">Loading queue…</p>
-        </Localized>
+        <div className="offline-queue-loading-skeleton">
+          {/* Header skeleton */}
+          <div className="offline-queue-skeleton-header">
+            <Skeleton variant="block" width="12rem" height="1.75rem" />
+            <Skeleton variant="block" width="7rem" height="2.25rem" />
+          </div>
+          {/* Table skeleton */}
+          <div className="offline-queue-table-wrap">
+            <table className="offline-queue-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Status</th>
+                  <th>Retries</th>
+                  <th>Last Error</th>
+                  <th>Created</th>
+                  <th>Synced At</th>
+                  <th aria-label="Actions"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td><Skeleton variant="text" width="6rem" /></td>
+                    <td><Skeleton variant="block" width="4.5rem" height="1.25rem" /></td>
+                    <td style={{ textAlign: 'center' }}><Skeleton variant="text" width="2rem" /></td>
+                    <td><Skeleton variant="text" width="8rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="block" width="3rem" height="1.5rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error ? (
         <Card shadow="sm">
           <div className="offline-queue-empty">

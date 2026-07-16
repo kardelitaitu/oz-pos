@@ -57,11 +57,11 @@ describe('ShiftManagementScreen', () => {
     });
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     mockListShifts.mockReturnValue(new Promise(() => {}));
     mockGetActiveShift.mockReturnValue(new Promise(() => {}));
     renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
-    expect(screen.getByText('Loading shifts…')).toBeInTheDocument();
+    expect(document.querySelector('.shift-mgmt-loading-skeleton')).toBeInTheDocument();
   });
 
   // ── No active shift ──────────────────────────────────────────

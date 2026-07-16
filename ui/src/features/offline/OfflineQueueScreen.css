@@ -34,11 +34,21 @@
   white-space: nowrap;
 }
 
-.offline-queue-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
-  padding: var(--space-8);
-  text-align: center;
+/* ── Skeleton loading ───────────────────────────────────── */
+.offline-queue-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.offline-queue-skeleton-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.offline-queue-loading-skeleton .offline-queue-table thead {
+  pointer-events: none;
 }
 
 /* ── Empty / Error state ──────────────────────────────────────────── */

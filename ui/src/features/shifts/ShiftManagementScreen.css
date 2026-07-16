@@ -29,10 +29,19 @@
   font-weight: var(--font-weight-bold);
 }
 
-.shift-mgmt-loading {
-  padding: var(--space-8) 0;
-  text-align: center;
-  color: var(--color-fg-secondary);
+/* ── Skeleton loading ───────────────────────────────────── */
+.shift-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.shift-mgmt-loading-skeleton .shift-mgmt-active-header {
+  min-height: 2.5rem;
+}
+
+.shift-mgmt-loading-skeleton .shift-mgmt-table thead {
+  pointer-events: none;
 }
 
 /* ── Active shift card ───────────────────────────────── */

@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { formatMoney } from '@/types/domain';
 import {
   listShifts,
@@ -197,9 +198,63 @@ export default function ShiftManagementScreen() {
       </div>
 
       {loading && (
-        <Localized id="shift-loading">
-          <p className="shift-mgmt-loading">Loading shifts…</p>
-        </Localized>
+        <div className="shift-mgmt-loading-skeleton">
+          {/* Active shift card skeleton */}
+          <Card shadow="md" className="shift-mgmt-active-card">
+            <div className="shift-mgmt-active-header">
+              <Skeleton variant="block" width="7rem" height="1.25rem" />
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <Skeleton variant="block" width="7rem" height="2rem" />
+                <Skeleton variant="block" width="7rem" height="2rem" />
+              </div>
+            </div>
+            <div className="shift-mgmt-active-details">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="shift-mgmt-active-stat">
+                  <Skeleton variant="text" width="3rem" />
+                  <Skeleton variant="text" width="5rem" />
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Table skeleton */}
+          <Card shadow="sm" className="shift-mgmt-table-card">
+            <Skeleton variant="block" width="8rem" height="1.25rem" style={{ marginBottom: 'var(--space-3)' }} />
+            <div className="shift-mgmt-table-wrap">
+              <table className="shift-mgmt-table" aria-hidden="true">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Opened</th>
+                    <th>Closed</th>
+                    <th>Opening</th>
+                    <th>Counted</th>
+                    <th>Expected</th>
+                    <th>Diff</th>
+                    <th>Sales</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={i}>
+                      <td><Skeleton variant="block" width="3.5rem" height="1.25rem" /></td>
+                      <td><Skeleton variant="text" width="7rem" /></td>
+                      <td><Skeleton variant="text" width="7rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="block" width="2.5rem" height="1.25rem" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
 
       {!loading && (
