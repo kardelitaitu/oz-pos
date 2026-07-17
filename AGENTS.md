@@ -90,7 +90,7 @@ npm install
 - Front-end components must have a corresponding test in `ui/src/__tests__/`.
 
 ### Git & Branch Policy
-- Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
+- Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`, `test/<name>`, `refactor/<name>`.
 - **Always make a local commit after each major modification.** Whenever a logical task, feature step, or significant code change is completed and verified locally, commit it before moving on to the next task. The commit message must accurately and comprehensively explain what was changed across all committed files.
 
 - **Never run `git push` without an explicit, direct order from the user.** Even after committing code or completing verification, always wait for the user to explicitly instruct you to push before executing any `git push` command.
