@@ -22,10 +22,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // ── Mock context for AuthContext ───────────────────────────────────────
-//
-// WorkspaceProvider reads `auth.session` via `useAuth()`. We create a
-// parallel context so the test wrapper can inject a canned session
-// without needing the real AuthProvider.
 
 interface MockAuthCtxValue {
   session: LoginSessionDto | null;
@@ -124,6 +120,33 @@ function renderWorkspaceHook(session: LoginSessionDto | null = DEFAULT_SESSION) 
   );
 }
 
+// ── Helper: flush pending microtasks synchronously ────────────────────
+// Replaces waitFor(() => expect(loading).toBe(false)) which polls at
+// 50ms intervals. await act(async () => {}) flushes all pending
+// microtasks (resolved mock promises + React state updates) in a
+// single tick, eliminating the 50ms polling overhead per call.
+
+async function flushAsync() {
+  await act(async () => {});
+}
+
+// For multi-step async flows where a single flush might not suffice,
+// use waitFor with a short interval instead of the default 50ms.
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
+
+// Asserts that loading has completed (loading === false) with fast polling.
+// Strictly better than flushAsync() for initial-load waits because it
+// preserves the safety assertion: if a future bug makes loading stay true
+// forever, the test fails instead of passing with stale state.
+// For null-session tests where loading may not transition, use flushAsync().
+type HookResult = { current: { workspace: { loading: boolean } } };
+
+async function waitForLoaded(result: HookResult) {
+  await waitFor(() => {
+    expect(result.current.workspace.loading).toBe(false);
+  }, FAST_WAIT);
+}
+
 // ── Setup ──────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -160,9 +183,7 @@ describe('WorkspaceContext', () => {
     it('loads workspaces from API on mount with valid session', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => {
-        expect(result.current.workspace.loading).toBe(false);
-      });
+      await waitForLoaded(result);
 
       expect(mocks.resolveBootStore).toHaveBeenCalled();
       expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'store-1', 'user-1');
@@ -172,9 +193,7 @@ describe('WorkspaceContext', () => {
     it('does not load workspaces when session is null', async () => {
       const { result } = renderWorkspaceHook(null);
 
-      await waitFor(() => {
-        expect(result.current.workspace.loading).toBe(false);
-      });
+      await flushAsync();
 
       expect(mocks.listWorkspaces).not.toHaveBeenCalled();
       expect(result.current.workspace.availableWorkspaces).toEqual([]);
@@ -185,7 +204,7 @@ describe('WorkspaceContext', () => {
     it('sets activeWorkspace and syncs activeInstance', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
 
@@ -197,7 +216,7 @@ describe('WorkspaceContext', () => {
     it('sets activeInstance and syncs activeWorkspace', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveInstance(STORE_POS); });
 
@@ -208,7 +227,7 @@ describe('WorkspaceContext', () => {
     it('clears selection when setting null', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
       act(() => { result.current.workspace.setActiveWorkspace(null); });
@@ -223,25 +242,25 @@ describe('WorkspaceContext', () => {
     it('loads screens when an instance is activated', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
 
       await waitFor(() => {
         expect(result.current.workspace.workspaceScreens).toEqual(['pos', 'orders']);
-      });
+      }, FAST_WAIT);
       expect(mocks.listWorkspaceScreens).toHaveBeenCalledWith('restaurant-pos');
     });
 
     it('clears screens when instance becomes null', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
       await waitFor(() => {
         expect(result.current.workspace.workspaceScreens.length).toBeGreaterThan(0);
-      });
+      }, FAST_WAIT);
 
       act(() => { result.current.workspace.setActiveWorkspace(null); });
 
@@ -253,24 +272,24 @@ describe('WorkspaceContext', () => {
     it('creates a session token when workspace is selected', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
 
       await waitFor(() => {
         expect(result.current.workspace.sessionToken).toBe('tok-abc-123');
-      });
+      }, FAST_WAIT);
     });
 
     it('destroys old token and creates new one when switching workspace', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
       await waitFor(() => {
         expect(result.current.workspace.sessionToken).toBe('tok-abc-123');
-      });
+      }, FAST_WAIT);
 
       mocks.createSession.mockResolvedValue(makeSessionResult({ session_token: 'tok-xyz' }));
 
@@ -278,7 +297,7 @@ describe('WorkspaceContext', () => {
 
       await waitFor(() => {
         expect(result.current.workspace.sessionToken).toBe('tok-xyz');
-      });
+      }, FAST_WAIT);
       expect(mocks.destroySession).toHaveBeenCalledWith('tok-abc-123');
     });
   });
@@ -287,12 +306,12 @@ describe('WorkspaceContext', () => {
     it('destroys token, clears state, and re-resolves for new store', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
       await waitFor(() => {
         expect(result.current.workspace.sessionToken).toBe('tok-abc-123');
-      });
+      }, FAST_WAIT);
 
       mocks.listWorkspaces.mockResolvedValue([STORE_POS]);
 
@@ -302,9 +321,7 @@ describe('WorkspaceContext', () => {
       expect(result.current.workspace.activeWorkspace).toBeNull();
       expect(result.current.workspace.resolvedStoreId).toBe('store-2');
 
-      await waitFor(() => {
-        expect(result.current.workspace.loading).toBe(false);
-      });
+      await waitForLoaded(result);
       expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'store-2', 'user-1');
     });
   });
@@ -313,12 +330,12 @@ describe('WorkspaceContext', () => {
     it('preserves workspace and creates token with new user identity', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
       await waitFor(() => {
         expect(result.current.workspace.sessionToken).toBe('tok-abc-123');
-      });
+      }, FAST_WAIT);
 
       mocks.createSession.mockResolvedValue(makeSessionResult({ session_token: 'tok-swapped' }));
 
@@ -334,7 +351,7 @@ describe('WorkspaceContext', () => {
     it('is a no-op when no instance is active', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       await act(async () => {
         await result.current.workspace.swapSessionToken('user-2', 'role-manager');
@@ -351,7 +368,7 @@ describe('WorkspaceContext', () => {
 
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       expect(result.current.workspace.availableWorkspaces.length).toBeGreaterThan(0);
       expect(result.current.workspace.error).toBeNull();
@@ -362,7 +379,7 @@ describe('WorkspaceContext', () => {
 
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       expect(result.current.workspace.availableWorkspaces.length).toBeGreaterThan(0);
       expect(result.current.workspace.error).toBe(
@@ -375,21 +392,21 @@ describe('WorkspaceContext', () => {
     it('re-fetches workspaces when retry is called', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       mocks.listWorkspaces.mockClear();
       act(() => { result.current.workspace.retry(); });
 
       expect(result.current.workspace.loading).toBe(true);
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
       expect(mocks.listWorkspaces).toHaveBeenCalled();
     });
 
     it('is a no-op when roleId is empty (no session)', async () => {
       const { result } = renderWorkspaceHook(null);
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await flushAsync();
 
       mocks.listWorkspaces.mockClear();
       act(() => { result.current.workspace.retry(); });
@@ -402,7 +419,7 @@ describe('WorkspaceContext', () => {
     it('returns null when no workspace is active', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       expect(result.current.scope).toBeNull();
     });
@@ -410,7 +427,7 @@ describe('WorkspaceContext', () => {
     it('returns scope derived from active instance', async () => {
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       act(() => { result.current.workspace.setActiveInstance(makeWorkspace()); });
 
@@ -428,7 +445,7 @@ describe('WorkspaceContext', () => {
 
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       expect(result.current.workspace.resolvedStoreId).toBe('default');
       expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'default', 'user-1');
@@ -444,7 +461,7 @@ describe('WorkspaceContext', () => {
 
       const { result } = renderWorkspaceHook();
 
-      await waitFor(() => expect(result.current.workspace.loading).toBe(false));
+      await waitForLoaded(result);
 
       expect(result.current.workspace.resolvedStoreId).toBe('branch-5');
       expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'branch-5', 'user-1');

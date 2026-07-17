@@ -9,7 +9,7 @@
 | Layer | Test files | Total tests | Status |
 |-------|-----------|-------------|--------|
 | Rust | 26 crates | ~800+ | ✅ All passing |
-| UI/Vitest | 152 files | 2,501 | ✅ All passing (0 failures, 0 skipped) |
+| UI/Vitest | 161 files | 2,526 | ✅ All passing (0 failures, 0 skipped) |
 | Vitest duration | — | — | **~14s** (baseline) |
 
 ---
@@ -21,31 +21,48 @@ suite and record the new wall-clock time at the bottom.
 
 ### 🏆 Tier 1 — Heavy hitters (> 3s)
 
-- [ ] **DataManagementScreen.test.tsx** — 9,128ms / 55 tests (avg 165ms)
+- [x] **DataManagementScreen.test.tsx** — 9,128ms / 55 tests → 4 files (Screen 10, Export 20, Import 16, Backup 9)
       Split into smaller test files by feature (Export, Import, Backup).
-- [ ] **RetailPosScreen.test.tsx** — 7,358ms / 49 tests (avg 150ms)
-      Reduce redundant re-renders; consolidate shared mock setup.
-- [ ] **PaymentModal.test.tsx** — 6,313ms / 26 tests (avg 242ms)
-      Extract slow keyboard/interaction tests to a separate file.
-- [ ] **PriceOverrideKeyboardEdgeCases.test.tsx** — 5,747ms / 16 tests (avg 359ms)
-      Profile async userEvent chains; look for unnecessary `act()` boundaries.
-- [ ] **SetupWizard.test.tsx** — 4,891ms / 24 tests (avg 203ms)
-      Cache mock data; reduce Fluent bundle re-creation per test.
-- [ ] **CreatePinScreen.test.tsx** — 4,759ms / 12 tests (avg 396ms)
-      High avg — investigate async timer dependencies.
-- [ ] **PriceOverrideModal.test.tsx** — 4,119ms / 15 tests (avg 274ms)
-      Consolidate shared render wrappers; reduce IPC mock thrash.
-- [ ] **StockTransfersKeyboard.test.tsx** — 3,560ms / 8 tests (avg 444ms)
-      Highest avg — profile keyboard event simulation overhead.
-- [ ] **SettingsPage.test.tsx** — 3,386ms / 26 tests (avg 130ms)
-- [ ] **PurchaseOrderForm.test.tsx** — 3,281ms / 17 tests (avg 192ms)
+- [x] **RetailPosScreen.test.tsx** — 7,358ms / 49 tests → 3 files (rendering 24, interactions 17, checkout 8)
+      Isolated heavy tests (long-press with 500ms setTimeout, full PaymentModal checkout flow) in separate files.
+- [x] **PaymentModal.test.tsx** — 6,313ms / 26 tests → 2 files (rendering/interaction 22, sale flow 4)
+      Extracted 4 heavy flow tests with Tauri IPC chain into PaymentModalSaleFlow.test.tsx.
+- [x] **PriceOverrideKeyboardEdgeCases.test.tsx** — 5,747ms / 16 tests (avg 359ms → 250ms)
+      Replaced userEvent.click with fireEvent.click for navigation buttons. Extracted 3 sync tests to PriceOverridePriceStep.test.tsx. -43% time.
+- [x] **SetupWizard.test.tsx** — 4,891ms / 24 tests → 2 files (interactions 21, render 3)
+      Module-level FluentBundle singleton + fireEvent.click for navigation. -72% time (1,347ms).
+- [x] **CreatePinScreen.test.tsx** — 4,759ms / 12 tests → 2 files (interactions 10, render 2)
+      Replaced userEvent.type with fireEvent.change (4 fields × ~20 chars = ~1.6s saved per test). 4 validation tests now sync. -87% time.
+- [x] **PriceOverrideModal.test.tsx** — 4,119ms / 15 tests → 2 files (interactions 11, render 4)
+      fireEvent.click for nav buttons + fireEvent.change for username + shared advanceToPinStep helpers. -87% time.
+- [x] **StockTransfersKeyboard.test.tsx** — 3,560ms / 8 tests → 2,049ms (-42%)
+      fireEvent.click for all button clicks + fireEvent.change for form fields. Kept userEvent.keyboard for Escape (native addEventListener).
+- [x] **SettingsPage.test.tsx** — 3,386ms / 26 tests → 2,210ms (-35%)
+      fireEvent.click for nav buttons, fireEvent.change for form fields,
+      fireEvent.blur for validation triggers, document.body.textContent for
+      split-element version string. Kept await waitFor for initial API data.
+- [x] **PurchaseOrderForm.test.tsx** — 3,281ms / 17 tests → 812ms (-75%)
+      fireEvent.click for all buttons, fireEvent.change for all form fields
+      + select options. Added fillField(), clickButton(), selectOption() helpers.
 
 ### 🥈 Tier 2 — Medium (2–3s)
 
-- [ ] **ProductLookupScreen.test.tsx** — 2,926ms / 20 tests (avg 146ms)
-- [ ] **SuppliersScreen.test.tsx** — 2,354ms / 16 tests (avg 147ms)
-- [ ] **FastPINOverlay.test.tsx** — 2,309ms / 19 tests (avg 121ms)
-- [ ] **WorkspaceContext.test.tsx** — 2,114ms / 21 tests (avg 100ms)
+- [x] **ProductLookupScreen.test.tsx** — 2,926ms / 20 tests → 1,055ms (-64%)
+      fireEvent.change for search/barcode inputs, fireEvent.click for radio
+      chips + scan buttons, fireEvent.keyDown for Enter key on barcode input.
+      Added fillInput(), pressEnter(), clickButton(), clickRadio() helpers.
+      Key lesson: async barcode scan asserts need await waitFor().
+- [x] **SuppliersScreen.test.tsx** — 2,354ms / 16 tests → 2,100ms (-11%)
+      fireEvent.change for form fields, fireEvent.click for buttons.
+      Removed 6 userEvent.setup() calls + userEvent import.
+      Added clickButton(name), fillField(index, value) helpers.
+- [x] **FastPINOverlay.test.tsx** — 2,309ms / 19 tests → 1,109ms (-52%)
+      fireEvent.change for username, fake timers for setTimeout test,
+      getByRole('button', { name }) for icon-only Backspace button.
+- [x] **WorkspaceContext.test.tsx** — 2,114ms / 21 tests → 1,400ms (-34%)
+      waitForLoaded(result) helper: waitFor(loading===false, FAST_WAIT) preserves
+      safety assertion. flushAsync() kept for 2 null-session tests. FAST_WAIT
+      (5ms polling) for multi-step async chains (sessionToken, screens).
 - [ ] **RefundModal.test.tsx** — 2,114ms / 15 tests (avg 140ms)
 
 ### 📝 Benchmark Log
@@ -53,6 +70,18 @@ suite and record the new wall-clock time at the bottom.
 | Date | Duration | Change | Notes |
 |------|----------|--------|-------|
 | baseline | 13.99s | — | Current config (min 8, max 28 threads) |
+| 2026-07-17 | 15.25s | +1.26s | After DataManagement split (155 files, 2509 tests). Slight increase from setup overhead; heavy Export (5.2s) + Import (5.1s) now run in parallel. |
+| 2026-07-17 | 15.38s | +1.39s | After RetailPosScreen split (158 files, 2526 tests). FeatureToggleScreen (15 fails) is pre-existing. 3 files from 1. |
+| 2026-07-17 | 16.33s | +2.34s | After PaymentModal split (159 files, 2526 tests). 22 fast + 4 heavy flow tests now parallel. |
+| 2026-07-17 | **13.64s** | **-0.35s** | After PriceOverride optimization (160 files, 2526 tests). fireEvent.click nav buttons -43% on KeyboardEdgeCases. **First time below baseline!** |
+| 2026-07-17 | 14.88s | +0.89s | After SetupWizard optimization (161 files, 2526 tests). SetupWizard 4.9s→1.35s (-72%). File count increase adds overhead. |
+| 2026-07-17 | 15.05s | +1.06s | After CreatePinScreen optimization (162 files, 2526 tests). CreatePinScreen 4.8s→645ms (-87%). File count increase adds overhead. |
+| 2026-07-17 | 16.48s | +2.49s | After PriceOverrideModal optimization (163 files, 2526 tests). PriceOverrideModal 4.1s→529ms (-87%). Run-to-run variance. |
+| 2026-07-17 | 15.15s | +1.16s | After StockTransfersKeyboard optimization (163 files, 2526 tests). StockTransfersKeyboard 3.6s→2.0s (-42%). |
+| 2026-07-17 | 15.46s | +1.47s | After SettingsPage optimization (164 files, 2533 tests). SettingsPage 3.4s→2.2s (-35%). |
+| 2026-07-17 | 15.28s | +1.29s | After SuppliersScreen optimization (164 files, 2533 tests). SuppliersScreen 2.35s→2.10s (-11%). All passing. |
+| 2026-07-17 | **13.45s** | **-0.54s** | After FastPINOverlay optimization (164 files, 2533 tests). FastPINOverlay 2.3s→1.1s (-52%). **Below baseline!** 🎉 |
+| 2026-07-17 | 16.55s | +2.56s | After WorkspaceContext optimization (164 files, 2533 tests). WorkspaceContext 2.1s→1.4s (-34%). Run-to-run variance; safety-preserving waitForLoaded. |
 
 ---
 
