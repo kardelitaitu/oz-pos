@@ -111,38 +111,49 @@ pub async fn set_feature(
     let feature = oz_core::features::feature_from_key(&args.key)
         .ok_or_else(|| AppError::Invalid(format!("unknown feature key: {}", args.key)))?;
 
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
+    // ── DB-scoped block: load, mutate, persist features ──────────
+    // Store is !Send (wraps rusqlite Connection's RefCell), so we
+    // must drop it before any subsequent .await point. Wrapping the
+    // entire DB interaction in a block guarantees both the Store and
+    // the MutexGuard are dropped before the terminal_id lock below.
+    let (reg, auto_enabled) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
 
-    let mut reg = store.load_features()?;
-    let mut auto_enabled: Vec<String> = Vec::new();
+        let mut reg = store.load_features()?;
+        let mut auto_enabled: Vec<String> = Vec::new();
 
-    if args.enabled {
-        // Before enabling, track what was already enabled.
-        let before_enable: Vec<Feature> = reg.enabled_features().collect();
+        if args.enabled {
+            // Before enabling, track what was already enabled.
+            let before_enable: Vec<Feature> = reg.enabled_features().collect();
 
-        // Enable the feature (this auto-enables dependencies).
-        reg.enable(feature);
+            // Enable the feature (this auto-enables dependencies).
+            reg.enable(feature);
 
-        // Auto-enable CloudSync when MultiTerminal is enabled (logical coupling:
-        // cross-terminal sync requires the cloud sync backend).
-        if feature == Feature::MultiTerminal && !reg.is_enabled(Feature::CloudSync) {
-            reg.enable(Feature::CloudSync);
-        }
-
-        // Figure out what was newly auto-enabled.
-        for f in reg.enabled_features() {
-            if !before_enable.contains(&f) && f != feature {
-                auto_enabled.push(oz_core::features::feature_key(f).to_string());
+            // Auto-enable CloudSync when MultiTerminal is enabled (logical coupling:
+            // cross-terminal sync requires the cloud sync backend).
+            if feature == Feature::MultiTerminal && !reg.is_enabled(Feature::CloudSync) {
+                reg.enable(Feature::CloudSync);
             }
-        }
-    } else {
-        reg.disable(feature);
-    }
 
-    // Persist the updated registry and prune stale rows (from disabling).
-    store.save_features(&reg)?;
-    store.prune_stale_features(&reg)?;
+            // Figure out what was newly auto-enabled.
+            for f in reg.enabled_features() {
+                if !before_enable.contains(&f) && f != feature {
+                    auto_enabled.push(oz_core::features::feature_key(f).to_string());
+                }
+            }
+        } else {
+            reg.disable(feature);
+        }
+
+        // Persist the updated registry and prune stale rows (from disabling).
+        store.save_features(&reg)?;
+        store.prune_stale_features(&reg)?;
+
+        // Store and MutexGuard dropped here — no !Send types survive
+        // past this block.
+        (reg, auto_enabled)
+    };
 
     // Auto-register this device as a terminal when MultiTerminal is enabled.
     // This ensures every POS device has a registered terminal entry for
@@ -150,6 +161,10 @@ pub async fn set_feature(
     if args.enabled && feature == Feature::MultiTerminal {
         let device_id = device_hostname();
         let mut tid = state.terminal_id.lock().await;
+        // Re-acquire db for terminal lookup — must happen after terminal_id
+        // lock to avoid holding !Send types across the await.
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
         if store.get_terminal_by_device_id(&device_id)?.is_none() {
             let name = format!("{} (auto)", &device_id);
             let terminal = Terminal::new(&name, &device_id);
