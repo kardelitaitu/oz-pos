@@ -370,9 +370,7 @@ impl Drop for AppState {
         // gives commands time to finish while guaranteeing the Drop
         // doesn't hang indefinitely.
         let mut stopped = false;
-        let mut attempts = 0u32;
         for _ in 0..50 {
-            attempts += 1;
             if let Ok(mut kernel) = self.kernel.try_lock() {
                 let _ = kernel.stop_all();
                 stopped = true;
@@ -382,10 +380,8 @@ impl Drop for AppState {
         }
         if !stopped {
             tracing::warn!(
-                attempts,
-                "kernel lock contended after {}ms, skipping stop_all — \
-                 modules may not have been stopped cleanly",
-                attempts * 10,
+                "kernel lock contended after 500ms, skipping stop_all — \
+                 modules may not have been stopped cleanly"
             );
         }
     }

@@ -511,7 +511,10 @@ export default function SettingsPage() {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
       if (isDirty) {
         e.preventDefault();
-        // Modern browsers ignore custom messages; they show a generic prompt.
+        // WebView2 (Windows) and Chromium require returnValue to be set
+        // to a non-empty string for the beforeunload dialog to appear.
+        // e.preventDefault() alone is insufficient on WebView2.
+        e.returnValue = '';
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload);

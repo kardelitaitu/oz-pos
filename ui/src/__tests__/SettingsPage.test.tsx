@@ -797,4 +797,78 @@ describe('SettingsPage', () => {
       expect(screen.getByText(/some settings could not be saved/i)).toBeInTheDocument();
     });
   });
+
+  // ══════════════════════════════════════════════════════════════
+  //  beforeunload — WebView2 unsaved-changes dialog (Windows UX bug)
+  //  Bug: e.preventDefault() alone is insufficient on WebView2.
+  //  Fix: Also set e.returnValue = '' to trigger the confirmation.
+  // ══════════════════════════════════════════════════════════════
+
+  it('sets returnValue on beforeunload when form is dirty (WebView2 compat)', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    // Make the form dirty by editing a field.
+    fillField('Store name', 'Unsaved Change');
+
+    // Dispatch a beforeunload event and verify the handler sets returnValue.
+    // WebView2 (Windows) requires e.returnValue to be set (even to '')
+    // for the unsaved-changes dialog to appear. e.preventDefault() alone
+    // is insufficient on WebView2.
+    const event = new Event('beforeunload', { cancelable: true, bubbles: true });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    Object.defineProperty(event, 'returnValue', {
+      writable: true,
+      value: undefined,
+    });
+    window.dispatchEvent(event);
+
+    expect(preventDefaultSpy).toHaveBeenCalled();
+    expect((event as BeforeUnloadEvent).returnValue).toBeDefined();
+    expect((event as BeforeUnloadEvent).returnValue).toBe('');
+  });
+
+  it('does not trigger beforeunload when form is clean', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    // Form is NOT dirty — beforeunload should not prevent default.
+    const event = new Event('beforeunload', { cancelable: true, bubbles: true });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    Object.defineProperty(event, 'returnValue', {
+      writable: true,
+      value: undefined,
+    });
+    window.dispatchEvent(event);
+
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    expect((event as BeforeUnloadEvent).returnValue).toBeUndefined();
+  });
+
+  it('stops triggering beforeunload after save clears dirty state', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+
+    // Make dirty
+    fillField('Store name', 'Will Save');
+
+    // Save to clear dirty state
+    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
+    });
+
+    // After save, beforeunload should NOT prevent default
+    const event = new Event('beforeunload', { cancelable: true, bubbles: true });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    window.dispatchEvent(event);
+
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+  });
 });
