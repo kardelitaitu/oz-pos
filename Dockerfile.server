@@ -121,6 +121,7 @@ RUN apt-get update && \
         ca-certificates \
         libc6 \
         gosu \
+        wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for security and initialize runtime /data directory.
