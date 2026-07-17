@@ -201,7 +201,7 @@ export function usePosState() {
    * This is a local preview; the backend applies it on complete.
    */
   const setDiscount = useCallback(
-    async (percent: number, label: string) => {
+    (percent: number, label: string) => {
       const clamped = Math.max(0, Math.min(100, Math.round(percent)));
       setDiscountPercent(clamped);
       setDiscountLabel(clamped > 0 ? label : '');

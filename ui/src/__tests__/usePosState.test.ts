@@ -85,6 +85,17 @@ describe('usePosState', () => {
       expect(result.current.lines).toHaveLength(0);
     });
 
+    it('does not throw when removing a non-existent line', () => {
+      const { result } = renderHook(() => usePosState());
+
+      act(() => { result.current.addProduct(makeProduct()); });
+
+      expect(() => {
+        act(() => { result.current.removeLine('nonexistent-id' as never); });
+      }).not.toThrow();
+      expect(result.current.lines).toHaveLength(1);
+    });
+
     it('updates quantity of a line', () => {
       const { result } = renderHook(() => usePosState());
 
@@ -140,6 +151,20 @@ describe('usePosState', () => {
       act(() => { result.current.setDiscount(150, 'Too much'); });
 
       expect(result.current.discountPercent).toBe(100);
+    });
+
+    it('clears discount label when percent is set to 0', () => {
+      const { result } = renderHook(() => usePosState());
+
+      act(() => { result.current.addProduct(makeProduct()); });
+      act(() => { result.current.setDiscount(10, 'VIP'); });
+      expect(result.current.discountLabel).toBe('VIP');
+
+      act(() => { result.current.setDiscount(0, ''); });
+
+      expect(result.current.discountPercent).toBe(0);
+      expect(result.current.discountLabel).toBe('');
+      expect(result.current.discountAmount).toBeNull();
     });
 
     it('applies service charge when enabled', () => {
@@ -260,6 +285,21 @@ describe('usePosState', () => {
       act(() => { result.current.fireAllCourses(); });
 
       expect(result.current.lines.every((l) => l.coursingStatus === 'fired')).toBe(true);
+    });
+
+    it('fireAllCourses is a no-op when no lines are on hold', () => {
+      const { result } = renderHook(() => usePosState());
+
+      act(() => { result.current.addProduct(makeProduct({ sku: 'LATTE' as Product['sku'] })); });
+      act(() => { result.current.addProduct(makeProduct({ sku: 'BAGEL' as Product['sku'], name: 'Bagel' })); });
+
+      // Lines have no course/coursingStatus yet — fireAllCourses should not mutate them
+      const before = result.current.lines.map((l) => ({ id: l.id, sku: l.sku }));
+      act(() => { result.current.fireAllCourses(); });
+
+      expect(result.current.lines).toHaveLength(2);
+      expect(result.current.lines.map((l) => ({ id: l.id, sku: l.sku }))).toEqual(before);
+      expect(result.current.lines.every((l) => l.coursingStatus === undefined)).toBe(true);
     });
   });
 });
