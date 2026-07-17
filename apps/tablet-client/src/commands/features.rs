@@ -160,10 +160,10 @@ pub async fn set_feature(
                 name = %terminal.name,
                 "terminal auto-registered for multi-terminal"
             );
-        } else if tid.is_none() {
-            if let Some(existing) = store.get_terminal_by_device_id(&device_id)? {
-                *tid = Some(existing.id);
-            }
+        } else if tid.is_none()
+            && let Some(existing) = store.get_terminal_by_device_id(&device_id)?
+        {
+            *tid = Some(existing.id);
         }
         drop(tid);
     }

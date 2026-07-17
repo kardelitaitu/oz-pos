@@ -67,7 +67,7 @@ fn kernel_drop_retries_and_eventually_succeeds() {
 
     assert!(acquired, "should eventually acquire after holder releases");
     assert!(
-        elapsed >= 130 && elapsed <= 520,
+        (130..=520).contains(&elapsed),
         "should take roughly 150ms to acquire, took {elapsed}ms"
     );
 }
@@ -100,7 +100,7 @@ fn kernel_drop_respects_max_retries() {
         "should NOT acquire when holder never releases within retries"
     );
     assert!(
-        elapsed >= 40 && elapsed <= 120,
+        (40..=120).contains(&elapsed),
         "5 retries × 10ms should take ~50ms, took {elapsed}ms"
     );
 }
