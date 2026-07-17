@@ -1266,10 +1266,24 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-              /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-static-element-interactions */
-              <div className="payment-customer-search-overlay" onClick={() => setShowCustomerSearch(false)}>
-                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
-                <div className="payment-customer-search-modal" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}>
+              /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape key provides keyboard dismissal, role=button for AT */
+              <div
+                className="payment-customer-search-overlay"
+                onClick={() => setShowCustomerSearch(false)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
+                role="button"
+                tabIndex={-1}
+                aria-label={l10n.getString('modal-close-aria') || 'Close customer search'}
+              >
+                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onClick stops propagation to backdrop, Escape provides keyboard dismissal */}
+                <div
+                  className="payment-customer-search-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  tabIndex={-1}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
+                >
                   <Localized id="payment-customer-search-heading">
                     <h3 className="payment-customer-search-heading">Select Customer</h3>
                   </Localized>

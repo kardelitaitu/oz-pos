@@ -1138,11 +1138,28 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         </div>
 
         {/* ── Resize handle ────────────────── */}
+        {/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- role=separator makes this interactive per ARIA spec */}
         <div
           className="retail-resize-handle"
           onMouseDown={startResize}
-          aria-hidden="true"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={retailCartWidth}
+          aria-valuemin={RETAIL_CART_WIDTH_MIN}
+          aria-valuemax={clampRetailCartWidth(RETAIL_CART_WIDTH_MAX_CAP, window.innerWidth)}
+          aria-label={l10n.getString('retail-resize-handle-aria') || 'Resize cart panel'}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') {
+              setRetailCartWidth((w) => clampRetailCartWidth(w - 20, window.innerWidth));
+              e.preventDefault();
+            } else if (e.key === 'ArrowRight') {
+              setRetailCartWidth((w) => clampRetailCartWidth(w + 20, window.innerWidth));
+              e.preventDefault();
+            }
+          }}
         />
+        {/* eslint-enable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
 
         {/* Right: cart */}
         <div className="retail-cart" style={{ width: retailCartWidth } as CSSProperties}>
