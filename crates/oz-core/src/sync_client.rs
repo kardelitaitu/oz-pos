@@ -80,6 +80,45 @@ pub struct PingResult {
     pub latency_ms: Option<u64>,
 }
 
+/// Format an ISO-8601 expiry timestamp as a human-readable relative duration.
+///
+/// Returns strings like "in 2 hours", "in 3 days", "in 5 minutes", or
+/// the raw timestamp if parsing fails.
+#[cfg(feature = "sync-http")]
+fn format_expiry(iso: &str) -> String {
+    // Try RFC 3339 first (the most common ISO-8601 variant from APIs).
+    let expiry = match chrono::DateTime::parse_from_rfc3339(iso) {
+        Ok(dt) => dt,
+        Err(_) => return format!("expires {iso}"),
+    };
+    let now = chrono::Utc::now();
+    let dur = expiry.signed_duration_since(now);
+
+    if dur.num_seconds() <= 0 {
+        return "expired".into();
+    }
+
+    let mins = dur.num_minutes();
+    let hours = dur.num_hours();
+    let days = dur.num_days();
+
+    if days >= 2 {
+        format!("expires in {days} days")
+    } else if days == 1 {
+        "expires in 1 day".into()
+    } else if hours >= 2 {
+        format!("expires in {hours} hours")
+    } else if hours == 1 {
+        "expires in 1 hour".into()
+    } else if mins >= 2 {
+        format!("expires in {mins} minutes")
+    } else if mins == 1 {
+        "expires in 1 minute".into()
+    } else {
+        "expires in less than a minute".into()
+    }
+}
+
 /// Result of requesting a new API token from the cloud server.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,7 +180,7 @@ pub fn request_token(url: &str) -> TokenResult {
                             ok: true,
                             status: expires
                                 .as_ref()
-                                .map(|e| format!("Token obtained — expires {e}"))
+                                .map(|e| format!("Token obtained — {}", format_expiry(e)))
                                 .unwrap_or_else(|| "Token obtained".into()),
                             token: Some(tr.token),
                             expires_at: tr.expires_at,
