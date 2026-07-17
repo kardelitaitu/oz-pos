@@ -138,6 +138,38 @@ suite and record the new wall-clock time at the bottom.
 
 ---
 
+## ✅ UI Accessibility Audit — Session Summary (2026-07-17)
+
+**Final vitest: 164 files, 2,561 tests, 15.71s — all passing.**
+
+Audited all 55 feature screens/overlays/modals for:
+- Touch target sizing (WCAG 2.5.5, 44px on touch via `@media pointer: coarse`)
+- Minimum font sizes (≥11px for readable text)
+- User-select: global `none` → selective on chrome/interactive elements only
+- Keyboard gaps: missing Escape, onKeyDown, tabIndex, role=dialog, type=button
+
+### Results
+
+| Round | Screens | Fixes | Commit |
+|:---|:---|:---|:---|
+| 1 | RetailPosScreen, PaymentModal, RestaurantMenu | 10 | a5c4c10 |
+| 2 | RetailOptionsScreen, ShiftManagementScreen, StockTransfersScreen | 1 | e3062be |
+| 3 | FastPINOverlay, ProductLookupScreen, PromotionManagementScreen | 6 | be0d692 |
+| 4 | LoyaltyManagementScreen, IssueGiftCardModal, DailyTotalWidget | 2 | a2fe67d |
+| 5 | 7 POS screens | 10 | d792e23 |
+| 6 | 6 Settings screens | 7 | 9bfe1e4 |
+| 7 | 3 Auth screens | 5 | f567b83 |
+| 8 | 5 Inventory screens | 0 | — |
+| 9 | 4 Reports screens | 0 | — |
+| 10 | 6 Remaining screens | 0 | — |
+| 11 | 12 Final batch screens | 2 | 0a35b04 |
+| **Total** | **55 screens** | **43 selectors** | **8 commits** |
+
+**42 screens needed no fixes** — design tokens, proper ARIA, clean sizing.  
+**ESLint: 0 a11y violations across all 55 screens.**
+
+---
+
 ## 🚦 Safety Rules
 
 - **Never delete a test assertion** — only reorganize or deduplicate.
