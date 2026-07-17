@@ -167,23 +167,29 @@ pub fn request_token(url: &str) -> TokenResult {
     {
         Ok(resp) => {
             if resp.status().is_success() {
+                // The server wraps token data in a nested object:
+                // {"token": {"token": "jwt...", "expires_at": "...", "token_id": "..."}}
                 #[derive(Deserialize)]
-                struct TokenResponse {
+                struct TokenPayload {
                     token: String,
                     #[serde(default)]
                     expires_at: Option<String>,
                 }
+                #[derive(Deserialize)]
+                struct TokenResponse {
+                    token: TokenPayload,
+                }
                 match resp.json::<TokenResponse>() {
                     Ok(tr) => {
-                        let expires = tr.expires_at.clone();
+                        let expires = tr.token.expires_at.clone();
                         TokenResult {
                             ok: true,
                             status: expires
                                 .as_ref()
                                 .map(|e| format!("Token obtained — {}", format_expiry(e)))
                                 .unwrap_or_else(|| "Token obtained".into()),
-                            token: Some(tr.token),
-                            expires_at: tr.expires_at,
+                            token: Some(tr.token.token),
+                            expires_at: tr.token.expires_at,
                         }
                     }
                     Err(e) => TokenResult {
