@@ -121,4 +121,42 @@ describe('useSwipe', () => {
 
     expect(onSwipeRight).not.toHaveBeenCalled();
   });
+
+  it('does not trigger at exactly the threshold (deltaX = 60)', () => {
+    const onSwipeRight = vi.fn();
+    const onSwipeLeft = vi.fn();
+    const { result } = renderHook(() => useSwipe({ onSwipeRight, onSwipeLeft }));
+
+    // Start at x=50, end at x=110 — delta=60 exactly (positive)
+    result.current.onTouchStart(createTouchEvent('touchstart', 50, 100));
+    result.current.onTouchEnd(createTouchEvent('touchend', 110, 100));
+    expect(onSwipeRight).not.toHaveBeenCalled();
+
+    // Start at x=110, end at x=50 — delta=-60 exactly (negative)
+    result.current.onTouchStart(createTouchEvent('touchstart', 110, 100));
+    result.current.onTouchEnd(createTouchEvent('touchend', 50, 100));
+    // The condition uses strict greater-than, so exactly -60 should not trigger
+    expect(onSwipeLeft).not.toHaveBeenCalled();
+  });
+
+  it('uses latest callback when handlers change between touchStart and touchEnd', () => {
+    const onSwipeLeft1 = vi.fn();
+    const onSwipeLeft2 = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ cb }) => useSwipe({ onSwipeLeft: cb }),
+      { initialProps: { cb: onSwipeLeft1 } },
+    );
+
+    // Start touch with callback v1
+    result.current.onTouchStart(createTouchEvent('touchstart', 200, 100));
+
+    // Rerender with a new callback before touchEnd
+    rerender({ cb: onSwipeLeft2 });
+
+    // End touch — should use callback v2 (the latest)
+    result.current.onTouchEnd(createTouchEvent('touchend', 100, 100));
+
+    expect(onSwipeLeft1).not.toHaveBeenCalled();
+    expect(onSwipeLeft2).toHaveBeenCalledTimes(1);
+  });
 });
