@@ -5,8 +5,11 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+// FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { withFluent } from '@/locales/test-utils';
 import salesFtl from '@/locales/sales.ftl?raw';
@@ -141,7 +144,7 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(container.querySelector('.retail-options-loading-skeleton')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
   });
 
@@ -150,7 +153,7 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByDisplayValue('TOKO TEST')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Jl. Contoh No. 123')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Cabang A')).toBeInTheDocument();
@@ -164,9 +167,9 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Receipt')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Receipt'));
+    fireEvent.click(screen.getByText('Receipt'));
 
     expect(screen.getByText('Receipt Settings')).toBeInTheDocument();
     // Footer text is rendered in a textarea value, not as visible text
@@ -178,9 +181,9 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Printer')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Printer'));
+    fireEvent.click(screen.getByText('Printer'));
 
     expect(screen.getByText('Receipt Printer')).toBeInTheDocument();
     expect(screen.getByDisplayValue('/dev/usb/lp0')).toBeInTheDocument();
@@ -191,9 +194,9 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Scanner')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Scanner'));
+    fireEvent.click(screen.getByText('Scanner'));
 
     expect(screen.getByText('Barcode Scanner')).toBeInTheDocument();
   });
@@ -203,14 +206,14 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Credit')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Credit'));
+    fireEvent.click(screen.getByText('Credit'));
 
     expect(screen.getByText('Credit Settings')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText(/Enable credit sales/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('switches to System tab', async () => {
@@ -218,9 +221,9 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('System'));
+    fireEvent.click(screen.getByText('System'));
 
     expect(screen.getByText(/App version/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('0.0.9')).toBeInTheDocument();
@@ -236,16 +239,16 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Save'));
+    fireEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
       expect(setStoreSettings).toHaveBeenCalledOnce();
       expect(setReceiptSettings).toHaveBeenCalledOnce();
       expect(setCreditSettings).toHaveBeenCalledOnce();
       expect(setHardwareSettings).toHaveBeenCalledOnce();
-    });
+    }, FAST_WAIT);
   });
 
   it('shows success toast after saving', async () => {
@@ -253,14 +256,14 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Save'));
+    fireEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
       const toast = screen.getByRole('alert');
       expect(toast.textContent).toMatch(/Settings saved/);
-    });
+    }, FAST_WAIT);
   });
 
   it('disables Save button while saving', async () => {
@@ -271,10 +274,10 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     const saveBtn = screen.getByText('Save');
-    await userEvent.click(saveBtn);
+    fireEvent.click(saveBtn);
 
     expect(screen.getByText('Saving\u2026')).toBeInTheDocument();
   });
@@ -286,14 +289,14 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Scanner')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Scanner'));
+    fireEvent.click(screen.getByText('Scanner'));
 
     await waitFor(() => {
       expect(screen.getByText('scanner-01')).toBeInTheDocument();
       expect(screen.getByText('scanner-02')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Receipt Preview ────────────────────────────────────────────
@@ -303,21 +306,21 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Receipt')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Receipt'));
+    fireEvent.click(screen.getByText('Receipt'));
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('Terima kasih')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     const previewHint = screen.getByText('Click to preview');
-    await userEvent.click(previewHint);
+    fireEvent.click(previewHint);
 
     await waitFor(() => {
       const closeBtn = screen.queryByText('\u00D7');
       expect(closeBtn).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('closes receipt preview popup when clicking close', async () => {
@@ -325,26 +328,26 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Receipt')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Receipt'));
+    fireEvent.click(screen.getByText('Receipt'));
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('Terima kasih')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     const previewHint = screen.getByText('Click to preview');
-    await userEvent.click(previewHint);
+    fireEvent.click(previewHint);
 
     await waitFor(() => {
       expect(screen.getByText('\u00D7')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('\u00D7'));
+    fireEvent.click(screen.getByText('\u00D7'));
 
     await waitFor(() => {
       expect(screen.queryByText('\u00D7')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Back / Close ───────────────────────────────────────────────
@@ -355,9 +358,9 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Back/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText(/Back/));
+    fireEvent.click(screen.getByText(/Back/));
 
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -368,7 +371,7 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     await userEvent.keyboard('{Escape}');
 
@@ -381,9 +384,9 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('General Settings')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Close'));
+    fireEvent.click(screen.getByText('Close'));
 
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -402,7 +405,7 @@ describe('RetailOptionsScreen', () => {
       const toasts = screen.getAllByRole('alert');
       const errorToast = toasts.find((t) => t.textContent?.includes('Failed to load'));
       expect(errorToast).toBeTruthy();
-    });
+    }, FAST_WAIT);
   });
 
   it('shows error toast when receipt settings fail to load', async () => {
@@ -415,7 +418,7 @@ describe('RetailOptionsScreen', () => {
       const toasts = screen.getAllByRole('alert');
       const errorToast = toasts.find((t) => t.textContent?.includes('Failed to load'));
       expect(errorToast).toBeTruthy();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Payments tab ──────────────────────────────────────────────
@@ -425,13 +428,13 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Payments'));
+    fireEvent.click(screen.getByText('Payments'));
 
     await waitFor(() => {
       expect(screen.getByText(/Payment Gateways/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('renders tender presets add/remove in Payments tab', async () => {
@@ -439,13 +442,13 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Payments'));
+    fireEvent.click(screen.getByText('Payments'));
 
     await waitFor(() => {
       expect(screen.getByText(/Add preset/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('adds a tender preset when add button is clicked', async () => {
@@ -453,16 +456,16 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Payments'));
+    fireEvent.click(screen.getByText('Payments'));
 
     await waitFor(() => {
       expect(screen.getByText(/Add preset/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     const addBtn = screen.getByText(/Add preset/);
-    await userEvent.click(addBtn);
+    fireEvent.click(addBtn);
 
     // Should now have 6 presets (5 default + 1 new)
     const removeBtns = screen.getAllByRole('button', { name: /remove preset/i });
@@ -474,16 +477,16 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Payments')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Payments'));
+    fireEvent.click(screen.getByText('Payments'));
 
     await waitFor(() => {
       expect(screen.getByText(/Add preset/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     const removeBtns = screen.getAllByRole('button', { name: /remove preset/i });
-    await userEvent.click(removeBtns[0]!);
+    fireEvent.click(removeBtns[0]!);
 
     const remaining = screen.getAllByRole('button', { name: /remove preset/i });
     expect(remaining).toHaveLength(4);
@@ -496,13 +499,13 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Sync'));
+    fireEvent.click(screen.getByText('Sync'));
 
     await waitFor(() => {
       expect(screen.getByText(/Cloud Sync/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('renders sync toggle and server URL field in Sync tab', async () => {
@@ -510,15 +513,15 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Sync'));
+    fireEvent.click(screen.getByText('Sync'));
 
     await waitFor(() => {
       expect(screen.getByText(/Server URL/)).toBeInTheDocument();
       expect(screen.getByText(/Enable cloud sync/)).toBeInTheDocument();
       expect(screen.getByText(/Authentication Token/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('shows sync status box in Sync tab', async () => {
@@ -526,14 +529,14 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Sync')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Sync'));
+    fireEvent.click(screen.getByText('Sync'));
 
     await waitFor(() => {
       expect(screen.getByText(/Offline/)).toBeInTheDocument();
       expect(screen.getByText(/Never synced/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Appearance / Features / Data tabs ─────────────────────────
@@ -543,13 +546,13 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Appearance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Appearance'));
+    fireEvent.click(screen.getByText('Appearance'));
 
     await waitFor(() => {
       expect(screen.getByTestId('appearance-settings')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('switches to Features tab', async () => {
@@ -557,13 +560,13 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Features')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Features'));
+    fireEvent.click(screen.getByText('Features'));
 
     await waitFor(() => {
       expect(screen.getByTestId('feature-toggle-screen')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('switches to Data tab', async () => {
@@ -571,13 +574,13 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Data')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Data'));
+    fireEvent.click(screen.getByText('Data'));
 
     await waitFor(() => {
       expect(screen.getByTestId('data-management-screen')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── System tab additional options ─────────────────────────────
@@ -587,15 +590,15 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('System'));
+    fireEvent.click(screen.getByText('System'));
 
     await waitFor(() => {
       expect(screen.getByText(/Theme/)).toBeInTheDocument();
       expect(screen.getByText(/Light/)).toBeInTheDocument();
       expect(screen.getByText(/Dark/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('renders language selector in System tab', async () => {
@@ -603,13 +606,13 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('System')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('System'));
+    fireEvent.click(screen.getByText('System'));
 
     await waitFor(() => {
       expect(screen.getByLabelText('Language selector')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('shows credit limit info when credit is enabled', async () => {
@@ -617,9 +620,9 @@ describe('RetailOptionsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Credit')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByText('Credit'));
+    fireEvent.click(screen.getByText('Credit'));
 
     await waitFor(() => {
       // maxLimitMinor=500000 → input value / 100 = 5000, formatted as IDR "5.000"
@@ -627,7 +630,7 @@ describe('RetailOptionsScreen', () => {
       expect(screen.getByText((content) =>
         content.replace(/[\u2068\u2069]/g, '').includes('Max limit: Rp 5.000')
       )).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
 });

@@ -12,6 +12,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+
+// FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 import stockTransfersFtl from '@/locales/stock-transfers.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -144,7 +147,7 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('opens and closes detail modal with X close button', async () => {
@@ -156,7 +159,7 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Create modal: Escape key ─────────────────────────────────
@@ -169,7 +172,7 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('opens and closes create modal with X close button', async () => {
@@ -181,7 +184,7 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Receive modal: Escape key ────────────────────────────────
@@ -194,7 +197,7 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
 
     await waitFor(() => {
       expect(screen.queryByText(/enter the quantity/i)).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('closes receive modal with Cancel button', async () => {
@@ -204,7 +207,7 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
 
     await waitFor(() => {
       expect(screen.queryByText(/enter the quantity/i)).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Create modal: form interaction ──────────────────────────
@@ -257,7 +260,7 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
 
     await waitFor(() => {
       expect(screen.queryByText(/enter the quantity/i)).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Detail modal should still be open
     expect(screen.getByRole('dialog')).toBeInTheDocument();

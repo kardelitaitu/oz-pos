@@ -94,6 +94,24 @@ suite and record the new wall-clock time at the bottom.
       fireEvent.change for role dropdown. Kept userEvent.keyboard for Escape
       (native addEventListener in useFocusTrap). FAST_WAIT (5ms polling).
 
+### 🏅 Tier 4 — Next batch (1.9–3s)
+
+- [x] **RetailOptionsScreen.test.tsx** — 2,985ms / 31 tests → 1,583ms (-47%)
+      Replaced ~25 userEvent.click with fireEvent.click for all tab navigation
+      (Receipt, Printer, Scanner, Credit, System, Payments, Sync, Appearance,
+      Features, Data), Save button, Back/Close buttons, receipt preview open/close,
+      tender preset add/remove. Kept userEvent.keyboard for Escape. FAST_WAIT
+      on all ~25 waitFor calls.
+- [x] **StockTransfersKeyboard.test.tsx** — 2,122ms / 8 tests → 2,281ms (+8%)
+      Already used fireEvent from Tier 1. Only added FAST_WAIT (5ms polling)
+      to all 7 waitFor calls. Minimal improvement — bottleneck is userEvent.keyboard
+      for Escape tests (4 tests × ~320ms each = ~1.3s, can't optimize further).
+- [x] **FeatureToggleScreen.test.tsx** — 1,933ms / 20 tests → 1,588ms (-18%)
+      Replaced userEvent.type with fireEvent.change for search input (2 tests).
+      Replaced all userEvent.click with fireEvent.click for retry, clear search,
+      feature toggle checkboxes, bulk enable/disable buttons. Removed userEvent
+      import. FAST_WAIT on all ~18 waitFor calls.
+
 ### 📝 Benchmark Log
 
 | Date | Duration | Change | Notes |
@@ -116,6 +134,7 @@ suite and record the new wall-clock time at the bottom.
 | 2026-07-17 | 15.50s | +1.51s | After PosScreen optimization (164 files, 2533 tests). PosScreen 2.26s→1.57s (-31%). Run-to-run variance. |
 | 2026-07-17 | 16.81s | +2.82s | After StaffManagementScreen optimization (164 files, 2533 tests). StaffMgmt 2.18s→1.35s (-38%). Run-to-run variance. |
 | 2026-07-17 | 15.11s | +1.12s | After LicenseActivationScreen optimization (164 files, 2550 tests). LicenseActivation 2.24s→0.78s (-65%). All 3 tiers complete! 🎉 |
+| 2026-07-17 | 18.83s | +4.84s | After Tier 4 optimization (164 files, 2554 tests). RetailOptions 2.99s→1.58s (-47%), FeatureToggle 1.93s→1.59s (-18%), StockTransfersKeyboard 2.12s→2.28s (+8%). Run-to-run variance (high system load). |
 
 ---
 
