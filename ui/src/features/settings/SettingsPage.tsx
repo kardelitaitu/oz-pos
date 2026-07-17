@@ -1379,11 +1379,27 @@ export default function SettingsPage() {
                       loading={syncing}
                       onClick={async () => {
                         setSyncing(true);
+                        setSyncResult(null);
                         try {
                           const result = await syncRun();
                           setSyncResult(result);
+                          if (result.error) {
+                            addToast({ message: result.error, type: 'error' });
+                          } else if (result.synced > 0 || result.failed > 0) {
+                            addToast({
+                              message: l10n.getString('settings-sync-success', { synced: result.synced, failed: result.failed }),
+                              type: 'success',
+                            });
+                          } else {
+                            addToast({
+                              message: l10n.getString('settings-sync-nothing'),
+                              type: 'info',
+                            });
+                          }
                         } catch {
-                          setSyncResult({ synced: 0, failed: 0, error: l10n.getString('settings-sync-error') });
+                          const errMsg = l10n.getString('settings-sync-error');
+                          setSyncResult({ synced: 0, failed: 0, error: errMsg });
+                          addToast({ message: errMsg, type: 'error' });
                         } finally {
                           setSyncing(false);
                         }

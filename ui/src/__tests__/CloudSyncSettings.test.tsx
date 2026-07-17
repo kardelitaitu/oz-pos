@@ -455,7 +455,9 @@ describe('CloudSyncSettings', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/3 synced/i)).toBeInTheDocument();
+      // Both the inline result text and the toast contain "3 synced"
+      const matches = screen.getAllByText(/3 synced/i);
+      expect(matches.length).toBeGreaterThanOrEqual(1);
     });
   });
 
