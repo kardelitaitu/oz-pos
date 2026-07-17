@@ -4256,6 +4256,7 @@ dependencies = [
  "platform-kernel",
  "platform-startup",
  "platform-sync",
+ "rand 0.8.6",
  "rusqlite",
  "serde",
  "serde_json",
