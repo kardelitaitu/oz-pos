@@ -110,7 +110,7 @@ oz-pos/
 │   └── src/
 │       ├── api/            # Per-domain invoke() wrappers — no invoke() in components
 │       ├── frontend/       # Shared components, shell layout, design tokens
-│       ├── features/       # 21+ screen components by domain
+│       ├── features/       # 55+ audited screen components by domain
 │       ├── locales/        # Fluent (.ftl) files — 1900+ IDs across 25 files
 │       └── __tests__/      # Vitest + testing-library (164 files, 2533+ tests)
 ├── docs/                   # ROADMAP.md, ADRs, specs, whitepaper

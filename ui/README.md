@@ -19,7 +19,7 @@ npm install            # one-time
 npm run dev            # vite dev server on http://localhost:1420
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
-npm run test           # vitest run (33 test files)
+npm run test           # vitest run (164 files, 2533+ tests)
 npm run build          # tsc -b && vite build
 ```
 
@@ -69,7 +69,7 @@ ui/src/
 │   └── components.css   # Shared component styles
 ├── types/
 │   └── domain.ts        # Money, CartId, Sku, LineId, Product, formatMoney
-├── __tests__/           # Per-screen test files (33 files)
+├── __tests__/           # Per-screen test files (164 files, 2533+ tests)
 ├── App.tsx              # Root: setup guard → auth guard → AppLayout
 └── main.tsx             # Entry: Fluent bundle registration + StrictMode
 ```
@@ -93,7 +93,7 @@ ui/src/
 - Each feature screen has a `__tests__/<Screen>.test.tsx` file
 - IPC is mocked via `vi.hoisted()` → `vi.mock('@tauri-apps/api/core')`
 - Fluent strings are provided inline via `FluentBundle` + `FluentResource`
-- Run: `npm run test` (33 test files, ~7s)
+- Run: `npm run test` (164 test files, 2533+ tests, ~14s)
 
 ## Conventions
 
@@ -106,4 +106,4 @@ ui/src/
 | Every screen has a test file | `__tests__/` audit |
 | Money displayed via `formatMoney()` | Import from `types/domain.ts` |
 
-> last audited 07-07-26 by docs-auditor
+> last audited 2026-07-17 by docs-auditor
