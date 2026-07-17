@@ -1,9 +1,9 @@
 .gateway-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 12px;
+  gap: var(--space-1_5);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xl);
   font-size: var(--text-xs);
   background: var(--color-bg-surface);
 }

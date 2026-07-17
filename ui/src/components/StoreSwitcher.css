@@ -58,7 +58,7 @@
 .store-switcher-option {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 1px; /* design exception: tight dropdown spacing, sub-token */
   width: 100%;
   padding: var(--space-2) var(--space-3);
   background: transparent;
