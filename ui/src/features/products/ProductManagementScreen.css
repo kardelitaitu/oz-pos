@@ -216,6 +216,7 @@
 }
 
 .product-mgmt-modal {
+  position: relative;
   width: 30rem;
   max-width: 92vw;
   background: var(--color-bg-elevated);

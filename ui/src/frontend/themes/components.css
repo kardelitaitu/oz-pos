@@ -230,6 +230,7 @@
 .license-activation-card::after,
 .gift-cards-modal::after,
 .promo-mgmt-modal::after,
+.product-mgmt-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -265,6 +266,7 @@
   .license-activation-card::after,
   .gift-cards-modal::after,
   .promo-mgmt-modal::after,
+  .product-mgmt-modal::after,
   .noise-dither::after { display: none; }
 }
 
