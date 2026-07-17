@@ -14,8 +14,6 @@
   color: var(--color-fg);
   font-family: var(--font-sans);
   overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .tables-title {
@@ -106,6 +104,7 @@
   padding: var(--space-1);
   overflow: hidden;
   line-height: var(--leading-tight);
+  user-select: none;
   transition:
     transform var(--duration-200) cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow var(--duration-200) var(--ease-out),

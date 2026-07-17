@@ -33,6 +33,13 @@
   color: var(--kds-text);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   overflow: hidden;
+}
+
+/* Selective user-select: chrome only — ticket content remains selectable */
+.kds-header,
+.kds-column-title,
+.kds-order-count,
+.kds-column-count {
   user-select: none;
 }
 
