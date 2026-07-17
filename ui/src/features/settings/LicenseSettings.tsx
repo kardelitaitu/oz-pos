@@ -71,6 +71,8 @@ const MAX_POLL_FAILURES = 3;
 /** License settings section — displays tier, expiry, grace period, and quotas. */
 export default function LicenseSettings() {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -142,12 +144,12 @@ export default function LicenseSettings() {
       setPollFailures((prev) => {
         const next = prev + 1;
         if (next >= MAX_POLL_FAILURES) {
-          setPollError(l10n.getString('settings-license-poll-offline'));
+          setPollError(l10nRef.current.getString('settings-license-poll-offline'));
         }
         return next;
       });
     }
-  }, [l10n, triggerFlash]);
+  }, [triggerFlash]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,11 +161,11 @@ export default function LicenseSettings() {
         setPayload(parsed);
       }
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : l10n.getString('settings-license-load-failed'));
+      setLoadError(err instanceof Error ? err.message : l10nRef.current.getString('settings-license-load-failed'));
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+  }, []);
 
   // Initial load.
   useEffect(() => { load(); }, [load]);
