@@ -674,7 +674,6 @@ settings-sync-toast-fail = Sinkronisasi gagal — periksa URL server dan token
 settings-sync-toast-test-success = Uji koneksi berhasil
 settings-sync-toast-test-fail = Tidak dapat menjangkau server
 settings-sync-pull-toast-success = { $products } produk, { $tax_rates } tarif pajak, { $users } pengguna ditarik dari server
-settings-sync-token-hint = Masukkan token JWT dari server cloud. Buat token via POST /api/v1/tokens dengan body: {"label":"pos-terminal"}
 settings-sync-pull-toast-empty = Snapshot server kosong — tidak ada yang ditarik
 settings-sync-pull-toast-fail = Penarikan gagal — periksa URL server dan token
 

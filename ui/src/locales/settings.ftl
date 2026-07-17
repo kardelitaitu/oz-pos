@@ -764,7 +764,6 @@ settings-sync-confirm-overwrite = Overwrite local data with the server snapshot?
 settings-sync-force-pull-btn = Pull from server
 settings-sync-pulling-btn = Pulling…
 settings-sync-pull-toast-success = Pulled { $products } products, { $tax_rates } tax rates, { $users } users from server
-settings-sync-token-hint = Enter a JWT token from the cloud server. Generate one via POST /api/v1/tokens with body: {"label":"pos-terminal"}
 settings-sync-pull-toast-empty = Server snapshot was empty — nothing to pull
 settings-sync-pull-toast-fail = Pull failed — check server URL and token
 settings-toast-failed-sync = Failed to load sync settings
