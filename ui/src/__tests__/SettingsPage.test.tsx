@@ -603,4 +603,83 @@ describe('SettingsPage', () => {
     fillField('Store name', 'x');
     expect(revertBtn.className).not.toContain('settings-btn-revert--hidden');
   });
+
+  // ── Arrow keyboard navigation ─────────────────────────────────
+
+  it('navigates sections with ArrowDown key', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+
+    // After ArrowDown from 'general', it should navigate to 'appearance'.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /appearance/i })?.className).toContain('settings-nav-item--active');
+    });
+  });
+
+  it('navigates sections with ArrowUp key', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
+    });
+
+    // Navigate down first to move to a different section, then up.
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+
+    await waitFor(() => {
+      const appearanceBtn = screen.getByRole('button', { name: /appearance/i });
+      expect(appearanceBtn.className).toContain('settings-nav-item--active');
+    });
+  });
+
+  // ── API key visibility toggle ─────────────────────────────────
+
+  it('toggles API key visibility in Cloud Sync section', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
+
+    const apiKeyInput = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
+    expect(apiKeyInput.type).toBe('password');
+
+    const toggleBtn = document.querySelector('.settings-input-toggle') as HTMLElement;
+    fireEvent.click(toggleBtn);
+
+    expect(apiKeyInput.type).toBe('text');
+
+    fireEvent.click(toggleBtn);
+    expect(apiKeyInput.type).toBe('password');
+  });
+
+  // ── Save button loading state ─────────────────────────────────
+
+  it('shows loading state on Save button while saving', async () => {
+    // Make a save command hang to keep saving=true.
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd.startsWith('set_') || cmd === 'update_sync_settings') {
+        return new Promise(() => {});
+      }
+      return defaultImpl(cmd);
+    });
+
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
+    });
+
+    const saveBtn = screen.getByRole('button', { name: /save settings/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(saveBtn).toHaveAttribute('aria-busy', 'true');
+    });
+  });
 });

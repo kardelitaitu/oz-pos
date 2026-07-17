@@ -4,7 +4,7 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.0.10] — 2026-07-16
+## [0.0.9] — 2026-07-17
 
 ### Added
 - **useWorkspaceNavShortcuts test suite**: 6 isolated tests covering Escape-to-go-back, aria-modal gating, Ctrl+Shift+Escape bypass, non-Escape key rejection, no listener when active=null, and listener cleanup on unmount. Duplicates the private hook logic from AppShell.tsx in the test file for direct coverage.

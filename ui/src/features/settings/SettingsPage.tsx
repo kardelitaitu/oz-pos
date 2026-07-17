@@ -634,17 +634,21 @@ export default function SettingsPage() {
       // Use local variables captured from the try block above (not from
       // React state) to avoid adding these values to the deps array and
       // causing an infinite re-load loop.
+      // On retry (initialSnapshotRef.current is set), preserve previous
+      // snapshot values for any API that failed to avoid reverting to
+      // default/empty state for backend data that is still valid.
+      const prev = initialSnapshotRef.current;
       initialSnapshotRef.current = {
-        receipt: rR.status === 'fulfilled' ? rR.value : (snapReceipt ?? receipt),
-        store: sR.status === 'fulfilled' ? sR.value : store,
+        receipt: rR.status === 'fulfilled' ? rR.value : (snapReceipt ?? prev?.receipt ?? receipt),
+        store: sR.status === 'fulfilled' ? sR.value : (prev?.store ?? store),
         defaultCurrency: ctxCurrency,
-        sync: syncR.status === 'fulfilled' ? syncR.value : sync,
-        syncServerUrl: syncR.status === 'fulfilled' ? (syncR.value.serverUrl ?? '') : syncServerUrl,
-        displayCardSize: snapCardSize ?? displayCardSize,
-        displayFontSize: snapFontSize ?? displayFontSize,
-        displayFontSmoothing: snapFontSmoothing ?? displayFontSmoothing,
-        brandColour: snapBrandColour ?? brandColour,
-        brandStoreName: snapStoreName ?? brandStoreName,
+        sync: syncR.status === 'fulfilled' ? syncR.value : (prev?.sync ?? sync),
+        syncServerUrl: syncR.status === 'fulfilled' ? (syncR.value.serverUrl ?? '') : (prev?.syncServerUrl ?? syncServerUrl),
+        displayCardSize: snapCardSize ?? prev?.displayCardSize ?? displayCardSize,
+        displayFontSize: snapFontSize ?? prev?.displayFontSize ?? displayFontSize,
+        displayFontSmoothing: snapFontSmoothing ?? prev?.displayFontSmoothing ?? displayFontSmoothing,
+        brandColour: snapBrandColour ?? prev?.brandColour ?? brandColour,
+        brandStoreName: snapStoreName ?? prev?.brandStoreName ?? brandStoreName,
       };
     } finally {
       setLoading(false);
@@ -689,7 +693,8 @@ export default function SettingsPage() {
       setIsDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      if (syncApiKey) setSyncApiKey('');
+      // Only clear the API key if the sync settings save succeeded.
+      if (syncApiKey && results[4]?.status === 'fulfilled') setSyncApiKey('');
       refreshBrandSettings();
 
       // Update the snapshot so Revert goes to the *saved* state.

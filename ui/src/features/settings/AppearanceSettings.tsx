@@ -135,12 +135,13 @@ export function AppearanceSettings({
       await setBrandPrimaryColour(colourRef.current);
       await setBrandStoreName(nameRef.current);
       refreshBrandSettings();
+      addToast({ message: l10n.getString('appearance-save-success'), type: 'success' });
     } catch {
-      // API call failed — state remains unchanged.
+      addToast({ message: l10n.getString('appearance-save-failed'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [refreshBrandSettings]);
+  }, [refreshBrandSettings, addToast, l10n]);
 
   const handleResetAll = useCallback(async () => {
     if (!window.confirm(l10n.getString('appearance-reset-all-confirm'))) return;

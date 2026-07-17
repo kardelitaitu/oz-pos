@@ -388,6 +388,8 @@ appearance-reset-all-success = Appearance settings reset to defaults
 appearance-reset-all-failed = Failed to reset appearance settings
 appearance-save-aria =
     .aria-label = Save appearance
+appearance-save-success = Appearance settings saved
+appearance-save-failed = Failed to save appearance settings
 
 # Settings option labels
 settings-decimal-separator-dot = 1.00 (dot)
