@@ -74,21 +74,49 @@ pub async fn update_sync_settings(
 
 /// Immediately run a sync cycle that pushes pending sales, credit, and
 /// other queued offline transactions to the configured cloud server.
+///
+/// Uses a three-phase split (read → async HTTP → write) so the DB
+/// lock is not held during the network round-trip.
 #[command]
 pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let config = SyncConfig::from_settings(&store)?;
-    let result = match config {
-        Some(cfg) => sync_client::sync_pending(&store, &cfg)?,
-        None => SyncAttemptResult {
+    // Phase 1: Read pending items and config from DB (brief lock).
+    let (pending_items, config_opt) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let pending = store.list_pending_offline()?;
+        let config = SyncConfig::from_settings(&store)?;
+        (pending, config)
+    };
+
+    let config = match config_opt {
+        Some(c) => c,
+        None => {
+            return Ok(SyncAttemptResult {
+                synced: 0,
+                failed: 0,
+                error: Some("Sync is not configured or disabled".into()),
+            });
+        }
+    };
+
+    if pending_items.is_empty() {
+        return Ok(SyncAttemptResult {
             synced: 0,
             failed: 0,
-            error: Some("Sync is not configured or disabled".into()),
-        },
-    };
-    drop(db);
-    Ok(result)
+            error: None,
+        });
+    }
+
+    // Phase 2: Async HTTP push (no DB lock held).
+    let outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
+
+    // Phase 3: Write outcomes back to DB (brief lock).
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    match outcomes {
+        Ok(outcomes) => Ok(sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?),
+        Err(e) => Ok(sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?),
+    }
 }
 
 /// Get the pending sync count.
@@ -119,7 +147,7 @@ pub async fn request_sync_token(
         }
     };
     match resolved {
-        Some(u) => Ok(sync_client::request_token(&u)),
+        Some(u) => Ok(sync_client::request_token(&u).await),
         None => Ok(sync_client::TokenResult {
             ok: false,
             token: None,
@@ -144,7 +172,7 @@ pub async fn test_sync_connection(
         }
     };
     match resolved {
-        Some(u) => Ok(sync_client::ping_server(&u)),
+        Some(u) => Ok(sync_client::ping_server(&u).await),
         None => Ok(sync_client::PingResult {
             ok: false,
             status: "No server URL configured".into(),
@@ -156,22 +184,45 @@ pub async fn test_sync_connection(
 /// Pull a server snapshot and overwrite the local cache for products,
 /// tax rates, and users. The UI is expected to confirm the overwrite
 /// before invoking this command.
+///
+/// Uses a three-phase split (read → async HTTP → write) so the DB
+/// lock is not held during the network round-trip.
 #[command]
 pub async fn sync_pull(state: State<'_, AppState>) -> Result<PullResult, AppError> {
+    // Phase 1: Read config from DB (brief lock).
+    let config_opt = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        SyncConfig::from_settings(&store)?
+    };
+
+    let config = match config_opt {
+        Some(c) => c,
+        None => {
+            return Ok(PullResult {
+                products_pulled: 0,
+                tax_rates_pulled: 0,
+                users_pulled: 0,
+                error: Some("Sync is not configured or disabled".into()),
+            });
+        }
+    };
+
+    // Phase 2: Async HTTP fetch (no DB lock held).
+    let snapshot = sync_client::fetch_snapshot_from_server(&config).await;
+
+    // Phase 3: Apply snapshot to DB (brief lock).
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let config = SyncConfig::from_settings(&store)?;
-    let result = match config {
-        Some(cfg) => sync_client::pull_snapshot(&store, &cfg)?,
-        None => PullResult {
+    match snapshot {
+        Ok(s) => Ok(sync_client::apply_snapshot(&store, &s)?),
+        Err(e) => Ok(PullResult {
             products_pulled: 0,
             tax_rates_pulled: 0,
             users_pulled: 0,
-            error: Some("Sync is not configured or disabled".into()),
-        },
-    };
-    drop(db);
-    Ok(result)
+            error: Some(e.to_string()),
+        }),
+    }
 }
 
 #[cfg(test)]
