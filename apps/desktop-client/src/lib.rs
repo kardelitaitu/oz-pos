@@ -95,24 +95,39 @@ pub fn run() {
             tauri::async_runtime::spawn(forwarder.run());
 
             // Subscribe event bus handlers for LAN forwarding.
-            // Use try_lock() because .setup() is synchronous.
+            // .setup() is synchronous, so we can't use .await.
+            // A single try_lock() could silently skip LAN handler
+            // registration if the kernel lock is momentarily held
+            // during startup. Use a bounded retry loop to give the
+            // lock holder time to finish without risking a deadlock.
+            const LAN_LOCK_RETRIES: usize = 10;
             {
                 let state = app.state::<AppState>();
-                if let Ok(kernel) = state.kernel.try_lock() {
-                    let bus = kernel.event_bus();
-                    bus.subscribe(
-                        "sale.completed",
-                        Box::new(handle.sale_completed_handler()),
+                let mut registered = false;
+                for _ in 0..LAN_LOCK_RETRIES {
+                    if let Ok(kernel) = state.kernel.try_lock() {
+                        let bus = kernel.event_bus();
+                        bus.subscribe(
+                            "sale.completed",
+                            Box::new(handle.sale_completed_handler()),
+                        );
+                        bus.subscribe(
+                            "order.course_fired",
+                            Box::new(handle.course_fired_handler()),
+                        );
+                        tracing::info!(
+                            "LAN event forwarder handlers registered for sale.completed and order.course_fired"
+                        );
+                        registered = true;
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                if !registered {
+                    tracing::warn!(
+                        "kernel lock contended after 100ms, LAN handlers not registered — \
+                         LAN event forwarding disabled for this session"
                     );
-                    bus.subscribe(
-                        "order.course_fired",
-                        Box::new(handle.course_fired_handler()),
-                    );
-                    tracing::info!(
-                        "LAN event forwarder handlers registered for sale.completed and order.course_fired"
-                    );
-                } else {
-                    tracing::warn!("kernel lock contended, LAN handlers not registered");
                 }
             }
 

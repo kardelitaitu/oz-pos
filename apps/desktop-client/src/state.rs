@@ -369,8 +369,9 @@ impl Drop for AppState {
         // to shut down (circular dependency). The bounded retry loop
         // gives commands time to finish while guaranteeing the Drop
         // doesn't hang indefinitely.
+        const DROP_LOCK_RETRIES: usize = 50;
         let mut stopped = false;
-        for _ in 0..50 {
+        for _ in 0..DROP_LOCK_RETRIES {
             if let Ok(mut kernel) = self.kernel.try_lock() {
                 let _ = kernel.stop_all();
                 stopped = true;
