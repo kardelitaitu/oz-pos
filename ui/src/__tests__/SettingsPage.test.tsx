@@ -746,7 +746,7 @@ describe('SettingsPage', () => {
   });
 
   // ══════════════════════════════════════════════════════════════
-  //  Sync API key — cleared only after successful sync save
+  //  Sync API key — preserved in field after successful save
   // ══════════════════════════════════════════════════════════════
 
   function navigateToSync() {
@@ -754,7 +754,7 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
   }
 
-  it('clears API key after save when sync save succeeds', async () => {
+  it('keeps API key in field after save when sync save succeeds', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
@@ -778,7 +778,7 @@ describe('SettingsPage', () => {
 
     await waitFor(() => {
       const inputAfterSave = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
-      expect(inputAfterSave).toHaveValue('');
+      expect(inputAfterSave).toHaveValue('sk-abc123');
     });
   });
 
