@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import purchasingFtl from '@/locales/purchasing.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -29,8 +28,6 @@ suppliers-btn-update = Update
 suppliers-btn-cancel = Cancel
 `;
 
-
-
 const sampleSuppliers = [
   {
     id: 'sup-1', code: 'SUP001', name: 'Acme Corp',
@@ -45,6 +42,19 @@ const sampleSuppliers = [
     notes: 'Preferred vendor', status: 'active', created_at: '2026-02-01', updated_at: '2026-02-01',
   },
 ];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function clickButton(name: string | RegExp) {
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
+function fillField(index: number, value: string) {
+  const inputs = screen.getAllByRole('textbox');
+  fireEvent.change(inputs[index]!, { target: { value } });
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('SuppliersScreen', () => {
   // ── List rendering ───────────────────────────────────────────
@@ -86,7 +96,6 @@ describe('SuppliersScreen', () => {
   });
 
   it('filters suppliers by search query', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
@@ -95,7 +104,7 @@ describe('SuppliersScreen', () => {
     });
 
     const searchInput = screen.getByRole('searchbox');
-    await user.type(searchInput, 'global');
+    fireEvent.change(searchInput, { target: { value: 'global' } });
 
     await waitFor(() => {
       expect(screen.getByText('Global Goods')).toBeInTheDocument();
@@ -104,7 +113,6 @@ describe('SuppliersScreen', () => {
   });
 
   it('shows no-match message when search filters everything out', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
@@ -112,7 +120,7 @@ describe('SuppliersScreen', () => {
       expect(screen.getByText('Acme Corp')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByRole('searchbox'), 'zzz404');
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzz404' } });
 
     await waitFor(() => {
       expect(screen.getByText(/no suppliers match your search/i)).toBeInTheDocument();
@@ -134,11 +142,10 @@ describe('SuppliersScreen', () => {
 
   // ── Create/Edit modal ────────────────────────────────────────
   it('opens create modal when Add Supplier is clicked', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     // "Add Supplier" appears in both the dialog heading and the Fluent Localized text.
@@ -151,7 +158,6 @@ describe('SuppliersScreen', () => {
   });
 
   it('opens edit modal when Edit button is clicked on a row', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
@@ -160,7 +166,7 @@ describe('SuppliersScreen', () => {
     });
 
     const editButtons = screen.getAllByRole('button', { name: /edit/i });
-    await user.click(editButtons[0]!);
+    fireEvent.click(editButtons[0]!);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Edit Supplier')).toBeInTheDocument();
@@ -169,37 +175,33 @@ describe('SuppliersScreen', () => {
   });
 
   it('enables save button when both code and name are filled', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
 
     // Initially disabled.
     expect(screen.getByRole('button', { name: /create/i })).toBeDisabled();
 
     // Fill both required fields.
-    const inputs = screen.getAllByRole('textbox');
-    await user.type(inputs[0]!, 'SUP-001');
-    await user.type(inputs[1]!, 'Test Co');
+    fillField(0, 'SUP-001');
+    fillField(1, 'Test Co');
 
     // Now enabled.
     expect(screen.getByRole('button', { name: /create/i })).toBeEnabled();
   });
 
   it('creates a supplier and refreshes the list', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     mockCreateSupplier.mockResolvedValue({ id: 'sup-3', code: 'SUP-NEW', name: 'New Co', status: 'active' });
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
 
-    const inputs = screen.getAllByRole('textbox');
-    await user.type(inputs[0]!, 'SUP-NEW');
-    await user.type(inputs[1]!, 'New Co');
+    fillField(0, 'SUP-NEW');
+    fillField(1, 'New Co');
 
-    await user.click(screen.getByRole('button', { name: /create/i }));
+    clickButton(/create/i);
 
     await waitFor(() => {
       expect(mockCreateSupplier).toHaveBeenCalledTimes(1);
@@ -210,18 +212,16 @@ describe('SuppliersScreen', () => {
   });
 
   it('shows error when createSupplier fails', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     mockCreateSupplier.mockRejectedValue(new Error('Duplicate code'));
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
 
-    const inputs = screen.getAllByRole('textbox');
-    await user.type(inputs[0]!, 'SUP-DUP');
-    await user.type(inputs[1]!, 'Duplicate Co');
+    fillField(0, 'SUP-DUP');
+    fillField(1, 'Duplicate Co');
 
-    await user.click(screen.getByRole('button', { name: /create/i }));
+    clickButton(/create/i);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Duplicate code');
@@ -229,39 +229,36 @@ describe('SuppliersScreen', () => {
   });
 
   it('closes modal when Cancel is clicked', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    clickButton(/cancel/i);
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 
   it('closes modal when X button is clicked', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /close/i }));
+    clickButton(/close/i);
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 
   it('renders all optional fields in the form', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
 
     expect(screen.getByText('Contact Person')).toBeInTheDocument();
     expect(screen.getByText('Phone')).toBeInTheDocument();
@@ -273,11 +270,10 @@ describe('SuppliersScreen', () => {
   });
 
   it('disables save button when code or name is empty', async () => {
-    const user = userEvent.setup();
     mockListSuppliers.mockResolvedValue([]);
     renderWithFluentSync(<SuppliersScreen />, purchasingFtl, sharedFtl, supplierFtl);
 
-    await user.click(screen.getByRole('button', { name: /add supplier/i }));
+    clickButton(/add supplier/i);
 
     expect(screen.getByRole('button', { name: /create/i })).toBeDisabled();
   });
