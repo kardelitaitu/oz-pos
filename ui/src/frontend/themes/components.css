@@ -227,6 +227,7 @@
 .retail-customer-modal::after,
 .tables-detail::after,
 .settings-popup::after,
+.license-activation-card::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -259,6 +260,7 @@
   .retail-customer-modal::after,
   .tables-detail::after,
   .settings-popup::after,
+  .license-activation-card::after,
   .noise-dither::after { display: none; }
 }
 

@@ -42,6 +42,7 @@
 }
 
 .license-activation-card {
+  position: relative;
   flex: 1;
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
