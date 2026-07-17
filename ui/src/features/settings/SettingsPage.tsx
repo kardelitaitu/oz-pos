@@ -712,6 +712,7 @@ export default function SettingsPage() {
             value: syncApiKey,
             user_id: userId,
           }).catch(() => { /* best-effort */ });
+          setSyncApiKey('');
         }
         setSync((prev) => ({
           ...prev,
