@@ -898,4 +898,64 @@ mod tests {
         };
         assert!(result.error.is_none());
     }
+
+    // ── format_expiry tests ────────────────────────────────────
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_exactly_one_hour() {
+        // Small buffer (+5s) accounts for sub-second drift between the
+        // timestamp construction and format_expiry's internal now() call.
+        let ts = (chrono::Utc::now() + chrono::Duration::hours(1) + chrono::Duration::seconds(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 hour");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_exactly_one_day() {
+        let ts = (chrono::Utc::now() + chrono::Duration::days(1) + chrono::Duration::seconds(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 day");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_already_expired() {
+        let ts = (chrono::Utc::now() - chrono::Duration::hours(1))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expired");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_less_than_a_minute() {
+        let ts = (chrono::Utc::now() + chrono::Duration::seconds(30))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in less than a minute");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_ninety_minutes() {
+        // Small buffer (+5s) prevents sub-second drift from pushing the
+        // duration below 60 minutes (which would display as "59 minutes").
+        let ts = (chrono::Utc::now() + chrono::Duration::minutes(90) + chrono::Duration::seconds(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 hour");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_twenty_five_hours() {
+        let ts = (chrono::Utc::now() + chrono::Duration::hours(25) + chrono::Duration::seconds(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 day");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_unparseable_fallback() {
+        assert_eq!(format_expiry("not-a-timestamp"), "expires not-a-timestamp");
+    }
 }
