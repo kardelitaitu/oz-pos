@@ -232,6 +232,7 @@
 .promo-mgmt-modal::after,
 .product-mgmt-modal::after,
 .po-form-modal::after,
+.stock-transfers-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -269,6 +270,7 @@
   .promo-mgmt-modal::after,
   .product-mgmt-modal::after,
   .po-form-modal::after,
+  .stock-transfers-modal::after,
   .noise-dither::after { display: none; }
 }
 

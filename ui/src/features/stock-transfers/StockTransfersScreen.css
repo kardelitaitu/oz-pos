@@ -277,6 +277,7 @@
 }
 
 .stock-transfers-modal {
+  position: relative;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
