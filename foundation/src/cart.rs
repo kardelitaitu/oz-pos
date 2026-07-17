@@ -219,11 +219,25 @@ impl Cart {
         }
     }
 
-    /// Sum of all line totals, minus any discount. Returns `None` on overflow.
+    /// Sum of all line totals, minus any discount.
+    ///
+    /// # Panics (debug only)
+    ///
+    /// In debug builds, panics if any line's effective currency (unit_price
+    /// or overridden_price) does not match the cart's currency.
+    ///
+    /// Returns `None` on overflow or currency mismatch (the latter is
+    /// caught by [`Money::checked_add`] in release builds).
     #[must_use]
     pub fn total(&self) -> Option<Money> {
         let mut acc = Money::zero(self.currency);
         for line in &self.lines {
+            debug_assert!(
+                line.unit_price.currency == self.currency,
+                "Cart::total: line unit_price currency ({}) does not match cart currency ({})",
+                line.unit_price.currency,
+                self.currency
+            );
             let t = line.total()?;
             acc = acc.checked_add(t)?;
         }
@@ -234,6 +248,13 @@ impl Cart {
     }
 
     /// The discount amount in minor units, or 0 if no discount.
+    ///
+    /// # Panics (debug only)
+    ///
+    /// In debug builds, panics if any line's effective currency does not
+    /// match the cart's currency.
+    ///
+    /// Returns `None` on overflow or currency mismatch.
     #[must_use]
     pub fn discount_amount(&self) -> Option<Money> {
         if self.discount_percent.get() == 0 {
@@ -241,6 +262,12 @@ impl Cart {
         }
         let mut subtotal = Money::zero(self.currency);
         for line in &self.lines {
+            debug_assert!(
+                line.unit_price.currency == self.currency,
+                "Cart::discount_amount: line unit_price currency ({}) does not match cart currency ({})",
+                line.unit_price.currency,
+                self.currency
+            );
             let t = line.total()?;
             subtotal = subtotal.checked_add(t)?;
         }
@@ -702,7 +729,6 @@ mod tests {
         // The original price should not have been overwritten
         assert!(line.overridden_price.is_none());
     }
-
     #[test]
     fn cartline_total_debug_assert_currency_mismatch_on_direct_mutation() {
         // set_overridden_price now validates currency, but the fields are pub
@@ -728,6 +754,54 @@ mod tests {
         assert!(
             result.is_err(),
             "debug_assert! should have panicked on currency mismatch from direct field mutation"
+        );
+    }
+
+    #[test]
+    fn cart_total_debug_assert_on_line_currency_mismatch() {
+        // Cart::total() checks every line's unit_price.currency matches the cart.
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("ITEM"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        // Direct mutation: change unit_price currency via pub field
+        cart.lines_mut()[0].unit_price.currency = eur();
+        let result = std::panic::catch_unwind(|| {
+            let _ = cart.total();
+        });
+        assert!(
+            result.is_err(),
+            "debug_assert! should have panicked on line currency mismatch in Cart::total()"
+        );
+    }
+
+    #[test]
+    fn cart_discount_amount_debug_assert_on_line_currency_mismatch() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("ITEM"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.set_discount(Percentage::new(10).unwrap(), None);
+        // Direct mutation
+        cart.lines_mut()[0].unit_price.currency = eur();
+        let result = std::panic::catch_unwind(|| {
+            let _ = cart.discount_amount();
+        });
+        assert!(
+            result.is_err(),
+            "debug_assert! should have panicked on line currency mismatch in Cart::discount_amount()"
         );
     }
 
