@@ -1106,22 +1106,20 @@ export default function SettingsPage() {
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <div className="settings-toggle">
+                  <label className="settings-toggle" htmlFor="receipt-show-currency">
+                    <span className="sr-only">Toggle</span>
                     <span className="settings-toggle-switch">
-                      <Localized id="settings-toggle-show-currency-aria" attrs={{ 'aria-label': true }}>
-                        <input
-                          id="receipt-show-currency"
-                          type="checkbox"
-                          role="switch"
-                          checked={receipt.showCurrency}
-                          aria-checked={receipt.showCurrency}
-                          onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
-                          aria-label="Show currency symbol on amounts"
-                        />
-                      </Localized>
+                      <input
+                        id="receipt-show-currency"
+                        type="checkbox"
+                        role="switch"
+                        checked={receipt.showCurrency}
+                        aria-checked={receipt.showCurrency}
+                        onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
+                      />
                       <span className="settings-toggle-slider" />
                     </span>
-                  </div>
+                  </label>
                 </span>
               </div>
 
@@ -1158,22 +1156,20 @@ export default function SettingsPage() {
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <div className="settings-toggle">
+                  <label className="settings-toggle" htmlFor="receipt-show-tax">
+                    <span className="sr-only">Toggle</span>
                     <span className="settings-toggle-switch">
-                      <Localized id="settings-toggle-show-tax-aria" attrs={{ 'aria-label': true }}>
-                        <input
-                          id="receipt-show-tax"
-                          type="checkbox"
-                          role="switch"
-                          checked={receipt.showTax}
-                          aria-checked={receipt.showTax}
-                          onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
-                          aria-label="Show tax line on receipts"
-                        />
-                      </Localized>
+                      <input
+                        id="receipt-show-tax"
+                        type="checkbox"
+                        role="switch"
+                        checked={receipt.showTax}
+                        aria-checked={receipt.showTax}
+                        onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
+                      />
                       <span className="settings-toggle-slider" />
                     </span>
-                  </div>
+                  </label>
                 </span>
               </div>
 
@@ -1228,22 +1224,20 @@ export default function SettingsPage() {
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <div className="settings-toggle">
+                  <label className="settings-toggle" htmlFor="receipt-show-table-number">
+                    <span className="sr-only">Toggle</span>
                     <span className="settings-toggle-switch">
-                      <Localized id="settings-toggle-show-table-number-aria" attrs={{ 'aria-label': true }}>
-                        <input
-                          id="receipt-show-table-number"
-                          type="checkbox"
-                          role="switch"
-                          checked={receipt.showTableNumber}
-                          aria-checked={receipt.showTableNumber}
-                          onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
-                          aria-label="Show table number on cart and receipts"
-                        />
-                      </Localized>
+                      <input
+                        id="receipt-show-table-number"
+                        type="checkbox"
+                        role="switch"
+                        checked={receipt.showTableNumber}
+                        aria-checked={receipt.showTableNumber}
+                        onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
+                      />
                       <span className="settings-toggle-slider" />
                     </span>
-                  </div>
+                  </label>
                 </span>
               </div>
             </div>
@@ -1331,22 +1325,20 @@ export default function SettingsPage() {
                   </Localized>
                 </label>
                 <span className="settings-field-input-wrap">
-                  <div className="settings-toggle">
+                  <label className="settings-toggle" htmlFor="sync-enabled">
+                    <span className="sr-only">Toggle</span>
                     <span className="settings-toggle-switch">
-                      <Localized id="settings-sync-enabled-aria" attrs={{ 'aria-label': true }}>
-                        <input
-                          id="sync-enabled"
-                          type="checkbox"
-                          role="switch"
-                          checked={sync.enabled}
-                          aria-checked={sync.enabled}
-                          onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
-                          aria-label="Enable Cloud Sync"
-                        />
-                      </Localized>
+                      <input
+                        id="sync-enabled"
+                        type="checkbox"
+                        role="switch"
+                        checked={sync.enabled}
+                        aria-checked={sync.enabled}
+                        onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
+                      />
                       <span className="settings-toggle-slider" />
                     </span>
-                  </div>
+                  </label>
                 </span>
               </div>
 

@@ -24,8 +24,10 @@ vi.mock('@/contexts/ZoomContext', () => ({
   useAppZoom: () => ({ zoomLevel: 'auto', setZoomLevel: vi.fn() }),
 }));
 
+const mockSetHwAccelEnabled = vi.fn();
+
 vi.mock('@/contexts/HardwareAccelContext', () => ({
-  useHardwareAccel: () => ({ enabled: true, setEnabled: vi.fn() }),
+  useHardwareAccel: () => ({ enabled: true, setEnabled: (val: boolean) => mockSetHwAccelEnabled(val) }),
   HardwareAccelProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -103,6 +105,7 @@ describe('AppearanceSettings', () => {
     mockPickLogoFile.mockResolvedValue(null);
     mockDeriveAccentPalette.mockReturnValue({});
     mockApplyAccentPalette.mockReturnValue(undefined);
+    mockSetHwAccelEnabled.mockClear();
   });
 
   // ── Rendering ──────────────────────────────────────────────────
@@ -113,6 +116,23 @@ describe('AppearanceSettings', () => {
       const cards = document.querySelectorAll('.card');
       expect(cards).toHaveLength(3);
     });
+  });
+
+  it('toggles Hardware Acceleration when clicking toggle slider', async () => {
+    render(<AppearanceSettings />);
+    await waitFor(() => {
+      expect(screen.getByLabelText('Hardware Acceleration')).toBeInTheDocument();
+    });
+
+    const checkbox = screen.getByLabelText('Hardware Acceleration') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+
+    // Verify clicking the visual slider or label container properly delegates click to checkbox
+    const toggleContainer = document.querySelector('.settings-toggle') as HTMLElement;
+    expect(toggleContainer).not.toBeNull();
+    fireEvent.click(toggleContainer);
+
+    expect(mockSetHwAccelEnabled).toHaveBeenCalledWith(false);
   });
 
   it('renders card containers in embedded mode without reset/save buttons', () => {

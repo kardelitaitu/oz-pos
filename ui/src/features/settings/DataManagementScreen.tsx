@@ -477,35 +477,44 @@ export default function DataManagementScreen() {
                 </Localized>
 
                 <div className="data-mgmt-types" role="group" aria-label={l10n.getString('data-mgmt-export-types-aria')}>
-                  <div className="data-mgmt-type-checkbox data-mgmt-type-checkbox--all">
+                  <label
+                    className="data-mgmt-type-checkbox data-mgmt-type-checkbox--all"
+                    htmlFor="type-select-all"
+                  >
                     <input
                       id="type-select-all"
                       type="checkbox"
+                      aria-label="Select all / none"
                       checked={exportState.selectedTypes.size === DATA_TYPES.length}
                       onChange={toggleAll}
                     />
                     <Localized id="data-mgmt-export-select-all">
-                      <label className="data-mgmt-type-label" htmlFor="type-select-all">Select all / none</label>
+                      <span className="data-mgmt-type-label">Select all / none</span>
                     </Localized>
-                  </div>
+                  </label>
 
                   {DATA_TYPES.map((dt) => (
-                    <div key={dt.key} className="data-mgmt-type-checkbox">
+                    <label
+                      key={dt.key}
+                      className="data-mgmt-type-checkbox"
+                      htmlFor={`type-${dt.key}`}
+                    >
                       <input
                         id={`type-${dt.key}`}
                         type="checkbox"
+                        aria-label={dt.label}
                         checked={exportState.selectedTypes.has(dt.key)}
                         onChange={() => toggleType(dt.key)}
                       />
                       <div className="data-mgmt-type-info">
                         <Localized id={`data-mgmt-type-${dt.key}`}>
-                          <label className="data-mgmt-type-label" htmlFor={`type-${dt.key}`}>{dt.label}</label>
+                          <span className="data-mgmt-type-label">{dt.label}</span>
                         </Localized>
                         <Localized id={`data-mgmt-type-${dt.key}-desc`}>
                           <span className="data-mgmt-type-desc">{dt.description}</span>
                         </Localized>
                       </div>
-                    </div>
+                    </label>
                   ))}
                 </div>
 

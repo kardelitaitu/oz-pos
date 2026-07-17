@@ -92,10 +92,6 @@ beforeEach(() => {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function expectAriaSelected(element: HTMLElement, value: boolean) {
-  expect(element.getAttribute('aria-selected')).toBe(String(value));
-}
-
 describe('DataManagement — Export', () => {
   // ═══════════════════════════════════════════════════════════════
   // Export wizard — type selection

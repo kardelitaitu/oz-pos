@@ -294,7 +294,8 @@ export function AppearanceSettings({
           <Localized id="appearance-hw-accel">Hardware Acceleration</Localized>
         </label>
         <span className="settings-field-input-wrap">
-          <div className="settings-toggle">
+          <label className="settings-toggle" htmlFor="hw-accel-checkbox">
+            <span className="sr-only">Toggle</span>
             <span className="settings-toggle-switch">
               <input
                 id="hw-accel-checkbox"
@@ -306,7 +307,7 @@ export function AppearanceSettings({
               />
               <span className="settings-toggle-slider" />
             </span>
-          </div>
+          </label>
           <p className="settings-hint">
             <Localized id="appearance-hw-accel-hint">
               <span>Disable if UI animations feel janky on low-end devices</span>

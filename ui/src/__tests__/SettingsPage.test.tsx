@@ -15,6 +15,7 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import settingsFtl from '@/locales/settings.ftl?raw';
@@ -366,6 +367,28 @@ describe('SettingsPage', () => {
 
     fireEvent.change(screen.getByLabelText(/show currency symbol/i), { target: { checked: true } });
     expect(screen.getByLabelText(/show currency symbol/i)).toBeChecked();
+  });
+
+  it('toggles checkboxes when clicking the visual toggle container or slider', async () => {
+    const user = userEvent.setup();
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('button', { name: /receipt/i }));
+
+    const currencyInput = screen.getByLabelText(/show currency symbol/i) as HTMLInputElement;
+    expect(currencyInput.checked).toBe(false);
+
+    // Find the label wrapper (.settings-toggle) that wraps the switch/slider
+    const currencyToggleLabel = currencyInput.closest('.settings-toggle') as HTMLLabelElement;
+    expect(currencyToggleLabel.tagName.toLowerCase()).toBe('label');
+    expect(currencyToggleLabel.getAttribute('for')).toBe('receipt-show-currency');
+
+    // Clicking the visual label wrapper/slider must delegate to the input
+    await user.click(currencyToggleLabel);
+    expect(currencyInput.checked).toBe(true);
   });
 
   it('changes decimal separator and updates receipt footer', async () => {
