@@ -828,4 +828,68 @@ mod tests {
         assert_eq!(back.printer_connection, "Network");
         assert_eq!(back.scanner_device_id, "scanner-2");
     }
+
+    // ── Generic get_setting / set_setting tests (C-3 fix verification) ─
+
+    #[test]
+    fn get_setting_returns_none_for_missing_key() {
+        let conn = fresh_conn();
+        let result = run_get_setting(&conn, "nonexistent.key").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn set_setting_persists_and_get_returns_it() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "sync.auth_token", "sk_test_abc123").unwrap();
+        let result = run_get_setting(&conn, "sync.auth_token").unwrap();
+        assert_eq!(result, Some("sk_test_abc123".into()));
+    }
+
+    #[test]
+    fn set_setting_overwrites_previous_value() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "my.key", "v1").unwrap();
+        run_set_setting(&conn, "my.key", "v2").unwrap();
+        let result = run_get_setting(&conn, "my.key").unwrap();
+        assert_eq!(result, Some("v2".into()));
+    }
+
+    #[test]
+    fn set_setting_empty_string_is_stored_as_empty() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "key", "hello").unwrap();
+        run_set_setting(&conn, "key", "").unwrap();
+        let result = run_get_setting(&conn, "key").unwrap();
+        assert_eq!(result, Some("".into()));
+    }
+
+    #[test]
+    fn get_setting_after_multiple_keys_only_returns_requested() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "a", "1").unwrap();
+        run_set_setting(&conn, "b", "2").unwrap();
+        run_set_setting(&conn, "c", "3").unwrap();
+        assert_eq!(run_get_setting(&conn, "b").unwrap(), Some("2".into()));
+        assert_eq!(run_get_setting(&conn, "d").unwrap(), None);
+    }
+
+    #[test]
+    fn sync_auth_token_cross_screen_roundtrip() {
+        // C-3 fix verification: the sync.auth_token key written by
+        // one screen (SettingsPage) must be readable by another
+        // (RetailOptionsScreen / useCloudSync) via get_setting.
+        let conn = fresh_conn();
+
+        // Simulate SettingsPage saving a token
+        run_set_setting(&conn, "sync.auth_token", "jwt-token-xyz").unwrap();
+
+        // Simulate useCloudSync loading the token on the other screen
+        let loaded = run_get_setting(&conn, "sync.auth_token").unwrap();
+        assert_eq!(
+            loaded,
+            Some("jwt-token-xyz".into()),
+            "C-3 regression: token saved via SettingsPage must be readable via get_setting"
+        );
+    }
 }
