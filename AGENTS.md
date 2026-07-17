@@ -22,11 +22,51 @@ Without this `core.hooksPath` set, all four gates are silently bypassed at commi
 
 For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), see [`scripts/check.sh`](./scripts/check.sh). For the full first-time setup walkthrough (4 gates explained, chmod, verify hint), see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](./.agents/skills/onboarding-guide/SKILL.md#first-time-setup).
 
+## Running UI CLI Tools on Windows (tsc / eslint)
+
+`tsc` and `eslint` are **project-local** — they live in `ui/node_modules/.bin/` and are
+NOT on the system PATH by default. On Windows every command that calls
+these tools must prefix the PATH for that session, because each shell subprocess
+starts fresh.
+
+### Preferred approach — use npm scripts
+
+`ui/package.json` wraps the tools as npm scripts, and npm resolves
+`node_modules/.bin` automatically on every platform:
+
+| Task | Command (run from `ui/`) |
+|------|--------------------------|
+| Type-check | `npm run typecheck` |
+| Lint | `npm run lint` |
+| Lint + auto-fix | `npm run lint:fix` |
+| Build (type-check + bundle) | `npm run build` |
+| Tests | `npm run test` |
+
+```powershell
+# Always run from the ui/ directory
+cd "ui"
+npm run typecheck
+npm run lint
+```
+
+> **Rule:** Agents must use `npm run <script>` (not bare `tsc`/`eslint`) unless the
+> PATH prefix pattern above is applied first. Never assume `tsc` or `eslint` are
+> globally available on this machine.
+
+### If node_modules is missing
+
+Run `npm install` inside `ui/` before any of the above:
+
+```powershell
+cd ui
+npm install
+```
+
 ## Project Specific Rules
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.4`.** Never change the version number
+- **Version is locked at `0.0.9`.** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
