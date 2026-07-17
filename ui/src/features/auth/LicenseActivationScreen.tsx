@@ -166,7 +166,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
           </div>
 
           {errorMsg && (
-            <div className="license-error-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
+            <div className="license-error-banner" role="alert">
               {errorMsg}
             </div>
           )}
