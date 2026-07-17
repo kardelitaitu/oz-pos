@@ -9,8 +9,6 @@
   color: var(--color-fg);
   font-family: var(--font-sans);
   padding: 2rem;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .license-activation-layout {
@@ -123,12 +121,21 @@
   background: none;
   border: none;
   padding: 0.25rem;
+  min-width: 2rem;
+  min-height: 2rem;
   cursor: pointer;
   color: var(--color-fg-disabled);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color var(--duration-200);
+}
+
+@media (pointer: coarse) {
+  .license-input-clear {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
 }
 
 .license-input-clear:hover {
