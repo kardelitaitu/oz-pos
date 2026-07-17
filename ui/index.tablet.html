@@ -17,7 +17,26 @@
     <link rel="manifest" href="/site.webmanifest" />
 
     <title>OZ-POS Tablet</title>
+    <!-- Restore saved theme before first paint to prevent theme flash. -->
+    <script>
+      (function() {
+        var theme = null;
+        try { theme = localStorage.getItem('oz-pos-theme-v4'); } catch(e) {}
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', theme);
+        }
+      })();
+    </script>
+
+    <!-- Inline theme base styles so the first paint already has the correct background and text color. -->
     <style>
+      :root {
+        color-scheme: dark;
+        accent-color: #5a9fd4;
+      }
+      html[data-theme="dark"] { color-scheme: dark; }
+      html[data-theme="light"] { color-scheme: light; }
+
       html, body {
         margin: 0;
         padding: 0;
@@ -26,6 +45,21 @@
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: none;
         touch-action: manipulation;
+        background: radial-gradient(ellipse at 50% -10%, #132540 0%, #07111d 60%, #040a12 100%);
+        color: #f0f6ff;
+      }
+
+      /* Light theme override (applied via data-theme attribute or OS preference) */
+      html[data-theme="light"] {
+        background: linear-gradient(160deg, #f8fafc 0%, #f1f5f9 50%, #eef2f6 100%);
+        color: #1e293b;
+      }
+
+      @media (prefers-color-scheme: light) {
+        html, body {
+          background: linear-gradient(160deg, #f8fafc 0%, #f1f5f9 50%, #eef2f6 100%);
+          color: #1e293b;
+        }
       }
       #root {
         height: 100%;

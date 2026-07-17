@@ -16,16 +16,12 @@ interface BrandContextValue {
   settings: BrandSettings;
   /** Re-fetch brand settings from the backend. */
   refreshBrandSettings: () => void;
+  /** True while brand settings are being fetched on first load. */
+  loading: boolean;
 }
 
 /** React context that carries brand/white-label settings. */
 export const BrandContext = createContext<BrandContextValue | null>(null);
-
-const DEFAULT_SETTINGS: BrandSettings = {
-  primary_colour: '#10b981',
-  logo_path: null,
-  store_name: '',
-};
 
 // ── Provider ──────────────────────────────────────────────────────
 
@@ -40,13 +36,27 @@ interface BrandProviderProps {
  * `refreshBrandSettings()` function so that components like
  * AppearanceSettings can trigger a re-fetch after saving.
  */
+const DEFAULT_SETTINGS: BrandSettings = {
+  primary_colour: '#10b981',
+  logo_path: null,
+  store_name: '',
+};
+
 export function BrandProvider({ children }: BrandProviderProps) {
   const [settings, setSettings] = useState<BrandSettings>(DEFAULT_SETTINGS);
+  const [loading, setLoading] = useState(true);
 
   const refreshBrandSettings = useCallback(() => {
+    setLoading(true);
     getBrandSettings()
-      .then(setSettings)
-      .catch(() => { /* keep current settings on error */ });
+      .then((s) => {
+        setSettings(s);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+        /* keep current settings on error */
+      });
   }, []);
 
   // Load on first mount.
@@ -55,7 +65,7 @@ export function BrandProvider({ children }: BrandProviderProps) {
   }, [refreshBrandSettings]);
 
   return (
-    <BrandContext.Provider value={{ settings, refreshBrandSettings }}>
+    <BrandContext.Provider value={{ settings, refreshBrandSettings, loading }}>
       {children}
     </BrandContext.Provider>
   );

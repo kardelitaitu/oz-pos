@@ -45,6 +45,7 @@ import InventoryReportScreen from '@/features/reports/InventoryReportScreen';
 import MenuEngineeringScreen from '@/features/reports/MenuEngineeringScreen';
 import DesignSystem from '@/features/design/DesignSystem';
 import TooltipPreview from '@/features/design/TooltipPreview';
+import { DevToolbar } from '@/features/design/DevToolbar';
 import KdsScreen from '@/features/kds/KdsScreen';
 import KioskScreen from '@/features/kiosk/KioskScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
@@ -228,6 +229,7 @@ export default function App() {
                 <ToastProvider>
                   <WorkspaceProvider>
                     <AppShell />
+                    <DevToolbar />
                   </WorkspaceProvider>
                 </ToastProvider>
               </AuthProvider>
