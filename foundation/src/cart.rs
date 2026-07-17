@@ -77,8 +77,18 @@ impl CartLine {
     }
 
     /// Override the unit price for this line.
-    pub fn set_overridden_price(&mut self, price: Money) {
+    ///
+    /// Returns `Err(CartError::CurrencyMismatch)` if `price.currency`
+    /// does not match `self.unit_price.currency`.
+    pub fn set_overridden_price(&mut self, price: Money) -> Result<(), CartError> {
+        if price.currency != self.unit_price.currency {
+            return Err(CartError::CurrencyMismatch {
+                cart: self.unit_price.currency.to_string(),
+                line: price.currency.to_string(),
+            });
+        }
         self.overridden_price = Some(price);
+        Ok(())
     }
 }
 
@@ -595,7 +605,8 @@ mod tests {
         line.set_overridden_price(Money {
             minor_units: 100,
             currency: usd(),
-        });
+        })
+        .unwrap();
         assert_eq!(line.overridden_price.unwrap().minor_units, 100);
     }
 
@@ -615,7 +626,8 @@ mod tests {
         line.set_overridden_price(Money {
             minor_units: 150,
             currency: usd(),
-        });
+        })
+        .unwrap();
         assert_eq!(line.total().unwrap().minor_units, 450);
     }
 
@@ -632,7 +644,8 @@ mod tests {
         line.set_overridden_price(Money {
             minor_units: 400,
             currency: usd(),
-        });
+        })
+        .unwrap();
         let clone = line.clone();
         assert_eq!(clone.sku, line.sku);
         assert_eq!(clone.qty, line.qty);
@@ -657,6 +670,26 @@ mod tests {
         assert_eq!(back.unit_price, line.unit_price);
     }
 
+    #[test]
+    fn cartline_set_overridden_price_currency_mismatch_returns_error() {
+        let mut line = CartLine::new(
+            Sku::new("TEA"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        );
+        let eur_price = Money {
+            minor_units: 90,
+            currency: eur(),
+        };
+        let result = line.set_overridden_price(eur_price);
+        assert!(matches!(result, Err(CartError::CurrencyMismatch { .. })));
+        // The original price should not have been overwritten
+        assert!(line.overridden_price.is_none());
+    }
+
     // ── Cart accessors & serialization ──
 
     #[test]
@@ -679,10 +712,12 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(cart.lines().len(), 1);
-        cart.lines_mut()[0].set_overridden_price(Money {
-            minor_units: 50,
-            currency: usd(),
-        });
+        cart.lines_mut()[0]
+            .set_overridden_price(Money {
+                minor_units: 50,
+                currency: usd(),
+            })
+            .unwrap();
         assert_eq!(cart.lines()[0].overridden_price.unwrap().minor_units, 50);
     }
 
