@@ -76,19 +76,29 @@ pub fn run() {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
                     loop {
                         interval.tick().await;
-                        if let Some(state) = app_handle.try_state::<AppState>() {
-                            let db = state.db.lock().await;
-                            let store = Store::new(&db);
-                            match SyncConfig::from_settings(&store) {
-                                Ok(Some(config)) => {
-                                    if let Err(e) =
-                                        oz_core::sync_client::sync_pending(&store, &config)
-                                    {
-                                        tracing::error!(error = %e, "sync cycle failed");
+                        match app_handle.try_state::<AppState>() {
+                            Some(state) => {
+                                let db = state.db.lock().await;
+                                let store = Store::new(&db);
+                                match SyncConfig::from_settings(&store) {
+                                    Ok(Some(config)) => {
+                                        if let Err(e) =
+                                            oz_core::sync_client::sync_pending(&store, &config)
+                                        {
+                                            tracing::error!(error = %e, "sync cycle failed");
+                                        }
+                                    }
+                                    Ok(None) => {}
+                                    Err(e) => {
+                                        tracing::error!(error = %e, "failed to load sync config")
                                     }
                                 }
-                                Ok(None) => {}
-                                Err(e) => tracing::error!(error = %e, "failed to load sync config"),
+                            }
+                            None => {
+                                tracing::warn!(
+                                    "tablet sync daemon: AppState not available — \
+                                     skipping sync cycle (shutting down?)"
+                                );
                             }
                         }
                     }

@@ -76,6 +76,15 @@ pub fn run() {
 
             app.manage(state);
 
+            // ── Show the main window after state restore ────────────
+            // The window starts with visible:false to prevent initial
+            // position flash while window-state restores its position/size.
+            // After setup completes we explicitly show it. If the window
+            // is not found (e.g. headless/CI), this is a no-op.
+            if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.show();
+            }
+
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();
             let app_handle = app.handle().clone();
