@@ -31,9 +31,16 @@ use crate::ValidationError;
 /// let bc = Barcode::new("4901234567890").unwrap();
 /// assert_eq!(serde_json::to_string(&bc).unwrap(), "\"4901234567890\"");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct Barcode(String);
+
+impl<'de> Deserialize<'de> for Barcode {
+    fn deserialize<D: serde::Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(de)?;
+        Barcode::new(s).map_err(|e| serde::de::Error::custom(e.message))
+    }
+}
 
 impl Barcode {
     /// Construct a `Barcode`, trimming whitespace and validating non-empty.
@@ -193,5 +200,38 @@ mod tests {
         let err: ValidationError = "   ".parse::<Barcode>().unwrap_err();
         assert_eq!(err.field, "barcode");
         assert!(err.message.contains("must not be empty"));
+    }
+
+    // ── Edge cases ───────────────────────────────────────────────
+
+    #[test]
+    fn preserves_leading_zeros() {
+        let bc = Barcode::new("000123456789").unwrap();
+        assert_eq!(bc.as_str(), "000123456789");
+    }
+
+    #[test]
+    fn accepts_very_long_barcode() {
+        let long = "A".repeat(1000);
+        let bc = Barcode::new(&long).unwrap();
+        assert_eq!(bc.as_str(), &long);
+    }
+
+    #[test]
+    fn accepts_unicode_characters() {
+        let bc = Barcode::new("café-ラテ").unwrap();
+        assert_eq!(bc.as_str(), "café-ラテ");
+    }
+
+    #[test]
+    fn serde_rejects_empty_string() {
+        let result: Result<Barcode, _> = serde_json::from_str("\"\"");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn serde_rejects_whitespace_only() {
+        let result: Result<Barcode, _> = serde_json::from_str("\"   \"");
+        assert!(result.is_err());
     }
 }
