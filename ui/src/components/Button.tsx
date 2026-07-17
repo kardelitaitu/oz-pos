@@ -71,7 +71,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             {icon}
           </span>
         ) : null}
-        <span className={loading ? 'sr-only' : undefined}>{children}</span>
+        {loading ? <span className="sr-only">{children}</span> : children}
       </button>
     );
   },
