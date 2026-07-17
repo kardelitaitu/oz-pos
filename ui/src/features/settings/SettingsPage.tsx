@@ -22,8 +22,11 @@ import {
   getSyncSettings,
   updateSyncSettings,
   syncRun,
+  syncPull,
+  pendingSyncCount,
   type SyncSettingsDto,
   type SyncAttemptResult,
+  type PullResult,
 } from '@/api/offline';
 import { getVersion } from '@/api/system';
 import {
@@ -436,7 +439,10 @@ export default function SettingsPage() {
   const [syncApiKey, setSyncApiKey] = useState('');
   const [syncApiKeyVisible, setSyncApiKeyVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
+  const [pullResult, setPullResult] = useState<PullResult | null>(null);
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
 
   const { session } = useAuth();
   const userId = session?.user_id ?? 'default';
@@ -764,6 +770,24 @@ export default function SettingsPage() {
           }),
         }))
         .filter((cat) => cat.keys.length > 0);
+
+  // ── Cloud Sync diagnostics ──────────────────────────────────
+
+  // Load pending offline count when sync section is active
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const count = await pendingSyncCount();
+      setPendingCount(count);
+    } catch {
+      setPendingCount(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === 'sync') {
+      refreshPendingCount();
+    }
+  }, [activeSection, refreshPendingCount]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
 
@@ -1373,6 +1397,26 @@ export default function SettingsPage() {
 
               {(sync.serverUrl !== null || sync.enabled) && (
                 <>
+                  {/* ── Status indicator ──────────────────── */}
+                  <div className="settings-sync-status">
+                    <span
+                      className={`settings-sync-dot${syncResult && !syncResult.error ? ' settings-sync-dot--ok' : ''}${syncResult?.error ? ' settings-sync-dot--err' : ''}`}
+                      aria-hidden="true"
+                    />
+                    <span className="settings-sync-status-text">
+                      {syncResult === null
+                        ? l10n.getString('settings-sync-status-idle')
+                        : syncResult.error
+                          ? l10n.getString('settings-sync-status-error')
+                          : l10n.getString('settings-sync-status-ok')}
+                    </span>
+                    {pendingCount !== null && pendingCount > 0 && (
+                      <span className="settings-sync-pending-badge">
+                        {l10n.getString('settings-sync-pending-count', { count: pendingCount })}
+                      </span>
+                    )}
+                  </div>
+
                   <div className="settings-actions">
                     <Button
                       variant="secondary"
@@ -1383,6 +1427,7 @@ export default function SettingsPage() {
                         try {
                           const result = await syncRun();
                           setSyncResult(result);
+                          refreshPendingCount();
                           if (result.error) {
                             addToast({ message: result.error, type: 'error' });
                           } else if (result.synced > 0 || result.failed > 0) {
@@ -1409,6 +1454,41 @@ export default function SettingsPage() {
                         <span>{syncing ? 'Syncing…' : 'Sync Now'}</span>
                       </Localized>
                     </Button>
+                    <Button
+                      variant="ghost"
+                      loading={pulling}
+                      onClick={async () => {
+                        setPulling(true);
+                        setPullResult(null);
+                        try {
+                          const result = await syncPull();
+                          setPullResult(result);
+                          if (result.error) {
+                            addToast({ message: result.error, type: 'error' });
+                          } else if (result.productsPulled > 0 || result.taxRatesPulled > 0 || result.usersPulled > 0) {
+                            addToast({
+                              message: l10n.getString('settings-sync-pull-toast-success', { products: result.productsPulled, tax_rates: result.taxRatesPulled, users: result.usersPulled }),
+                              type: 'success',
+                            });
+                          } else {
+                            addToast({
+                              message: l10n.getString('settings-sync-pull-empty'),
+                              type: 'info',
+                            });
+                          }
+                        } catch {
+                          const errMsg = l10n.getString('settings-sync-error');
+                          setPullResult({ productsPulled: 0, taxRatesPulled: 0, usersPulled: 0, error: errMsg });
+                          addToast({ message: errMsg, type: 'error' });
+                        } finally {
+                          setPulling(false);
+                        }
+                      }}
+                    >
+                      <Localized id={pulling ? 'settings-sync-pulling' : 'settings-sync-pull'}>
+                        <span>{pulling ? 'Pulling…' : 'Pull from Server'}</span>
+                      </Localized>
+                    </Button>
                   </div>
 
                   {syncResult && (
@@ -1423,6 +1503,22 @@ export default function SettingsPage() {
                       </p>
                       {syncResult.error && (
                         <p className="settings-hint settings-hint--error">{syncResult.error}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {pullResult && (
+                    <div className="settings-sync-result-block">
+                      <p className="settings-hint">
+                        <Localized
+                          id="settings-sync-pull-result"
+                          vars={{ products: pullResult.productsPulled, tax_rates: pullResult.taxRatesPulled, users: pullResult.usersPulled }}
+                        >
+                          <span>Last pull: {pullResult.productsPulled} products, {pullResult.taxRatesPulled} tax rates, {pullResult.usersPulled} users</span>
+                        </Localized>
+                      </p>
+                      {pullResult.error && (
+                        <p className="settings-hint settings-hint--error">{pullResult.error}</p>
                       )}
                     </div>
                   )}

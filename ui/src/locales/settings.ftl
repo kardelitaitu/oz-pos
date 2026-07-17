@@ -285,6 +285,14 @@ settings-save-error = Failed to save settings. Please try again.
 settings-save-partial = Some settings could not be saved. Try again.
 settings-retry = Retry
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
+settings-sync-status-idle = Ready
+settings-sync-status-ok = Connected
+settings-sync-status-error = Connection error
+settings-sync-pending-count = { $count } pending
+settings-sync-pull = Pull from Server
+settings-sync-pulling = Pulling…
+settings-sync-pull-empty = Server returned empty snapshot — nothing to pull
+settings-sync-pull-result = Last pull: { $products } products, { $tax_rates } tax rates, { $users } users
 settings-font-smoothing-antialiased = Antialiased (crisp)
 settings-font-smoothing-subpixel = Subpixel (smooth)
 
