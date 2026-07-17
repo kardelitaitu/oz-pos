@@ -269,6 +269,23 @@ settings-sync-test-failed = Connection test failed
 settings-sync-request-token = Request Token
 settings-sync-requesting = Requesting…
 settings-sync-error = Sync failed
+
+# ── Token expiry badge ──────────────────────────────────
+settings-sync-expiry-expired = Expired
+settings-sync-expiry-in-days = { $count ->
+    [one] Expires in 1 day
+   *[other] Expires in { $count } days
+}
+settings-sync-expiry-in-hours = { $count ->
+    [one] Expires in 1 hour
+   *[other] Expires in { $count } hours
+}
+settings-sync-expiry-in-minutes = { $count ->
+    [one] Expires in 1 minute
+   *[other] Expires in { $count } minutes
+}
+settings-sync-expiry-less-than-minute = Expires in less than a minute
+settings-sync-expiry-fallback = Expires { $iso }
 settings-sync-result = Last sync: { $synced } synced, { $failed } failed
 settings-sync-success = Sync complete: { $synced } synced, { $failed } failed
 settings-sync-nothing = Nothing to sync — all caught up

@@ -356,6 +356,49 @@ function getToday(): string {
 
 // ── Component ─────────────────────────────────────────────────────
 
+// ── Token expiry badge helper ───────────────────────────────────
+
+/** Structured expiry info for a JWT token. The UI uses Fluent keys
+ *  to render the badge text, making it localisable. */
+interface ExpiryInfo {
+  /** Fluent key — one of the `settings-sync-expiry-*` keys. */
+  fluentKey: string;
+  /** Argument object passed to `l10n.getString()`. */
+  fluentArgs: Record<string, unknown>;
+  /** Urgency level for the badge colour. */
+  tone: 'good' | 'warn' | 'critical';
+}
+
+/** Compute a localisable expiry label and urgency colour for a JWT token.
+ *  Returns `null` when no `expiresAt` is provided. */
+function formatTokenExpiry(expiresAt: string | null): ExpiryInfo | null {
+  if (!expiresAt) return null;
+  const now = Date.now();
+  const expiry = Date.parse(expiresAt);
+  if (Number.isNaN(expiry)) {
+    return { fluentKey: 'settings-sync-expiry-fallback', fluentArgs: { iso: expiresAt }, tone: 'warn' };
+  }
+  const diffMs = expiry - now;
+  if (diffMs <= 0) {
+    return { fluentKey: 'settings-sync-expiry-expired', fluentArgs: {}, tone: 'critical' };
+  }
+  const mins = Math.floor(diffMs / 60_000);
+  const hours = Math.floor(diffMs / 3_600_000);
+  const days = Math.floor(diffMs / 86_400_000);
+  const tone: 'good' | 'warn' | 'critical' =
+    hours < 1 ? 'critical' : hours < 24 ? 'warn' : 'good';
+  if (days >= 1) {
+    return { fluentKey: 'settings-sync-expiry-in-days', fluentArgs: { count: days }, tone };
+  }
+  if (hours >= 1) {
+    return { fluentKey: 'settings-sync-expiry-in-hours', fluentArgs: { count: hours }, tone };
+  }
+  if (mins >= 1) {
+    return { fluentKey: 'settings-sync-expiry-in-minutes', fluentArgs: { count: mins }, tone };
+  }
+  return { fluentKey: 'settings-sync-expiry-less-than-minute', fluentArgs: {}, tone: 'critical' };
+}
+
 /** Settings hub — sidebar-driven navigation across general, appearance, features, data management, staff, terminals, multi-store, audit, offline queue, shifts, tax, currency, and promotions. */
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -450,6 +493,7 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);
   const [requesting, setRequesting] = useState(false);
+  const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
   const { session } = useAuth();
   const userId = session?.user_id ?? 'default';
@@ -585,6 +629,7 @@ export default function SettingsPage() {
     setSyncResult(null);
     setSyncApiKey('');
     setSyncApiKeyVisible(false);
+    setTokenExpiresAt(null);
   }, []);
 
   // Sync font-smoothing to <html> whenever it changes
@@ -1325,7 +1370,7 @@ export default function SettingsPage() {
                       id="settings-field-server-url"
                       placeholder="https://api.example.com"
                       value={syncServerUrl}
-                      onChange={(e) => { setSyncServerUrl(e.target.value); setPingResult(null); markDirty(); }}
+                      onChange={(e) => { setSyncServerUrl(e.target.value); setPingResult(null); setTokenExpiresAt(null); markDirty(); }}
                     />
                   </Localized>
                 </span>
@@ -1390,6 +1435,7 @@ export default function SettingsPage() {
                           if (result.ok && result.token) {
                             setSyncApiKey(result.token);
                             setSyncApiKeyVisible(false);
+                            setTokenExpiresAt(result.expiresAt ?? null);
                             markDirty();
                             addToast({ message: result.status, type: 'success' });
                           } else {
@@ -1407,6 +1453,15 @@ export default function SettingsPage() {
                       </Localized>
                     </Button>
                   </div>
+                  {(() => {
+                    const expiry = formatTokenExpiry(tokenExpiresAt);
+                    if (!expiry) return null;
+                    return (
+                      <span className={`settings-sync-expiry-badge settings-sync-expiry-badge--${expiry.tone}`}>
+                        {l10n.getString(expiry.fluentKey, expiry.fluentArgs)}
+                      </span>
+                    );
+                  })()}
                 </span>
               </div>
 

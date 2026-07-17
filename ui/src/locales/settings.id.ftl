@@ -259,6 +259,23 @@ settings-sync-test-failed = Tes koneksi gagal
 settings-sync-request-token = Minta Token
 settings-sync-requesting = Meminta…
 settings-sync-error = Sinkronisasi gagal
+
+# ── Token expiry badge ──────────────────────────────────
+settings-sync-expiry-expired = Kedaluwarsa
+settings-sync-expiry-in-days = { $count ->
+    [one] Kedaluwarsa dalam 1 hari
+   *[other] Kedaluwarsa dalam { $count } hari
+}
+settings-sync-expiry-in-hours = { $count ->
+    [one] Kedaluwarsa dalam 1 jam
+   *[other] Kedaluwarsa dalam { $count } jam
+}
+settings-sync-expiry-in-minutes = { $count ->
+    [one] Kedaluwarsa dalam 1 menit
+   *[other] Kedaluwarsa dalam { $count } menit
+}
+settings-sync-expiry-less-than-minute = Kedaluwarsa dalam kurang dari 1 menit
+settings-sync-expiry-fallback = Kedaluwarsa { $iso }
 settings-sync-result = Sinkronisasi terakhir: { $synced } tersinkron, { $failed } gagal
 settings-sync-success = Sinkronisasi selesai: { $synced } tersinkron, { $failed } gagal
 settings-sync-nothing = Tidak ada yang perlu disinkronkan
