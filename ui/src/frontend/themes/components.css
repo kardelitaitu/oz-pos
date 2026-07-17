@@ -218,6 +218,7 @@
 .staff-login-card::after,
 .modal-panel::after,
 .workspace-card::after,
+.retail-shift-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -241,6 +242,7 @@
   .staff-login-card::after,
   .modal-panel::after,
   .workspace-card::after,
+  .retail-shift-modal::after,
   .noise-dither::after { display: none; }
 }
 
