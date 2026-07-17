@@ -440,7 +440,7 @@ export default function StaffLoginScreen() {
           {step === 'username' && renderLogo()}
           {step === 'pin' && (
             <div className="staff-login-pin-top">
-              {storeName && <p>{storeName}</p>}
+              {storeName && <p className="staff-login-store-name">{storeName}</p>}
               {renderPinDots()}
             </div>
           )}

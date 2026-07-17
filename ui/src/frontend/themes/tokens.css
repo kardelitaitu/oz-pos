@@ -282,7 +282,7 @@
   --color-bg-elevated:     #ffffff;
   --color-bg-surface:      rgba(255, 255, 255, 0.7);
   --color-bg-overlay:      rgba(0, 0, 0, 0.45);
-  --color-bg-input:        #ffffff;
+  --color-bg-input:        var(--neutral-50);
 
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);
@@ -378,7 +378,7 @@
   --color-bg-elevated:     var(--neutral-100);
   --color-bg-surface:      var(--neutral-200);
   --color-bg-overlay:      rgba(0, 0, 0, 0.55);
-  --color-bg-input:        var(--neutral-100);
+  --color-bg-input:        var(--neutral-200);
 
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);

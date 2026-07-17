@@ -131,6 +131,13 @@
   background: var(--color-bg-hover, var(--color-bg-input));
 }
 
+@media (pointer: coarse) {
+  .staff-login-close-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
 /* ── Animations ──────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: no-preference) {
@@ -190,7 +197,7 @@
 
   /* ── Step dot pulse + slow blink ───────────── */
   .staff-login-step-dot--active {
-    animation: login-step-dot-pulse 3s var(--ease-out) infinite;
+    animation: login-step-dot-pulse var(--duration-3000) var(--ease-out) infinite;
   }
 
   @keyframes login-step-dot-pulse {
@@ -588,7 +595,7 @@
 }
 
 .staff-login-footer-copyright {
-  font-size: clamp(10px, 1.3vw, 10px);
+  font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   opacity: 0.7;
 }
