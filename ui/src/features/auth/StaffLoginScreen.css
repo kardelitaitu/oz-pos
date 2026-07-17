@@ -359,8 +359,11 @@
   align-items: center;
 }
 
-.staff-login-pin-wrap:focus-visible,
 .staff-login-pin-wrap:focus-visible {
+  /* The PIN pad wrapper is focused programmatically for keyboard capture.
+     Visual feedback comes from the PIN dots and keypad interactions —
+     no need for an additional focus ring on the container itself. */
+  outline: none;
 }
 
 /* ── PIN dots ────────────────────────────────────────────────────── */
