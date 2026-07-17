@@ -39,6 +39,7 @@ platform-startup = { workspace = true }
 tauri = { workspace = true, features = [] }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-clipboard-manager = { workspace = true }
+tauri-plugin-window-state = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
