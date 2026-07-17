@@ -149,7 +149,7 @@ pub async fn set_feature(
     // cross-terminal inventory sync and Redis pub/sub filtering.
     if args.enabled && feature == Feature::MultiTerminal {
         let device_id = device_hostname();
-        let mut tid = state.terminal_id.lock().unwrap();
+        let mut tid = state.terminal_id.lock().await;
         if store.get_terminal_by_device_id(&device_id)?.is_none() {
             let name = format!("{} (auto)", &device_id);
             let terminal = Terminal::new(&name, &device_id);

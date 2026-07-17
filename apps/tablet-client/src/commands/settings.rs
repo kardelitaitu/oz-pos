@@ -386,6 +386,46 @@ pub async fn set_user_preferences(
     Ok(UserPreferences::set_batch(&conn, &user_id, &pairs)?)
 }
 
+// ── Generic key-value settings ────────────────────────────────
+
+/// Read a single setting value by key.
+///
+/// Returns `None` when the key does not exist.
+#[command]
+pub async fn get_setting(
+    key: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, AppError> {
+    let conn = state.db.lock().await;
+    run_get_setting(&conn, &key)
+}
+
+/// Business logic for `get_setting` (extracted for testing).
+fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<String>, AppError> {
+    Ok(Settings::get(conn, key)?)
+}
+
+/// Write (or overwrite) a single setting value.
+///
+/// Pass an empty string to store an empty value.
+#[command]
+pub async fn set_setting(
+    key: String,
+    value: String,
+    user_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let conn = state.db.lock().await;
+    let store = oz_core::db::Store::new(&conn);
+    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
+    run_set_setting(&conn, &key, &value)
+}
+
+/// Business logic for `set_setting` (extracted for testing).
+fn run_set_setting(conn: &rusqlite::Connection, key: &str, value: &str) -> Result<(), AppError> {
+    Ok(Settings::set(conn, key, value)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -51,7 +51,7 @@ pub async fn adjust_stock(
     // the next .await point when we lock the kernel for event publishing.
     let new_qty = {
         let db = state.db.lock().await;
-        let tid = state.terminal_id.lock().unwrap().clone();
+        let tid = state.terminal_id.lock().await.clone();
         let store = oz_core::db::Store::new(&db).with_terminal_id(tid);
         store.adjust_stock(&args.sku, args.delta)?
     };

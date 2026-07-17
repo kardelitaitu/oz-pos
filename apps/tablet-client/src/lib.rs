@@ -70,8 +70,15 @@ pub fn run() {
                 // ── Module system lifecycle (shared startup) ──────────────
                 platform_startup::init_module_system(&state.kernel, &state.db_path)?;
 
-                // ── Background sync daemon ────────────────────────────────
+                // ── Manage state BEFORE spawning background daemons ───────
+                // Daemons access AppState via try_state(), which only works
+                // after the state is managed. Managing first avoids the
+                // daemon's first tick silently skipping because the state
+                // isn't available yet.
                 let app_handle = app.handle().clone();
+                app.manage(state);
+
+                // ── Background sync daemon ────────────────────────────────
                 platform_startup::spawn_daemon("tablet sync daemon", async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
                     loop {
@@ -104,7 +111,6 @@ pub fn run() {
                     }
                 });
 
-                app.manage(state);
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![
@@ -207,6 +213,8 @@ pub fn run() {
                 commands::settings::set_hardware_settings,
                 commands::settings::get_user_preferences,
                 commands::settings::set_user_preferences,
+                commands::settings::get_setting,
+                commands::settings::set_setting,
                 commands::setup::get_enabled_features,
                 commands::setup::complete_setup,
                 commands::setup::dismiss_setup_wizard,
