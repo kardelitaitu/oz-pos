@@ -389,6 +389,7 @@
 }
 
 .sales-history-modal {
+  position: relative;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
   width: 90%;

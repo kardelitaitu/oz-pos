@@ -235,6 +235,7 @@
 .stock-transfers-modal::after,
 .shift-mgmt-modal::after,
 .payment-modal::after,
+.sales-history-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -275,6 +276,7 @@
   .stock-transfers-modal::after,
   .shift-mgmt-modal::after,
   .payment-modal::after,
+  .sales-history-modal::after,
   .noise-dither::after { display: none; }
 }
 
