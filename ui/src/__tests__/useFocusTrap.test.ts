@@ -39,7 +39,7 @@ function createPanel(): {
 
 describe('useFocusTrap', () => {
   let elements: ReturnType<typeof createPanel>;
-  let onEscape: ReturnType<typeof vi.fn>;
+  let onEscape: () => void;
 
   beforeEach(() => {
     elements = createPanel();
@@ -580,7 +580,7 @@ describe('useFocusTrap', () => {
 
   it('gracefully handles when panelRef.current becomes null during activation', () => {
     // Create a ref that we can clear
-    const ref = { current: elements.panel };
+    const ref = { current: elements.panel as HTMLElement | null };
 
     const { unmount } = renderHook(() =>
       useFocusTrap(ref, true, onEscape),

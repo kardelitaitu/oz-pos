@@ -42,8 +42,8 @@ describe('usePosState', () => {
       act(() => { result.current.addProduct(product); });
 
       expect(result.current.lines).toHaveLength(1);
-      expect(result.current.lines[0].sku).toBe('LATTE');
-      expect(result.current.lines[0].qty).toBe(1);
+      expect(result.current.lines[0]!.sku).toBe('LATTE');
+      expect(result.current.lines[0]!.qty).toBe(1);
     });
 
     it('increments quantity when adding the same product twice', () => {
@@ -54,7 +54,7 @@ describe('usePosState', () => {
       act(() => { result.current.addProduct(product); });
 
       expect(result.current.lines).toHaveLength(1);
-      expect(result.current.lines[0].qty).toBe(2);
+      expect(result.current.lines[0]!.qty).toBe(2);
     });
 
     it('adds separate lines for different products', () => {
@@ -71,14 +71,14 @@ describe('usePosState', () => {
 
       act(() => { result.current.addProduct(makeProduct(), 5); });
 
-      expect(result.current.lines[0].qty).toBe(5);
+      expect(result.current.lines[0]!.qty).toBe(5);
     });
 
     it('removes a line from the cart', () => {
       const { result } = renderHook(() => usePosState());
 
       act(() => { result.current.addProduct(makeProduct()); });
-      const lineId = result.current.lines[0].id;
+      const lineId = result.current.lines[0]!.id;
 
       act(() => { result.current.removeLine(lineId); });
 
@@ -100,22 +100,22 @@ describe('usePosState', () => {
       const { result } = renderHook(() => usePosState());
 
       act(() => { result.current.addProduct(makeProduct()); });
-      const lineId = result.current.lines[0].id;
+      const lineId = result.current.lines[0]!.id;
 
       act(() => { result.current.updateQty(lineId, 3); });
 
-      expect(result.current.lines[0].qty).toBe(3);
+      expect(result.current.lines[0]!.qty).toBe(3);
     });
 
     it('ignores updateQty when quantity is less than 1', () => {
       const { result } = renderHook(() => usePosState());
 
       act(() => { result.current.addProduct(makeProduct()); });
-      const lineId = result.current.lines[0].id;
+      const lineId = result.current.lines[0]!.id;
 
       act(() => { result.current.updateQty(lineId, 0); });
 
-      expect(result.current.lines[0].qty).toBe(1);
+      expect(result.current.lines[0]!.qty).toBe(1);
     });
   });
 
@@ -252,11 +252,11 @@ describe('usePosState', () => {
       const { result } = renderHook(() => usePosState());
 
       act(() => { result.current.addProduct(makeProduct({ price: { minor_units: 450, currency: 'USD' } })); });
-      const lineId = result.current.lines[0].id;
+      const lineId = result.current.lines[0]!.id;
 
       act(() => { result.current.updateLinePrice(lineId, { minor_units: 350, currency: 'USD' }); });
 
-      expect(result.current.lines[0].unit_price).toEqual({ minor_units: 350, currency: 'USD' });
+      expect(result.current.lines[0]!.unit_price).toEqual({ minor_units: 350, currency: 'USD' });
     });
   });
 
@@ -265,12 +265,12 @@ describe('usePosState', () => {
       const { result } = renderHook(() => usePosState());
 
       act(() => { result.current.addProduct(makeProduct()); });
-      const lineId = result.current.lines[0].id;
+      const lineId = result.current.lines[0]!.id;
 
       act(() => { result.current.assignCourse(lineId, 'course-1' as never); });
 
-      expect(result.current.lines[0].courseId).toBe('course-1');
-      expect(result.current.lines[0].coursingStatus).toBe('hold');
+      expect(result.current.lines[0]!.courseId).toBe('course-1');
+      expect(result.current.lines[0]!.coursingStatus).toBe('hold');
     });
 
     it('fires all lines on hold for a specific course', () => {
@@ -278,8 +278,8 @@ describe('usePosState', () => {
 
       act(() => { result.current.addProduct(makeProduct({ sku: 'LATTE' as Product['sku'] })); });
       act(() => { result.current.addProduct(makeProduct({ sku: 'BAGEL' as Product['sku'], name: 'Bagel' })); });
-      const latteId = result.current.lines[0].id;
-      const bagelId = result.current.lines[1].id;
+      const latteId = result.current.lines[0]!.id;
+      const bagelId = result.current.lines[1]!.id;
 
       act(() => { result.current.assignCourse(latteId, 'course-1' as never); });
       act(() => { result.current.assignCourse(bagelId, 'course-2' as never); });
@@ -287,8 +287,8 @@ describe('usePosState', () => {
 
       const latteLine = result.current.lines.find((l) => l.id === latteId)!;
       const bagelLine = result.current.lines.find((l) => l.id === bagelId)!;
-      expect(latteLine.coursingStatus).toBe('fired');
-      expect(bagelLine.coursingStatus).toBe('hold');
+      expect(latteLine!.coursingStatus).toBe('fired');
+      expect(bagelLine!.coursingStatus).toBe('hold');
     });
 
     it('fires all courses at once', () => {
@@ -296,8 +296,8 @@ describe('usePosState', () => {
 
       act(() => { result.current.addProduct(makeProduct({ sku: 'LATTE' as Product['sku'] })); });
       act(() => { result.current.addProduct(makeProduct({ sku: 'BAGEL' as Product['sku'], name: 'Bagel' })); });
-      const latteId = result.current.lines[0].id;
-      const bagelId = result.current.lines[1].id;
+      const latteId = result.current.lines[0]!.id;
+      const bagelId = result.current.lines[1]!.id;
 
       act(() => { result.current.assignCourse(latteId, 'course-1' as never); });
       act(() => { result.current.assignCourse(bagelId, 'course-2' as never); });

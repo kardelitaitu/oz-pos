@@ -105,7 +105,7 @@ describe('CSS animation reduced-motion compliance', () => {
         const keyframeName = declMatch[1];
 
         // Skip essential animations
-        if (ESSENTIAL_KEYFRAMES.has(keyframeName)) continue;
+        if (ESSENTIAL_KEYFRAMES.has(keyframeName!)) continue;
         // Skip non-keyframe values
         if (keyframeName === 'none' || keyframeName === 'auto') continue;
 
@@ -118,7 +118,7 @@ describe('CSS animation reduced-motion compliance', () => {
         if (hasReduceBlock) continue;
 
         // Pattern C: @keyframes definition is inside @media (prefers-reduced-motion: no-preference)
-        const kfPos = findKeyframePosition(css, keyframeName);
+        const kfPos = findKeyframePosition(css, keyframeName!);
         if (kfPos !== -1 && positionInsideNoPreference(css, kfPos)) continue;
 
         // Violation
@@ -128,15 +128,13 @@ describe('CSS animation reduced-motion compliance', () => {
       }
     }
 
-    expect(violations).toEqual(
-      [],
-      `Found ${violations.length} un-gated decorative animations.\n`
+    const msg = `Found ${violations.length} un-gated decorative animations.\n`
       + 'Expected one of:\n'
       + '  A: `animation:` inside @media (prefers-reduced-motion: no-preference)\n'
       + '  B: @media (prefers-reduced-motion: reduce) block overrides the animation\n'
       + '  C: @keyframes definition inside @media (prefers-reduced-motion: no-preference)\n'
       + '\nViolations:\n'
-      + violations.join('\n'),
-    );
+      + violations.join('\n');
+    expect(violations, msg).toEqual([]);
   });
 });

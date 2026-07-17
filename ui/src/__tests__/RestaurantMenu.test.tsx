@@ -7,18 +7,18 @@ import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import type { Product } from '@/types/domain';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
-const mockProducts: Product[] = [
+const mockProducts = [
   {
-    id: 'prod-1', sku: 'NASI-GORENG', name: 'Nasi Goreng', category: 'Makanan',
+    sku: 'NASI-GORENG', name: 'Nasi Goreng', category: 'Makanan',
     productType: 'restaurant', price: { minor_units: 25000, currency: 'IDR' },
     inStock: true, createdAt: '2026-01-01',
-  } as Product,
+  },
   {
-    id: 'prod-2', sku: 'ES-TEH', name: 'Es Teh', category: 'Minuman',
+    sku: 'ES-TEH', name: 'Es Teh', category: 'Minuman',
     productType: 'restaurant', price: { minor_units: 5000, currency: 'IDR' },
     inStock: true, createdAt: '2026-01-02',
-  } as Product,
-];
+  },
+] as Product[];
 
 const mockUseProducts = vi.fn();
 const mockGoToWorkspacePicker = vi.fn();
@@ -86,7 +86,8 @@ afterEach(() => {
 });
 
 function renderMenu(props: { onAddProduct?: (product: Product) => void } = {}) {
-  return render(withFluent(<RestaurantMenu onAddProduct={props.onAddProduct} />, sharedFtl));
+  const { onAddProduct } = props;
+  return render(withFluent(<RestaurantMenu onAddProduct={onAddProduct!} />, sharedFtl));
 }
 
 describe('RestaurantMenu', () => {

@@ -111,8 +111,8 @@ describe('useBarcodeScanner', () => {
     });
 
     it('unsubscribes from both events on unmount', async () => {
-      const unsubScan = vi.fn();
-      const unsubErr = vi.fn();
+      const unsubScan = vi.fn<() => void>();
+      const unsubErr = vi.fn<() => void>();
       mocks.onBarcodeScanned.mockResolvedValue(unsubScan);
       mocks.onBarcodeError.mockResolvedValue(unsubErr);
 
@@ -136,7 +136,7 @@ describe('useBarcodeScanner', () => {
 
       await renderHookInAct(() => useBarcodeScanner(makeOpts({ onProductFound })));
 
-      const scanHandler = mocks.onBarcodeScanned.mock.calls[0][0];
+      const scanHandler = mocks.onBarcodeScanned.mock.calls[0]![0];
       await scanHandler(payload);
 
       expect(onProductFound).toHaveBeenCalledWith(payload);
@@ -149,7 +149,7 @@ describe('useBarcodeScanner', () => {
 
       await renderHookInAct(() => useBarcodeScanner(makeOpts({ onProductNotFound })));
 
-      const scanHandler = mocks.onBarcodeScanned.mock.calls[0][0];
+      const scanHandler = mocks.onBarcodeScanned.mock.calls[0]![0];
       await scanHandler(payload);
 
       expect(onProductNotFound).toHaveBeenCalledWith('0000000000000');
@@ -162,7 +162,7 @@ describe('useBarcodeScanner', () => {
 
       await renderHookInAct(() => useBarcodeScanner(makeOpts({ onProductNotFound })));
 
-      const scanHandler = mocks.onBarcodeScanned.mock.calls[0][0];
+      const scanHandler = mocks.onBarcodeScanned.mock.calls[0]![0];
       await scanHandler(payload);
 
       expect(onProductNotFound).toHaveBeenCalledWith('0000000000000');
@@ -175,7 +175,7 @@ describe('useBarcodeScanner', () => {
 
       await renderHookInAct(() => useBarcodeScanner(makeOpts({ onProductNotFound })));
 
-      const scanHandler = mocks.onBarcodeScanned.mock.calls[0][0];
+      const scanHandler = mocks.onBarcodeScanned.mock.calls[0]![0];
       await scanHandler(payload);
 
       expect(onProductNotFound).toHaveBeenCalledWith('0000000000000');
@@ -187,7 +187,7 @@ describe('useBarcodeScanner', () => {
 
       await renderHookInAct(() => useBarcodeScanner(makeOpts({ onProductNotFound: undefined })));
 
-      const scanHandler = mocks.onBarcodeScanned.mock.calls[0][0];
+      const scanHandler = mocks.onBarcodeScanned.mock.calls[0]![0];
 
       await expect(scanHandler(payload)).resolves.toBeUndefined();
     });
@@ -199,7 +199,7 @@ describe('useBarcodeScanner', () => {
 
       await renderHookInAct(() => useBarcodeScanner(makeOpts({ onError })));
 
-      const errorHandler = mocks.onBarcodeError.mock.calls[0][0];
+      const errorHandler = mocks.onBarcodeError.mock.calls[0]![0];
       errorHandler('scanner disconnected');
 
       expect(onError).toHaveBeenCalledWith('scanner disconnected');
@@ -208,7 +208,7 @@ describe('useBarcodeScanner', () => {
     it('does not throw when onError is not provided', async () => {
       await renderHookInAct(() => useBarcodeScanner(makeOpts({ onError: undefined })));
 
-      const errorHandler = mocks.onBarcodeError.mock.calls[0][0];
+      const errorHandler = mocks.onBarcodeError.mock.calls[0]![0];
 
       expect(() => errorHandler('some error')).not.toThrow();
     });
@@ -217,7 +217,7 @@ describe('useBarcodeScanner', () => {
   describe('idempotency', () => {
     it('re-starts scanner when preferredId changes', async () => {
       mocks.startScanner.mockClear();
-      const { rerender } = await renderHookInAct(
+      const { rerender } = await (renderHookInAct as any)(
         ({ scannerId }: { scannerId?: string }) => useBarcodeScanner(makeOpts({ scannerId })),
         { initialProps: { scannerId: 'scanner-1' } },
       );

@@ -79,7 +79,7 @@ afterEach(() => {
 
 function setProcessingMock() {
   // Make complete_sale never resolve so processing stays true
-  invokeMock.mockImplementation((cmd: string) => {
+  invokeMock.mockImplementation((cmd: string): any => {
     if (cmd === 'complete_sale') return new Promise(() => {});
     if (cmd === 'start_sale') return Promise.resolve({ cartId: 'test-cart' });
     if (cmd === 'add_line') return Promise.resolve({ lineId: 'test-line', lineTotal: null });
@@ -90,7 +90,7 @@ function setProcessingMock() {
 }
 
 function setErrorMock() {
-  invokeMock.mockImplementation((cmd: string) => {
+  invokeMock.mockImplementation((cmd: string): any => {
     if (cmd === 'complete_sale') return Promise.reject(new Error('Payment gateway timeout'));
     if (cmd === 'start_sale') return Promise.resolve({ cartId: 'test-cart' });
     if (cmd === 'add_line') return Promise.resolve({ lineId: 'test-line', lineTotal: null });

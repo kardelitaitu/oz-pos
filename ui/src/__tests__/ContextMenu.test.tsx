@@ -4,10 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { ContextMenu } from '@/frontend/shared/ContextMenu';
 import { createRef } from 'react';
 
-function createMenu(overrides = {}) {
+function createMenu(overrides: Partial<{ x: number; y: number; target: HTMLInputElement | HTMLTextAreaElement }> = {}) {
   return {
     x: 100,
     y: 200,
+    target: document.createElement('input'),
     ...overrides,
   };
 }

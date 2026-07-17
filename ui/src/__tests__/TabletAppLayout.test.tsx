@@ -41,7 +41,7 @@ function renderLayout(props: {
   } = props;
   return render(
     withFluent(
-      <TabletAppLayout route={route} onNavigate={onNavigate} enabledFeatures={enabledFeatures} userRole={userRole} workspaceScreens={workspaceScreens}>
+      <TabletAppLayout route={route} onNavigate={onNavigate} enabledFeatures={enabledFeatures!} userRole={userRole!} workspaceScreens={workspaceScreens!}>
         <div data-testid="content">Main Content</div>
       </TabletAppLayout>,
       sharedFtl,

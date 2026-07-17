@@ -16,7 +16,7 @@ beforeEach(() => {
   mockExportDailySummary.mockReset();
 });
 
-function createRow(overrides: Partial<DailySummaryRow> = {}): DailySummaryRow {
+function createRow(overrides: Record<string, unknown> = {}) {
   return {
     date: '2026-07-16',
     total_minor: 0,
@@ -24,7 +24,7 @@ function createRow(overrides: Partial<DailySummaryRow> = {}): DailySummaryRow {
     sale_count: 0,
     line_count: 0,
     ...overrides,
-  };
+  } as unknown as DailySummaryRow;
 }
 
 describe('DailyTotalWidget', () => {

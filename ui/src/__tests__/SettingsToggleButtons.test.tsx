@@ -63,29 +63,21 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
   HardwareAccelProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-vi.mock(import('@/contexts/BrandContext'), async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    useBrand: () => ({
-      settings: {
-        primary_colour: '#10b981',
-        logo_path: null,
-        store_name: '',
-      },
-      refreshBrandSettings: vi.fn(),
-    }),
-  };
-});
+vi.mock('@/contexts/BrandContext', () => ({
+  useBrand: () => ({
+    settings: {
+      primary_colour: '#10b981',
+      logo_path: null,
+      store_name: '',
+    },
+    refreshBrandSettings: vi.fn(),
+  }),
+} as any));
 
-vi.mock(import('@/utils/color'), async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    deriveAccentPalette: vi.fn().mockReturnValue({}),
-    applyAccentPalette: vi.fn(),
-  };
-});
+vi.mock('@/utils/color', () => ({
+  deriveAccentPalette: vi.fn().mockReturnValue({}),
+  applyAccentPalette: vi.fn(),
+} as any));
 
 const mockAddToast = vi.fn();
 vi.mock('@/frontend/shared/Toast', () => ({
@@ -148,7 +140,7 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
 });
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (cmd: string, args?: unknown) => invokeMock(cmd, args),
+  invoke: (cmd: string, args?: unknown) => (invokeMock as any)(cmd, args),
 }));
 
 Element.prototype.scrollIntoView = vi.fn();
@@ -157,8 +149,8 @@ describe('Settings Toggle Buttons Regression Suite', () => {
   beforeEach(() => {
     mockSetHwAccelEnabled.mockClear();
     mockGetBrandSettings.mockResolvedValue({ primary_colour: '#10b981', logo_path: null, store_name: '' });
-    invokeMock.mockReset();
-    invokeMock.mockImplementation(defaultImpl);
+    (invokeMock as any).mockReset();
+    (invokeMock as any).mockImplementation((cmd: any) => defaultImpl(cmd));
   });
 
   it('ensures all 4 toggle buttons in SettingsPage are structured as <label htmlFor="..."> and delegate clicks', async () => {

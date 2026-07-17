@@ -2,7 +2,7 @@
 REM ============================================================================
 REM  start-local-sync.bat — launches the OZ-POS local sync server in Docker.
 REM
-REM  Run from project root (or double-click from Windows Explorer).
+REM  Run from project root (or from the scripts/ folder via double-click).
 REM  Checks if Docker Desktop is installed and running; if stopped, attempts
 REM  to auto-start Docker Desktop. Once ready, runs `docker compose up -d`
 REM  to build and start the headless `pos-cloud-server` container on port 3099.
@@ -18,7 +18,7 @@ REM    docker compose down
 REM ============================================================================
 setlocal
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo [1/3] Checking Docker CLI availability...
 where docker >nul 2>&1

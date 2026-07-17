@@ -4,7 +4,7 @@
 // Fast synchronous tests extracted from PriceOverrideKeyboardEdgeCases
 // to enable parallel execution. 3 tests.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 vi.mock('@/api/staff', () => ({

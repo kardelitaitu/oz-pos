@@ -7,7 +7,7 @@ import { withFluent } from '@/locales/test-utils';
 import type { KdsOrder } from '@/api/kds';
 
 const mockPlayAlert = vi.fn();
-const mockSlaResult = { level: 'green' as const, display: '0s', elapsedSeconds: 0 };
+const mockSlaResult: { level: string; display: string; elapsedSeconds: number } = { level: 'green', display: '0s', elapsedSeconds: 0 };
 
 vi.mock('@/features/kds/hooks/useTicketSla', () => ({
   useTicketSla: () => mockSlaResult,

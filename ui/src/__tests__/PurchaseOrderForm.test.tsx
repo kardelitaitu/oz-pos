@@ -30,7 +30,7 @@ function clickButton(name: string | RegExp) {
   fireEvent.click(screen.getByRole('button', { name }));
 }
 
-function selectOption(label: string | RegExp, value: string) {
+function selectOption(_label: string | RegExp, value: string) {
   fireEvent.change(screen.getByRole('combobox'), { target: { value } });
 }
 

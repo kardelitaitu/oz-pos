@@ -16,14 +16,14 @@ beforeEach(() => {
   mockExportSalesByHour.mockReset();
 });
 
-function createRow(overrides: Partial<SalesByHourRow> = {}): SalesByHourRow {
+function createRow(overrides: Record<string, unknown> = {}) {
   return {
     hour: 0,
     total_minor: 0,
     currency: 'USD',
     sale_count: 0,
     ...overrides,
-  };
+  } as SalesByHourRow;
 }
 
 describe('SalesByHourWidget', () => {

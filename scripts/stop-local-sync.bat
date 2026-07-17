@@ -2,14 +2,14 @@
 REM ============================================================================
 REM  stop-local-sync.bat — stops and removes the OZ-POS Docker sync containers.
 REM
-REM  Run from project root (or double-click from Windows Explorer).
+REM  Run from project root (or from the scripts/ folder via double-click).
 REM  Runs `docker compose down` to shut down pos-cloud-server and optional
 REM  pos-cloud-db containers cleanly while keeping your data volumes intact.
 REM ============================================================================
 setlocal
 
 REM `%~dp0` is the directory containing this bat (project root).
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo Stopping OZ-POS Cloud Sync Server Docker containers...
 docker compose down

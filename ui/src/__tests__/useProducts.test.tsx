@@ -84,7 +84,7 @@ describe('useProducts', () => {
 
       await waitFor(() => {
         expect(result.current.products).toHaveLength(1);
-        expect(result.current.products[0].sku).toBe('LATTE');
+        expect(result.current.products[0]!.sku).toBe('LATTE');
       });
     });
 
@@ -92,7 +92,7 @@ describe('useProducts', () => {
       const { result } = renderHook(() => useProducts());
 
       await waitFor(() => {
-        const p = result.current.products[0];
+        const p = result.current.products[0]!;
         expect(p.productType).toBe('restaurant');
         expect(p.category).toBe('Hot Drinks');
         expect(p.barcode).toBe('4901234567890');
@@ -108,7 +108,7 @@ describe('useProducts', () => {
       const { result } = renderHook(() => useProducts());
 
       await waitFor(() => {
-        expect(result.current.products[0].category).toBe('Other');
+        expect(result.current.products[0]!.category).toBe('Other');
       });
     });
 
@@ -120,7 +120,7 @@ describe('useProducts', () => {
 
       await waitFor(() => {
         expect(result.current.categoryMeta).toHaveLength(1);
-        expect(result.current.categoryMeta[0].name).toBe('Food');
+        expect(result.current.categoryMeta[0]!.name).toBe('Food');
       });
     });
 

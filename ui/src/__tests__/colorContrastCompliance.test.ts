@@ -21,7 +21,7 @@ interface ContrastPair {
   fgLabel: string;
   bgLabel: string;
   theme: string;
-  level: 'AA-normal' | 'AA-large';
+  level: string; // 'AA-normal' | 'AA-large'
   description: string;
 }
 
@@ -43,9 +43,9 @@ function parseRgba(rgba: string): [number, number, number, number] {
   );
   if (!m) throw new Error(`Cannot parse rgba: ${rgba}`);
   return [
-    parseInt(m[1], 10),
-    parseInt(m[2], 10),
-    parseInt(m[3], 10),
+    parseInt(m[1]!, 10),
+    parseInt(m[2]!, 10),
+    parseInt(m[3]!, 10),
     m[4] !== undefined ? parseFloat(m[4]) : 1,
   ];
 }
@@ -53,7 +53,7 @@ function parseRgba(rgba: string): [number, number, number, number] {
 function parseGradientLastStop(gradient: string): [number, number, number] {
   const hexes = gradient.match(/#[0-9a-f]{6}\b/gi);
   if (hexes && hexes.length > 0) {
-    return hexToRgb(hexes[hexes.length - 1]);
+    return hexToRgb(hexes[hexes.length - 1]!);
   }
   throw new Error(`Cannot parse gradient (no hex colours found): ${gradient.slice(0, 80)}`);
 }
@@ -74,7 +74,10 @@ function blendOver(
 /** Resolve a var(--token) reference or return value as-is. */
 function resolveValue(value: string, tokens: Record<string, string>): string {
   const m = value.match(/^var\(--([\w-]+)\)$/);
-  if (m && tokens[`--${m[1]}`] !== undefined) return tokens[`--${m[1]}`];
+  if (m) {
+    const resolved = tokens[`--${m[1]!}`];
+    if (resolved !== undefined) return resolved;
+  }
   return value;
 }
 
@@ -167,7 +170,7 @@ function extractTokens(css: string, themeSelector: string): Record<string, strin
   const propRe = /(--[\w-]+)\s*:\s*([^;]+);/g;
   let match: RegExpExecArray | null;
   while ((match = propRe.exec(block)) !== null) {
-    tokens[match[1]] = match[2].trim();
+    tokens[match[1]!] = match[2]!.trim();
   }
   return tokens;
 }

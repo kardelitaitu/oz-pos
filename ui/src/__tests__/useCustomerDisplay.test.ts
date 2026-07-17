@@ -78,7 +78,7 @@ describe('useCustomerDisplay', () => {
     });
 
     it('clears display when cart is empty', async () => {
-      await renderHookInAct(() =>
+      await (renderHookInAct as any)(() =>
         useCustomerDisplay({ lines: [], total: null }),
       );
 
@@ -86,7 +86,7 @@ describe('useCustomerDisplay', () => {
     });
 
     it('clears display when item count reaches zero', async () => {
-      const { rerender } = await renderHookInAct(
+      const { rerender } = await (renderHookInAct as any)(
         ({ lines, total }: { lines: { qty: number }[]; total: Money | null }) =>
           useCustomerDisplay({ lines, total }),
         { initialProps: { lines: [{ qty: 3 }], total: makeTotal() } },
@@ -138,7 +138,7 @@ describe('useCustomerDisplay', () => {
       const lines = [{ qty: 3 }];
       const total = makeTotal();
 
-      const { rerender } = await renderHookInAct(
+      const { rerender } = await (renderHookInAct as any)(
         ({ lines: l, total: t }: { lines: { qty: number }[]; total: Money | null }) =>
           useCustomerDisplay({ lines: l, total: t }),
         { initialProps: { lines, total } },
@@ -164,8 +164,8 @@ describe('useCustomerDisplay', () => {
 
     it('calls onPaymentComplete callback', async () => {
       const onPaymentComplete = vi.fn();
-      const { result } = await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal(), onPaymentComplete }),
+      const { result } = await (renderHookInAct as any)(() =>
+        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal(), onPaymentComplete } as any),
       );
 
       result.current.handlePaymentComplete();
