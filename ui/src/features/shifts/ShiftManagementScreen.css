@@ -416,8 +416,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -426,6 +426,13 @@
   font-size: var(--text-lg);
   cursor: pointer;
   transition: all var(--duration-100) var(--ease-out);
+}
+
+@media (pointer: coarse) {
+  .shift-mgmt-modal-close {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
 }
 
 .shift-mgmt-modal-close:hover:not(:disabled) {
