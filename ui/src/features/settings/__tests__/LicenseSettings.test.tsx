@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -15,8 +16,8 @@ vi.mock('@/api/license', () => ({
   checkLicenseStatus: vi.fn(),
 }));
 
-const { mockL10n } = vi.hoisted(() => ({
-  mockL10n: {
+const { mockL10n, mockUseLocalization } = vi.hoisted(() => {
+  const mockL10n = {
     getString: (id: string) => {
       const map: Record<string, string> = {
         'settings-loading': 'Loading…',
@@ -69,14 +70,14 @@ const { mockL10n } = vi.hoisted(() => ({
       };
       return map[id] || id;
     },
-  },
-}));
+  };
+  const mockUseLocalization = vi.fn(() => ({ l10n: mockL10n }));
+  return { mockL10n, mockUseLocalization };
+});
 
 vi.mock('@fluent/react', () => ({
   Localized: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useLocalization: () => ({
-    l10n: mockL10n,
-  }),
+  useLocalization: mockUseLocalization,
 }));
 
 vi.mock('@/components/Card', () => ({
@@ -768,6 +769,56 @@ describe('LicenseSettings', () => {
         expect(screen.getByText(/Last checked:/)).toBeInTheDocument();
         expect(screen.getByText(/just now/)).toBeInTheDocument();
       });
+    });
+
+    it('does not re-fire getLicenseStatus on parent re-render with unstable l10n', async () => {
+      vi.mocked(checkLicenseStatus).mockResolvedValue(SERVER_STATUS);
+      vi.mocked(getLicenseStatus).mockClear();
+
+      // Simulate LocaleProvider creating a new ReactLocalization on every render
+      // (the pre-fix behavior that caused the "Checking…" hang).
+      let callCount = 0;
+      mockUseLocalization.mockImplementation(() => ({
+        l10n: { getString: (id: string) => mockL10n.getString(id), _seq: callCount++ },
+      }));
+
+      // Use a test harness that forces parent re-renders.
+      function Harness() {
+        const [, force] = useState(0);
+        return (
+          <div>
+            <LicenseSettings />
+            <button data-testid="force-render" onClick={() => force((n) => n + 1)}>
+              Force
+            </button>
+          </div>
+        );
+      }
+
+      render(<Harness />);
+
+      // Wait for initial load + first poll to complete.
+      await waitFor(() => {
+        expect(screen.getByText('Live')).toBeInTheDocument();
+      });
+
+      // getLicenseStatus should be called exactly once (initial mount).
+      expect(getLicenseStatus).toHaveBeenCalledTimes(1);
+      expect(checkLicenseStatus).toHaveBeenCalledTimes(1);
+
+      // Force several parent re-renders.
+      const forceBtn = screen.getByTestId('force-render');
+      await userEvent.click(forceBtn);
+      await userEvent.click(forceBtn);
+      await userEvent.click(forceBtn);
+
+      // After re-renders with unstable l10n, getLicenseStatus must NOT have
+      // been called again — the empty-dep useCallback for load() prevents it.
+      expect(getLicenseStatus).toHaveBeenCalledTimes(1);
+      // checkLicenseStatus should still be exactly 1 (the initial poll).
+      // The polling effect's interval was never reset because pollTick has
+      // stable deps (no l10n dependency).
+      expect(checkLicenseStatus).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getReceiptSettings,
@@ -704,6 +705,13 @@ export default function SettingsPage() {
       // URL field after saving a URL.
       if (results[4]?.status === 'fulfilled') {
         if (syncApiKey) {
+          // Mirror the token to the shared IPC channel so the
+          // Retail Options screen (useCloudSync) can load it.
+          invoke('set_setting', {
+            key: 'sync.auth_token',
+            value: syncApiKey,
+            user_id: userId,
+          }).catch(() => { /* best-effort */ });
           setSyncApiKey('');
         }
         setSync((prev) => ({
