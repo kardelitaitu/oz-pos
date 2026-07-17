@@ -199,6 +199,38 @@ mod tests {
         assert!(Percentage::new(100).unwrap().apply_to(m).is_none());
     }
 
+    #[test]
+    fn apply_to_max_div_100_succeeds() {
+        // i64::MAX / 100 * 100 → just under i64::MAX, no overflow
+        let m = Money {
+            minor_units: i64::MAX / 100,
+            currency: usd(),
+        };
+        let result = Percentage::new(100).unwrap().apply_to(m).unwrap();
+        assert_eq!(result.minor_units, (i64::MAX / 100) * 100 / 100);
+    }
+
+    #[test]
+    fn apply_to_i64_max_with_1_pct_succeeds() {
+        // i64::MAX * 1 does not overflow, then / 100 fits
+        let m = Money {
+            minor_units: i64::MAX,
+            currency: usd(),
+        };
+        let result = Percentage::new(1).unwrap().apply_to(m).unwrap();
+        assert_eq!(result.minor_units, i64::MAX / 100);
+    }
+
+    #[test]
+    fn apply_to_zero_amount() {
+        let m = Money {
+            minor_units: 0,
+            currency: usd(),
+        };
+        let result = Percentage::new(50).unwrap().apply_to(m).unwrap();
+        assert_eq!(result.minor_units, 0);
+    }
+
     // ── complement_apply_to ─────────────────────────────────────
 
     #[test]
@@ -233,6 +265,28 @@ mod tests {
         };
         // 0% complement = 100% of i64::MAX * 100 → overflow
         assert!(Percentage::new(0).unwrap().complement_apply_to(m).is_none());
+    }
+
+    #[test]
+    fn complement_apply_to_near_overflow_succeeds() {
+        // 1% complement = 99% of i64::MAX/99 → safely within i64::MAX
+        let m = Money {
+            minor_units: i64::MAX / 99,
+            currency: usd(),
+        };
+        let result = Percentage::new(1).unwrap().complement_apply_to(m).unwrap();
+        // 99% of (i64::MAX / 99) ≈ i64::MAX * 99 / 99 / 100 (truncated)
+        assert_eq!(result.minor_units, (i64::MAX / 99) * 99 / 100);
+    }
+
+    #[test]
+    fn complement_apply_to_zero_amount() {
+        let m = Money {
+            minor_units: 0,
+            currency: usd(),
+        };
+        let result = Percentage::new(50).unwrap().complement_apply_to(m).unwrap();
+        assert_eq!(result.minor_units, 0);
     }
 
     // ── zero / hundred / default ─────────────────────────────────
