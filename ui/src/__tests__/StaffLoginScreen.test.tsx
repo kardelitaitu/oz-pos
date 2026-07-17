@@ -8,6 +8,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
+import { BrandProvider } from '@/contexts/BrandContext';
 import { checkUsername } from '@/api/staff';
 
 const mockLogin = vi.fn();
@@ -31,7 +32,15 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
-function withFluent(children: ReactNode): ReactElement {
+vi.mock('@/api/branding', () => ({
+  getBrandSettings: () => Promise.resolve({
+    primary_colour: '#10b981',
+    logo_path: null,
+    store_name: 'OZ-POS',
+  }),
+}));
+
+function withProviders(children: ReactNode): ReactElement {
   const bundle = new FluentBundle('en-US');
   bundle.addResource(new FluentResource(`
 staff-login-title = OZ-POS
@@ -65,11 +74,20 @@ staff-login-error-not-found = User not found
 staff-login-error-connection = Could not verify username. Check your connection.
 `));
   const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
+
+  return (
+    <BrandProvider>
+      <LocalizationProvider l10n={l10n}>
+        <ToastProvider>
+          {children}
+        </ToastProvider>
+      </LocalizationProvider>
+    </BrandProvider>
+  );
 }
 
 function renderScreen() {
-  return render(withFluent(<StaffLoginScreen />));
+  return render(withProviders(<StaffLoginScreen />));
 }
 
 describe('StaffLoginScreen', () => {
