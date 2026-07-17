@@ -69,10 +69,23 @@ impl CartLine {
 
     /// Total for this line: `unit_price * qty`, in minor units.
     /// If [`overridden_price`](Self::overridden_price) is set, uses that instead.
+    ///
+    /// # Panics (debug only)
+    ///
+    /// In debug builds, panics if `overridden_price` is set but its currency
+    /// does not match `unit_price.currency`. This guards against direct field
+    /// mutation bypassing [`set_overridden_price`](Self::set_overridden_price).
+    ///
     /// Returns `None` on `i64` overflow.
     #[must_use]
     pub fn total(&self) -> Option<Money> {
         let price = self.overridden_price.unwrap_or(self.unit_price);
+        debug_assert!(
+            price.currency == self.unit_price.currency,
+            "CartLine::total: overridden_price currency ({}) does not match unit_price currency ({})",
+            price.currency,
+            self.unit_price.currency
+        );
         price.checked_mul(self.qty)
     }
 
@@ -688,6 +701,34 @@ mod tests {
         assert!(matches!(result, Err(CartError::CurrencyMismatch { .. })));
         // The original price should not have been overwritten
         assert!(line.overridden_price.is_none());
+    }
+
+    #[test]
+    fn cartline_total_debug_assert_currency_mismatch_on_direct_mutation() {
+        // set_overridden_price now validates currency, but the fields are pub
+        // so a caller could bypass it with direct mutation. The debug_assert!
+        // in total() catches this in debug/test builds.
+        let mut line = CartLine::new(
+            Sku::new("TEA"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        );
+        // Direct mutation bypasses set_overridden_price validation
+        line.overridden_price = Some(Money {
+            minor_units: 90,
+            currency: eur(),
+        });
+        // debug_assert! should fire — verify with catch_unwind
+        let result = std::panic::catch_unwind(|| {
+            let _ = line.total();
+        });
+        assert!(
+            result.is_err(),
+            "debug_assert! should have panicked on currency mismatch from direct field mutation"
+        );
     }
 
     // ── Cart accessors & serialization ──
