@@ -15,7 +15,7 @@
 }
 
 html {
-  font-size: 16px;
+  font-size: 16px; /* root font-size (rem base), no token equivalent */
   -webkit-text-size-adjust: 100%;
   -moz-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -145,8 +145,8 @@ h3 { font-size: var(--text-lg); }
 /* ── Code / pre ────────────────────────────────── */
 code,
 pre {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.9em;
+  font-family: var(--font-mono);
+  font-size: 0.9em; /* relative to parent, no fixed token equivalent */
 }
 
 pre {

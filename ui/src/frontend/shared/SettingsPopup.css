@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--color-bg-overlay);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   will-change: backdrop-filter;
@@ -126,7 +126,7 @@
 
 .settings-popup-error svg {
   flex-shrink: 0;
-  margin-top: 1px;
+  margin-top: 1px; /* sub-token value, design exception */
 }
 
 /* ── Footer ────────────────────────────────────────────── */

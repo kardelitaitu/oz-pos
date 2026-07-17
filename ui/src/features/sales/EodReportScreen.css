@@ -377,7 +377,7 @@
   display: inline-flex;
   align-items: center;
   padding: 0 var(--space-1);
-  font-size: 0.5625rem;
+  font-size: 0.5625rem; /* design exception: 9px, no exact token (closest --text-xs=10px) */
   font-weight: var(--font-weight-bold);
   border-radius: var(--radius-full);
   text-transform: uppercase;
@@ -429,7 +429,7 @@
 }
 
 .eod-report-shift-cash-label {
-  font-size: 0.625rem;
+  font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;

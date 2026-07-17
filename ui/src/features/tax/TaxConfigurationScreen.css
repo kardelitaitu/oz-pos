@@ -156,7 +156,7 @@
 
 .tax-config-type-badge {
   display: inline-block;
-  padding: 0.125rem 0.5rem;
+  padding: var(--space-0_5) var(--space-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   font-weight: 500;

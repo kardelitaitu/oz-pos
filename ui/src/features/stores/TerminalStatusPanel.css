@@ -49,7 +49,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.3125rem;
+  gap: 0.3125rem; /* design exception: 5px, no exact space token */
 }
 
 .terminal-status-error {

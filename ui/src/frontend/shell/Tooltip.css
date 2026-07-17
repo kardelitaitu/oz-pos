@@ -106,7 +106,8 @@
   pointer-events: none;
 }
 
-/* Right-positioned arrow points left into the trigger */
+/* Design exception: tooltip arrow positioning uses functional -9px offset,
+ * no token equivalent for negative sub-tooltip arrow positioning. */
 .tooltip-content--right::before {
   left: -9px;
   top: 50%;
@@ -114,7 +115,6 @@
   border-right-color: var(--tooltip-bg, var(--neutral-800));
 }
 
-/* Left-positioned arrow points right */
 .tooltip-content--left::before {
   right: -9px;
   top: 50%;
@@ -122,7 +122,6 @@
   border-left-color: var(--tooltip-bg, var(--neutral-800));
 }
 
-/* Top-positioned arrow points up */
 .tooltip-content--top::before {
   bottom: -9px;
   left: 50%;
@@ -130,7 +129,6 @@
   border-top-color: var(--tooltip-bg, var(--neutral-800));
 }
 
-/* Bottom-positioned arrow points down */
 .tooltip-content--bottom::before {
   top: -9px;
   left: 50%;

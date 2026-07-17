@@ -262,7 +262,7 @@
 .app-sidebar-section-items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   padding: var(--space-1) 0 0 var(--space-1);
   overflow: hidden;
 }
@@ -561,6 +561,6 @@
 /* Tablet portrait: full-width */
 @media (max-width: 768px) {
   .app-header {
-    padding: 0 8px;
+    padding: 0 var(--space-2);
   }
 }

@@ -191,7 +191,7 @@
 }
 
 .setup-preset-emoji {
-  font-size: 2rem;
+  font-size: 2rem; /* design exception: emoji size, no exact text token (closest --text-4xl=2.25rem) */
   line-height: 1;
 }
 

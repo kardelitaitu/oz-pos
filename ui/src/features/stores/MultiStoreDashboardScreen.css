@@ -99,7 +99,7 @@
 
 .multi-store-card--primary {
   border-color: var(--color-accent);
-  border-width: 2px;
+  border-width: 2px; /* design exception: semantic border width, no token equivalent */
 }
 
 .multi-store-card-header {
