@@ -142,6 +142,7 @@ pub fn run() {
                 commands::exchange_rates::create_exchange_rate,
                 commands::exchange_rates::delete_exchange_rate,
                 commands::features::list_all_features,
+                commands::features::set_features_bulk,
                 commands::features::set_feature,
                 commands::gift_cards::issue_gift_card,
                 commands::gift_cards::get_gift_card,

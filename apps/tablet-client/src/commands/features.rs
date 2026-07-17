@@ -204,6 +204,88 @@ pub async fn set_feature(
     })
 }
 
+// ── Set features bulk ───────────────────────────────────────────────
+
+/// Arguments for `set_features_bulk`.
+#[derive(Debug, Deserialize)]
+pub struct SetFeaturesBulkArgs {
+    /// Kebab-case keys of the features to toggle.
+    pub keys: Vec<String>,
+    /// Whether to enable (`true`) or disable (`false`) all given features.
+    pub enabled: bool,
+}
+
+/// Enable or disable multiple feature flags atomically in a single
+/// SQLite transaction.
+///
+/// Unlike `set_feature`, this bulk operation:
+/// - Executes all changes in a single SQLite transaction
+/// - Does NOT cascade auto-enable dependencies (each feature is toggled
+///   individually; call `set_feature` if dependency resolution is needed)
+/// - Returns `ListAllFeaturesResult` so the front-end can refresh its
+///   display with a single response
+///
+/// This is intended for bulk group toggles in the Feature Toggle screen
+/// (e.g. "Enable all Hardware", "Disable all Advanced").
+#[command]
+pub async fn set_features_bulk(
+    args: SetFeaturesBulkArgs,
+    state: State<'_, AppState>,
+) -> Result<ListAllFeaturesResult, AppError> {
+    let mut db = state.db.lock().await;
+
+    // Start a SQLite transaction for atomicity.
+    let tx = db.transaction().map_err(|e| {
+        AppError::Internal(format!("failed to start transaction for bulk toggle: {e}"))
+    })?;
+
+    // Use Store within the transaction (Transaction derefs to Connection).
+    let store = Store::new(&tx);
+    let mut reg = store.load_features()?;
+
+    // Parse and apply each key.
+    for key in &args.keys {
+        let feature = oz_core::features::feature_from_key(key)
+            .ok_or_else(|| AppError::Invalid(format!("unknown feature key: {key}")))?;
+
+        if args.enabled {
+            reg.enable(feature);
+        } else {
+            reg.disable(feature);
+        }
+    }
+
+    // Persist and prune within the transaction.
+    store.save_features(&reg)?;
+    store.prune_stale_features(&reg)?;
+
+    // Commit the transaction.
+    tx.commit()
+        .map_err(|e| AppError::Internal(format!("failed to commit bulk feature toggle: {e}")))?;
+
+    let features = all_feature_metadata()
+        .into_iter()
+        .map(|(feat, name, desc, group)| {
+            let key = oz_core::features::feature_key(feat).to_string();
+            let deps: Vec<String> = feat
+                .dependencies()
+                .iter()
+                .map(|d| oz_core::features::feature_key(*d).to_string())
+                .collect();
+            FeatureDto {
+                key,
+                name,
+                description: desc,
+                group,
+                enabled: reg.is_enabled(feat),
+                dependencies: deps,
+            }
+        })
+        .collect();
+
+    Ok(ListAllFeaturesResult { features })
+}
+
 /// Return a stable device identifier for this machine.
 ///
 /// Uses `COMPUTERNAME` (Windows) or `HOSTNAME` (Unix) if available,
@@ -474,6 +556,46 @@ mod tests {
         };
         let debug = format!("{:?}", args);
         assert!(debug.contains("tax-engine"));
+    }
+
+    // ── SetFeaturesBulkArgs ──────────────────────────────────────
+
+    #[test]
+    fn set_features_bulk_args_deserialize() {
+        let json = r#"{"keys": ["simple-retail", "cash-payment"], "enabled": true}"#;
+        let args: SetFeaturesBulkArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.keys.len(), 2);
+        assert_eq!(args.keys[0], "simple-retail");
+        assert_eq!(args.keys[1], "cash-payment");
+        assert!(args.enabled);
+    }
+
+    #[test]
+    fn set_features_bulk_args_deserialize_disable() {
+        let json = r#"{"keys": ["kitchen-display"], "enabled": false}"#;
+        let args: SetFeaturesBulkArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.keys.len(), 1);
+        assert_eq!(args.keys[0], "kitchen-display");
+        assert!(!args.enabled);
+    }
+
+    #[test]
+    fn set_features_bulk_args_empty_keys() {
+        let json = r#"{"keys": [], "enabled": true}"#;
+        let args: SetFeaturesBulkArgs = serde_json::from_str(json).unwrap();
+        assert!(args.keys.is_empty());
+        assert!(args.enabled);
+    }
+
+    #[test]
+    fn set_features_bulk_args_debug() {
+        let args = SetFeaturesBulkArgs {
+            keys: vec!["hardware".into()],
+            enabled: false,
+        };
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("hardware"));
+        assert!(debug.contains("false"));
     }
 
     #[test]

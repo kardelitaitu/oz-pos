@@ -22,6 +22,7 @@ use crate::state::AppState;
 /// All receipt display options in one shot – the UI loads these on
 /// mount and sends the whole struct back on save.
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiptSettingsDto {
     /// Show currency symbol prefix on amounts.
     pub show_currency: bool,
@@ -134,6 +135,7 @@ fn run_set_receipt_settings(
 
 /// Store name, address, tax ID, currency, branch, and logo – shown on printed receipts.
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StoreSettingsDto {
     /// Display name.
     pub name: String,
@@ -227,6 +229,7 @@ fn run_set_store_settings(
 // ── Credit Settings DTO ─────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Creditsettingsdto.
 pub struct CreditSettingsDto {
     /// Enabled.
@@ -393,6 +396,7 @@ pub async fn settle_credit_scoped(
 
 /// Printer and scanner configuration.
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HardwareSettingsDto {
     /// Printer Connection.
     pub printer_connection: String,
@@ -827,7 +831,7 @@ mod tests {
 
     #[test]
     fn receipt_settings_dto_deserialize() {
-        let json = r##"{"show_currency":true,"decimal_separator":"comma","show_tax":false,"footer":"","paper_width":"narrow","show_table_number":true,"margin_top":5,"margin_bottom":3,"margin_left":2,"margin_right":2}"##;
+        let json = r##"{"showCurrency":true,"decimalSeparator":"comma","showTax":false,"footer":"","paperWidth":"narrow","showTableNumber":true,"marginTop":5,"marginBottom":3,"marginLeft":2,"marginRight":2}"##;
         let dto: ReceiptSettingsDto = serde_json::from_str(json).unwrap();
         assert!(dto.show_currency);
         assert_eq!(dto.decimal_separator, "comma");
@@ -865,7 +869,7 @@ mod tests {
 
     #[test]
     fn credit_settings_dto_deserialize() {
-        let json = r##"{"enabled":true,"reminder_interval_hours":24,"max_limit_minor":500000}"##;
+        let json = r##"{"enabled":true,"reminderIntervalHours":24,"maxLimitMinor":500000}"##;
         let dto: CreditSettingsDto = serde_json::from_str(json).unwrap();
         assert!(dto.enabled);
         assert_eq!(dto.reminder_interval_hours, 24);
@@ -892,7 +896,7 @@ mod tests {
             scanner_input_mode: "keyboard".into(),
         };
         let json = serde_json::to_value(&dto).unwrap();
-        assert_eq!(json["printer_connection"], "USB");
+        assert_eq!(json["printerConnection"], "USB");
     }
 
     #[test]
@@ -946,5 +950,77 @@ mod tests {
         run_set_setting(&conn, "c", "3").unwrap();
         assert_eq!(run_get_setting(&conn, "b").unwrap(), Some("2".into()));
         assert_eq!(run_get_setting(&conn, "d").unwrap(), None);
+    }
+
+    // ── CamelCase serde round-trip tests ─────────────────────────
+
+    #[test]
+    fn receipt_settings_dto_serde_roundtrip() {
+        let dto = ReceiptSettingsDto {
+            show_currency: true,
+            decimal_separator: "comma".into(),
+            show_tax: false,
+            footer: "Round Trip".into(),
+            paper_width: "narrow".into(),
+            show_table_number: true,
+            margin_top: 5,
+            margin_bottom: 3,
+            margin_left: 2,
+            margin_right: 1,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        let back: ReceiptSettingsDto = serde_json::from_value(json).unwrap();
+        assert_eq!(back.show_currency, true);
+        assert_eq!(back.decimal_separator, "comma");
+        assert_eq!(back.show_tax, false);
+        assert_eq!(back.footer, "Round Trip");
+        assert_eq!(back.paper_width, "narrow");
+        assert_eq!(back.show_table_number, true);
+        assert_eq!(back.margin_top, 5);
+    }
+
+    #[test]
+    fn store_settings_dto_serde_roundtrip() {
+        let dto = StoreSettingsDto {
+            name: "Round".into(),
+            address: "Trip St".into(),
+            tax_id: "RT-001".into(),
+            currency: "EUR".into(),
+            branch: "Main".into(),
+            logo: "logo_data".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        let back: StoreSettingsDto = serde_json::from_value(json).unwrap();
+        assert_eq!(back.name, "Round");
+        assert_eq!(back.tax_id, "RT-001");
+        assert_eq!(back.logo, "logo_data");
+    }
+
+    #[test]
+    fn credit_settings_dto_serde_roundtrip() {
+        let dto = CreditSettingsDto {
+            enabled: true,
+            reminder_interval_hours: 48,
+            max_limit_minor: 999999,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        let back: CreditSettingsDto = serde_json::from_value(json).unwrap();
+        assert!(back.enabled);
+        assert_eq!(back.reminder_interval_hours, 48);
+    }
+
+    #[test]
+    fn hardware_settings_dto_serde_roundtrip() {
+        let dto = HardwareSettingsDto {
+            printer_connection: "Network".into(),
+            printer_device_path: "192.168.1.100".into(),
+            printer_paper_size: "58mm".into(),
+            scanner_device_id: "scanner-2".into(),
+            scanner_input_mode: "serial".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        let back: HardwareSettingsDto = serde_json::from_value(json).unwrap();
+        assert_eq!(back.printer_connection, "Network");
+        assert_eq!(back.scanner_device_id, "scanner-2");
     }
 }

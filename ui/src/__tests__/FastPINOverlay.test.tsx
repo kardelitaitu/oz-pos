@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import FastPINOverlay from "@/components/FastPINOverlay";
 
 // ── Mock staff login API ────────────────────────────────────────────
@@ -91,6 +90,18 @@ function renderOverlay(open = true, onClose = vi.fn()) {
   return render(<FastPINOverlay open={open} onClose={onClose} />);
 }
 
+function typeUsername(name: string) {
+  fireEvent.change(screen.getByPlaceholderText("Username"), { target: { value: name } });
+}
+
+function clickDigit(digit: string) {
+  fireEvent.click(screen.getByLabelText(digit));
+}
+
+function clickButton(name: string | RegExp) {
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("FastPINOverlay", () => {
@@ -136,11 +147,8 @@ describe("FastPINOverlay", () => {
   describe("username step", () => {
     it("advances to PIN step when username is entered and submitted", async () => {
       renderOverlay(true);
-      const input = screen.getByPlaceholderText("Username");
-      await userEvent.type(input, "cashier1");
-
-      const nextBtn = screen.getByText("Next");
-      fireEvent.click(nextBtn);
+      typeUsername("cashier1");
+      clickButton("Next");
 
       await waitFor(() => {
         expect(
@@ -181,9 +189,8 @@ describe("FastPINOverlay", () => {
   describe("PIN step", () => {
     async function advanceToPinStep() {
       renderOverlay(true);
-      const input = screen.getByPlaceholderText("Username");
-      await userEvent.type(input, "cashier1");
-      fireEvent.click(screen.getByText("Next"));
+      typeUsername("cashier1");
+      clickButton("Next");
     }
 
     it("shows PIN dots and keypad", async () => {
@@ -196,10 +203,9 @@ describe("FastPINOverlay", () => {
 
     it("fills PIN dots as digits are entered", async () => {
       await advanceToPinStep();
-      const digitBtn = screen.getByLabelText("1");
-      fireEvent.click(digitBtn);
-      fireEvent.click(screen.getByLabelText("2"));
-      fireEvent.click(screen.getByLabelText("3"));
+      clickDigit("1");
+      clickDigit("2");
+      clickDigit("3");
 
       const filled = document.querySelectorAll(".fastpin-pin-dot--filled");
       expect(filled.length).toBe(3);
@@ -207,10 +213,10 @@ describe("FastPINOverlay", () => {
 
     it("clears PIN when clear button is pressed", async () => {
       await advanceToPinStep();
-      fireEvent.click(screen.getByLabelText("1"));
-      fireEvent.click(screen.getByLabelText("2"));
+      clickDigit("1");
+      clickDigit("2");
 
-      fireEvent.click(screen.getByLabelText("Clear"));
+      clickButton("Clear");
 
       const filled = document.querySelectorAll(".fastpin-pin-dot--filled");
       expect(filled.length).toBe(0);
@@ -218,9 +224,9 @@ describe("FastPINOverlay", () => {
 
     it("backspace removes last digit", async () => {
       await advanceToPinStep();
-      fireEvent.click(screen.getByLabelText("1"));
-      fireEvent.click(screen.getByLabelText("2"));
-      fireEvent.click(screen.getByLabelText("Backspace"));
+      clickDigit("1");
+      clickDigit("2");
+      clickButton("Backspace");
 
       const filled = document.querySelectorAll(".fastpin-pin-dot--filled");
       expect(filled.length).toBe(1);
@@ -228,7 +234,7 @@ describe("FastPINOverlay", () => {
 
     it("goes back to username step when Back is clicked", async () => {
       await advanceToPinStep();
-      fireEvent.click(screen.getByText("← Back"));
+      clickButton("← Back");
 
       await waitFor(() => {
         expect(screen.getByPlaceholderText("Username")).toBeInTheDocument();
@@ -258,14 +264,14 @@ describe("FastPINOverlay", () => {
       render(<FastPINOverlay open={true} onClose={onClose} />);
 
       // Enter username
-      await userEvent.type(screen.getByPlaceholderText("Username"), "bob");
-      fireEvent.click(screen.getByText("Next"));
+      typeUsername("bob");
+      clickButton("Next");
 
       // Enter PIN
-      fireEvent.click(screen.getByLabelText("1"));
-      fireEvent.click(screen.getByLabelText("2"));
-      fireEvent.click(screen.getByLabelText("3"));
-      fireEvent.click(screen.getByLabelText("4"));
+      clickDigit("1");
+      clickDigit("2");
+      clickDigit("3");
+      clickDigit("4");
 
       await waitFor(() => {
         expect(mockStaffLogin).toHaveBeenCalledWith({
@@ -301,16 +307,16 @@ describe("FastPINOverlay", () => {
       render(<FastPINOverlay open={true} onClose={vi.fn()} />);
 
       // Enter username
-      await userEvent.type(screen.getByPlaceholderText("Username"), "bob");
-      fireEvent.click(screen.getByText("Next"));
+      typeUsername("bob");
+      clickButton("Next");
 
       // Enter enough PIN digits to trigger auto-submit
-      fireEvent.click(screen.getByLabelText("1"));
-      fireEvent.click(screen.getByLabelText("2"));
-      fireEvent.click(screen.getByLabelText("3"));
-      fireEvent.click(screen.getByLabelText("4"));
-      fireEvent.click(screen.getByLabelText("5"));
-      fireEvent.click(screen.getByLabelText("6"));
+      clickDigit("1");
+      clickDigit("2");
+      clickDigit("3");
+      clickDigit("4");
+      clickDigit("5");
+      clickDigit("6");
 
       await waitFor(() => {
         expect(screen.getByRole("alert")).toBeInTheDocument();
@@ -322,17 +328,20 @@ describe("FastPINOverlay", () => {
     });
 
     it("does not auto-submit with fewer than max PIN digits", async () => {
+      vi.useFakeTimers();
       render(<FastPINOverlay open={true} onClose={vi.fn()} />);
 
-      await userEvent.type(screen.getByPlaceholderText("Username"), "bob");
-      fireEvent.click(screen.getByText("Next"));
+      typeUsername("bob");
+      clickButton("Next");
 
-      fireEvent.click(screen.getByLabelText("1"));
-      fireEvent.click(screen.getByLabelText("2"));
+      clickDigit("1");
+      clickDigit("2");
 
-      // Wait a tick — should NOT have called staffLogin
-      await new Promise((r) => setTimeout(r, 100));
+      // Advance timers by 100ms — should NOT have called staffLogin
+      vi.advanceTimersByTime(100);
       expect(mockStaffLogin).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
     });
   });
 
@@ -343,12 +352,12 @@ describe("FastPINOverlay", () => {
       );
 
       // Enter username and advance to PIN
-      await userEvent.type(screen.getByPlaceholderText("Username"), "bob");
-      fireEvent.click(screen.getByText("Next"));
+      typeUsername("bob");
+      clickButton("Next");
 
       // Enter some digits
-      fireEvent.click(screen.getByLabelText("1"));
-      fireEvent.click(screen.getByLabelText("2"));
+      clickDigit("1");
+      clickDigit("2");
       const filled = document.querySelectorAll(".fastpin-pin-dot--filled");
       expect(filled.length).toBe(2);
 
