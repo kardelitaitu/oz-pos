@@ -343,6 +343,38 @@ mod tests {
         assert!(err.message.contains("must be between"));
     }
 
+    #[test]
+    fn range_accepts_i64_min_at_lower_bound() {
+        // i64::MIN at the lower bound should pass
+        assert!(validate_range("x", i64::MIN, i64::MIN, 0).is_ok());
+        // Number just above the lower bound should also pass
+        assert!(validate_range("x", i64::MIN + 1, i64::MIN, 0).is_ok());
+    }
+
+    #[test]
+    fn range_accepts_i64_max_at_upper_bound() {
+        assert!(validate_range("x", i64::MAX, 0, i64::MAX).is_ok());
+        assert!(validate_range("x", i64::MAX - 1, 0, i64::MAX).is_ok());
+    }
+
+    #[test]
+    fn range_accepts_any_value_with_full_i64_bounds() {
+        // With min=i64::MIN, max=i64::MAX, every i64 value is valid.
+        assert!(validate_range("x", 0_i64, i64::MIN, i64::MAX).is_ok());
+        assert!(validate_range("x", i64::MIN, i64::MIN, i64::MAX).is_ok());
+        assert!(validate_range("x", i64::MAX, i64::MIN, i64::MAX).is_ok());
+    }
+
+    #[test]
+    fn range_with_inverted_bounds_rejects_all_values() {
+        // When min > max (e.g. min=10, max=5), every value is rejected
+        // because (value < 10) || (value > 5) is always true.
+        // This is documented behavior — callers must ensure min <= max.
+        assert!(validate_range("x", 0_i64, 10, 5).is_err());
+        assert!(validate_range("x", 7_i64, 10, 5).is_err());
+        assert!(validate_range("x", 15_i64, 10, 5).is_err());
+    }
+
     // ── validate_min_length ──────────────────────────────────────
 
     #[test]
