@@ -189,9 +189,7 @@ pub use stock_transfer::{StockTransfer, StockTransferLine};
 pub use store_profile::StoreProfile;
 pub use subscription::{InstanceStatus, SubscriptionTier, TenantSubscription};
 pub use supplier::Supplier;
-pub use sync_client::{
-    PullResult, SyncAttemptResult, SyncConfig, pull_snapshot, sync_pending, sync_pending_async,
-};
+pub use sync_client::{PullResult, SyncAttemptResult, SyncConfig, pull_snapshot, sync_pending};
 pub use table::{Table, TableStatus};
 pub use terminal::Terminal;
 pub use terminal_override::TerminalFeatureOverride;
