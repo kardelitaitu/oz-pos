@@ -115,21 +115,24 @@ RUN cargo build --package oz-cloud-server --release
 # ── Stage 2: Runtime ────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
 
-# Install CA certificates for outbound HTTPS (needed by reqwest in
-# oz-api / platform-sync for calling external services).
+# Install CA certificates for outbound HTTPS and gosu for dropping privileges.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         libc6 \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user for security.
+# Create a non-root user for security and initialize runtime /data directory.
 RUN groupadd --system ozpos && \
-    useradd --system --gid ozpos --no-create-home --home-dir /data ozpos
+    useradd --system --gid ozpos --home-dir /data ozpos && \
+    mkdir -p /data && chown -R ozpos:ozpos /data
 
 WORKDIR /app
 
 COPY --from=builder /build/target/release/oz-cloud-server /app/oz-cloud-server
+COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Runtime volume for persistent SQLite data.
 VOLUME ["/data"]
@@ -141,6 +144,5 @@ ENV RUST_LOG=info
 
 EXPOSE 3099
 
-USER ozpos
-
-ENTRYPOINT ["/app/oz-cloud-server"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/app/oz-cloud-server"]

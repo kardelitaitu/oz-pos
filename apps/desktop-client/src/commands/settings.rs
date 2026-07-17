@@ -970,12 +970,12 @@ mod tests {
         };
         let json = serde_json::to_value(&dto).unwrap();
         let back: ReceiptSettingsDto = serde_json::from_value(json).unwrap();
-        assert_eq!(back.show_currency, true);
+        assert!(back.show_currency);
         assert_eq!(back.decimal_separator, "comma");
-        assert_eq!(back.show_tax, false);
+        assert!(!back.show_tax);
         assert_eq!(back.footer, "Round Trip");
         assert_eq!(back.paper_width, "narrow");
-        assert_eq!(back.show_table_number, true);
+        assert!(back.show_table_number);
         assert_eq!(back.margin_top, 5);
     }
 
