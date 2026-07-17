@@ -231,6 +231,7 @@
 .gift-cards-modal::after,
 .promo-mgmt-modal::after,
 .product-mgmt-modal::after,
+.po-form-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -267,6 +268,7 @@
   .gift-cards-modal::after,
   .promo-mgmt-modal::after,
   .product-mgmt-modal::after,
+  .po-form-modal::after,
   .noise-dither::after { display: none; }
 }
 

@@ -9,6 +9,7 @@
 }
 
 .po-form-modal {
+  position: relative;
   width: 45rem;
   max-width: 94vw;
   max-height: 90vh;
