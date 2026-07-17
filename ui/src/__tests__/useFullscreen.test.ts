@@ -191,6 +191,20 @@ describe('useFullscreen', () => {
     expect(onToggle).toHaveBeenCalledWith(true);
   });
 
+  it('fires onToggle with false when exiting Tauri fullscreen', async () => {
+    setTauriMode();
+    mockIsFullscreen.mockResolvedValue(true);
+    const onToggle = vi.fn();
+
+    const { result } = renderHook(() => useFullscreen(onToggle));
+
+    await act(async () => {
+      result.current.toggleFullscreen();
+    });
+
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+
   it('logs warning on Tauri fullscreen error', async () => {
     setTauriMode();
     const error = new Error('Window API failed');
