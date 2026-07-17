@@ -194,6 +194,9 @@ export default function DataManagementScreen() {
   const importStateRef = useRef(importState);
   importStateRef.current = importState;
 
+  // Guard ref to prevent double-clicks during export.
+  const exportingRef = useRef(false);
+
   // ── Load backup status on mount ─────────────────────────────────
 
   useEffect(() => {
@@ -207,7 +210,10 @@ export default function DataManagementScreen() {
       })
       .catch(() => {
         setBackup((prev) => ({ ...prev, lastBackup: null }));
+        addToast({ message: l10n.getString('data-mgmt-toast-backup-status-fail'), type: 'error' });
       });
+    // Effect runs once on mount; addToast and l10n are stable references.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Backup handlers ─────────────────────────────────────────────
@@ -272,6 +278,9 @@ export default function DataManagementScreen() {
       return;
     }
 
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+
     setExportState((prev) => ({ ...prev, step: 'exporting', progress: 10, error: null }));
 
     try {
@@ -306,6 +315,8 @@ export default function DataManagementScreen() {
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-export-fail'),
       }));
       addToast({ message: l10n.getString('data-mgmt-toast-export-fail'), type: 'error' });
+    } finally {
+      exportingRef.current = false;
     }
   }, [addToast, l10n, triggerFlash]);
 
@@ -668,9 +679,6 @@ export default function DataManagementScreen() {
                 <div className="data-mgmt-file-picker">
                   <div className="data-mgmt-file-dropzone">
                     <span className="data-mgmt-file-icon">{folderIcon()}</span>
-                    <Localized id="data-mgmt-import-drop-text">
-                      <p>Drag & drop a .ozpkg file here, or</p>
-                    </Localized>
                     <Button variant="secondary" onClick={handleFileSelect}>
                       <Localized id="data-mgmt-import-browse">Browse files…</Localized>
                     </Button>

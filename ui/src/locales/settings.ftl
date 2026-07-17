@@ -338,8 +338,7 @@ settings-license-just-now = just now
 settings-license-seconds-ago = { $seconds }s ago
 settings-license-minutes-ago = { $minutes }m ago
 settings-license-refresh = Refresh
-settings-license-refresh-aria =
-    .aria-label = Refresh license status
+settings-license-refresh-aria = Refresh license status
 settings-license-poll-offline = Server unreachable
 settings-license-load-failed = Failed to load license info
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
@@ -505,6 +504,7 @@ data-mgmt-toast-import-no-file = No file selected
 data-mgmt-toast-import-success = Import complete
 data-mgmt-toast-import-fail = Import failed
 data-mgmt-toast-file-picker-fail = Failed to open file picker
+data-mgmt-toast-backup-status-fail = Failed to load backup status
 
 # Aria labels
 data-mgmt-dismiss-aria = Dismiss notification

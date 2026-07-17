@@ -199,7 +199,6 @@ export default function LicenseSettings() {
       addToast({ type: 'info', message: l10n.getString('settings-license-server-status-retrieved') });
     } catch (err) {
       const msg = err instanceof Error ? err.message : l10n.getString('settings-license-server-check-failed');
-      setPollFailures((prev) => prev + 1);
       addToast({ type: 'error', message: msg });
     } finally {
       setCheckingServer(false);

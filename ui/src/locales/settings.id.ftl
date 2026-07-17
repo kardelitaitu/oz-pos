@@ -414,6 +414,7 @@ data-mgmt-toast-import-no-file = Tidak ada file dipilih
 data-mgmt-toast-import-success = Impor selesai
 data-mgmt-toast-import-fail = Impor gagal
 data-mgmt-toast-file-picker-fail = Gagal membuka pemilih file
+data-mgmt-toast-backup-status-fail = Gagal memuat status cadangan
 data-mgmt-dismiss-aria =
     .aria-label = Tutup notifikasi
 
@@ -695,8 +696,7 @@ settings-license-just-now = baru saja
 settings-license-seconds-ago = { $seconds }d yang lalu
 settings-license-minutes-ago = { $minutes }m yang lalu
 settings-license-refresh = Muat Ulang
-settings-license-refresh-aria =
-    .aria-label = Muat ulang status lisensi
+settings-license-refresh-aria = Muat ulang status lisensi
 settings-license-poll-offline = Server tidak dapat dijangkau
 settings-license-load-failed = Gagal memuat info lisensi
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
