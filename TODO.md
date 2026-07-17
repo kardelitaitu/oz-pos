@@ -80,7 +80,14 @@ suite and record the new wall-clock time at the bottom.
       fireEvent.click for 5 Settings tab tests (gear, Features/Data/Sync tabs,
       Back button). FAST_WAIT (5ms polling) for all waitFor calls. 14 barcode
       scan tests already used act() — only got FAST_WAIT benefit.
-- [ ] **LicenseActivationScreen.test.tsx** — 2,236ms / 50 tests
+- [x] **LicenseActivationScreen.test.tsx** — 2,236ms / 50 tests → 781ms (-65%)
+      Replaced 28 userEvent.click with fireEvent.click (clear buttons, submit,
+      container click, paste clicks). Removed userEvent import. Added fillForm()
+      and clickSubmit() helpers. FAST_WAIT (5ms polling) on all 19 waitFor calls.
+      Converted tests 18-22, 38 to sync (loading state set before first await).
+      Test 31 bug fix: needed async + waitFor because handleSubmit awaits
+      getMachineId() before activateLicense() — fireEvent.click doesn't flush
+      microtasks. All 3 tiers complete!
 - [x] **StaffManagementScreen.test.tsx** — 2,176ms / 12 tests → 1,348ms (-38%)
       fireEvent.change for form fields (username, display name, PIN),
       fireEvent.click for buttons (Add/Edit/Deactivate/Restore/Create),
@@ -108,6 +115,7 @@ suite and record the new wall-clock time at the bottom.
 | 2026-07-17 | **13.47s** | **-0.52s** | After GiftCardsScreen optimization (164 files, 2533 tests). GiftCardsScreen 2.37s→1.03s (-57%). **New all-time best!** 🎉 |
 | 2026-07-17 | 15.50s | +1.51s | After PosScreen optimization (164 files, 2533 tests). PosScreen 2.26s→1.57s (-31%). Run-to-run variance. |
 | 2026-07-17 | 16.81s | +2.82s | After StaffManagementScreen optimization (164 files, 2533 tests). StaffMgmt 2.18s→1.35s (-38%). Run-to-run variance. |
+| 2026-07-17 | 15.11s | +1.12s | After LicenseActivationScreen optimization (164 files, 2550 tests). LicenseActivation 2.24s→0.78s (-65%). All 3 tiers complete! 🎉 |
 
 ---
 

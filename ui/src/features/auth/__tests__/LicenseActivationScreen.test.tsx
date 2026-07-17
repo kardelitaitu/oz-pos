@@ -1,10 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, createEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import LicenseActivationScreen from '../LicenseActivationScreen';
 import { activateLicense, getMachineId } from '@/api/license';
 import { getVersion, getLocalIp, type VersionInfo } from '@/api/system';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
+
+// FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 
 const mockAddToast = vi.fn();
 const mockOnActivated = vi.fn();
@@ -72,6 +74,20 @@ vi.mock('@/frontend/shell/ThemeToggle', () => ({
   default: () => <div data-testid="theme-toggle">ThemeToggle</div>,
 }));
 
+// ── Helpers ──────────────────────────────────────────────────────
+
+/** Fill all 3 form fields with fireEvent.change (sync, no per-char overhead). */
+function fillForm(email = 'test@test.com', phone = '08123456789', key = 'KEY123') {
+  fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: email } });
+  fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: phone } });
+  fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: key } });
+}
+
+/** Click the Activate License submit button via fireEvent.click (sync). */
+function clickSubmit() {
+  fireEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+}
+
 describe('LicenseActivationScreen - Exhaustive Suite', () => {
   beforeEach(() => {
     vi.mocked(getVersion).mockResolvedValue({ version: '1.0.0', name: 'oz-pos', rustVersion: '1.70', target: 'windows' });
@@ -84,24 +100,24 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
   describe('1. Mounting & Lifecycle', () => {
     it('1. getVersion resolves and displays the correct version on mount', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      await waitFor(() => expect(screen.getByText('Version 1.0.0')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Version 1.0.0')).toBeInTheDocument(), FAST_WAIT);
     });
 
     it('2. getLocalIp resolves and displays the correct IP on mount', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      await waitFor(() => expect(screen.getByText('IP Address : 192.168.1.100')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('IP Address : 192.168.1.100')).toBeInTheDocument(), FAST_WAIT);
     });
 
     it('3. getLocalIp rejects and gracefully falls back to "Unknown"', async () => {
       vi.mocked(getLocalIp).mockRejectedValue(new Error('IP Fail'));
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      await waitFor(() => expect(screen.getByText('IP Address : Unknown')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('IP Address : Unknown')).toBeInTheDocument(), FAST_WAIT);
     });
 
     it('4. getVersion rejects gracefully without crashing the app', async () => {
       vi.mocked(getVersion).mockRejectedValue(new Error('Version Fail'));
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      await waitFor(() => expect(screen.getByText('Version 0.0.9')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Version 0.0.9')).toBeInTheDocument(), FAST_WAIT);
     });
 
     it('5. Component unmounting during getVersion fetch prevents state updates', () => {
@@ -182,45 +198,43 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       expect(screen.getByRole('button', { name: /Activate License/i })).toBeEnabled();
     });
 
-    it('15. Inline Clear button correctly clears the Email field', async () => {
+    it('15. Inline Clear button correctly clears the Email field', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const emailInput = screen.getByLabelText(/Email Address/i);
       fireEvent.change(emailInput, { target: { value: 'test@test.com' } });
       const clearBtn = screen.getAllByRole('button').find(b => b.className === 'license-input-clear')!;
-      await userEvent.click(clearBtn);
+      fireEvent.click(clearBtn);
       expect(emailInput).toHaveValue('');
     });
 
-    it('16. Inline Clear button correctly clears the Phone field', async () => {
+    it('16. Inline Clear button correctly clears the Phone field', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const phoneInput = screen.getByLabelText(/Phone Number/i);
       fireEvent.change(phoneInput, { target: { value: '1234' } });
       const clearBtn = screen.getAllByRole('button').find(b => b.className === 'license-input-clear')!;
-      await userEvent.click(clearBtn);
+      fireEvent.click(clearBtn);
       expect(phoneInput).toHaveValue('');
     });
 
-    it('17. Inline Clear button correctly clears the License Key field', async () => {
+    it('17. Inline Clear button correctly clears the License Key field', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const keyInput = screen.getByLabelText(/License Key/i);
       fireEvent.change(keyInput, { target: { value: 'KEY123' } });
       const clearBtn = screen.getAllByRole('button').find(b => b.className === 'license-input-clear')!;
-      await userEvent.click(clearBtn);
+      fireEvent.click(clearBtn);
       expect(keyInput).toHaveValue('');
     });
   });
 
   describe('3. Loading State Behavior', () => {
-    it('18. Inputs become disabled when loading is true', async () => {
+    it('18. Inputs become disabled when loading is true', () => {
       let resolveActivate: (value: boolean) => void = () => {};
       const promise = new Promise<boolean>(resolve => { resolveActivate = resolve; });
       vi.mocked(activateLicense).mockReturnValue(promise);
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
       expect(screen.getByLabelText(/Email Address/i)).toBeDisabled();
       expect(screen.getByLabelText(/Phone Number/i)).toBeDisabled();
@@ -229,58 +243,50 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       resolveActivate(true);
     });
 
-    it('19. Clear buttons disappear while loading is true', async () => {
+    it('19. Clear buttons disappear while loading is true', () => {
       let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
       expect(screen.queryByRole('button', { name: /clear/i })).not.toBeInTheDocument();
       resolveActivate(true);
     });
 
-    it('20. The Submit button becomes disabled while loading is true', async () => {
+    it('20. The Submit button becomes disabled while loading is true', () => {
       let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
+      fillForm();
       const submitBtn = screen.getByRole('button', { name: /Activate License/i });
-      await userEvent.click(submitBtn);
+      fireEvent.click(submitBtn);
       
       expect(submitBtn).toBeDisabled();
       resolveActivate(true);
     });
 
-    it('21. The Submit button text changes to "Activating..." when loading', async () => {
+    it('21. The Submit button text changes to "Activating..." when loading', () => {
       let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
       expect(screen.getByText(/Activating\.\.\./i)).toBeInTheDocument();
       resolveActivate(true);
     });
 
-    it('22. A loading spinner SVG is rendered inside the Submit button while loading', async () => {
+    it('22. A loading spinner SVG is rendered inside the Submit button while loading', () => {
       let resolveActivate: (value: boolean) => void = () => {};
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       const { container } = render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
       expect(container.querySelector('svg.spinner')).toBeInTheDocument();
       resolveActivate(true);
@@ -292,85 +298,73 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       vi.mocked(activateLicense).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
+      fillForm();
       
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
-      await waitFor(() => expect(screen.getByText('Failed to activate license.')).toBeInTheDocument());
+      clickSubmit();
+      await waitFor(() => expect(screen.getByText('Failed to activate license.')).toBeInTheDocument(), FAST_WAIT);
       
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
-      expect(screen.queryByText('Failed to activate license.')).not.toBeInTheDocument();
+      clickSubmit();
+      await waitFor(() => expect(screen.queryByText('Failed to activate license.')).not.toBeInTheDocument(), FAST_WAIT);
     });
 
-    it('24. Submitting with whitespace-only Key shows validation error', async () => {
+    it('24. Submitting with whitespace-only Key shows validation error', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@example.com' } });
       fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
       fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: '   ' } });
       
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      clickSubmit();
       expect(screen.getByText('License key and Email are required.')).toBeInTheDocument();
       expect(activateLicense).not.toHaveBeenCalled();
     });
 
     it('25. Submitting trims whitespace from the Email payload', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: '  test@test.com  ' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '  08123456789  ' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm('  test@test.com  ', '  08123456789  ', 'KEY123');
+      clickSubmit();
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'));
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
     });
 
     it('26. Submitting trims whitespace from the License Key payload', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: '  KEY123  ' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm('test@test.com', '08123456789', '  KEY123  ');
+      clickSubmit();
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'));
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
     });
 
     it('27. Submitting trims whitespace from the Phone payload', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '  08123456789  ' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm('test@test.com', '  08123456789  ', 'KEY123');
+      clickSubmit();
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'));
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
     });
 
     it('28. Happy path: Successful activation calls getMachineId, activateLicense, fires success toast', async () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
       await waitFor(() => {
         expect(getMachineId).toHaveBeenCalled();
         expect(activateLicense).toHaveBeenCalled();
         expect(mockAddToast).toHaveBeenCalledWith({ type: 'success', message: 'License activated successfully!' });
         expect(mockOnActivated).toHaveBeenCalled();
-      });
+      }, FAST_WAIT);
     });
 
     it('29. API returns false: Displays the specific inline red error banner', async () => {
       vi.mocked(activateLicense).mockResolvedValue(false);
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
-      await waitFor(() => expect(screen.getByText('Failed to activate license.')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Failed to activate license.')).toBeInTheDocument(), FAST_WAIT);
     });
 
-    it('30. Form handles extremely long input strings without UI crashing', async () => {
+    it('30. Form handles extremely long input strings without UI crashing', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const longStr = 'a'.repeat(500);
       fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: longStr } });
@@ -383,14 +377,15 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       vi.mocked(activateLicense).mockReturnValue(new Promise<boolean>(resolve => { resolveActivate = resolve; }));
       
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
+      fillForm();
       
       const submitBtn = screen.getByRole('button', { name: /Activate License/i });
-      await userEvent.click(submitBtn);
-      await userEvent.click(submitBtn); // Should be ignored as it's disabled
+      fireEvent.click(submitBtn);
+      // Must flush microtasks: handleSubmit calls await getMachineId() before
+      // activateLicense(), so activateLicense isn't called synchronously.
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledTimes(1), FAST_WAIT);
       
+      fireEvent.click(submitBtn); // Should be ignored — button is now disabled
       expect(activateLicense).toHaveBeenCalledTimes(1);
       resolveActivate(true);
     });
@@ -400,45 +395,37 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     it('32. Thrown Error instance: Fires an error toast with err.message', async () => {
       vi.mocked(activateLicense).mockRejectedValue(new Error('Network Failure 500'));
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
-      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Network Failure 500' }));
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Network Failure 500' }), FAST_WAIT);
     });
 
     it('33. Thrown string primitive: Fires an error toast using the string itself', async () => {
       vi.mocked(activateLicense).mockRejectedValue('String Error');
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
-      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'String Error' }));
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'String Error' }), FAST_WAIT);
     });
 
     it('34. Thrown object with message property: Fires an error toast parsing the message field', async () => {
       vi.mocked(activateLicense).mockRejectedValue({ message: 'Object Error' });
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
-      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Object Error' }));
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Object Error' }), FAST_WAIT);
     });
 
     it('35. Thrown unknown object: Gracefully falls back to stringifying the unknown object', async () => {
       vi.mocked(activateLicense).mockRejectedValue({ unknown: true });
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'test@test.com' } });
-      fireEvent.change(screen.getByLabelText(/Phone Number/i), { target: { value: '08123456789' } });
-      fireEvent.change(screen.getByLabelText(/License Key/i), { target: { value: 'KEY123' } });
-      await userEvent.click(screen.getByRole('button', { name: /Activate License/i }));
+      fillForm();
+      clickSubmit();
       
-      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'An error occurred during activation.' }));
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'An error occurred during activation.' }), FAST_WAIT);
     });
   });
 
@@ -465,7 +452,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       expect(screen.queryByText('Paste')).not.toBeInTheDocument();
     });
 
-    it('38. Clicking the container (global click) closes an open context menu', async () => {
+    it('38. Clicking the container (global click) closes an open context menu', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const emailInput = screen.getByLabelText(/Email Address/i);
       fireEvent.contextMenu(emailInput, { clientX: 150, clientY: 250 });
@@ -473,7 +460,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       expect(screen.getByText('Paste')).toBeInTheDocument();
       
       const container = document.querySelector('.license-activation-container')!;
-      await userEvent.click(container);
+      fireEvent.click(container);
       
       expect(screen.queryByText('Paste')).not.toBeInTheDocument();
     });
@@ -495,9 +482,9 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       const emailInput = screen.getByLabelText(/Email Address/i);
       
       fireEvent.contextMenu(emailInput, { clientX: 100, clientY: 100 });
-      await userEvent.click(screen.getByText('Paste'));
+      fireEvent.click(screen.getByText('Paste'));
       
-      await waitFor(() => expect(emailInput).toHaveValue('test@paste.com'));
+      await waitFor(() => expect(emailInput).toHaveValue('test@paste.com'), FAST_WAIT);
       expect(screen.getByLabelText(/Phone Number/i)).toHaveValue('');
     });
 
@@ -507,9 +494,9 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       const phoneInput = screen.getByLabelText(/Phone Number/i);
       
       fireEvent.contextMenu(phoneInput, { clientX: 100, clientY: 100 });
-      await userEvent.click(screen.getByText('Paste'));
+      fireEvent.click(screen.getByText('Paste'));
       
-      await waitFor(() => expect(phoneInput).toHaveValue('0899999'));
+      await waitFor(() => expect(phoneInput).toHaveValue('0899999'), FAST_WAIT);
       expect(screen.getByLabelText(/Email Address/i)).toHaveValue('');
     });
 
@@ -519,9 +506,9 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       const keyInput = screen.getByLabelText(/License Key/i);
       
       fireEvent.contextMenu(keyInput, { clientX: 100, clientY: 100 });
-      await userEvent.click(screen.getByText('Paste'));
+      fireEvent.click(screen.getByText('Paste'));
       
-      await waitFor(() => expect(keyInput).toHaveValue('OZ-KEY-ABC'));
+      await waitFor(() => expect(keyInput).toHaveValue('OZ-KEY-ABC'), FAST_WAIT);
       expect(screen.getByLabelText(/Email Address/i)).toHaveValue('');
     });
 
@@ -532,9 +519,9 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fireEvent.change(emailInput, { target: { value: 'existing@email.com' } });
       
       fireEvent.contextMenu(emailInput, { clientX: 100, clientY: 100 });
-      await userEvent.click(screen.getByText('Paste'));
+      fireEvent.click(screen.getByText('Paste'));
       
-      await waitFor(() => expect(screen.queryByText('Paste')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByText('Paste')).not.toBeInTheDocument(), FAST_WAIT);
       expect(emailInput).toHaveValue('existing@email.com'); // Unchanged
     });
 
@@ -544,11 +531,11 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       const emailInput = screen.getByLabelText(/Email Address/i);
       
       fireEvent.contextMenu(emailInput, { clientX: 100, clientY: 100 });
-      await userEvent.click(screen.getByText('Paste'));
+      fireEvent.click(screen.getByText('Paste'));
       
       await waitFor(() => {
         expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Error: Clipboard error: Permission denied' });
-      });
+      }, FAST_WAIT);
       expect(screen.queryByText('Paste')).not.toBeInTheDocument();
     });
 
@@ -560,7 +547,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       const emailInput = screen.getByLabelText(/Email Address/i);
       
       fireEvent.contextMenu(emailInput, { clientX: 100, clientY: 100 });
-      await userEvent.click(screen.getByText('Paste'));
+      fireEvent.click(screen.getByText('Paste'));
       
       unmount();
       expect(() => resolveReadText('late@email.com')).not.toThrow();
