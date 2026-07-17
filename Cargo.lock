@@ -4598,6 +4598,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "tauri",
  "tempfile",
  "tokio",
  "tracing",
