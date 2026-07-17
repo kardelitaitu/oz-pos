@@ -682,4 +682,119 @@ describe('SettingsPage', () => {
       expect(saveBtn).toHaveAttribute('aria-busy', 'true');
     });
   });
+
+  // ══════════════════════════════════════════════════════════════
+  //  SectionKey — multiple navigations don't break rendering
+  // ══════════════════════════════════════════════════════════════
+
+  it('renders correct section after navigating through multiple sections', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('button', { name: /receipt/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/show currency symbol/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /system/i }));
+    fireEvent.click(screen.getByRole('button', { name: /about/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /system.*license/i })).toBeInTheDocument();
+    });
+
+    // Navigate back to General via the sidebar.
+    const businessHeader = screen.getByRole('button', { name: /business/i });
+    fireEvent.click(businessHeader);
+
+    fireEvent.click(screen.getByRole('button', { name: /general/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  //  Sync API key — cleared only after successful sync save
+  // ══════════════════════════════════════════════════════════════
+
+  function navigateToSync() {
+    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
+  }
+
+  it('clears API key after save when sync save succeeds', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    navigateToSync();
+
+    const apiKeyInput = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-abc123' } });
+    expect(apiKeyInput).toHaveValue('sk-abc123');
+
+    // Make every non-sync save command fail so only sync succeeds.
+    failCommands.add('set_receipt_settings');
+    failCommands.add('set_store_settings');
+    failCommands.add('set_default_currency');
+    failCommands.add('set_user_preferences');
+    failCommands.add('set_brand_primary_colour');
+    failCommands.add('set_brand_store_name');
+
+    const saveBtn = screen.getByRole('button', { name: /save settings/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      const inputAfterSave = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
+      expect(inputAfterSave).toHaveValue('');
+    });
+  });
+
+  it('keeps API key after save when sync save fails', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    navigateToSync();
+
+    const apiKeyInput = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-xyz789' } });
+    expect(apiKeyInput).toHaveValue('sk-xyz789');
+
+    // Make sync save fail while all other saves succeed.
+    failCommands.add('update_sync_settings');
+
+    const saveBtn = screen.getByRole('button', { name: /save settings/i });
+    fireEvent.click(saveBtn);
+
+    // Wait for save to settle (Saved! appears when at least one save succeeds).
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
+    });
+
+    const inputAfterSave = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
+    expect(inputAfterSave).toHaveValue('sk-xyz789');
+  });
+
+  it('shows partial-save toast when sync save is the only failure', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    });
+    navigateToSync();
+
+    failCommands.add('update_sync_settings');
+
+    const saveBtn = screen.getByRole('button', { name: /save settings/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/some settings could not be saved/i)).toBeInTheDocument();
+    });
+  });
 });
