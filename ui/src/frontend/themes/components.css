@@ -237,6 +237,7 @@
 .payment-modal::after,
 .sales-history-modal::after,
 .price-override-modal::after,
+.dev-toolbar::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -279,6 +280,7 @@
   .payment-modal::after,
   .sales-history-modal::after,
   .price-override-modal::after,
+  .dev-toolbar::after,
   .noise-dither::after { display: none; }
 }
 
