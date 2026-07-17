@@ -1483,6 +1483,7 @@
 .retail-options-field input:focus-visible,
 .retail-options-field select:focus-visible,
 .retail-options-field textarea:focus-visible {
+  outline: none;
   border-color: var(--color-primary-pos);
   background: var(--color-primary-pos-light);
 }

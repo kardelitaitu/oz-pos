@@ -126,7 +126,6 @@ pub fn run() {
                 commands::loyalty::get_points_value,
                 commands::loyalty::get_or_create_loyalty_account,
                 commands::staff::list_staff,
-                commands::staff::list_staff,
                 commands::staff::list_roles,
                 commands::staff::create_staff,
                 commands::staff::update_staff,

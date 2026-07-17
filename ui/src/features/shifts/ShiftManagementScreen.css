@@ -507,6 +507,7 @@
 }
 
 .shift-mgmt-input:focus-visible {
+  outline: none;
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
@@ -530,6 +531,7 @@
 }
 
 .shift-mgmt-textarea:focus-visible {
+  outline: none;
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }

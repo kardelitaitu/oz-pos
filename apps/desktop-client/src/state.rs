@@ -360,10 +360,33 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 impl Drop for AppState {
     fn drop(&mut self) {
         tracing::info!("stopping kernel modules");
-        if let Ok(mut kernel) = self.kernel.try_lock() {
-            let _ = kernel.stop_all();
-        } else {
-            tracing::warn!("kernel lock contended, skipping stop_all");
+        // Retry the lock for up to 500ms before giving up. This addresses
+        // a Windows window-lifecycle bottleneck where `try_lock()` would
+        // silently skip `stop_all()` if a Tauri command was mid-execution.
+        // A single `try_lock()` is too aggressive during shutdown because
+        // commands may still be draining. But `blocking_lock()` risks a
+        // deadlock if a command holding the lock is waiting for the runtime
+        // to shut down (circular dependency). The bounded retry loop
+        // gives commands time to finish while guaranteeing the Drop
+        // doesn't hang indefinitely.
+        let mut stopped = false;
+        let mut attempts = 0u32;
+        for _ in 0..50 {
+            attempts += 1;
+            if let Ok(mut kernel) = self.kernel.try_lock() {
+                let _ = kernel.stop_all();
+                stopped = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !stopped {
+            tracing::warn!(
+                attempts,
+                "kernel lock contended after {}ms, skipping stop_all — \
+                 modules may not have been stopped cleanly",
+                attempts * 10,
+            );
         }
     }
 }
